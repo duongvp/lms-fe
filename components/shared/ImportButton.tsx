@@ -1,7 +1,16 @@
 'use client';
-import React from 'react';
-import { Button, Space, Spin, Upload, message, notification } from 'antd';
-import { DownloadOutlined } from '@ant-design/icons';
+import React, { useState } from 'react';
+import {
+    Button,
+    Space,
+    Spin,
+    Upload,
+    message,
+    notification,
+    Modal,
+    Flex,
+} from 'antd';
+import { DownloadOutlined, FullscreenOutlined } from '@ant-design/icons';
 import type { UploadProps } from 'antd/es/upload';
 import { useAuthStore } from '@/stores/authStore';
 import * as XLSX from 'xlsx';
@@ -27,6 +36,10 @@ export default function ImportButton({
     const [api, contextHolder] = notification.useNotification();
     const { userId, warehouseId } = useAuthStore((state) => state.user);
 
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [importErrors, setImportErrors] = useState<React.ReactNode[]>([]);
+    const [importFileName, setImportFileName] = useState<string>('');
+
     const handleBeforeUpload = async (file: File) => {
         if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
             message.error('Chỉ chấp nhận file Excel (.xlsx, .xls, .csv)');
@@ -34,7 +47,6 @@ export default function ImportButton({
         }
 
         try {
-            // Đọc nội dung file để kiểm tra số dòng
             const data = await file.arrayBuffer();
             const workbook = XLSX.read(data, { type: 'array' });
             const sheetName = workbook.SheetNames[0];
@@ -94,16 +106,27 @@ export default function ImportButton({
                     </div>
                 ));
 
+                // Lưu lỗi vào state để mở modal
+                setImportErrors(errorList);
+                setImportFileName(file.name);
+
                 api.warning({
                     key: notificationKey,
                     message: file.name,
                     description: (
-                        <div style={{ fontSize: '13px', lineHeight: 1.6 }}>
-                            <p className="text-sm text-red-500">Import file lỗi</p>
-                            {errorList}
-                        </div>
+                        <Flex justify='space-between' style={{ fontSize: '13px', lineHeight: 1.6, maxHeight: 180, overflow: 'auto' }}>
+                            <span className="text-sm text-red-500">Import file lỗi</span>
+                            <Button
+                                type="link"
+                                size="small"
+                                icon={<FullscreenOutlined />}
+                                onClick={() => setIsModalOpen(true)}
+                            >
+                                Xem chi tiết
+                            </Button>
+                        </Flex>
                     ),
-                    duration: 0,
+                    duration: 60,
                     placement: 'bottomRight',
                 });
             } else {
@@ -133,13 +156,13 @@ export default function ImportButton({
                 message: file.name,
                 description: (
                     <div className="flex flex-col">
-                        <span className="text-gray-500 text-sm">Lỗi khi import</span>
+                        <span className="text-gray-500 text-sm" style={{ paddingRight: 8 }}>Lỗi khi import</span>
                         <span className="mt-1 text-sm text-red-500">
                             {error.message || 'Đã xảy ra lỗi khi import file'}
                         </span>
                     </div>
                 ),
-                duration: 2.5,
+                duration: 5,
                 placement: 'bottomRight',
             });
         }
@@ -165,6 +188,21 @@ export default function ImportButton({
                     {label}
                 </Button>
             </Upload>
+
+            <Modal
+                title={`Chi tiết lỗi - ${importFileName}`}
+                open={isModalOpen}
+                onCancel={() => setIsModalOpen(false)}
+                footer={null}
+                width={600}
+                styles={{ body: { maxHeight: '60vh', overflowY: 'auto' } }}
+            >
+                {importErrors.length > 0 ? (
+                    <div>{importErrors}</div>
+                ) : (
+                    <p>Không có lỗi nào để hiển thị.</p>
+                )}
+            </Modal>
         </>
     );
 }

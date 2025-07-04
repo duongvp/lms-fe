@@ -46,7 +46,7 @@ const TableWithActions: React.FC<any> = ({ data, returnOrderDetails, returnOrder
                     </Row>
                     <Row style={{ marginBottom: 8 }}>
                         <Col span={8}><Text strong>Thời gian:</Text></Col>
-                        <Col><Text>{dayjs(returnOrderDetails.created_at).format('DD/MM/YYYY HH:mm')}</Text></Col>
+                        <Col><Text>{dayjs(returnOrderDetails.return_date).format('DD/MM/YYYY HH:mm')}</Text></Col>
                     </Row>
                     <Row style={{ marginBottom: 8 }}>
                         <Col span={8}><Text strong>Người tạo:</Text></Col>

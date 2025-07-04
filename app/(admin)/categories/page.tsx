@@ -2,12 +2,12 @@
 import React, { useState, useEffect } from "react";
 import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
-import { CategoryApiResponse, deleteCategory, getCategories, getCategoriesByPage } from "@/services/categoryService";
+import { CategoryApiResponse, deleteCategory, getCategoriesByPage } from "@/services/categoryService";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
 import CategoryModal from "./components/SearchAndActionsBar/CategoryModal";
 import useCategoryStore from "@/stores/categoryStore";
 import { ActionType } from "@/enums/action";
-import { Space } from "antd";
+import { notification, Space } from "antd";
 import ConfirmButton from "@/components/ui/ConfirmButton";
 import { DeleteOutlined, EditFilled } from "@ant-design/icons";
 import ActionButton from "@/components/ui/ActionButton";
@@ -40,6 +40,7 @@ const Page = () => {
     const [data, setData] = useState<DataType[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const { setModal, shouldReload, setShouldReload } = useCategoryStore();
+    const [api, contextHolder] = notification.useNotification();
     const [filters, setFilters] = useState<any>({ search: "" });
     const hasPermission = useAuthStore(state => state.hasPermission);
     const handleDetete = async (id: number) => {
@@ -48,7 +49,6 @@ const Page = () => {
 
     const fetchApi = async () => {
         try {
-            console.log("filters", filters);
             const apiData = await getCategoriesByPage(filters);
 
             // map lại dữ liệu cho Table
@@ -88,6 +88,10 @@ const Page = () => {
             setData(tableData);
         } catch (error) {
             console.error("Lỗi fetch API:", error);
+            api.error({
+                message: "Lỗi khi tải dữ liệu",
+                description: "Không thể tải danh sách nhóm hàng. Vui lòng thử lại sau.",
+            });
         } finally {
             setLoading(false);
         }
@@ -114,6 +118,7 @@ const Page = () => {
 
     return (
         <>
+            {contextHolder}
             <SearchAndActionsBar
                 onSearch={handleSearch}
                 placeholder="Theo tên nhóm hàng"

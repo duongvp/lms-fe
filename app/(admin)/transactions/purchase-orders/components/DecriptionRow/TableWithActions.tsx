@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Row, Col, Typography, Space, Spin, } from 'antd';
-import { CheckCircleFilled, CloseCircleFilled, CopyOutlined, DownloadOutlined } from '@ant-design/icons';
+import { CheckCircleFilled, CloseCircleFilled, CopyOutlined } from '@ant-design/icons';
 import CustomTable from '@/components/ui/Table';
 import { getPOStatusLabel, POStatus } from '@/enums/purchaseOrder';
 import ActionButton from '@/components/ui/ActionButton';
@@ -12,7 +12,6 @@ import usePurchaseOrderStore from '@/stores/purchaseOrderStore';
 import PrintPurchaseWrapper from './PrintPurchaseWrapper';
 import { useAuthStore } from '@/stores/authStore';
 import { PermissionKey } from '@/types/permissions';
-import { isEmpty } from 'lodash';
 import GenericExportButton from '@/components/shared/GenericExportButton';
 
 const { Text, Link } = Typography;

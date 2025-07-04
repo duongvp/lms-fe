@@ -1,14 +1,11 @@
 // components/FilterDrawer.tsx
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Drawer, Form, Select, DatePicker, Checkbox, Button, Row, Col, Empty } from 'antd';
 import dayjs from 'dayjs';
 import SelectWithButton from '../ui/Selects/SelectWithButton';
-import useCustomerSelect from '@/hooks/useCustomerSelect';
 import { PurchaseOrderStatus, Status } from '@/enums/status';
-import useSupplierSelect from '@/hooks/useSupplierSelect';
 import useUserSelect from '@/hooks/useUserSelect';
 
-const { Option } = Select;
 const { RangePicker } = DatePicker;
 
 interface FilterDrawerProps {
@@ -21,8 +18,6 @@ interface FilterDrawerProps {
 
 const FilterDrawer: React.FC<FilterDrawerProps> = ({ open, onClose, handleSearch, title = 'Bộ lọc hóa đơn', isPurchaseOrder = false }) => {
     const [form] = Form.useForm();
-    const [searchTerm, setSearchTerm] = useState('');
-    const { options, handleScroll } = isPurchaseOrder ? useSupplierSelect(searchTerm, form) : useCustomerSelect(searchTerm, form);
     const { options: optionsUser } = useUserSelect();
 
     const onFinish = async (values: any) => {
@@ -47,7 +42,6 @@ const FilterDrawer: React.FC<FilterDrawerProps> = ({ open, onClose, handleSearch
                 return true;
             })
         );
-        console.log("filter", filter);
         handleSearch(filter);
         onClose();
     };
@@ -55,11 +49,6 @@ const FilterDrawer: React.FC<FilterDrawerProps> = ({ open, onClose, handleSearch
     const onReset = () => {
         form.resetFields();
     };
-
-    // useEffect(() => {
-    //     if (!open) return;
-    //     form.setFieldsValue({ "status": isPurchaseOrder ? PurchaseOrderStatus.RECEIVED : Status.RECEIVED });
-    // }, [open]);
 
     return (
         <Drawer
@@ -108,48 +97,6 @@ const FilterDrawer: React.FC<FilterDrawerProps> = ({ open, onClose, handleSearch
                         </Row>
                     </Checkbox.Group>
                 </Form.Item>
-                {/* Người bán */}
-                {
-                    isPurchaseOrder ? (
-                        <Form.Item
-                            label={<span style={{ fontWeight: 600, color: '#222' }}>Nhà cung cấp</span>}
-                            name="supplier_id"
-                            style={{ marginBottom: 16 }}>
-                            <SelectWithButton
-                                options={options}
-                                style={{ width: '100%' }}
-                                placeholder="Chọn nhà cung cấp"
-                                onSearch={setSearchTerm}
-                                onPopupScroll={handleScroll}
-                                notFoundContent={
-                                    <Empty
-                                        image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                        description="Không có kết quả phù hợp"
-                                    />
-                                }
-                            />
-                        </Form.Item>
-                    ) : (
-                        <Form.Item
-                            label={<span style={{ fontWeight: 600, color: '#222' }}>Người bán</span>}
-                            name="customer_id"
-                            style={{ marginBottom: 16 }}>
-                            <SelectWithButton
-                                options={options}
-                                style={{ width: '100%' }}
-                                placeholder="Chọn khách hàng"
-                                onSearch={setSearchTerm}
-                                onPopupScroll={handleScroll}
-                                notFoundContent={
-                                    <Empty
-                                        image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                        description="Không có kết quả phù hợp"
-                                    />
-                                }
-                            />
-                        </Form.Item>
-                    )
-                }
                 {/* Người tạo */}
                 <Form.Item
                     label={<span style={{ fontWeight: 600, color: '#222' }}>Người tạo</span>}

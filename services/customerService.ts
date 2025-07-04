@@ -83,18 +83,25 @@ export const importCustomersFromExcel = async (formatData: any): Promise<any> =>
 };
 
 
+// export const exportCustomers = async (): Promise<Blob> => {
+//     const response = await fetch(`${API_BASE_URL}/export`, {
+//         method: 'POST',
+//         headers: {
+//             'Content-Type': 'application/json',
+//         },
+//     });
+
+//     if (!response.ok) {
+//         const error = await response.json();
+//         throw new Error(error.message || 'Failed to export products');
+//     }
+
+//     return await response.blob();
+// };
 export const exportCustomers = async (): Promise<Blob> => {
-    const response = await fetch(`${API_BASE_URL}/export`, {
+    const response = await fetchInstance(`${API_BASE_URL}/export`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-    });
+    }, 'blob');
 
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to export products');
-    }
-
-    return await response.blob();
+    return response;
 };

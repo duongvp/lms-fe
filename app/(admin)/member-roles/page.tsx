@@ -9,6 +9,7 @@ import { getRoles, RoleApiResponse } from "@/services/roleService";
 import useRoleStore from "@/stores/roleStore";
 import RoleModal from "./components/RoleModal";
 import { ActionType } from "@/enums/action";
+import { notification } from "antd";
 
 
 // Đây là kiểu dữ liệu cho Table (thêm key + description)
@@ -39,7 +40,8 @@ const Page = () => {
     const [data, setData] = useState<DataType[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
-    const { modal, setModal, shouldReload, setShouldReload } = useRoleStore();
+    const { setModal, shouldReload, setShouldReload } = useRoleStore();
+    const [api, contextHolder] = notification.useNotification();
 
     const fetchRoles = async () => {
         try {
@@ -57,6 +59,10 @@ const Page = () => {
             setData(tableData);
         } catch (error) {
             console.error("Lỗi fetch API:", error);
+            api.error({
+                message: "Lỗi khi tải dữ liệu",
+                description: "Không thể tải danh sách vai trò thành viên. Vui lòng thử lại sau.",
+            });
         } finally {
             setLoading(false);
         }
@@ -82,13 +88,13 @@ const Page = () => {
 
     return (
         <>
+            {contextHolder}
             <SearchAndActionsBar
                 placeholder="Tên vai trò"
                 titleBtnAdd="Vai trò"
                 onSearch={async (value) => console.log(value)}
                 handleAddBtn={() => setModal({ open: true, type: ActionType.CREATE, role: null })}
             />
-            {/* <SearchAndActionsBar /> */}
             <CustomTable<DataType>
                 columns={columns}
                 dataSource={data}

@@ -11,6 +11,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { Status } from "@/enums/status";
 import { useRouter } from "next/navigation";
 import useReturnStore from "@/stores/returnStore";
+import { useBreakpoint } from "@ant-design/pro-components";
 
 interface Props {
     visible: boolean;
@@ -42,6 +43,11 @@ const ReturnInvoiceModal = ({ visible, onClose }: Props) => {
     const { warehouseId } = useAuthStore((state) => state.user)
     const router = useRouter();
     const shouldReload = useReturnStore((state) => state.shouldReload);
+
+    const screen = useBreakpoint();
+    const isMobile = screen && ['sm', 'xs'].includes(screen);
+
+
 
     const onSelect = (record: DataType) => {
         router.push(`/transactions/returns/create/${record.invoice_id}`);
@@ -194,9 +200,10 @@ const ReturnInvoiceModal = ({ visible, onClose }: Props) => {
                 onCancel={onClose}
                 footer={null}
                 width={1000}
+                centered={isMobile}
             >
                 <Row gutter={16}>
-                    <Col span={6}>
+                    <Col md={6} xs={24}>
                         <Space direction="vertical" style={{ width: '100%', height: '505px' }} >
                             <h4 style={{ fontWeight: 500 }}>Tìm kiếm</h4>
                             <CustomSearchInput
@@ -251,7 +258,7 @@ const ReturnInvoiceModal = ({ visible, onClose }: Props) => {
                             </div>
                         </Space>
                     </Col>
-                    <Col span={18}>
+                    <Col md={18} xs={24}>
                         <CustomTable<DataType>
                             columns={columns}
                             dataSource={data}

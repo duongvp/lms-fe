@@ -17,7 +17,7 @@ import { PermissionKey } from "@/types/permissions";
 import useReturnStore from "@/stores/returnStore";
 import { Status } from "@/enums/status";
 
-interface DataType extends ReturnOrderApiResponse {
+interface DataType extends Partial<ReturnOrderApiResponse> {
     key: number;
     description: React.ReactNode;
 }
@@ -28,19 +28,34 @@ const columns: ColumnsType<DataType> = [
         dataIndex: "return_code",
     },
     {
-        title: "Người bán",
+        title: "Người tạo",
         dataIndex: "created_by",
         ellipsis: true,
     },
     {
         title: "Thời gian khởi tạo",
-        dataIndex: "created_at",
-        render: (value) => dayjs(value).format("DD/MM/YYYY HH:mm"),
+        dataIndex: "return_date",
+        render: (value) => {
+            if (!value) return '';
+            return dayjs(value).format("DD/MM/YYYY HH:mm")
+        },
     },
     {
         title: "Khách hàng",
         dataIndex: "customer_name",
         ellipsis: true,
+        render: (value) => {
+            if (!value) return '';
+            return value
+        }
+    },
+    {
+        title: "Tổng tiền hàng trả",
+        dataIndex: "total_amount",
+        render: (value) => {
+            if (!value) return '0';
+            return Number(value).toLocaleString()
+        },
     },
     {
         title: "Trạng thái",
@@ -54,11 +69,19 @@ const columns: ColumnsType<DataType> = [
 ];
 
 interface IReturnFilter {
-    return_code: string;
+    search_text: string;
     [key: string]: any;
 }
 
 const Page = () => {
+    const summaryRow: DataType = {
+        key: -1, // key đặc biệt để phân biệt
+        return_order_code: "",
+        supplier_name: "",
+        status: "",
+        total_amount: "0",
+        description: null
+    };
     const [data, setData] = useState<DataType[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
@@ -70,7 +93,7 @@ const Page = () => {
     const hasPermission = useAuthStore(state => state.hasPermission);
     const { warehouseId } = useAuthStore((state) => state.user)
     const { shouldReload, setShouldReload } = useReturnStore()
-    const [filter, setFilter] = useState<IReturnFilter>({ return_code: "", status: Status.RECEIVED });
+    const [filter, setFilter] = useState<IReturnFilter>({ search_text: "", status: Status.RECEIVED });
 
     const fetchData = useCallback(async () => {
         if (warehouseId === -1) return
@@ -78,7 +101,7 @@ const Page = () => {
             setLoading(true);
             const { current, pageSize } = pagination;
             const skip = (current - 1) * pageSize;
-            const { data: apiData, total } = await getReturnOrdersByPage(pageSize, skip, filter);
+            const { data: apiData, total, grand_total } = await getReturnOrdersByPage(pageSize, skip, { ...filter, warehouse_id: warehouseId });
 
             setTotal(total);
 
@@ -89,7 +112,8 @@ const Page = () => {
                 description: <DecriptionTable data={item} />,
             }));
 
-            setData(tableData);
+            summaryRow.total_amount = grand_total.toLocaleString();
+            setData([summaryRow, ...tableData]);
         } catch (error) {
             api.error({
                 message: "Lỗi khi tải dữ liệu",
@@ -119,16 +143,15 @@ const Page = () => {
     };
 
     const handleSearch = async (value: string) => {
-        setFilter({ ...filter, return_code: value });
+        setFilter({ ...filter, search_text: value });
     };
 
     const handleFilterOrder = (values: any) => {
-        console.log("🚀 ~ handleFilterOrder ~ values:", values)
         if (isEmpty(values)) {
-            setFilter({ return_code: filter.return_code });
+            setFilter({ search_text: filter.search_text });
             return
         }
-        setFilter({ return_code: filter.return_code, ...values });
+        setFilter({ search_text: filter.search_text, ...values });
     };
 
     const handleAddBtn = () => {
@@ -146,17 +169,12 @@ const Page = () => {
         }
     }, [shouldReload])
 
-    useEffect(() => {
-        if (warehouseId === -1) return
-        setFilter({ ...filter, warehouse_id: warehouseId });
-    }, [warehouseId]);
-
     return (
         <>
             {contextHolder}
             <SearchAndActionsBar
                 onSearch={handleSearch}
-                placeholder="Tìm theo mã phiếu trả, mã hoá đơn"
+                placeholder="Tìm theo mã phiếu trả, mã hoá đơn, mã KH, tên KH, sđt KH"
                 titleBtnAdd="Trả hàng"
                 handleAddBtn={hasPermission(PermissionKey.RETURN_PROCESS) ? handleAddBtn : undefined}
                 handleFilterBtn={() => setOpenFilterDrawer(true)}
@@ -164,7 +182,7 @@ const Page = () => {
                     hasPermission(PermissionKey.RETURN_EXPORT) && (
                         <GenericExportButton
                             exportService={exportReturnOrders}
-                            serviceParams={[[], warehouseId]}
+                            serviceParams={[[], warehouseId, filter]}
                             fileNamePrefix="Danh_sach_phiếu trả hàng"
                         />
                     )
@@ -186,9 +204,12 @@ const Page = () => {
                 onChange={handleTableChange}
                 scroll={{ x: "max-content" }}
                 expandable={{
-                    expandedRowRender: (record) => record.description,
+                    expandedRowRender: (record) =>
+                        record.key === -1 ? null : record.description,
+                    rowExpandable: (record) => record.key !== -1,
                     expandedRowKeys,
                     onExpand: (expanded, record) => {
+                        if (record.key === -1) return;
                         if (expanded) {
                             setExpandedRowKeys([record.key]);
                         } else {

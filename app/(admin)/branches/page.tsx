@@ -12,6 +12,7 @@ import useBranchStore from "@/stores/branchStore";
 import { convertStatusToText } from "@/ultils/customText";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
+import { notification } from "antd";
 
 
 // Đây là kiểu dữ liệu cho Table (thêm key + description)
@@ -51,6 +52,8 @@ const Page = () => {
     const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
     const { modal, setModal, shouldReload, setShouldReload } = useBranchStore();
     const hasPermission = useAuthStore(state => state.hasPermission);
+    const [api, contextHolder] = notification.useNotification();
+
 
     const fetchWarehouses = async () => {
         try {
@@ -68,6 +71,10 @@ const Page = () => {
             setData(tableData);
         } catch (error) {
             console.error("Lỗi fetch API:", error);
+            api.error({
+                message: "Lỗi khi tải dữ liệu",
+                description: "Không thể tải danh sách chi nhánh. Vui lòng thử lại sau.",
+            });
         } finally {
             setLoading(false);
         }
@@ -97,6 +104,7 @@ const Page = () => {
 
     return (
         <>
+            {contextHolder}
             <SearchAndActionsBar
                 showSearch={false}
                 titleBtnAdd="Chi nhánh"

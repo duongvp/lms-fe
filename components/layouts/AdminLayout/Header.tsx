@@ -1,8 +1,9 @@
 import { useAuthStore } from "@/stores/authStore";
+import { handleLogout } from "@/ultils/auth";
 import { EnvironmentOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
 import { Avatar, Button, Dropdown, Flex, Layout, Space, theme } from "antd";
 import { MenuProps } from "antd/lib";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import React from "react";
 
 const { Header: AntdHeader } = Layout;
@@ -18,19 +19,25 @@ const Header: React.FC<HeaderProps> = ({ collapsed, toggle }) => {
   const {
     token: { colorBgContainer },
   } = theme.useToken();
+  const router = useRouter()
+
+  const logout = () => {
+    handleLogout();
+    router.push('/auth/login');
+  }
 
   const items: MenuProps['items'] = [
     {
       key: 'profile',
-      label: 'Thông tin tài khoản',
+      label: username,
       onClick: () => { }
     },
     {
       key: 'logout',
-      label: <Link href="/auth/login">Đăng xuất</Link>,
+      label: 'Đăng xuất',
+      onClick: () => { logout() }
     }
   ];
-
 
   return (
     <AntdHeader style={{ padding: 0, background: colorBgContainer }}>

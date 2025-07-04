@@ -22,8 +22,9 @@ const GenericExportButton = <T extends any[]>({
     const [api, contextHolder] = notification.useNotification();
 
     const handleExport = async () => {
+        const randomNumber = Math.floor(Math.random() * 100000) + 1;
         const key = `export-${Date.now()}`;
-        const filename = `${fileNamePrefix}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        const filename = `${fileNamePrefix}_${new Date().toISOString().slice(0, 10)}_${randomNumber}.xlsx`;
 
         api.info({
             key,
@@ -32,7 +33,7 @@ const GenericExportButton = <T extends any[]>({
             placement: 'bottomRight',
             duration: 0,
         });
-        await new Promise(resolve => setTimeout(resolve, 5000)); // Giả lập thời gian xử lý
+        await new Promise(resolve => setTimeout(resolve, 200)); // Giả lập thời gian xử lý
         setLoading(true);
 
         try {

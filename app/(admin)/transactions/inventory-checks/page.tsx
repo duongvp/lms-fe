@@ -30,7 +30,7 @@ const columns: ColumnsType<DataType> = [
     },
     {
         title: "Thời gian khởi tạo",
-        dataIndex: "created_at",
+        dataIndex: "start_date",
         render: (value) => dayjs(value).format("DD/MM/YY HH:mm"),
     },
     {
@@ -81,7 +81,7 @@ const Page = () => {
             setLoading(true);
             const { current, pageSize } = pagination;
             const skip = (current - 1) * pageSize;
-            const { data: apiData, total } = await getInventoryChecksByPage(pageSize, skip, filter);
+            const { data: apiData, total } = await getInventoryChecksByPage(pageSize, skip, { ...filter, warehouse_id: warehouseId });
 
             const tableData: DataType[] = apiData.map((item) => ({
                 ...item,
@@ -126,7 +126,7 @@ const Page = () => {
             setFilter({ stock_take_code: filter.stock_take_code });
             return;
         }
-        setFilter({ ...filter, ...values });
+        setFilter({ stock_take_code: filter.stock_take_code, ...values });
     };
 
     const handleAddBtn = () => {
@@ -136,11 +136,6 @@ const Page = () => {
     useEffect(() => {
         fetchData();
     }, [fetchData]);
-
-    useEffect(() => {
-        if (warehouseId === -1) return
-        setFilter({ ...filter, warehouse_id: warehouseId });
-    }, [warehouseId]);
 
     useEffect(() => {
         if (shouldReload) {
@@ -162,7 +157,7 @@ const Page = () => {
                     hasPermission(PermissionKey.STOCK_CHECK_EXPORT) && (
                         <GenericExportButton
                             exportService={exportInventoryChecks}
-                            serviceParams={[[], warehouseId]}
+                            serviceParams={[[], warehouseId, filter]}
                             fileNamePrefix="Danh_sach_kiem_kho"
                         />
                     )

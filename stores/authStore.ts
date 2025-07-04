@@ -1,3 +1,4 @@
+import { handleLogout } from '@/ultils/auth';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
@@ -9,8 +10,12 @@ interface AuthState {
         warehouseName: string;
         permissions: string[];
     };
+    accessToken: string | null;
     setUser: (userData: any) => void;
     clearUser: () => void;
+    setAccessToken: (token: string | null) => void;
+    clearAccessToken: () => void;
+    logout: () => void;
     hasPermission: (permission: string) => boolean;
 }
 
@@ -26,6 +31,7 @@ export const useAuthStore = create<AuthState>()(
     persist(
         (set, get) => ({
             user: defaultUser,
+            accessToken: '',
 
             setUser: (userData) =>
                 set({
@@ -40,17 +46,30 @@ export const useAuthStore = create<AuthState>()(
 
             clearUser: () => set({ user: defaultUser }),
 
+            setAccessToken: (token) => set({ accessToken: token }),
+
+            clearAccessToken: () => set({ accessToken: '' }),
+
             hasPermission: (permission) => {
                 if (typeof window === 'undefined') return false;
                 const { user } = get();
                 if (!user) return false;
                 if (user.permissions.includes('*')) return true;
                 return user.permissions.includes(permission);
-            }
+            },
+
+            logout: () => {
+                set({ user: defaultUser, accessToken: null });
+                handleLogout();
+                // 👉 Redirect về login (chỉ gọi ở client)
+                if (typeof window !== 'undefined' && window.location.pathname !== '/auth/login') {
+                    window.location.href = '/auth/login';
+                }
+            },
         }),
         {
             name: 'auth-storage', // key trong localStorage
-            partialize: (state) => ({ user: state.user }), // chỉ lưu user
+            partialize: (state) => ({ user: state.user, accessToken: state.accessToken }), // chỉ lưu user
             onRehydrateStorage: () => (state, error) => {
                 console.log('Rehydrating state:', state)
                 if (error) {

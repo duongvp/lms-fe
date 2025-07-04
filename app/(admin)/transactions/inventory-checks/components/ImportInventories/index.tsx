@@ -3,7 +3,6 @@ import { Card, Row, Col } from 'antd';
 import ImportInventoriesForm from './ImportInventoriesForm';
 import InventoryCheckSelect from '@/components/templates/InventoryCheckTemplate';
 import { useInventoryCheckTableData } from '@/hooks/useInventoryCheckTableData';
-import ProductModal from '@/app/(admin)/products/components/Modal/ProductModal';
 import { ITypeImportInvoice } from '@/types/invoice';
 
 interface IImportInventoriesProps {
@@ -13,21 +12,22 @@ interface IImportInventoriesProps {
 
 const ImportInventories: React.FC<IImportInventoriesProps> = ({ slug, type }) => {
     const [totalActualQuantity, setTotalActualQuantity] = useState<number>(0);
-    const [data, setData] = useState<any>({});
+    const [dataSource, setDataSource] = useState<any[]>([]);
 
     const {
         tableData,
-        inventoryDetails,
-        inventorySummary,
-        loading,
-        error,
     } = useInventoryCheckTableData(slug ?? 0);
+
+    const resetForm = () => {
+        setDataSource([]);
+        setTotalActualQuantity(0);
+    }
 
     return (
         <Row gutter={16} style={{ height: "100%" }}>
             {/* Left side */}
             <Col span={16}>
-                <InventoryCheckSelect setTotalActualQuantity={setTotalActualQuantity} tableData={tableData} setData={setData} />
+                <InventoryCheckSelect setTotalActualQuantity={setTotalActualQuantity} tableData={tableData} dataSource={dataSource} setDataSource={setDataSource} />
             </Col>
 
             {/* Right side */}
@@ -41,7 +41,7 @@ const ImportInventories: React.FC<IImportInventoriesProps> = ({ slug, type }) =>
                         },
                     }}
                 >
-                    <ImportInventoriesForm totalActualQuantity={totalActualQuantity} data={data} type={type} slug={slug} />
+                    <ImportInventoriesForm totalActualQuantity={totalActualQuantity} data={dataSource} type={type} slug={slug} resetForm={resetForm} />
                 </Card>
             </Col>
         </Row>

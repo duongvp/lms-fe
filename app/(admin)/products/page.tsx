@@ -14,6 +14,7 @@ import useProductStore from "@/stores/productStore";
 import { ActionType } from "@/enums/action";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
+import { notification } from "antd";
 
 // Đây là kiểu dữ liệu cho Table (thêm key + description)
 interface DataType extends ProductApiResponse {
@@ -55,6 +56,9 @@ const columns: ColumnsType<DataType> = [
     {
         title: "Tồn kho",
         dataIndex: "stock",
+        render: (value) => {
+            return <span>{Number(value).toLocaleString()}</span>
+        },
     },
     {
         title: "Thời gian khởi tạo",
@@ -79,6 +83,7 @@ const Page = () => {
     const [pagination, setPagination] = useState<Pagination>({ current: 1, pageSize: 10 });
     const [total, setTotal] = useState<number>(0);
     const [openFilterDrawer, setOpenFilterDrawer] = useState(false);
+    const [api, contextHolder] = notification.useNotification();
     const [openImportModal, setOpenImportModal] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Array<string | number>>([1, 2, 3]);
     const hasPermission = useAuthStore(state => state.hasPermission);
@@ -93,7 +98,7 @@ const Page = () => {
         try {
             const { current = 1, pageSize = 10 } = params;
             const skip = (current - 1) * pageSize;
-            const response = await getProductsByPage(pageSize, skip, filters);
+            const response = await getProductsByPage(pageSize, skip, { ...filters, warehouse_id: warehouseId });
 
             const tableData: DataType[] = response.data.map((item) => ({
                 ...item,
@@ -107,6 +112,10 @@ const Page = () => {
                 pageSize,
             });
         } catch (error) {
+            api.error({
+                message: "Lỗi khi tải dữ liệu",
+                description: "Không thể tải danh sách sản phẩm. Vui lòng thử lại sau.",
+            });
             console.error("Lỗi khi lấy dữ liệu:", error);
         } finally {
             setLoading(false);
@@ -143,7 +152,7 @@ const Page = () => {
 
     useEffect(() => {
         fetchData();
-    }, [filters])
+    }, [api, filters])
 
     useEffect(() => {
         if (shouldReload) {
@@ -152,13 +161,9 @@ const Page = () => {
         }
     }, [shouldReload]);
 
-    useEffect(() => {
-        if (warehouseId === -1) return
-        setFilters({ ...filters, warehouse_id: warehouseId });
-    }, [warehouseId]);
-
     return (
         <>
+            {contextHolder}
             <SearchAndActionsBar
                 onSearch={handleSearch}
                 placeholder="Theo mã hàng, tên hàng"
@@ -169,8 +174,8 @@ const Page = () => {
                     hasPermission(PermissionKey.PRODUCT_EXPORT) && (
                         <GenericExportButton
                             exportService={exportProducts}
-                            serviceParams={[[], warehouseId]}
-                            fileNamePrefix="Danhsachsanpham"
+                            serviceParams={[[], warehouseId, filters]}
+                            fileNamePrefix="Danh_sach_san_pham"
                         />
                     )
                 }

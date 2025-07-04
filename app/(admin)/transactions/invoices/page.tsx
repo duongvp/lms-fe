@@ -6,7 +6,7 @@ import type { ColumnsType } from "antd/es/table";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
 import DecriptionTable from "./components/DecriptionRow";
 import { exportInvoices, getInvoicesByPage, importInvoicesFromExcel, InvoiceApiResponse } from "@/services/invoiceService";
-import { notification } from "antd";
+import { notification, Table } from "antd";
 import { getInvoiceStatusLabel, InvoiceStatus } from "@/enums/invoice";
 import FilterDrawer from "@/components/shared/FilterModal";
 import { isEmpty } from "lodash";
@@ -18,13 +18,13 @@ import { PermissionKey } from "@/types/permissions";
 import useInvoiceStore from "@/stores/invoiceStore";
 import { Status } from "@/enums/status";
 
-interface DataType extends InvoiceApiResponse {
+interface DataType extends Partial<InvoiceApiResponse> {
     key: number;
     description: React.ReactNode;
 }
 
 interface InvoiceFilter {
-    invoice_code?: string;
+    search_text?: string;
     [key: string]: any;
 }
 
@@ -35,8 +35,11 @@ const columns: ColumnsType<DataType> = [
     },
     {
         title: "Thời gian khởi tạo",
-        dataIndex: "created_at",
-        render: (value) => dayjs(value).format("DD/MM/YYYY HH:mm"),
+        dataIndex: "invoice_date",
+        render: (value) => {
+            if (!value) return '';
+            return dayjs(value).format("DD/MM/YYYY HH:mm")
+        },
     },
     {
         title: "Khách hàng",
@@ -61,7 +64,20 @@ const columns: ColumnsType<DataType> = [
 ];
 
 const Page = () => {
-    const [data, setData] = useState<DataType[]>([]);
+    const summaryRow: DataType = {
+        key: -1, // key đặc biệt để phân biệt
+        invoice_id: -1,
+        warehouse_id: -1,
+        customer_id: -1,
+        user_id: -1,
+        invoice_code: "",
+        customer_name: "",
+        status: "",
+        total_amount: "0",
+        description: null,
+        // Add other missing properties from InvoiceApiResponse here with default values if needed
+    };
+    const [data, setData] = useState<DataType[]>([summaryRow]);
     const [loading, setLoading] = useState<boolean>(true);
     const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
     const [openFilterDrawer, setOpenFilterDrawer] = useState(false);
@@ -91,15 +107,15 @@ const Page = () => {
     };
 
     const handleSearch = async (value: string) => {
-        setFilter({ ...filter, invoice_code: value });
+        setFilter({ ...filter, search_text: value });
     };
 
     const handleFilterOrder = (values: any) => {
         if (isEmpty(values)) {
-            setFilter({ invoice_code: filter.invoice_code });
+            setFilter({ search_text: filter.search_text });
             return
         }
-        setFilter({ invoice_code: filter.invoice_code, ...values });
+        setFilter({ search_text: filter.search_text, ...values });
     };
 
     const handleCreateInvoice = () => window.open('/transactions/invoices/create', '_blank')
@@ -112,10 +128,7 @@ const Page = () => {
             setLoading(true);
             const { current, pageSize } = pagination;
             const skip = (current - 1) * pageSize;
-            const { data: apiData, total } = await getInvoicesByPage(pageSize, skip, filter);
-
-            const apiUserData = await getUsersFollowWarehouse(warehouseId);
-            const options = apiUserData.map((item: any) => ({ value: item.user_id, labelText: item.username, label: item.full_name }));
+            const { data: apiData, total, grand_total } = await getInvoicesByPage(pageSize, skip, { ...filter, warehouse_id: warehouseId });
 
             setTotal(total);
 
@@ -123,10 +136,10 @@ const Page = () => {
                 ...item,
                 key: item.invoice_id,
                 status: getInvoiceStatusLabel(item.status as InvoiceStatus),
-                description: <DecriptionTable data={item} options={options} />,
+                description: <DecriptionTable data={item} />,
             }));
-
-            setData(tableData);
+            summaryRow.total_amount = grand_total.toLocaleString();
+            setData([summaryRow, ...tableData]);
         } catch (error) {
             api.error({
                 message: "Lỗi khi tải dữ liệu",
@@ -144,11 +157,6 @@ const Page = () => {
     }, [fetchData]);
 
     useEffect(() => {
-        if (warehouseId === -1) return
-        setFilter({ ...filter, warehouse_id: warehouseId });
-    }, [warehouseId]);
-
-    useEffect(() => {
         if (shouldReload) {
             fetchData();
             setShouldReload(false);
@@ -160,7 +168,7 @@ const Page = () => {
             {contextHolder}
             <SearchAndActionsBar
                 onSearch={handleSearch}
-                placeholder="Tìm theo mã phiếu hoá đơn"
+                placeholder="Tìm theo mã hoá đơn, mã khách hàng, tên khách hàng, sđt khách hàng"
                 titleBtnAdd="Hoá đơn"
                 handleImportClick={hasPermission(PermissionKey.INVOICE_CREATE) ? handleImportClick : undefined}
                 handleAddBtn={hasPermission(PermissionKey.INVOICE_IMPORT) ? handleCreateInvoice : undefined}
@@ -169,8 +177,8 @@ const Page = () => {
                     hasPermission(PermissionKey.INVOICE_EXPORT) && (
                         <GenericExportButton
                             exportService={exportInvoices}
-                            serviceParams={[[], warehouseId]}
-                            fileNamePrefix="Danh_sach_hoa_don_"
+                            serviceParams={[[], warehouseId, filter]}
+                            fileNamePrefix="Danh_sach_hoa_don"
                         />
                     )
                 }
@@ -191,9 +199,12 @@ const Page = () => {
                 onChange={handleTableChange}
                 scroll={{ x: "max-content" }}
                 expandable={{
-                    expandedRowRender: (record) => record.description,
+                    expandedRowRender: (record) =>
+                        record.key === -1 ? null : record.description,
+                    rowExpandable: (record) => record.key !== -1,
                     expandedRowKeys,
                     onExpand: (expanded, record) => {
+                        if (record.key === -1) return;
                         if (expanded) {
                             setExpandedRowKeys([record.key]);
                         } else {
@@ -207,7 +218,11 @@ const Page = () => {
                 })}
                 rowClassName={() => "expandable-row"}
             />
-            <FilterDrawer open={openFilterDrawer} onClose={() => { setOpenFilterDrawer(false) }} handleSearch={handleFilterOrder} />
+            <FilterDrawer
+                open={openFilterDrawer}
+                onClose={() => { setOpenFilterDrawer(false) }}
+                handleSearch={handleFilterOrder}
+            />
             <ImportModal
                 open={openImportModal}
                 onClose={() => setOpenImportModal(false)}

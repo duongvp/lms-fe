@@ -18,6 +18,7 @@ import useUnitStore from '@/stores/unitStore';
 import { Status } from '@/enums/status';
 import { createInventoryCheck } from '@/services/inventoryCheckService';
 import { isEmpty } from 'lodash';
+import CustomInput from '@/components/ui/Inputs';
 
 const ProductModal = () => {
     const { modal, resetModal, setShouldReload } = useProductStore();
@@ -252,15 +253,36 @@ const ProductModal = () => {
                         {/* Bên phải */}
                         <Col span={8}>
                             <Form.Item label="Giá vốn" name="purchase_price">
-                                <InputNumber style={{ width: '100%' }} min={0} placeholder="0" />
+                                <InputNumber
+                                    style={{ width: '100%' }}
+                                    min={0}
+                                    placeholder="0"
+                                    formatter={(value) =>
+                                        `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+                                    }
+                                />
                             </Form.Item>
 
                             <Form.Item label="Giá bán" name="selling_price" rules={[{ required: true, message: 'Vui lòng nhập giá bán' }]}>
-                                <InputNumber style={{ width: '100%' }} min={0} placeholder="0" />
+                                <InputNumber
+                                    style={{ width: '100%' }}
+                                    min={0}
+                                    placeholder="0"
+                                    formatter={(value) =>
+                                        `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+                                    }
+                                />
                             </Form.Item>
 
                             <Form.Item label="Tồn kho" name="stock" rules={[{ required: true, message: 'Vui lòng nhập tồn kho' }]}>
-                                <InputNumber style={{ width: '100%' }} min={0} placeholder="0" />
+                                <InputNumber
+                                    style={{ width: '100%' }}
+                                    min={0}
+                                    placeholder="0"
+                                    formatter={(value) =>
+                                        `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+                                    }
+                                />
                             </Form.Item>
 
                             <Form.Item label="Trọng lượng" name="weight">

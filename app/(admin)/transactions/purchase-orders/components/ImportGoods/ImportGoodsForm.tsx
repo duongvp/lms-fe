@@ -73,8 +73,11 @@ export default function ImportGoodsForm({ subtotal, poInfos, poSummary, type, da
         }
     };
 
+    console.log("dateTimeSelected", dayjs(dateTimeSelected).format('YYYY-MM-DD HH:mm:ss'));
+
     const handleCreatePurchaseOrder = async (values: any) => {
         try {
+            if (dataSource.length === 0) return
             const details = dataSource.map((item: any) => ({
                 product_id: item.id,
                 quantity: item.quantity,
@@ -91,10 +94,11 @@ export default function ImportGoodsForm({ subtotal, poInfos, poSummary, type, da
                 total_amount: calculateTotal(),
                 amount_paid: paymentToSupplier,
                 debt_amount: debt,
-                order_date: dayjs().format('YYYY-MM-DD HH:mm:ss'),
+                order_date: dayjs(dateTimeSelected).format('YYYY-MM-DD HH:mm:ss'),
                 status: PurchaseOrderStatus.RECEIVED,
                 details
             }
+            console.log('newValues', newValues);
             if (type === 'edit') {
                 await updatePurchaseOrder(poInfos.po_id ?? 0, newValues);
                 showSuccessMessage('Cập nhật phiếu nhập thành công')
@@ -161,7 +165,6 @@ export default function ImportGoodsForm({ subtotal, poInfos, poSummary, type, da
                 <div>
                     {/* Header */}
                     <HeaderForm
-                        warehouseId={warehouseId}
                         userIdSelected={userIdSelected}
                         setUserIdSelected={setUserIdSelected}
                         dateTime={dateTimeSelected}
@@ -185,12 +188,6 @@ export default function ImportGoodsForm({ subtotal, poInfos, poSummary, type, da
                             }
                         />
                     </Form.Item>
-
-                    {/* Các trường nhập liệu */}
-                    <Form.Item name="po_code">
-                        <CustomInput label="Mã phiếu nhập" name="po_code" placeholder="Mã phiếu tự động" />
-                    </Form.Item>
-                    <Divider />
 
                     {/* Tổng tiền */}
                     <Flex justify='space-between' style={{ marginBottom: 8 }}>

@@ -29,8 +29,8 @@ export default function SearchAndActionsBar({
 }: Partial<SearchAndActionsBarProps>) {
 
     return (
-        <Row style={{ width: '100%', marginBottom: '16px' }} gutter={16}>
-            <Col xl={6} lg={8} md={12} sm={24} xs={24}>
+        <Row style={{ width: '100%', marginBottom: '16px' }} gutter={[16, 8]}>
+            <Col xxl={6} lg={8} md={12} sm={24} xs={24}>
                 {showSearch && (
                     <CustomSearchInput
                         placeholder={placeholder}
@@ -38,7 +38,7 @@ export default function SearchAndActionsBar({
                     />
                 )}
             </Col>
-            <Col xl={18} lg={16} md={12} sm={24} xs={24}>
+            <Col xxl={18} lg={16} md={12} sm={24} xs={24}>
                 <Flex
                     vertical
                     align='stretch'

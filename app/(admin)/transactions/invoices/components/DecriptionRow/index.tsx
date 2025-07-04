@@ -7,14 +7,9 @@ import useInvoiceStore from '@/stores/invoiceStore';
 
 interface DecriptionTableProps {
     data: InvoiceApiResponse;
-    options: {
-        value: number;
-        labelText: string;
-        label: string;
-    }[];
 }
 
-const InvoiceDescriptionTable: React.FC<DecriptionTableProps> = ({ data, options }) => {
+const InvoiceDescriptionTable: React.FC<DecriptionTableProps> = ({ data }) => {
     const shouldReload = useInvoiceStore(state => state.shouldReload);
     const {
         tableData,
@@ -36,7 +31,6 @@ const InvoiceDescriptionTable: React.FC<DecriptionTableProps> = ({ data, options
                     data={tableData}
                     invoiceDetails={invoiceDetails}
                     invoiceSummary={invoiceSummary}
-                    options={options}
                 />
             ),
         },

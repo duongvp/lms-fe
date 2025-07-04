@@ -15,6 +15,7 @@ export interface ReturnOrderApiResponse {
     supplier_name: string;
     created_at: Date;
     updated_at: Date;
+    total_amount: string;
 }
 
 export interface ReturnOrderDetailResponse {
@@ -48,7 +49,7 @@ export const getReturnOrdersByPage = async (
     limit: number,
     skip: number,
     filter: any
-): Promise<{ data: ReturnOrderApiResponse[], total: number }> => {
+): Promise<{ data: ReturnOrderApiResponse[], total: number, grand_total: string }> => {
     return await fetchInstance(`${API_BASE_URL}/search`, {
         method: 'POST',
         headers: {
@@ -81,26 +82,18 @@ export const importReturnOrdersFromExcel = async (formatData: any): Promise<any>
     });
 };
 
-export const exportReturnOrders = async (returnIds: Array<string | number>, warehouseId?: number): Promise<Blob> => {
-    const response = await fetch(`${API_BASE_URL}/export`, {
+export const exportReturnOrders = async (
+    returnIds: Array<string | number | undefined>,
+    warehouseId?: number,
+    filter: any = {}
+): Promise<Blob> => {
+    const response = await fetchInstance(`${API_BASE_URL}/export`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            returnIds,
-            warehouseId
-        }),
-    });
+        body: JSON.stringify({ returnIds, warehouseId, ...filter }),
+    }, 'blob');
 
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to export products');
-    }
-
-    return await response.blob();
+    return response;
 };
-
 
 export const updateReturnOrder = async (id: string, returnOrderData: any): Promise<ReturnOrderApiResponse> => {
     const url = `${API_BASE_URL}/${id}`;

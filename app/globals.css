@@ -1,8 +1,12 @@
-@import "tailwindcss";
-
 :root {
   --background: #ffffff;
   --foreground: #171717;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
 @theme inline {
@@ -182,5 +186,36 @@ body {
   .site-layout-background {
     margin: 24px 16px;
     padding: 24px;
+  }
+}
+
+/* styles/globals.css */
+@media (max-width: 768px) {
+  .daily-revenue {
+    border-right: none !important;
+  }
+
+  :where(.ant-input, .ant-input-affix-wrapper, .ant-picker-input > input, .ant-select-selector) {
+    font-size: 16px !important;
+  }
+
+  /* Nếu bạn có sử dụng textarea */
+  :where(.ant-input-textarea) {
+    font-size: 16px !important;
+  }
+
+  /* Nếu bạn dùng DatePicker */
+  :where(.ant-picker) {
+    font-size: 16px !important;
+  }
+
+  /* Nếu bạn dùng Select */
+  :where(.ant-select-selection-item) {
+    font-size: 16px !important;
+  }
+
+  /* Nếu bạn dùng Form.Item label */
+  :where(.ant-form-item-label > label) {
+    font-size: 16px !important;
   }
 }

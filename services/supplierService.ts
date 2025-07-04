@@ -92,17 +92,9 @@ export const importSuppliersFromExcel = async (formatData: any): Promise<any> =>
 
 // Xuất nhà cung cấp
 export const exportSuppliers = async (): Promise<Blob> => {
-    const response = await fetch(`${API_BASE_URL}/export`, {
+    const response = await fetchInstance(`${API_BASE_URL}/export`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-    });
+    }, 'blob');
 
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to export suppliers');
-    }
-
-    return await response.blob();
+    return response;
 };

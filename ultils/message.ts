@@ -21,6 +21,14 @@ export const showErrorMessage = (content: string) => {
     });
 };
 
+export const showWarningMessage = (content: string) => {
+    message.warning({
+        content,
+        style: { textAlign: 'right', },
+    });
+};
+
+
 export const showLoadingMessage = (content: string) => {
     message.loading({
         content,

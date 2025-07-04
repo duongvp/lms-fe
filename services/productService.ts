@@ -65,24 +65,38 @@ export const importProductsFromExcel = async (formatData: any): Promise<any> => 
 };
 
 // productExport.service.ts
-export const exportProducts = async (productIds: Array<string | number>, warehouseId?: number): Promise<Blob> => {
-    const response = await fetch(`${API_BASE_URL}/export`, {
+// export const exportProducts = async (productIds: Array<string | number>, warehouseId?: number): Promise<Blob> => {
+//     const response = await fetch(`${API_BASE_URL}/export`, {
+//         method: 'POST',
+//         headers: {
+//             'Content-Type': 'application/json',
+//         },
+//         body: JSON.stringify({
+//             productIds,
+//             warehouseId
+//         }),
+//     });
+
+//     if (!response.ok) {
+//         const error = await response.json();
+//         throw new Error(error.message || 'Failed to export products');
+//     }
+
+//     return await response.blob();
+// };
+
+export const exportProducts = async (
+    productIds: Array<string | number>,
+    warehouseId?: number,
+    filters: any = {}
+): Promise<Blob> => {
+    console.log("Exporting products with filters:", filters);
+    const response = await fetchInstance(`${API_BASE_URL}/export`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            productIds,
-            warehouseId
-        }),
-    });
+        body: JSON.stringify({ productIds, warehouseId, ...filters }),
+    }, 'blob');
 
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to export products');
-    }
-
-    return await response.blob();
+    return response;
 };
 
 export const createProduct = async (productData: any) => {

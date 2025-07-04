@@ -10,23 +10,26 @@ const { Title, Text, Link } = Typography;
 
 const LoginForm = () => {
     const router = useRouter()
-    const setUser = useAuthStore(state => state.setUser);
+    const { setUser, setAccessToken } = useAuthStore();
     const [loading, setLoading] = React.useState(false);
 
     const onFinish = async (values: any) => {
         setLoading(true);
         try {
             const response = await loginUser(values);
-            setUser(response.data);
+            const { accessToken, refreshToken, ...userRest } = response.data;
+            setUser(userRest);
+            setAccessToken(accessToken);
             setLoading(false);
 
             //giải pháp tạm thời
             const data = await response.data;
-            // document.cookie = `refreshToken=${data.refreshToken}; path=/; secure; sameSite=None`;
-            // document.cookie = `user=${data.user}; path=/; secure; sameSite=None`;
-            document.cookie = `refreshToken=${data.refreshToken}; path=/`;
-            document.cookie = `user=${data.user}; path=/`;
+            document.cookie = `refreshToken=${data.refreshToken}; path=/; secure; sameSite=None`;
+            document.cookie = `user=${data.user}; path=/; secure; sameSite=None`;
 
+            // document.cookie = `refreshToken=${refreshToken}; path=/`;
+            // document.cookie = `user=${data.user}; path=/`;
+            localStorage.setItem('login', Date.now().toString());
             setTimeout(() => {
                 router.push('/dashboard');
             }, 100)
@@ -34,12 +37,16 @@ const LoginForm = () => {
             //giải pháp tạm thời
 
             // router.push('/dashboard');
-        } catch {
+        } catch (error) {
             setLoading(false);
             showErrorMessage('Tên đăng nhập hoặc mật khẩu không đúng');
         }
         console.log('Thành công:', values);
     };
+
+    const handleForgetPassword = () => {
+        router.push('/auth/forgot-password');
+    }
 
     return (
         <div style={{ maxWidth: 380, margin: '0 auto' }}>
@@ -65,7 +72,7 @@ const LoginForm = () => {
                     <Form.Item name="remember" valuePropName="checked" noStyle>
                         <Checkbox>Duy trì đăng nhập</Checkbox>
                     </Form.Item>
-                    <Link style={{ float: 'right' }} href="#">Quên mật khẩu?</Link>
+                    <Link style={{ float: 'right' }} onClick={handleForgetPassword}>Quên mật khẩu?</Link>
                 </Form.Item>
 
                 <Form.Item>

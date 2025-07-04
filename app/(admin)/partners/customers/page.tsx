@@ -11,9 +11,9 @@ import CustomerModal from "./components/Modal/CustomerModal";
 import { ActionType } from "@/enums/action";
 import ImportModal from "@/components/shared/ImportModal";
 import GenericExportButton from "@/components/shared/GenericExportButton";
-import { exportInventoryChecks } from "@/services/inventoryCheckService";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
+import { notification } from "antd";
 
 interface Pagination {
     current?: number;
@@ -65,6 +65,8 @@ const Page = () => {
     const [openImportModal, setOpenImportModal] = useState(false);
     const { shouldReload, setShouldReload } = useCustomerStore();
     const { hasPermission } = useAuthStore();
+    const [api, contextHolder] = notification.useNotification();
+
 
     const fetchData = async (params: Pagination = {}) => {
         setLoading(true);
@@ -87,6 +89,10 @@ const Page = () => {
             });
         } catch (error) {
             console.error("Lỗi khi lấy dữ liệu:", error);
+            api.error({
+                message: "Lỗi khi tải dữ liệu",
+                description: "Không thể tải danh sách khách hàng. Vui lòng thử lại sau.",
+            });
         } finally {
             setLoading(false);
         }
@@ -121,7 +127,6 @@ const Page = () => {
         }
     }, [shouldReload])
 
-
     const handleAddBtn = () => {
         setModal({ open: true, type: ActionType.CREATE, customer: null })
     }
@@ -132,6 +137,7 @@ const Page = () => {
 
     return (
         <>
+            {contextHolder}
             <SearchAndActionsBar
                 onSearch={handleSearch}
                 placeholder="Theo tên, số điện thoại khách hàng"

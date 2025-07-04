@@ -22,10 +22,9 @@ interface TableWithActionsProps {
     data: Partial<IInvoiceTableData>[]; // Dữ liệu bảng
     invoiceDetails: Partial<IInvoiceDetail>;
     invoiceSummary: any;
-    options: { value: number; labelText: string; label: string }[]
 }
 
-const TableWithActions: React.FC<TableWithActionsProps> = ({ data, invoiceDetails, invoiceSummary, options }) => {
+const TableWithActions: React.FC<TableWithActionsProps> = ({ data, invoiceDetails, invoiceSummary }) => {
     console.log("🚀 ~ invoiceDetails:", invoiceDetails)
     const router = useRouter()
     const hasPermission = useAuthStore(state => state.hasPermission);
@@ -125,6 +124,10 @@ const TableWithActions: React.FC<TableWithActionsProps> = ({ data, invoiceDetail
                     <Row style={{ marginBottom: 8 }}>
                         <Col span={8}><Text strong>Giảm giá</Text></Col>
                         <Col span={16} style={{ textAlign: "end" }}><Text>{Number(invoiceSummary?.discount_amount)?.toLocaleString()}</Text></Col>
+                    </Row>
+                    <Row style={{ marginBottom: 8 }}>
+                        <Col span={8}><Text strong>VAT({Number(invoiceSummary?.VAT)}%)</Text></Col>
+                        <Col span={16} style={{ textAlign: "end" }}><Text>{((Number(invoiceSummary?.VAT) / 100) * (Number(invoiceSummary?.subtotal) - Number(invoiceSummary?.discount_amount)))?.toLocaleString()}</Text></Col>
                     </Row>
                     <Row style={{ marginBottom: 8 }}>
                         <Col span={8}><Text strong>Tổng cộng</Text></Col>

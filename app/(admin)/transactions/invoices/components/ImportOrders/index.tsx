@@ -14,14 +14,14 @@ const Index: React.FC<{ slug?: number, type: ITypeImportInvoice, code?: string }
         console.log("type", type);
         if (type == 'copy') {
             setInitialTabs([...initialTabs, {
-                title: `Sao chéo_${code}`,
-                key: "2",
+                title: `Sao chép_${code}`,
+                key: "copy",
                 component: <ImportOrders slug={slug} type={type} />,
             }]);
         } else if (type == 'edit') {
             setInitialTabs([...initialTabs, {
                 title: `Cập nhật_${code}`,
-                key: "2",
+                key: "update",
                 component: <ImportOrders slug={slug} type={type} />,
             }]);
         }

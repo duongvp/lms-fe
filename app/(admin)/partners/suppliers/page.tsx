@@ -13,6 +13,7 @@ import ImportModal from "@/components/shared/ImportModal";
 import GenericExportButton from "@/components/shared/GenericExportButton";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
+import { notification } from "antd";
 
 interface Pagination {
     current?: number;
@@ -63,6 +64,7 @@ const Page = () => {
     const [openImportModal, setOpenImportModal] = useState(false);
     const { shouldReload, setShouldReload } = useSupplierStore();  // Cập nhật store để reload dữ liệu khi cần
     const { hasPermission } = useAuthStore();
+    const [api, contextHolder] = notification.useNotification();
 
     const fetchData = async (params: Pagination = {}) => {
         setLoading(true);
@@ -85,6 +87,10 @@ const Page = () => {
             });
         } catch (error) {
             console.error("Lỗi khi lấy dữ liệu:", error);
+            api.error({
+                message: "Lỗi khi tải dữ liệu",
+                description: "Không thể tải danh sách nhà cung cấp. Vui lòng thử lại sau.",
+            });
         } finally {
             setLoading(false);
         }
@@ -129,6 +135,7 @@ const Page = () => {
 
     return (
         <>
+            {contextHolder}
             <SearchAndActionsBar
                 onSearch={handleSearch}
                 placeholder="Theo tên, số điện thoại nhà cung cấp"

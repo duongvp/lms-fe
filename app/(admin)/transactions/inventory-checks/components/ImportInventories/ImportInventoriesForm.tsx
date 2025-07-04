@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/authStore';
 import dayjs from 'dayjs';
 import { Status } from '@/enums/status';
 import { ITypeImportInvoice } from '@/types/invoice';
+import useProductStore from '@/stores/productStore';
 
 const { Text } = Typography;
 
@@ -17,15 +18,17 @@ interface ImportInventoriesFormProps {
     data: any;
     type?: ITypeImportInvoice
     slug?: number
+    resetForm: () => void
 }
 
-export default function ImportInventoriesForm({ totalActualQuantity, data, type, slug = 0 }: ImportInventoriesFormProps) {
+export default function ImportInventoriesForm({ totalActualQuantity, data, type, slug = 0, resetForm }: ImportInventoriesFormProps) {
     const [form] = Form.useForm();
     const [loadingSubmit, setLoadingSubmit] = useState<boolean>(false);
     const [loadingTemporary, setLoadingTemporary] = useState<boolean>(false);
     const { warehouseId, userId } = useAuthStore(state => state.user);
     const [userIdSelected, setUserIdSelected] = useState<number>(userId);
     const [dateTimeSelected, setDateTimeSelected] = useState<dayjs.Dayjs | null | undefined>(dayjs());
+    const { setShouldReload } = useProductStore();
 
     const handleTemporary = async () => {
         try {
@@ -41,6 +44,8 @@ export default function ImportInventoriesForm({ totalActualQuantity, data, type,
         try {
             setLoadingSubmit(true);
             await handleCreateInventoryCheck(values, Status.RECEIVED);
+            resetForm();
+            setShouldReload(true);
         } finally {
             setLoadingSubmit(false);
         }
@@ -48,30 +53,6 @@ export default function ImportInventoriesForm({ totalActualQuantity, data, type,
 
     const handleCreateInventoryCheck = async (values: any, status: string) => {
         if (warehouseId === -1) return
-        // const data = {
-        //     "warehouse_id": 1,
-        //     "user_id": 101,
-        //     "start_date": "2025-05-20T08:00:00.000Z",
-        //     "end_date": "2025-05-20T10:00:00.000Z",
-        //     "status": "completed",
-        //     "stock_take_details": [
-        //         {
-        //             "product_id": 1,
-        //             "system_quantity": 50,
-        //             "actual_quantity": 47
-        //         },
-        //         {
-        //             "product_id": 2,
-        //             "system_quantity": 30,
-        //             "actual_quantity": 30
-        //         },
-        //         {
-        //             "product_id": 3,
-        //             "system_quantity": 80,
-        //             "actual_quantity": 90
-        //         }
-        //     ]
-        // }
         try {
             const stock_take_details = data.map((item: any) => ({
                 product_id: item.id,
@@ -84,6 +65,7 @@ export default function ImportInventoriesForm({ totalActualQuantity, data, type,
                 status: status,
                 user_id: userIdSelected,
                 warehouse_id: warehouseId,
+                start_date: dateTimeSelected ? dateTimeSelected.format('YYYY-MM-DD HH:mm:ss') : null,
                 notes: values.notes
             }
             if (type === "edit") {
@@ -119,7 +101,6 @@ export default function ImportInventoriesForm({ totalActualQuantity, data, type,
                 <div>
                     {/* Header */}
                     <HeaderForm
-                        warehouseId={warehouseId}
                         userIdSelected={userIdSelected}
                         setUserIdSelected={setUserIdSelected}
                         dateTime={dateTimeSelected}
@@ -128,14 +109,14 @@ export default function ImportInventoriesForm({ totalActualQuantity, data, type,
 
 
                     {/* Các trường nhập liệu */}
-                    <Form.Item name="stock_take_code">
+                    {/* <Form.Item name="stock_take_code">
                         <CustomInput label="Mã kiểm kho" name="stock_take_code" placeholder="Mã phiếu tự động" />
-                    </Form.Item>
+                    </Form.Item> */}
                     {/* <CustomInput label="Mã đặt hàng nhập" name="orderCode" placeholder="" /> */}
-                    <Flex style={{ marginTop: 12, marginBottom: 16 }}>
+                    {/* <Flex style={{ marginTop: 12, marginBottom: 16 }}>
                         <Text style={{ width: 120 }}>Trạng thái</Text>
                         <Text style={{ paddingLeft: 11 }}>Phiếu tạm</Text>
-                    </Flex>
+                    </Flex> */}
                     <Flex style={{ marginBottom: 16 }}>
                         <Text>Tổng số lượng thực tế :</Text>
                         <Text style={{ paddingLeft: 24 }}>{totalActualQuantity.toLocaleString()}</Text>
@@ -152,9 +133,9 @@ export default function ImportInventoriesForm({ totalActualQuantity, data, type,
 
                 {/* Các nút thao tác */}
                 <Flex gap={8}>
-                    <Button type="default" style={{ flex: 1 }} icon={<SaveOutlined />} onClick={handleTemporary} loading={loadingTemporary}>
+                    {/* <Button type="default" style={{ flex: 1 }} icon={<SaveOutlined />} onClick={handleTemporary} loading={loadingTemporary}>
                         Lưu tạm
-                    </Button>
+                    </Button> */}
                     <Button type="primary" htmlType="submit" style={{ flex: 1 }} icon={<CheckOutlined />} loading={loadingSubmit}>
                         Hoàn thành
                     </Button>

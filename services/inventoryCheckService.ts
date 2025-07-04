@@ -1,5 +1,6 @@
 import { Status } from "@/enums/status";
 import { fetchInstance } from "@/ultils/fetchInstance";
+import { filter } from "lodash";
 const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/api/inventory-checks`;
 
 // Kiểu dữ liệu API trả về
@@ -90,24 +91,17 @@ export const importInventoryChecksFromExcel = async (formatData: any): Promise<a
     });
 };
 
-export const exportInventoryChecks = async (stockTakeIds: Array<string | number | undefined>, warehouseId?: number): Promise<Blob> => {
-    const response = await fetch(`${API_BASE_URL}/export`, {
+export const exportInventoryChecks = async (
+    stockTakeIds: Array<string | number | undefined>,
+    warehouseId?: number,
+    filter: any = {}
+): Promise<Blob> => {
+    const response = await fetchInstance(`${API_BASE_URL}/export`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            stockTakeIds,
-            warehouseId
-        }),
-    });
+        body: JSON.stringify({ stockTakeIds, warehouseId, ...filter }),
+    }, 'blob');
 
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to export products');
-    }
-
-    return await response.blob();
+    return response;
 };
 
 export const getInventoryCheckById = async (id: number): Promise<InventoryCheck> => {

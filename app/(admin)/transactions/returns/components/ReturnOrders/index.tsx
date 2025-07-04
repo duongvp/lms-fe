@@ -8,7 +8,7 @@ import { IDataTypeProductSelect } from '@/types/productSelect';
 import { useReturnTableData } from '@/hooks/useReturnTableData';
 
 const ReturnOrders: React.FC<{ slug?: number, type?: ITypeImportInvoice }> = ({ slug, type }) => {
-    const [totalAmount, setTotalAmount] = useState<number>(0);
+    const [subtotal, setSubtotal] = useState<number>(0);
     const [dataSource, setDataSource] = useState<IDataTypeProductSelect[]>([]);
 
     const dataHook = type === 'edit'
@@ -39,7 +39,7 @@ const ReturnOrders: React.FC<{ slug?: number, type?: ITypeImportInvoice }> = ({ 
             {/* Left side */}
             <Col span={16}>
                 <ProductGridTemplate
-                    setTotalAmount={setTotalAmount}
+                    setTotalAmount={setSubtotal}
                     tableData={tableData}
                     dataSource={dataSource}
                     setDataSource={setDataSource}
@@ -58,7 +58,7 @@ const ReturnOrders: React.FC<{ slug?: number, type?: ITypeImportInvoice }> = ({ 
                         },
                     }}
                 >
-                    <ReturnOrdersForm totalAmount={totalAmount} type={type} returnOrderDetails={returnOrderDetails} returnOrderSummary={returnOrderSummary} dataSource={dataSource} />
+                    <ReturnOrdersForm subtotal={subtotal} type={type} returnOrderDetails={returnOrderDetails} returnOrderSummary={returnOrderSummary} dataSource={dataSource} />
                 </Card>
             </Col>
         </Row>

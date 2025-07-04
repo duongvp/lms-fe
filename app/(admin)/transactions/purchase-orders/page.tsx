@@ -17,7 +17,7 @@ import { PurchaseOrderStatus } from "@/enums/status";
 import { useRouter } from "next/navigation";
 import { PermissionKey } from "@/types/permissions";
 
-interface DataType extends PurchaseOrderApiResponse {
+interface DataType extends Partial<PurchaseOrderApiResponse> {
     key: number;
     description?: React.ReactNode;
 }
@@ -29,21 +29,39 @@ const columns: ColumnsType<DataType> = [
     },
     {
         title: "Thời gian khởi tạo",
-        dataIndex: "created_at",
-        render: (value) => dayjs(value).format("DD/MM/YY HH:mm"),
+        dataIndex: "order_date",
+        render: (value) => {
+            if (!value) return '';
+            return dayjs(value).format("DD/MM/YYYY HH:mm")
+        },
     },
     {
         title: "Nhà cung cấp",
         dataIndex: "supplier_name",
     },
     {
+        title: "Tổng tiền",
+        dataIndex: "total_amount",
+        render: (value) => Number(value).toLocaleString(),
+    },
+    {
         title: "Trạng thái",
         dataIndex: "status",
-        render: (value) => (value === PurchaseOrderStatus.RECEIVED ? "Đã nhập hàng" : (value === PurchaseOrderStatus.DRAFT ? 'Phiếu tạm' : 'Đã huỷ')),
+        render: (value) => {
+            if (!value) return
+            return (value === PurchaseOrderStatus.RECEIVED ? "Đã nhập hàng" : (value === PurchaseOrderStatus.DRAFT ? 'Phiếu tạm' : 'Đã huỷ'))
+        }
     },
 ];
 
 const Page = () => {
+    const summaryRow: DataType = {
+        key: -1, // key đặc biệt để phân biệt
+        po_code: "",
+        supplier_name: "",
+        total_amount: "0",
+        description: null
+    };
     const [data, setData] = useState<DataType[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
@@ -64,7 +82,7 @@ const Page = () => {
             setLoading(true);
             const { current, pageSize } = pagination;
             const skip = (current - 1) * pageSize;
-            const { data: apiData, total } = await getPurchaseOrdersByPage(pageSize, skip, filter);
+            const { data: apiData, total, grand_total } = await getPurchaseOrdersByPage(pageSize, skip, { ...filter, warehouse_id: warehouseId });
 
             const tableData: DataType[] = apiData.map((item) => ({
                 ...item,
@@ -72,7 +90,8 @@ const Page = () => {
                 description: <DecriptionTable data={item} />,
             }));
 
-            setData(tableData);
+            summaryRow.total_amount = grand_total.toLocaleString();
+            setData([summaryRow, ...tableData]);
             setTotal(total);
         } catch (error) {
             api.error({
@@ -102,15 +121,15 @@ const Page = () => {
     };
 
     const handleSearch = async (value: string) => {
-        setFilter({ ...filter, po_code: value });
+        setFilter({ ...filter, search_text: value });
     };
 
     const handleFilterOrder = (values: any) => {
         if (isEmpty(values)) {
-            setFilter({ po_code: filter.po_code });
+            setFilter({ search_text: filter.search_text });
             return;
         }
-        setFilter({ po_code: filter.po_code, ...values });
+        setFilter({ search_text: filter.search_text, ...values });
     };
 
     const handleAddBtn = () => {
@@ -126,11 +145,6 @@ const Page = () => {
     }, [fetchData]);
 
     useEffect(() => {
-        if (warehouseId === -1) return
-        setFilter({ ...filter, warehouse_id: warehouseId });
-    }, [warehouseId]);
-
-    useEffect(() => {
         if (shouldReload) {
             fetchData();
             setShouldReload(false);
@@ -142,7 +156,7 @@ const Page = () => {
             {contextHolder}
             <SearchAndActionsBar
                 onSearch={handleSearch}
-                placeholder="Tìm theo mã phiếu nhập"
+                placeholder="Tìm theo mã phiếu nhập, mã NCC, tên NCC, sđt NCC"
                 titleBtnAdd="Phiếu nhập"
                 handleAddBtn={hasPermission(PermissionKey.IMPORT_CREATE) ? handleAddBtn : undefined}
                 handleImportClick={hasPermission(PermissionKey.IMPORT_IMPORT) ? handleImportClick : undefined}
@@ -151,7 +165,7 @@ const Page = () => {
                     hasPermission(PermissionKey.IMPORT_EXPORT) && (
                         <GenericExportButton
                             exportService={exportPurchaseOrders}
-                            serviceParams={[[], warehouseId]}
+                            serviceParams={[[], warehouseId, filter]}
                             fileNamePrefix="Danh_sach_phieu_nhap_hang"
                         />
                     )
@@ -173,9 +187,12 @@ const Page = () => {
                 onChange={handleTableChange}
                 scroll={{ x: "max-content" }}
                 expandable={{
-                    expandedRowRender: (record) => record.description ?? null,
+                    expandedRowRender: (record) =>
+                        record.key === -1 ? null : record.description,
+                    rowExpandable: (record) => record.key !== -1,
                     expandedRowKeys,
                     onExpand: (expanded, record) => {
+                        if (record.key === -1) return;
                         if (expanded) {
                             setExpandedRowKeys([record.key]);
                         } else {

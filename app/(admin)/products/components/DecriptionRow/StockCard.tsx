@@ -58,8 +58,22 @@ const StockCard: React.FC<TableWithActionsProps> = ({ data }) => {
                 return Number(value).toLocaleString();
             }
         },
-        { title: 'Số lượng', dataIndex: 'quantity', key: 'quantity' },
-        { title: 'Tồn cuối', dataIndex: 'ending_balance', key: 'ending_balance' },
+        {
+            title: 'Số lượng',
+            dataIndex: 'quantity',
+            key: 'quantity',
+            render: (value: any) => {
+                return Number(value).toLocaleString();
+            }
+        },
+        {
+            title: 'Tồn cuối',
+            dataIndex: 'ending_balance',
+            key: 'ending_balance',
+            render: (value: any) => {
+                return Number(value).toLocaleString();
+            }
+        },
     ];
 
     const fetchData = async () => {

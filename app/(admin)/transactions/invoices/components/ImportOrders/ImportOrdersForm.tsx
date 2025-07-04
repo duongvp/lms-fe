@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Form, Typography, Button, Divider, Flex, Input, Empty } from 'antd';
+import { Form, Typography, Button, Flex, Input, Empty, Alert } from 'antd';
 import { CheckOutlined } from '@ant-design/icons';
 import CustomInput from '@/components/ui/Inputs'; // bạn nhớ tạo cho chuẩn nhé
 import SelectWithButton from '@/components/ui/Selects/SelectWithButton';
@@ -10,7 +10,7 @@ import useCustomerStore from '@/stores/customerStore';
 import { InvoiceStatus } from '@/enums/invoice';
 import HeaderForm from '@/components/shared/HeaderForm';
 import { ActionType } from '@/enums/action';
-import { showErrorMessage, showSuccessMessage } from '@/ultils/message';
+import { showErrorMessage, showSuccessMessage, showWarningMessage } from '@/ultils/message';
 import { createInvoice, updateInvoice } from '@/services/invoiceService';
 import dayjs from 'dayjs';
 import { useAuthStore } from '@/stores/authStore';
@@ -34,6 +34,7 @@ interface ImportOrdersFormProps {
 export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceDetails, invoiceSummary, dataSource, setDataSource }: ImportOrdersFormProps) {
     const [form] = Form.useForm();
     const [discountAmount, setDiscountAmount] = useState<number>(0);
+    const [VAT, setVAT] = useState<number>(0);
     const [customerPayment, setCustomerPayment] = useState<number>(0);
     const { setModal } = useCustomerStore();
     const [searchTerm, setSearchTerm] = useState('');
@@ -48,6 +49,8 @@ export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceD
     const resetForm = () => {
         setDataSource([])
         setSubtotal(0)
+        setVAT(0)
+        setDiscountAmount(0)
         form.resetFields();
     }
 
@@ -62,6 +65,10 @@ export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceD
 
     const handleCreateInvoice = async (values: any) => {
         if (warehouseId === -1) return
+        if (dataSource.length === 0) {
+            showWarningMessage('Hoá đơn chỉ được tạo khi có tối thiểu 1 sản phẩm được chọn')
+            return
+        }
         try {
             const details = dataSource.map((item: any) => ({
                 product_id: item.id,
@@ -79,6 +86,7 @@ export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceD
                 total_amount: calculateTotal(),
                 amount_paid: customerPayment,
                 debt_amount: calculateDebt(),
+                VAT: VAT,
                 invoice_date: dateTimeSelected?.format('YYYY-MM-DD HH:mm:ss'),
                 status: InvoiceStatus.RECEIVED,
                 notes: values.notes,
@@ -94,15 +102,14 @@ export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceD
                 setShouldReload(true);
                 resetForm();
             }
-        } catch (error) {
-            console.error('error', error);
-            showErrorMessage('Tạo hoá đơn thất bại')
+        } catch (error: any) {
+            showErrorMessage(error.message || 'Tạo hoá đơn thất bại')
         }
     }
 
     const calculateTotal = () => {
-        const total = subtotal - discountAmount;
-        return total >= 0 ? total : 0;
+        const total = (subtotal - discountAmount) * (1 + VAT / 100);
+        return total >= 0 ? Math.round(total) : 0;
     };
 
     const calculateDebt = () => {
@@ -123,6 +130,7 @@ export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceD
             setUserIdSelected(invoiceDetails?.user_id as number);
             setDateTimeSelected(dayjs(invoiceDetails?.invoice_date));
             setDiscountAmount(invoiceSummary?.discount_amount);
+            setVAT(invoiceSummary?.VAT);
             setCustomerPayment(invoiceSummary?.amount_paid);
         }
     }, [invoiceDetails, type, invoiceSummary])
@@ -133,9 +141,10 @@ export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceD
 
     useEffect(() => {
         if (type == "create") {
+            console.log("calculateTotal()", calculateTotal());
             setCustomerPayment(calculateTotal())
         }
-    }, [subtotal, discountAmount, type])
+    }, [subtotal, discountAmount, type, VAT])
 
 
     return (
@@ -150,7 +159,6 @@ export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceD
                 <div>
                     {/* Header */}
                     <HeaderForm
-                        warehouseId={warehouseId}
                         userIdSelected={userIdSelected}
                         setUserIdSelected={setUserIdSelected}
                         dateTime={dateTimeSelected}
@@ -175,12 +183,6 @@ export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceD
                             }
                         />
                     </Form.Item>
-
-                    {/* Các trường nhập liệu */}
-                    <Form.Item name="invoice_code">
-                        <CustomInput label="Mã phiếu đặt" name="invoice_code" placeholder="Mã phiếu tự động" />
-                    </Form.Item>
-                    <Divider />
 
                     <Flex justify='space-between' style={{ marginBottom: 8 }}>
                         <Text>Tổng số hàng đặt</Text>
@@ -207,7 +209,21 @@ export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceD
                             onChange: (value) => setDiscountAmount(Number(value) || 0),
                         }}
                     />
-
+                    <div style={{ marginTop: 8 }}>
+                        <CustomInput
+                            label="VAT(%)"
+                            name="VAT"
+                            isNumber
+                            lablelStyle={{ width: "70%" }}
+                            inputNumberProps={{
+                                min: 0,
+                                value: VAT,
+                                formatter: (val) => `${val}`.replace(/\B(?=(\d{3})+(?!\d))/g, ','),
+                                parser: (val) => val?.replace(/,/g, '') || '0',
+                                onChange: (value) => setVAT(Number(value) || 0),
+                            }}
+                        />
+                    </div>
                     {/* Cần trả */}
                     <Flex justify="space-between" style={{ marginBottom: 16, marginTop: 12 }}>
                         <Text strong>Khách cần trả</Text>

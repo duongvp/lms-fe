@@ -6,7 +6,6 @@ import { PermissionKey } from './types/permissions';
 const protectedRoutes = [
     // { path: '/dashboard', permission: 'dashboard_view' },
     { path: '/products', permission: PermissionKey.PRODUCT_VIEW },
-    // { path: '/units', permission: PermissionKey.UNIT_VIEW },
     { path: '/categories', permission: PermissionKey.CATEGORY_VIEW },
     { path: '/transactions/inventory-checks', permission: PermissionKey.STOCK_CHECK_VIEW },
     { path: '/transactions/invoices', permission: PermissionKey.INVOICE_VIEW },
@@ -28,7 +27,7 @@ export function middleware(req: NextRequest) {
     const userCookie = req.cookies.get('user')?.value;
     console.log("🚀 ~ middleware ~ userCookie lại11:", userCookie, token)
 
-    if (!token || !userCookie) {
+    if (!userCookie) {
         return NextResponse.redirect(new URL('/auth/login', req.url));
     }
 
@@ -53,7 +52,8 @@ export const config = {
          * - /auth (login/register)
          * - /403 (forbidden page)
         */
-        '/((?!_next|api|auth|403).*)',
+        // '/((?!_next|api|auth|403).*)',
+        '/((?!_next|api|auth|403|.*\\.(?:png|jpg|jpeg|svg|webp|ico|woff2?|ttf)).*)',
     ],
 };
 

@@ -27,17 +27,18 @@ interface ImportGoodsItem {
     totalPrice: string;
 }
 
-interface DataType extends ImportGoodsItem {
+export interface DataType extends ImportGoodsItem {
     key: string;
 }
 
 interface ProductSelectProps {
     setTotalActualQuantity: React.Dispatch<React.SetStateAction<number>>;
-    setData: React.Dispatch<any>
     tableData: Partial<StockTakeItem>[]
+    dataSource: DataType[];
+    setDataSource: React.Dispatch<React.SetStateAction<DataType[]>>;
 }
 
-const InventoryCheckSelect = ({ setTotalActualQuantity, setData, tableData }: ProductSelectProps) => {
+const InventoryCheckSelect = ({ setTotalActualQuantity, tableData, dataSource, setDataSource }: ProductSelectProps) => {
     const [searchTerm, setSearchTerm] = useState('');
 
     const {
@@ -45,7 +46,6 @@ const InventoryCheckSelect = ({ setTotalActualQuantity, setData, tableData }: Pr
         handleScroll,
     } = useProductSelect(searchTerm, true);
 
-    const [dataSource, setDataSource] = useState<DataType[]>([]);
     const { setModal } = useProductStore();
 
     const columns: ColumnsType<DataType> = [
@@ -68,7 +68,6 @@ const InventoryCheckSelect = ({ setTotalActualQuantity, setData, tableData }: Pr
         { title: 'STT', dataIndex: 'no', key: 'no', width: 60 },
         { title: 'Mã hàng', dataIndex: 'itemCode', key: 'itemCode', render: (value) => <Link href={'#'}>{value}</Link> },
         { title: 'Tên hàng', dataIndex: 'itemName', key: 'itemName' },
-        { title: 'ĐVT', dataIndex: 'unit', key: 'unit', width: 80 },
         { title: 'Tồn kho', dataIndex: 'tonkho', key: 'tonkho', width: 100 },
         {
             title: 'Thực tế',
@@ -177,7 +176,6 @@ const InventoryCheckSelect = ({ setTotalActualQuantity, setData, tableData }: Pr
         }, 0);
 
         setTotalActualQuantity(total);
-        setData(dataSource);
     }, [dataSource]);
 
     useEffect(() => {

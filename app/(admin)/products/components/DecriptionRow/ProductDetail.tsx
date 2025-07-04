@@ -43,7 +43,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ record }) => {
         { label: 'Mã vạch', value: record.barcode },
         { label: 'Nhóm hàng', value: record.category_name },
         { label: 'Đơn vị tính', value: '' },
-        { label: 'Tồn kho', value: record.total_stock },
+        { label: 'Tồn kho', value: Number(record.total_stock).toLocaleString() },
         { label: 'Giá bán', value: Number(record.selling_price).toLocaleString() },
         { label: 'Giá vốn', value: Number(record.purchase_price).toLocaleString() },
         { label: 'Nhà cung cấp', value: '' },

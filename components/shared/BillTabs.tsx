@@ -19,8 +19,26 @@ const BillTabs: React.FC<BillTabsProps> = ({ initialTabs, defaultComponent }) =>
     const [tabs, setTabs] = useState<TabItem[]>(initialTabs);
     const [activeKey, setActiveKey] = useState(initialTabs[0]?.key || "");
 
+    // const handleAdd = () => {
+    //     const nextIndex = tabs.length + 1;
+    //     const newKey = `${nextIndex}`;
+    //     const newTab: TabItem = {
+    //         title: `Hóa đơn ${nextIndex}`,
+    //         key: newKey,
+    //         component: defaultComponent(), // tái tạo component
+    //     };
+    //     setTabs([...tabs, newTab]);
+    //     setActiveKey(newKey);
+    // };
     const handleAdd = () => {
-        const nextIndex = tabs.length + 1;
+        let length = tabs.length;
+        let nextIndex = 1;
+        let lastKey = tabs[length - 1]?.key;
+        if (isNaN(Number(lastKey))) {
+            nextIndex = 2
+        } else {
+            nextIndex = Number(tabs[length - 1].key) + 1; // lấy key của tab cuối cùng và cộng thêm 1
+        }
         const newKey = `${nextIndex}`;
         const newTab: TabItem = {
             title: `Hóa đơn ${nextIndex}`,
@@ -32,10 +50,15 @@ const BillTabs: React.FC<BillTabsProps> = ({ initialTabs, defaultComponent }) =>
     };
 
     const handleRemove = (targetKey: string) => {
+        const index = tabs.findIndex((tab) => tab.key === targetKey);
         const newTabs = tabs.filter((tab) => tab.key !== targetKey);
         setTabs(newTabs);
         if (targetKey === activeKey && newTabs.length > 0) {
-            setActiveKey(newTabs[newTabs.length - 1].key);
+            let lastActiveKey = newTabs[newTabs.length - 1].key;
+            if (isNaN(Number(targetKey)) || Number(targetKey) < Number(lastActiveKey)) {
+                lastActiveKey = newTabs[index]?.key || newTabs[0].key; // nếu tab bị xóa là tab hiện tại, chọn tab trước đó
+            }
+            setActiveKey(lastActiveKey);
         }
     };
 

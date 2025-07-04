@@ -53,7 +53,6 @@ const ProductSelect = ({ setTotalAmount, tableData, dataSource, setDataSource, i
         { title: 'STT', dataIndex: 'no', key: 'no', width: 60 },
         { title: 'Mã hàng', dataIndex: 'itemCode', key: 'itemCode', render: (value) => <Link href={'#'}>{value}</Link> },
         { title: 'Tên hàng', dataIndex: 'itemName', key: 'itemName' },
-        { title: 'ĐVT', dataIndex: 'unit', key: 'unit', width: 80 },
         {
             title: 'Số lượng',
             dataIndex: 'quantity',
@@ -203,6 +202,7 @@ const ProductSelect = ({ setTotalAmount, tableData, dataSource, setDataSource, i
                             unit: selectedProduct.unit_name,
                             quantity: 1,
                             unitPrice: unitPrice,
+                            // maxQuantity: selectedProduct.stock, // trường hợp dành cho hoá đơn 
                             discount: 0,
                             totalPrice: unitPrice,
                         },

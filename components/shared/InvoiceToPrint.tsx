@@ -190,10 +190,10 @@ const InvoiceToPrint: React.FC<TableWithActionsProps> = ({ data, invoiceDetails,
                         </Row>
                         <Row justify="space-between" style={{ marginBottom: 8, paddingLeft: 130 }}>
                             <Col>
-                                <Text strong>VAT (0%):</Text>
+                                <Text strong>VAT:</Text>
                             </Col>
                             <Col>
-                                <Text strong>{Number(invoiceSummary?.discount_amount)?.toLocaleString()}</Text>
+                                <Text strong>{((Number(invoiceSummary?.VAT) / 100) * (Number(invoiceSummary?.subtotal) - Number(invoiceSummary?.discount_amount)))?.toLocaleString()}</Text>
                             </Col>
                         </Row>
 

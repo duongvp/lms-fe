@@ -12,7 +12,7 @@ import { createReturnOrder, updateReturnOrder } from '@/services/returnService';
 import { ActionType } from '@/enums/action';
 import { useAuthStore } from '@/stores/authStore';
 import dayjs from 'dayjs';
-import { isEmpty } from 'lodash';
+import { isEmpty, set } from 'lodash';
 
 import { ITypeImportInvoice } from '@/types/invoice';
 import { IDataTypeProductSelect } from '@/types/productSelect';
@@ -22,22 +22,25 @@ import { useRouter } from 'next/navigation';
 const { Text } = Typography;
 
 interface ImportOrdersFormProps {
-    totalAmount: number;
+    subtotal: number;
     type?: ITypeImportInvoice;
     returnOrderDetails?: any;
     returnOrderSummary?: any;
     dataSource: IDataTypeProductSelect[]
 }
 
-export default function ReturnOrdersForm({ totalAmount, type, returnOrderDetails, returnOrderSummary, dataSource }: ImportOrdersFormProps) {
+export default function ReturnOrdersForm({ subtotal, type, returnOrderDetails, returnOrderSummary, dataSource }: ImportOrdersFormProps) {
+    console.log("🚀 ~ ReturnOrdersForm ~ returnOrderDetails:", returnOrderDetails)
     const [form] = Form.useForm();
     const [discount, setDiscount] = useState<number>(0);
+    const [VAT, setVAT] = useState<number>(0);
+    const [totalAmount, setTotalAmount] = useState<number>(0);
     const [customerPayment, setCustomerPayment] = useState<number>(0);
     const [returnFee, setReturnFee] = useState<number>(0);
     const { setModal } = useCustomerStore();
     const [searchTerm, setSearchTerm] = useState('');
     const { options, handleScroll } = useCustomerSelect(searchTerm)
-    const { warehouseId, userId } = useAuthStore(state => state.user);
+    const { userId } = useAuthStore(state => state.user);
     const [userIdSelected, setUserIdSelected] = useState<number>(userId);
     const [dateTimeSelected, setDateTimeSelected] = useState<dayjs.Dayjs | null | undefined>(dayjs());
     const { hasPermission } = useAuthStore();
@@ -84,10 +87,12 @@ export default function ReturnOrdersForm({ totalAmount, type, returnOrderDetails
                 warehouse_id: returnOrderDetails?.warehouse_id,
                 user_id: userIdSelected,                              // ID người tạo
                 invoice_id: returnOrderDetails?.invoice_id, // Optional: ID hóa đơn mua hàng gốc (nếu có)
+                return_date: dayjs(dateTimeSelected).format("YYYY-MM-DD HH:mm:ss"), // Ngày trả hàng
                 customer_id: values.customer_id, // Optional: ID khách hàng (nếu cần lưu)
                 notes: values.notes,
                 status: "completed", // "draft" hoặc "completed"
                 return_fee: returnFee,
+                VAT: VAT,
                 refund_amount: calculateTotal(),
                 amount_paid: customerPayment,
                 discount_total: discount,
@@ -125,6 +130,7 @@ export default function ReturnOrdersForm({ totalAmount, type, returnOrderDetails
                 invoice_code: returnOrderDetails?.invoice_code
             });
             setDiscount(returnOrderSummary?.discount_amount)
+            setVAT(returnOrderSummary?.VAT)
             setCustomerPayment(returnOrderSummary?.amount_paid)
         }
     }, [returnOrderDetails, type, returnOrderSummary])
@@ -135,6 +141,10 @@ export default function ReturnOrdersForm({ totalAmount, type, returnOrderDetails
             setDateTimeSelected(dayjs());
         }
     }, [userId])
+
+    useEffect(() => {
+        setTotalAmount((subtotal - discount) * (1 + VAT / 100));
+    }, [VAT, discount, subtotal])
 
     return (
         <Form
@@ -148,11 +158,11 @@ export default function ReturnOrdersForm({ totalAmount, type, returnOrderDetails
                 <div>
                     {/* Header */}
                     <HeaderForm
-                        warehouseId={warehouseId}
                         userIdSelected={userIdSelected}
                         setUserIdSelected={setUserIdSelected}
                         dateTime={dateTimeSelected}
                         setDateTime={setDateTimeSelected}
+                        minDateTime={dayjs(returnOrderDetails.invoice_date)}
                     />
 
                     {/* Khách hàng */}
@@ -162,6 +172,7 @@ export default function ReturnOrdersForm({ totalAmount, type, returnOrderDetails
                             style={{ width: '100%' }}
                             styleWrapSelect={{ borderBottom: '1px solid #d9d9d9' }}
                             placeholder="Tìm khách hàng"
+                            disabled
                             onSearch={setSearchTerm}
                             onAddClick={hasPermission(PermissionKey.CUSTOMER_CREATE) ? handleAddCustomer : undefined}
                             onPopupScroll={handleScroll}
@@ -177,7 +188,7 @@ export default function ReturnOrdersForm({ totalAmount, type, returnOrderDetails
                     {/* Tổng tiền */}
                     <Flex justify='space-between' style={{ marginBottom: 8 }}>
                         <Text strong >Tổng thành tiền</Text>
-                        <Text>{totalAmount.toLocaleString()}</Text>
+                        <Text>{subtotal.toLocaleString()}</Text>
                     </Flex>
 
                     {/* Giảm giá */}
@@ -185,7 +196,10 @@ export default function ReturnOrdersForm({ totalAmount, type, returnOrderDetails
                         <Text strong >Giảm giá</Text>
                         <Text>{Number(discount).toLocaleString()}</Text>
                     </Flex>
-
+                    <Flex justify='space-between' style={{ marginBottom: 8 }}>
+                        <Text strong >VAT({Number(VAT)}%)</Text>
+                        <Text>{((Number(subtotal) - Number(discount)) * (Number(VAT) / 100)).toLocaleString()}</Text>
+                    </Flex>
                     <Flex justify='space-between' style={{ marginBottom: 8 }}>
                         <Text strong >Tổng cộng</Text>
                         <Text>{totalAmount.toLocaleString()}</Text>

@@ -47,13 +47,16 @@ export default function useCustomerSelect(searchTerm: string, form?: FormInstanc
 
     useEffect(() => {
         if (data.length > 0) {
-            const newOptions = data.map((item, index) => ({
-                value: item.customer_id,
-                labelText: `${item.customer_name} - ${item.phone}`, // item.customer_name,
-                // disabled: item.max_stock <= 0,
-                data: item,
-                label: (`${item.customer_name} - ${item.phone}`)
-            }));
+            const newOptions = data.map((item, index) => {
+                let labelText = (item.phone ? `${item.customer_name} - ${item.phone}` : `${item.customer_name}`)
+                return {
+                    value: item.customer_id,
+                    labelText: labelText,
+                    // disabled: item.max_stock <= 0,
+                    data: item,
+                    label: labelText
+                }
+            });
             setOptions(newOptions);
         } else {
             setOptions([]);

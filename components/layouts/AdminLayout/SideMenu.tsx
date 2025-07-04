@@ -7,6 +7,7 @@ import Image from "next/image";
 import { useAuthStore } from "@/stores/authStore";
 import { useBreakpoint } from "@ant-design/pro-components";
 import { PermissionKey } from "@/types/permissions";
+import { handleLogout } from "@/ultils/auth";
 
 const { Sider } = Layout;
 
@@ -276,7 +277,15 @@ const SideMenu: React.FC<SideMenuProps> = ({ collapsed, toggle }) => {
     const onMenuClick: MenuProps['onClick'] = ({ key }) => {
         const path = menuRoutes[key];
         if (path) {
+            if (path === "/auth/login") {
+                handleLogout();
+                router.push('/auth/login');
+                return
+            }
             router.push(path);
+            if (isMobile) {
+                toggle()
+            }
         }
     };
 
@@ -308,26 +317,21 @@ const SideMenu: React.FC<SideMenuProps> = ({ collapsed, toggle }) => {
                             selectedKeys={selectedKey ? [selectedKey] : []}
                             openKeys={stateOpenKeys}
                             onOpenChange={onOpenChange}
-                            onClick={({ key }) => {
-                                const path = menuRoutes[key];
-                                if (path) {
-                                    router.push(path);
-                                    toggle(); // Đóng drawer khi chọn menu
-                                }
-                            }}
+                            onClick={onMenuClick}
                             items={items}
                         />
                     </Drawer>
                 </>
             ) : (
                 <Sider trigger={null} collapsible collapsed={collapsed} theme="light">
-                    <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 10 }}>
+                    <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 10, overflow: 'hidden' }}>
                         <Image
                             src="/warehousepro-logo.png"
-                            alt="WarehousePro Logo"
+                            alt="Warehouse Logo"
                             width={collapsed ? 40 : 120}
-                            height={40}
+                            height={collapsed ? 40 : 120}
                             style={{ objectFit: 'contain' }}
+                            priority={true}
                         />
                     </div>
                     <Menu
