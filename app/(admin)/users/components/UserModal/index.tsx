@@ -13,6 +13,7 @@ import useBranchStore from "@/stores/branchStore";
 import { getWarehouses } from "@/services/branchService";
 import { updateUser } from "@/services/userService";
 import { registerUser } from "@/services/authService";
+import { useAuthStore } from "@/stores/authStore";
 
 const formItemLayout = {
     labelCol: { span: 8 },
@@ -27,6 +28,8 @@ const UserModal = () => {
     const [loadingModalVisible, setLoadingModalVisible] = useState(false);
     const [roleOptions, setRoleOptions] = useState<{ label: string; value: number; labelText: string }[]>([]);
     const [branchOptions, setBranchOptions] = useState<{ label: string; value: number; labelText: string }[]>([]);
+    const { userId } = useAuthStore(state => state.user)
+    const { user, setUser } = useAuthStore()
 
     const onCloseModal = () => {
         form.resetFields();
@@ -44,14 +47,16 @@ const UserModal = () => {
                 await registerUser(dataToSend);
             } else if (modal.type === ActionType.UPDATE) {
                 await updateUser(modal.user?.user_id || 0, dataToSend);
-                // await updateRole(modal.role?.role_id || 0, roleData);
+                if (modal.user?.user_id === userId && user.username !== values.username) {
+                    setUser({ ...user, username: values.username })
+                }
             }
             onCloseModal();
             setShouldReload(true);
             showSuccessMessage(`${modal.title} thành công!`);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Lỗi submit:", error);
-            showErrorMessage(`${modal.title} thất bại!`);
+            showErrorMessage(error.message);
         } finally {
             setLoadingModalVisible(false);
         }
@@ -203,17 +208,37 @@ const UserModal = () => {
                             >
                                 <Input.Password />
                             </Form.Item>
-                            <Form.Item label="Chi nhánh" name="warehouse_id" rules={[{ required: true, message: "Vui lòng chọn chi nhánh!" }]}>
+                            <Form.Item
+                                label="Chi nhánh"
+                                name="warehouse_id"
+                                extra={
+                                    modal.user?.user_id == userId
+                                        ? "Bạn không thể thay đổi chi nhánh của tài khoản đang đăng nhập."
+                                        : ""
+                                }
+                                rules={[{ required: true, message: "Vui lòng chọn chi nhánh!" }]}
+                            >
                                 <SelectWithButton
                                     options={branchOptions}
                                     placeholder="--Chọn chi nhánh---"
+                                    disabled={modal.user?.user_id == userId}
                                     onAddClick={() => { setBranchModal({ open: true, type: ActionType.CREATE, warehouse: null }) }}
                                 />
                             </Form.Item>
-                            <Form.Item label="Vai trò" name="role_id">
+                            <Form.Item
+                                label="Vai trò"
+                                name="role_id"
+                                extra={
+                                    modal.user?.user_id == userId
+                                        ? "Bạn không thể thay đổi vai trò của tài khoản đang đăng nhập."
+                                        : ""
+                                }
+                                rules={[{ required: true, message: "Vui lòng chọn vai trò!" }]}
+                            >
                                 <SelectWithButton
                                     options={roleOptions}
                                     placeholder="--Chọn vai trò---"
+                                    disabled={modal.type === ActionType.UPDATE && modal.user?.user_id == userId}
                                     onAddClick={() => { setRoleModal({ open: true, type: ActionType.CREATE, role: null }) }}
                                 />
                             </Form.Item>
@@ -226,7 +251,11 @@ const UserModal = () => {
                             <Form.Item label="Tên người dùng" name="full_name" rules={[{ required: true, message: "Vui lòng nhập tên người dùng!" }]}>
                                 <Input />
                             </Form.Item>
-                            <Form.Item label="Email" name="email" rules={[{ required: true, message: "Vui lòng nhập email!" }]}>
+                            <Form.Item label="Email" name="email"
+                                rules={[
+                                    { required: true, message: "Vui lòng nhập email!" },
+                                    { type: "email", message: "Email không đúng định dạng!" }
+                                ]}>
                                 <Input />
                             </Form.Item>
                             <Form.Item label="Điện thoại" name="phone">

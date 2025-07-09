@@ -158,7 +158,6 @@ body {
 
 .site-layout-background {
   margin: 12px 0;
-  padding: 12px;
 }
 
 @media (min-width: 576px) {
@@ -185,7 +184,6 @@ body {
 @media (min-width: 1200px) {
   .site-layout-background {
     margin: 24px 16px;
-    padding: 24px;
   }
 }
 

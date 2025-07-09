@@ -15,6 +15,7 @@ const { Text } = Typography;
 const BranchDetail: React.FC<{ record: WarehouseApiResponse; }> = ({ record }) => {
     const { setModal, setShouldReload } = useBranchStore();
     const hasPermission = useAuthStore(state => state.hasPermission);
+    const { warehouseId } = useAuthStore(state => state.user)
     const handleUpdate = async () => {
         const res = await getWarehouseById(record.warehouse_id);
         setModal({
@@ -66,11 +67,11 @@ const BranchDetail: React.FC<{ record: WarehouseApiResponse; }> = ({ record }) =
                             )
                         }
                         {
-                            hasPermission(PermissionKey.BRANCH_DELETE) && (
+                            (hasPermission(PermissionKey.BRANCH_DELETE) && warehouseId !== record.warehouse_id) && (
                                 <BtnDeActiveDetete
                                     record={{ id: record.warehouse_id, ...record }}
                                     contextActive='Ban có chắc muốn hoạt động lại chi nhánh này không?'
-                                    contextDeactive='Bạn có chắc chắn muốn ngừng hoạt động chi nhánh này?'
+                                    contextDeactive='Bạn có chắc chắn muốn ngừng hoạt động chi nhánh này? Thông tin giao dịch lịch sử của chi nhánh sẽ vẫn được giữ'
                                     contextDelete='Bạn có chắc chắn muốn xoá chi nhánh này? Hành động này sẽ không thể hoàn tác.'
                                     toggleStatus={toggleWarehouseStatus}
                                     onDelete={deleteWarehouse}

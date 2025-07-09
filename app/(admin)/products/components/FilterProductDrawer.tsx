@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Drawer, Form, Checkbox, Button, Row, Col, Radio } from 'antd';
-import { getCategories } from '@/services/categoryService';
 import type { CheckboxChangeEvent } from 'antd/es/checkbox';
 import useCategoryStore from '@/stores/categoryStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -11,12 +10,19 @@ interface FilterDrawerProps {
     handleSearch: (value: any) => void;
 }
 
+const initialValues = {
+    is_active: 'all',
+    stock: 'all',
+    categoryIds: [],
+}
+
 const FilterProductDrawer: React.FC<FilterDrawerProps> = ({ open, onClose, handleSearch }) => {
     const [form] = Form.useForm();
     const [allChecked, setAllChecked] = useState(false);
     const [indeterminate, setIndeterminate] = useState(false);
     const { optionsCategory } = useCategoryStore();
     const { warehouseId } = useAuthStore((state) => state.user)
+    const [formValueBeforeClose, setFormValueBeforeClose] = useState(initialValues)
 
     const onFinish = async (values: any) => {
         if (values.is_active === 'all') {
@@ -27,6 +33,7 @@ const FilterProductDrawer: React.FC<FilterDrawerProps> = ({ open, onClose, handl
             delete values.stock;
         }
 
+        setFormValueBeforeClose(values)
         console.log("filter", values);
 
         const filter = Object.fromEntries(
@@ -47,6 +54,7 @@ const FilterProductDrawer: React.FC<FilterDrawerProps> = ({ open, onClose, handl
         form.resetFields();
         setAllChecked(false);
         setIndeterminate(false);
+        setFormValueBeforeClose(initialValues)
     };
 
     // Cập nhật trạng thái checkbox cha khi giá trị categoryIds thay đổi
@@ -65,6 +73,12 @@ const FilterProductDrawer: React.FC<FilterDrawerProps> = ({ open, onClose, handl
         setAllChecked(checked);
         setIndeterminate(false);
     };
+
+    useEffect(() => {
+        if (open) {
+            form.setFieldsValue(formValueBeforeClose)
+        }
+    }, [open, formValueBeforeClose])
 
     return (
         <Drawer
@@ -87,11 +101,7 @@ const FilterProductDrawer: React.FC<FilterDrawerProps> = ({ open, onClose, handl
                 form={form}
                 layout="vertical"
                 onFinish={onFinish}
-                initialValues={{
-                    is_active: 'all',
-                    stock: 'all',
-                    categoryIds: [],
-                }}
+                initialValues={initialValues}
                 onValuesChange={(changedValues, allValues) => {
                     if (changedValues.categoryIds !== undefined) {
                         onCategoryChange(allValues.categoryIds || []);

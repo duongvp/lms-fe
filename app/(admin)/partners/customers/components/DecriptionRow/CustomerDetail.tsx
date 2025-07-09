@@ -54,37 +54,38 @@ const CustomerDetail: React.FC<SupplierDetailProps> = ({ record }) => {
                     </Col>
                 </Row>
             </div>
-
-            <Row justify="end" align="middle" style={{ marginTop: 16 }}>
-                <Col>
-                    <Space>
-                        {
-                            hasPermission(PermissionKey.CUSTOMER_EDIT) && (
-                                <Button
-                                    type="primary"
-                                    icon={<UploadOutlined />}
-                                    onClick={handleUpdate}
-                                >
-                                    Cập nhật
-                                </Button>
-                            )
-                        }
-                        {
-                            hasPermission(PermissionKey.CUSTOMER_DELETE) && (
-                                <BtnDeActiveDetete
-                                    record={{ id: record.customer_id, ...record }}
-                                    contextActive='Ban có chắc muốn hoạt động lại khách hàng này không?'
-                                    contextDeactive='Bạn có chắc chắn muốn ngừng hoạt động khách hàng này?'
-                                    contextDelete='Bạn có chắc chắn muốn xoá khách hàng này? Hành động này sẽ không thể hoàn tác.'
-                                    toggleStatus={toggleCustomerStatus}
-                                    onDelete={deleteCustomer}
-                                    setShouldReload={setShouldReload}
-                                />
-                            )
-                        }
-                    </Space>
-                </Col>
-            </Row>
+            {record.customer_id !== 1 && (
+                <Row justify="end" align="middle" style={{ marginTop: 16 }}>
+                    <Col>
+                        <Space>
+                            {
+                                hasPermission(PermissionKey.CUSTOMER_EDIT) && (
+                                    <Button
+                                        type="primary"
+                                        icon={<UploadOutlined />}
+                                        onClick={handleUpdate}
+                                    >
+                                        Cập nhật
+                                    </Button>
+                                )
+                            }
+                            {
+                                hasPermission(PermissionKey.CUSTOMER_DELETE) && (
+                                    <BtnDeActiveDetete
+                                        record={{ id: record.customer_id, ...record }}
+                                        contextActive='Ban có chắc muốn hoạt động lại khách hàng này không?'
+                                        contextDeactive='Bạn có chắc chắn muốn ngừng hoạt động khách hàng này?'
+                                        contextDelete='Bạn có chắc chắn muốn xoá khách hàng này? Hành động này sẽ không thể hoàn tác.'
+                                        toggleStatus={toggleCustomerStatus}
+                                        onDelete={deleteCustomer}
+                                        setShouldReload={setShouldReload}
+                                    />
+                                )
+                            }
+                        </Space>
+                    </Col>
+                </Row>
+            )}
         </div>
     );
 };

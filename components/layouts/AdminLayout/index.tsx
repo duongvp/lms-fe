@@ -40,39 +40,6 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     setCollapsed(!collapsed);
   };
 
-  // useEffect(() => {
-  //   const handleStorage = (event: StorageEvent) => {
-  //     if (event.key === 'logout') {
-  //       clearUser();
-  //       localStorage.removeItem('auth-storage');
-  //       router.push('/auth/login');
-  //     }
-  //   }
-
-  //   window.addEventListener('storage', handleStorage);
-  //   return () => window.removeEventListener('storage', handleStorage);
-  // }, []);
-
-  // useEffect(() => {
-  //   const handleStorage = async (event: StorageEvent) => {
-  //     if (event.key === 'login') {
-  //       // Tự fetch lại thông tin người dùng
-  //       try {
-  //         const data = await getMe();
-  //         console.log("🚀 ~ handleStorage ~ data:", data)
-  //       } catch (error) {
-  //         router.push('/auth/login');
-  //       }
-  //     }
-  //     if (event.key === 'logout') {
-  //       router.push('/auth/login');
-  //     }
-  //   }
-
-  //   window.addEventListener('storage', handleStorage);
-  //   return () => window.removeEventListener('storage', handleStorage);
-  // }, []);
-
   useEffect(() => {
     const handleStorage = async (event: StorageEvent) => {
       if (event.key === 'login') {
@@ -114,19 +81,44 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
 
   return (
     <ConfigProvider locale={viVN}>
-      <Layout style={{ minHeight: '100vh' }}>
+      <Layout style={{ height: '100vh' }}>
         <SideMenu collapsed={collapsed} toggle={toggle} />
-        <Layout>
-          <Header collapsed={collapsed} toggle={toggle} />
+        <Layout
+          style={{
+            overflowY: 'auto',
+            height: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+          }}>
+          <div
+            style={{
+              position: 'sticky',
+              top: 0,
+              zIndex: 1000,
+              background: colorBgContainer,
+            }}
+          >
+            <Header collapsed={collapsed} toggle={toggle} />
+          </div>
           <Content
             style={{
-              minHeight: 280,
               background: colorBgContainer,
               borderRadius: borderRadiusLG,
             }}
             className="site-layout-background"
           >
-            {children}
+            <div style={{
+              padding: 16,
+              height: 'auto',
+              minHeight: "100%",
+              background: colorBgContainer,
+              borderRadius: borderRadiusLG,
+              display: "flex"
+            }}>
+              <div style={{ flex: 1 }}>
+                {children}
+              </div>
+            </div>
           </Content>
         </Layout>
       </Layout>

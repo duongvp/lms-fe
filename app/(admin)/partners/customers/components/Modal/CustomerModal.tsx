@@ -7,6 +7,7 @@ import { showErrorMessage, showSuccessMessage } from '@/ultils/message';
 import useCustomerStore from '@/stores/customerStore';
 import { createCustomer, updateCustomer } from '@/services/customerService';
 import { ActionType } from '@/enums/action';
+import { vietnamPhoneValidator } from '@/ultils/validators/phoneValidator';
 
 const formItemLayout = {
     labelCol: { span: 6 },
@@ -78,7 +79,7 @@ const CustomerModal = () => {
                     <Button
                         key="submit"
                         type="primary"
-                        onClick={handleFormSubmit}
+                        onClick={() => form.submit()}
                         icon={<SaveOutlined />}
                     >
                         Lưu
@@ -95,28 +96,28 @@ const CustomerModal = () => {
                     <Form.Item label="Mã khách hàng" name="customer_code">
                         <Input placeholder="Mã mặc định" />
                     </Form.Item>
-                    <Form.Item label="Tên khách hàng" name="customer_name" rules={[{ required: true, message: 'Vui lòng nhập tên khách hàng!' }]}>
+                    <Form.Item
+                        label="Tên khách hàng"
+                        name="customer_name"
+                        rules={[{ required: true, message: 'Vui lòng nhập tên khách hàng!' }]}
+                    >
                         <Input />
                     </Form.Item>
-                    <Form.Item label="Điện thoại" name="phone" rules={[
-                        { required: true, message: 'Vui lòng nhập số điện thoại khách hàng!' },
-                        {
-                            validator: (_, value) => {
-                                if (!value) return Promise.resolve();
-
-                                // Nếu thiếu số 0 đầu, tự thêm vào để kiểm tra định dạng
-                                const normalized = value.startsWith('0') ? value : '0' + value;
-
-                                const vietnamPhoneRegex = /^0(3[2-9]|5[6|8|9]|7[0|6-9]|8[1-5]|9[0-9])[0-9]{7}$/;
-
-                                if (vietnamPhoneRegex.test(normalized)) {
-                                    return Promise.resolve();
-                                } else {
-                                    return Promise.reject('Số điện thoại không hợp lệ!');
-                                }
-                            },
-                        },
-                    ]}>
+                    <Form.Item
+                        label="Điện thoại"
+                        name="phone"
+                        rules={[
+                            { required: true, message: 'Vui lòng nhập số điện thoại khách hàng!' },
+                            { validator: vietnamPhoneValidator },
+                        ]}>
+                        <Input />
+                    </Form.Item>
+                    <Form.Item
+                        label="Email"
+                        name="email"
+                        rules={[
+                            { type: "email", message: "Email không đúng định dạng!" }
+                        ]}>
                         <Input />
                     </Form.Item>
                     <Form.Item label="Địa chỉ" name="address">

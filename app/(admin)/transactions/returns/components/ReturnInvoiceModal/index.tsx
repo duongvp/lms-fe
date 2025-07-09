@@ -60,7 +60,7 @@ const ReturnInvoiceModal = ({ visible, onClose }: Props) => {
         },
         {
             title: 'Ngày tạo',
-            dataIndex: 'created_at',
+            dataIndex: 'invoice_date',
             render: (text) => dayjs(text).format('DD/MM/YYYY HH:mm'),
         },
         {

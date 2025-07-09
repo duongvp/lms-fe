@@ -54,36 +54,40 @@ const SupplierDetail: React.FC<SupplierDetailProps> = ({ record }) => {
                 </Row>
             </div>
 
-            <Row justify="end" align="middle" style={{ marginTop: 16 }}>
-                <Col>
-                    <Space>
-                        {
-                            hasPermission(PermissionKey.SUPPLIER_EDIT) && (
-                                <Button
-                                    type="primary"
-                                    icon={<UploadOutlined />}
-                                    onClick={handleUpdate}
-                                >
-                                    Cập nhật
-                                </Button>
-                            )
-                        }
-                        {
-                            hasPermission(PermissionKey.SUPPLIER_DELETE) && (
-                                <BtnDeActiveDetete
-                                    record={{ id: record.supplier_id, ...record }}
-                                    contextActive='Ban có chắc muốn hoạt động lại nhà cung cấp này không?'
-                                    contextDeactive='Bạn có chắc chắn muốn ngừng hoạt động nhà cung cấp này?'
-                                    contextDelete='Bạn có chắc chắn muốn xoá nhà cung cấp này? Hành động này sẽ không thể hoàn tác.'
-                                    toggleStatus={toggleSupplierStatus}
-                                    onDelete={deleteSupplier}
-                                    setShouldReload={setShouldReload}
-                                />
-                            )
-                        }
-                    </Space>
-                </Col>
-            </Row>
+            {
+                record.supplier_id !== 1 && (
+                    <Row justify="end" align="middle" style={{ marginTop: 16 }}>
+                        <Col>
+                            <Space>
+                                {
+                                    hasPermission(PermissionKey.SUPPLIER_EDIT) && (
+                                        <Button
+                                            type="primary"
+                                            icon={<UploadOutlined />}
+                                            onClick={handleUpdate}
+                                        >
+                                            Cập nhật
+                                        </Button>
+                                    )
+                                }
+                                {
+                                    hasPermission(PermissionKey.SUPPLIER_DELETE) && (
+                                        <BtnDeActiveDetete
+                                            record={{ id: record.supplier_id, ...record }}
+                                            contextActive='Ban có chắc muốn hoạt động lại nhà cung cấp này không?'
+                                            contextDeactive='Bạn có chắc chắn muốn ngừng hoạt động nhà cung cấp này?'
+                                            contextDelete='Bạn có chắc chắn muốn xoá nhà cung cấp này? Hành động này sẽ không thể hoàn tác.'
+                                            toggleStatus={toggleSupplierStatus}
+                                            onDelete={deleteSupplier}
+                                            setShouldReload={setShouldReload}
+                                        />
+                                    )
+                                }
+                            </Space>
+                        </Col>
+                    </Row>
+                )
+            }
         </div>
     );
 };

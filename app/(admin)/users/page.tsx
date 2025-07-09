@@ -33,6 +33,10 @@ const columns: ColumnsType<DataType> = [
         dataIndex: "full_name",
     },
     {
+        title: "Chi nhánh hoạt động",
+        dataIndex: "warehouse_name",
+    },
+    {
         title: "Thời gian khởi tạo",
         dataIndex: "created_at",
         render: (value) => dayjs(value).format("DD/MM/YY HH:mm"),

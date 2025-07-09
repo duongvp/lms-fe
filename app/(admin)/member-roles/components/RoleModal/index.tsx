@@ -22,7 +22,7 @@ import useRoleStore from "@/stores/roleStore";
 import { ActionType } from "@/enums/action";
 import { createRole, updateRole } from "@/services/roleService";
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
 const formItemLayout = {
     labelCol: { span: 8 },
@@ -288,91 +288,100 @@ const RoleModal = () => {
                     </Button>,
                 ]}
             >
-                <Form
-                    form={form}
-                    onFinish={handleFormSubmit}
-                    {...formItemLayout}
-                    labelAlign="left"
-                >
-                    <Form.Item
-                        name="roleName"
-                        label="Vai trò"
-                        rules={[{ required: true, message: "Vui lòng nhập tên vai trò!" }]}
+                <div style={{ maxHeight: 520, overflowY: 'auto', overflowX: 'hidden', paddingRight: 8 }}>
+                    <Form
+                        form={form}
+                        onFinish={handleFormSubmit}
+                        {...formItemLayout}
+                        labelAlign="left"
                     >
-                        <Input placeholder="Nhập tên vai trò" />
-                    </Form.Item>
+                        <Form.Item
+                            name="roleName"
+                            label="Vai trò"
+                            rules={[{ required: true, message: "Vui lòng nhập tên vai trò!" }]}
+                        >
+                            <Input placeholder="Nhập tên vai trò" />
+                        </Form.Item>
 
-                    <Form.Item
-                        name="description"
-                        label="Mô tả"
-                    >
-                        <Input.TextArea placeholder="Nhập mô tả" rows={3} />
-                    </Form.Item>
+                        <Form.Item
+                            name="description"
+                            label="Mô tả"
+                        >
+                            <Input.TextArea placeholder="Nhập mô tả" rows={3} />
+                        </Form.Item>
 
-                    <Title level={5}>Phân quyền</Title>
-                    <Row gutter={[24, 16]}>
-                        {Object.entries(permissionsStructure).map(([groupName, groupItems]) => (
-                            <Col xs={24} sm={12} md={8} key={groupName}>
-                                <p style={{ fontWeight: 500, marginBottom: 12 }}>{groupName}</p>
-                                {Object.keys(groupItems).map((itemName) => {
-                                    const isExpanded = expandedGroups[itemName] ?? false;
-                                    const currentChecked = checkedGroups[itemName] || [];
-                                    const itemData = getItemData(itemName);
-                                    const actionsToShow = itemData?.actions || [];
+                        {
+                            modal.role?.role_id === 1 && (
+                                <Text type="danger">Chú ý: vì là vai trò {form.getFieldValue("roleName")} nên mặc định 3 quyền Người dùng, Chi nhánh và Tổng quan sẽ không thể sửa</Text>
+                            )
+                        }
+                        <Title level={5}>Phân quyền </Title>
+                        <Row gutter={[24, 16]}>
+                            {Object.entries(permissionsStructure).map(([groupName, groupItems]) => (
+                                <Col xs={24} sm={12} md={8} key={groupName}>
+                                    <p style={{ fontWeight: 500, marginBottom: 12 }}>{groupName}</p>
+                                    {Object.keys(groupItems).map((itemName) => {
+                                        const isExpanded = expandedGroups[itemName] ?? false;
+                                        const currentChecked = checkedGroups[itemName] || [];
+                                        const itemData = getItemData(itemName);
+                                        const actionsToShow = itemData?.actions || [];
 
-                                    return (
-                                        <div
-                                            key={itemName}
-                                            style={{
-                                                paddingBottom: 8,
-                                                marginBottom: 8,
-                                                borderBottom: '1px solid #f0f0f0'
-                                            }}
-                                        >
+                                        return (
                                             <div
+                                                key={itemName}
                                                 style={{
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    gap: 4,
+                                                    paddingBottom: 8,
+                                                    marginBottom: 8,
+                                                    borderBottom: '1px solid #f0f0f0'
                                                 }}
                                             >
-                                                <span
-                                                    onClick={() => toggleGroup(itemName)}
-                                                    style={{ cursor: "pointer", display: "flex", alignItems: "center" }}
+                                                <div
+                                                    style={{
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        gap: 4,
+                                                    }}
                                                 >
-                                                    {isExpanded ? <CaretDownFilled style={{ color: 'rgb(107 102 102)' }} /> : <CaretRightFilled style={{ color: 'rgb(107 102 102)' }} />}
-                                                </span>
-                                                <Checkbox
-                                                    checked={isAllChecked(itemName)}
-                                                    indeterminate={isIndeterminate(itemName)}
-                                                    onChange={(e) => onParentCheck(itemName, e.target.checked)}
-                                                >
-                                                    {itemName}
-                                                </Checkbox>
-                                            </div>
+                                                    <span
+                                                        onClick={() => toggleGroup(itemName)}
+                                                        style={{ cursor: "pointer", display: "flex", alignItems: "center" }}
+                                                    >
+                                                        {isExpanded ? <CaretDownFilled style={{ color: 'rgb(107 102 102)' }} /> : <CaretRightFilled style={{ color: 'rgb(107 102 102)' }} />}
+                                                    </span>
+                                                    <Checkbox
+                                                        checked={isAllChecked(itemName)}
+                                                        indeterminate={isIndeterminate(itemName)}
+                                                        onChange={(e) => onParentCheck(itemName, e.target.checked)}
+                                                        disabled={modal.role?.role_id === 1 && (itemName === "Người dùng" || itemName === "Chi nhánh" || itemName == "Tổng quan")}
+                                                    >
+                                                        {itemName}
+                                                    </Checkbox>
+                                                </div>
 
-                                            {isExpanded && itemData && (
-                                                <Form.Item
-                                                    name={['permissions', itemName]}
-                                                    style={{ marginTop: 8, marginLeft: 40 }}
-                                                >
-                                                    <Checkbox.Group
-                                                        style={{ display: 'flex', flexDirection: 'column' }}
-                                                        options={actionsToShow}
-                                                        value={currentChecked}
-                                                        onChange={(checked) =>
-                                                            onChildCheck(itemName, checked as string[])
-                                                        }
-                                                    />
-                                                </Form.Item>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </Col>
-                        ))}
-                    </Row>
-                </Form>
+                                                {isExpanded && itemData && (
+                                                    <Form.Item
+                                                        name={['permissions', itemName]}
+                                                        style={{ marginTop: 8, marginLeft: 40 }}
+                                                    >
+                                                        <Checkbox.Group
+                                                            style={{ display: 'flex', flexDirection: 'column' }}
+                                                            options={actionsToShow}
+                                                            value={currentChecked}
+                                                            onChange={(checked) =>
+                                                                onChildCheck(itemName, checked as string[])
+                                                            }
+                                                            disabled={modal.role?.role_id === 1 && (itemName === "Người dùng" || itemName === "Chi nhánh" || itemName == "Tổng quan")}
+                                                        />
+                                                    </Form.Item>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </Col>
+                            ))}
+                        </Row>
+                    </Form>
+                </div>
             </Modal>
         </>
     );

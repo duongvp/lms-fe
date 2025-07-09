@@ -166,7 +166,7 @@ const Page = () => {
             {contextHolder}
             <SearchAndActionsBar
                 onSearch={handleSearch}
-                placeholder="Theo mã hàng, tên hàng"
+                placeholder="Theo mã hàng, tên hàng, mã vạch"
                 handleAddBtn={hasPermission(PermissionKey.PRODUCT_CREATE) ? handleAddBtn : undefined}
                 handleFilterBtn={() => setOpenFilterDrawer(true)}
                 handleImportClick={hasPermission(PermissionKey.PRODUCT_IMPORT) ? handleImportClick : undefined}

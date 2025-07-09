@@ -7,6 +7,7 @@ import { showErrorMessage, showSuccessMessage } from '@/ultils/message';
 import { deleteRole, getRoleById, RoleApiResponse } from '@/services/roleService';
 import useRoleStore from '@/stores/roleStore';
 import { ActionType } from '@/enums/action';
+import { useAuthStore } from '@/stores/authStore';
 
 const { Text } = Typography;
 
@@ -15,9 +16,12 @@ interface RoleDetailProps {
 }
 
 const RoleDetail: React.FC<RoleDetailProps> = ({ record }) => {
+    console.log("🚀 ~ record:", record)
     const { setModal, setShouldReload } = useRoleStore();
     const [confirmOpen, setConfirmOpen] = React.useState(false);
     const [loading, setLoading] = React.useState(false);
+    const { user } = useAuthStore()
+    console.log("🚀 ~ user:", user)
 
     const handleUpdate = async () => {
         const res = await getRoleById(record.role_id);
@@ -86,14 +90,18 @@ const RoleDetail: React.FC<RoleDetailProps> = ({ record }) => {
                         >
                             Cập nhật
                         </Button>
-                        <Button
-                            type="primary"
-                            icon={<DeleteOutlined />}
-                            style={{ backgroundColor: '#ff4d4f', borderColor: '#ff4d4f' }}
-                            onClick={handleDeleteClick}
-                        >
-                            Xoá
-                        </Button>
+                        {
+                            record.role_id !== 1 && (
+                                <Button
+                                    type="primary"
+                                    icon={<DeleteOutlined />}
+                                    style={{ backgroundColor: '#ff4d4f', borderColor: '#ff4d4f' }}
+                                    onClick={handleDeleteClick}
+                                >
+                                    Xoá
+                                </Button>
+                            )
+                        }
                     </Space>
                 </Col>
             </Row>

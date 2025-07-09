@@ -69,8 +69,9 @@ const BtnDeActiveDetete: React.FC<props> = ({
             setShouldReload && setShouldReload(true);
             showSuccessMessage('Xoá thành công');
             setConfirmOpen(false);
-        } catch (error) {
-            showErrorMessage('Có lỗi xảy ra khi xoá');
+        } catch (error: any) {
+            console.log("🚀 ~ handleDelete ~ error:", error)
+            showErrorMessage(error.message || 'Có lỗi xảy ra khi xoá');
         } finally {
             setLoading(false);
         }

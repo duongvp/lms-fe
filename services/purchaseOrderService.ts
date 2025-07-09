@@ -68,7 +68,8 @@ export interface IPurchaseOrderBase {
     created_by: string
     username: string
     warehouse_name: string
-    warehouse_address: string
+    warehouse_address: string,
+    warehouse_phone: string
 }
 
 export interface IFullPurchaseOrderResponse extends IPurchaseOrderBase {

@@ -32,7 +32,7 @@ const ViewToPrint: React.FC<TableWithActionsProps> = ({ data, details, summary, 
                 Địa chỉ: {details.warehouse_address}
             </Text>
             <Text style={{ display: 'block', textAlign: 'center', marginBottom: 16 }}>
-                Điện thoại:
+                Điện thoại: {details.warehouse_phone}
             </Text>
             <Title level={3} style={{ textAlign: 'center', marginBottom: 4, textTransform: 'uppercase' }}>
                 Hoá đơn trả hàng

@@ -18,6 +18,7 @@ interface UserDetailProps {
 const UserDetail: React.FC<UserDetailProps> = ({ record }) => {
     const { setModal, setShouldReload } = useUserStore();
     const hasPermission = useAuthStore(state => state.hasPermission);
+    const { userId } = useAuthStore(state => state.user)
 
     const handleUpdate = () => {
         setModal({
@@ -68,7 +69,7 @@ const UserDetail: React.FC<UserDetailProps> = ({ record }) => {
                             )
                         }
                         {
-                            hasPermission(PermissionKey.USER_DELETE) && (
+                            hasPermission(PermissionKey.USER_DELETE) && (userId != record.user_id) && (
                                 <BtnDeActiveDetete
                                     record={{ id: record.user_id, ...record }}
                                     contextActive='Ban có chắc muốn hoạt động lại người dùng này không?'

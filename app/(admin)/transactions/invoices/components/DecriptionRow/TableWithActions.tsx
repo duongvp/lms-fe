@@ -25,6 +25,7 @@ interface TableWithActionsProps {
 }
 
 const TableWithActions: React.FC<TableWithActionsProps> = ({ data, invoiceDetails, invoiceSummary }) => {
+    console.log("🚀 ~ data:", data)
     console.log("🚀 ~ invoiceDetails:", invoiceDetails)
     const router = useRouter()
     const hasPermission = useAuthStore(state => state.hasPermission);
@@ -53,6 +54,14 @@ const TableWithActions: React.FC<TableWithActionsProps> = ({ data, invoiceDetail
         window.open(`/transactions/invoices/edit/${invoiceDetails.invoice_id}/${invoiceDetails.invoice_code}`, '_blank');
     }
 
+    const handleReturnClick = () => {
+        let url = `/transactions/returns/create/${invoiceDetails.invoice_id}`
+        if (invoiceDetails.return_id) {
+            url = `/transactions/returns/edit/${invoiceDetails.return_id}`
+        }
+        router.push(url);
+    }
+
     return (
         <div>
             <Row gutter={24} style={{ marginBottom: 12 }}>
@@ -73,14 +82,10 @@ const TableWithActions: React.FC<TableWithActionsProps> = ({ data, invoiceDetail
                         <Col span={8}><Text strong>Người tạo:</Text></Col>
                         <Col><Text>{invoiceDetails.created_by}</Text></Col>
                     </Row>
-                    {
-                        invoiceDetails.return_code && (
-                            <Row style={{ marginBottom: 8 }}>
-                                <Col span={8}><Text strong>Phiếu trả hàng:</Text></Col>
-                                <Col><Text copyable>{invoiceDetails.return_code}</Text></Col>
-                            </Row>
-                        )
-                    }
+                    <Row style={{ marginBottom: 8 }}>
+                        <Col span={8}><Text strong>Phiếu trả hàng:</Text></Col>
+                        {invoiceDetails.return_code && <Col><Text copyable>{invoiceDetails.return_code}</Text></Col>}
+                    </Row>
                 </Col>
 
                 <Col xs={24} md={12} xl={8} xxl={6}>
@@ -149,9 +154,7 @@ const TableWithActions: React.FC<TableWithActionsProps> = ({ data, invoiceDetail
                                             color='green'
                                             variant='solid'
                                             icon={<CheckCircleOutlined />}
-                                            onClick={() => {
-                                                router.push(`/transactions/returns/create/${invoiceDetails.invoice_id}`);
-                                            }}
+                                            onClick={handleReturnClick}
                                         />
                                     )
                                 }

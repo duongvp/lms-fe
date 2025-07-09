@@ -1,6 +1,6 @@
 // components/FilterDrawer.tsx
-import React from 'react';
-import { Drawer, Form, Select, DatePicker, Checkbox, Button, Row, Col, Empty } from 'antd';
+import React, { useEffect, useState } from 'react';
+import { Drawer, Form, DatePicker, Checkbox, Button, Row, Col, Empty } from 'antd';
 import dayjs from 'dayjs';
 import SelectWithButton from '../ui/Selects/SelectWithButton';
 import { PurchaseOrderStatus, Status } from '@/enums/status';
@@ -19,10 +19,18 @@ interface FilterDrawerProps {
 const FilterDrawer: React.FC<FilterDrawerProps> = ({ open, onClose, handleSearch, title = 'Bộ lọc hóa đơn', isPurchaseOrder = false }) => {
     const [form] = Form.useForm();
     const { options: optionsUser } = useUserSelect();
+    const initialValues = {
+        dateTime: undefined,
+        status: isPurchaseOrder ? PurchaseOrderStatus.RECEIVED : Status.RECEIVED,
+        user_id: undefined
+    }
+    const [formValueBeforeClose, setFormValueBeforeClose] = useState(initialValues)
+
 
     const onFinish = async (values: any) => {
         const { dateTime, ...rest } = values;
-        console.log("🚀 ~ onFinish ~ values:", values)
+
+        setFormValueBeforeClose(values)
 
         const rawFilter = {
             ...rest,
@@ -48,7 +56,15 @@ const FilterDrawer: React.FC<FilterDrawerProps> = ({ open, onClose, handleSearch
 
     const onReset = () => {
         form.resetFields();
+        setFormValueBeforeClose(initialValues)
     };
+
+    useEffect(() => {
+        if (open) {
+            console.log("formValueBeforeClose", formValueBeforeClose);
+            form.setFieldsValue(formValueBeforeClose)
+        }
+    }, [open, formValueBeforeClose])
 
     return (
         <Drawer
@@ -68,9 +84,12 @@ const FilterDrawer: React.FC<FilterDrawerProps> = ({ open, onClose, handleSearch
                 </div>
             }
         >
-            <Form form={form} layout="vertical" onFinish={onFinish} initialValues={{
-                status: isPurchaseOrder ? PurchaseOrderStatus.RECEIVED : Status.RECEIVED,
-            }}>
+            <Form
+                form={form}
+                layout="vertical"
+                onFinish={onFinish}
+                initialValues={initialValues}
+            >
                 {/* Thời gian */}
                 <Form.Item
                     name="dateTime"

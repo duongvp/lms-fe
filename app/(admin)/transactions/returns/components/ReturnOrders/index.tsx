@@ -50,7 +50,7 @@ const ReturnOrders: React.FC<{ slug?: number, type?: ITypeImportInvoice }> = ({ 
             {/* Right side */}
             <Col span={8}>
                 <Card
-                    title={`Thông tin hoá đơn ${returnOrderDetails?.invoice_code} (trả hàng)`}
+                    title={`Thông tin hoá đơn ${returnOrderDetails?.invoice_code} (${type === 'edit' ? 'cập nhật ' : ''}trả hàng)`}
                     style={{ height: "100%", display: "flex", flexDirection: "column", boxShadow: "0 0 10px rgba(0,0,0,0.1)" }}
                     styles={{
                         body: {

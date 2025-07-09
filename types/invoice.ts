@@ -43,6 +43,7 @@ export interface IInvoiceDetail {
     total_amount: string;
     status: string;
     notes: string | null;
+    return_id: number | null
     created_at: Date;
     updated_at: Date;
     created_by: string;
@@ -51,5 +52,6 @@ export interface IInvoiceDetail {
     user_phone: string;
     warehouse_name: string;
     warehouse_address: string;
-    return_code: string
+    warehouse_phone: string;
+    return_code: string | null
 }

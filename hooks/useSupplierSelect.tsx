@@ -47,13 +47,16 @@ export default function useSupplierSelect(searchTerm: string, form?: FormInstanc
 
     useEffect(() => {
         if (data.length > 0) {
-            const newOptions = data.map((item, index) => ({
-                value: item.supplier_id,  // Thay đổi từ customer_id sang supplier_id
-                labelText: `${item.supplier_name} - ${item.phone}`,  // Chỉnh sửa theo thông tin nhà cung cấp
-                // disabled: item.max_stock <= 0, // Nếu có trạng thái disabled thì xử lý tại đây
-                data: item,
-                label: (`${item.supplier_name} - ${item.phone}`),  // Hiển thị thông tin tên và điện thoại nhà cung cấp
-            }));
+            const newOptions = data.map((item, index) => {
+                let labelText = (item.phone ? `${item.supplier_name} - ${item.phone}` : `${item.supplier_name}`)
+                return {
+                    value: item.supplier_id,  // Thay đổi từ customer_id sang supplier_id
+                    labelText,  // Chỉnh sửa theo thông tin nhà cung cấp
+                    // disabled: item.max_stock <= 0, // Nếu có trạng thái disabled thì xử lý tại đây
+                    data: item,
+                    label: labelText,  // Hiển thị thông tin tên và điện thoại nhà cung cấp
+                }
+            });
             setOptions(newOptions);
         } else {
             setOptions([]);
