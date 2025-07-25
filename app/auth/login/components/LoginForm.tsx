@@ -18,7 +18,8 @@ const LoginForm = () => {
         setLoading(true);
         try {
             const response = await loginUser(values);
-            let { accessToken, ...userRest } = response.data;
+            let { accessToken, refreshToken, user, ...userRest } = response.data;
+            console.log("🚀 ~ onFinish ~ user:", user)
 
             console.log("response.data", response.data);
             console.log("🚀 ~ onFinish ~ userRest:", userRest)
@@ -26,8 +27,8 @@ const LoginForm = () => {
             setAccessToken(accessToken);
 
 
-            // document.cookie = `refreshToken=${refreshToken}; path=/; secure; sameSite=Lax`;
-            // document.cookie = `user=${user}; path=/; secure; sameSite=Lax`;
+            document.cookie = `refreshToken=${refreshToken}; path=/; secure; sameSite=Lax`;
+            document.cookie = `user=${user}; path=/; secure; sameSite=Lax`;
 
             localStorage.setItem('login', Date.now().toString());
 
