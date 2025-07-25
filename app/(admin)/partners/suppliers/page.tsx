@@ -71,7 +71,7 @@ const Page = () => {
         try {
             const { current = 1, pageSize = 10 } = params;
             const skip = (current - 1) * pageSize;
-            const response = await getSuppliersByPage(pageSize, skip, filters);
+            const response = await getSuppliersByPage(pageSize, skip, { ...filters, includeGuest: true });
 
             const tableData: DataType[] = response.data.map((item) => ({
                 ...item,

@@ -108,7 +108,6 @@ const SupplierModal = () => {
                         label="Điện thoại"
                         name="phone"
                         rules={[
-                            { required: true, message: 'Vui lòng nhập số điện thoại nhà cung cấp!' },
                             { validator: vietnamPhoneValidator },
                         ]}>
                         <Input />

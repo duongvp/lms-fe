@@ -238,7 +238,7 @@ const ProductModal = () => {
                                     onAddClick={() => setModalUnit({ open: true, type: ActionType.CREATE, unit: null })} />
                             </Form.Item>
 
-                            <Form.Item label="Hình ảnh" name="images">
+                            {/* <Form.Item label="Hình ảnh" name="images">
                                 <Upload
                                     listType="picture-card"
                                     fileList={fileList}
@@ -247,7 +247,7 @@ const ProductModal = () => {
                                 >
                                     {fileList.length >= 5 ? null : uploadButton}
                                 </Upload>
-                            </Form.Item>
+                            </Form.Item> */}
                         </Col>
 
                         {/* Bên phải */}

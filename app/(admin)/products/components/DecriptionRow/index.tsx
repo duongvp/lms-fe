@@ -29,11 +29,11 @@ const DecriptionRow: React.FC<DecriptionRowProps> = ({ record }) => {
             label: 'Thông tin',
             children: <ProductDetail record={record} />,
         },
-        {
-            key: '2',
-            label: 'Tồn kho',
-            children: <ProductStockTable data={record} />,
-        },
+        // {
+        //     key: '2',
+        //     label: 'Tồn kho',
+        //     children: <ProductStockTable data={record} />,
+        // },
         {
             key: '3',
             label: 'Thẻ kho',

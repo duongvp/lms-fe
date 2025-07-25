@@ -14,59 +14,28 @@ const LoginForm = () => {
     const { setUser, setAccessToken } = useAuthStore();
     const [loading, setLoading] = React.useState(false);
 
-    // const onFinish = async (values: any) => {
-    //     setLoading(true);
-    //     try {
-    //         const response = await loginUser(values);
-    //         console.log("🚀 ~ onFinish ~ response:", response.data)
-    //         const { accessToken, refreshToken, user, ...userRest } = response.data;
-    //         console.log("🚀 ~ onFinish ~ userRest:", userRest)
-    //         console.log("usesdsadr", JSON.parse(decodeURIComponent(user)));
-    //         setUser(userRest);
-    //         setAccessToken(accessToken);
-    //         setLoading(false);
-
-    //         //giải pháp tạm thời
-    //         document.cookie = `refreshToken=${refreshToken}; path=/; secure; sameSite=None`;
-    //         document.cookie = `user=${user}; path=/; secure; sameSite=None`;
-
-    //         // document.cookie = `refreshToken=${refreshToken}; path=/`;
-    //         // document.cookie = `user=${data.user}; path=/`;
-    //         localStorage.setItem('login', Date.now().toString());
-    //         setTimeout(() => {
-    //             // router.push('/dashboard');
-    //         }, 100)
-
-    //         //giải pháp tạm thời
-
-    //         // router.push('/dashboard');
-    //     } catch (error) {
-    //         setLoading(false);
-    //         showErrorMessage('Tên đăng nhập hoặc mật khẩu không đúng');
-    //     }
-    //     console.log('Thành công:', values);
-    // };
-
     const onFinish = async (values: any) => {
         setLoading(true);
         try {
             const response = await loginUser(values);
-            let { accessToken, refreshToken, user, ...userRest } = response.data;
+            let { accessToken, ...userRest } = response.data;
 
-            setUser({ user, ...userRest });
+            console.log("response.data", response.data);
+            console.log("🚀 ~ onFinish ~ userRest:", userRest)
+            setUser(userRest);
             setAccessToken(accessToken);
 
 
-            document.cookie = `refreshToken=${refreshToken}; path=/; secure; sameSite=Lax`;
-            document.cookie = `user=${user}; path=/; secure; sameSite=Lax`;
+            // document.cookie = `refreshToken=${refreshToken}; path=/; secure; sameSite=Lax`;
+            // document.cookie = `user=${user}; path=/; secure; sameSite=Lax`;
 
             localStorage.setItem('login', Date.now().toString());
 
-            user = JSON.parse(decodeURIComponent(user))
             // Tìm route đầu tiên mà user có quyền
             const firstAllowedRoute = protectedRoutes.find(route =>
-                user.permissions?.includes(route.permission)
+                userRest.permissions?.includes(route.permission)
             );
+            console.log("🚀 ~ onFinish ~ firstAllowedRoute:", firstAllowedRoute);
 
             if (firstAllowedRoute) {
                 router.push(firstAllowedRoute.path);
@@ -74,6 +43,7 @@ const LoginForm = () => {
                 router.push('/403'); // fallback nếu không có quyền nào
             }
         } catch (error) {
+            console.log("🚀 ~ onFinish ~ error:", error)
             setLoading(false);
             showErrorMessage('Tên đăng nhập hoặc mật khẩu không đúng');
         }

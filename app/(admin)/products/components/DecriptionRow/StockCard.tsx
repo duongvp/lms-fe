@@ -40,6 +40,7 @@ const StockCard: React.FC<TableWithActionsProps> = ({ data }) => {
                 return dayjs(value).format("DD/MM/YY HH:mm")
             }
         },
+        { title: 'Người tạo', dataIndex: 'full_name', key: 'full_name', width: 150 },
         { title: 'Loại giao dịch', dataIndex: 'transaction_type', key: 'transaction_type', width: 200 },
         {
             title: 'Giá GD',

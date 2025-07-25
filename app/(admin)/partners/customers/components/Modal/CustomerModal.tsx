@@ -107,7 +107,6 @@ const CustomerModal = () => {
                         label="Điện thoại"
                         name="phone"
                         rules={[
-                            { required: true, message: 'Vui lòng nhập số điện thoại khách hàng!' },
                             { validator: vietnamPhoneValidator },
                         ]}>
                         <Input />
