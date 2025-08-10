@@ -1,5 +1,5 @@
 // hooks/useProductSelect.ts
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { debounce } from 'lodash';
 import { getProductsByPage, ProductApiResponse } from '@/services/productService';
 import { Flex, Image, Tag, Typography } from 'antd';
@@ -19,7 +19,12 @@ interface ProductOption {
     label: React.ReactNode;
 }
 
-export default function useProductSelect(searchTerm: string, isViewPurchasePrice?: boolean) {
+export default function useProductSelect(
+    searchTerm: string,
+    isViewPurchasePrice: boolean,
+    isSelectOption: boolean,
+    listIdProducts: number[]
+) {
     const [data, setData] = useState<ProductApiResponse[]>([]);
     const [loading, setLoading] = useState(false);
     const [hasMore, setHasMore] = useState(true);
@@ -41,23 +46,24 @@ export default function useProductSelect(searchTerm: string, isViewPurchasePrice
 
     // useEffect(() => {
     //     fetchProducts(0); // Initial fetch
-    // }, []);
+    // }, []);  
+    console.log("searchTerm", searchTerm);
 
     useEffect(() => {
         if (warehouseId === -1) return
         const delaySearch = debounce(() => {
-            fetchProducts(0, { search: searchTerm, warehouse_id: warehouseId, is_active: 1 });
+            fetchProducts(0, { search: searchTerm, warehouse_id: warehouseId, is_active: 1, listIdProducts });
         }, 300);
         delaySearch();
         return () => delaySearch.cancel();
-    }, [searchTerm, warehouseId]);
+    }, [searchTerm, warehouseId, listIdProducts]);
 
     useEffect(() => {
         if (data.length > 0) {
             const newOptions = data.map((item, index) => ({
                 value: item.product_code + '-' + index, // Add index for uniqueness
                 labelText: item.product_name,
-                disabled: item.stock <= 0 && !isViewPurchasePrice,
+                disabled: !!(item.stock <= 0 && !isSelectOption),
                 data: item,
                 label: (
                     <div style={{ display: "flex", alignItems: "center", gap: 12, padding: 4 }}>

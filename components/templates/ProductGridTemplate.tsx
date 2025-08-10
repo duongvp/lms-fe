@@ -1,7 +1,7 @@
 // ProductSelect.tsx
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Empty, Flex, Upload } from 'antd';
 import { UploadOutlined, DeleteOutlined } from '@ant-design/icons';
 import SelectWithButton from '../ui/Selects/SelectWithButton';
@@ -21,17 +21,30 @@ interface ProductSelectProps {
     dataSource: IDataTypeProductSelect[];
     setDataSource: React.Dispatch<React.SetStateAction<IDataTypeProductSelect[]>>;
     isViewPurchasePrice?: boolean,
-    isViewMaxQuantity?: boolean
+    isViewMaxQuantity?: boolean,
+    isSelectOption?: boolean,
+    listIdProducts?: number[];
+    intialDataSource?: Map<any, any>;
 }
 
-const ProductSelect = ({ setTotalAmount, tableData, dataSource, setDataSource, isViewPurchasePrice = false, isViewMaxQuantity = false }: ProductSelectProps) => {
+const ProductSelect = ({
+    setTotalAmount,
+    tableData,
+    dataSource,
+    setDataSource,
+    isViewPurchasePrice = false,
+    isViewMaxQuantity = false,
+    isSelectOption = true,
+    listIdProducts,
+    intialDataSource }: ProductSelectProps) => {
     const [searchTerm, setSearchTerm] = useState('');
     const { setModal } = useProductStore();
+    const stableIds = useMemo(() => listIdProducts || [], [listIdProducts]);
 
     const {
         options,
         handleScroll
-    } = useProductSelect(searchTerm, isViewPurchasePrice);
+    } = useProductSelect(searchTerm, isViewPurchasePrice, isSelectOption, stableIds);
 
     const columns: ColumnsType<IDataTypeProductSelect> = [
         {
@@ -168,6 +181,7 @@ const ProductSelect = ({ setTotalAmount, tableData, dataSource, setDataSource, i
 
         if (selectedOption && selectedProduct) {
             setDataSource((prevData) => {
+                console.log("prevData", prevData);
                 const existingIndex = prevData.findIndex(
                     (item) => item.itemCode === selectedProduct.product_code
                 );
@@ -203,6 +217,7 @@ const ProductSelect = ({ setTotalAmount, tableData, dataSource, setDataSource, i
                             quantity: 1,
                             unitPrice: unitPrice,
                             // maxQuantity: selectedProduct.stock, // trường hợp dành cho hoá đơn 
+                            maxQuantity: intialDataSource?.get(selectedProduct.product_id) || selectedProduct.stock, // trường hợp dành cho phiếu nhập kho
                             discount: 0,
                             totalPrice: unitPrice,
                         },
@@ -225,6 +240,7 @@ const ProductSelect = ({ setTotalAmount, tableData, dataSource, setDataSource, i
     }, [dataSource]);
 
     useEffect(() => {
+        console.log("🚀 ~ tableData:", tableData)
         if (tableData) {
             const newData = tableData.map((item: any, index: number) => {
                 // const unitPrice = Number(item.unit_price || item.selling_price);
@@ -241,14 +257,12 @@ const ProductSelect = ({ setTotalAmount, tableData, dataSource, setDataSource, i
                     unitPrice: unitPrice,
                     discount: item.discount,
                     totalPrice: totalPrice,
-                    maxQuantity: item.quantity,
+                    maxQuantity: item.max_quantity || item.quantity,
                 };
             });
-
             setDataSource(newData);
         }
     }, [tableData])
-
 
     return (
         <div style={{ height: "100%" }}>

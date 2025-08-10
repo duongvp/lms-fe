@@ -7,7 +7,7 @@ import { showErrorMessage, showSuccessMessage } from '@/ultils/message';
 import useCustomerStore from '@/stores/customerStore';
 import { createCustomer, updateCustomer } from '@/services/customerService';
 import { ActionType } from '@/enums/action';
-import { vietnamPhoneValidator } from '@/ultils/validators/phoneValidator';
+import { phoneNumberValidator } from '@/ultils/validators/phoneValidator';
 
 const formItemLayout = {
     labelCol: { span: 6 },
@@ -93,9 +93,9 @@ const CustomerModal = () => {
                     {...formItemLayout}
                     labelAlign="left"
                 >
-                    <Form.Item label="Mã khách hàng" name="customer_code">
+                    {/* <Form.Item label="Mã khách hàng" name="customer_code">
                         <Input placeholder="Mã mặc định" />
-                    </Form.Item>
+                    </Form.Item> */}
                     <Form.Item
                         label="Tên khách hàng"
                         name="customer_name"
@@ -107,7 +107,7 @@ const CustomerModal = () => {
                         label="Điện thoại"
                         name="phone"
                         rules={[
-                            { validator: vietnamPhoneValidator },
+                            { validator: phoneNumberValidator },
                         ]}>
                         <Input />
                     </Form.Item>

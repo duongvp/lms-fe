@@ -217,3 +217,11 @@ body {
     font-size: 16px !important;
   }
 }
+
+.summary-row {
+  font-weight: 600;
+}
+
+.summary-row:hover td {
+  background-color: #f0f0f0 !important;
+}

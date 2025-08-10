@@ -7,7 +7,7 @@ import { showErrorMessage, showSuccessMessage } from '@/ultils/message';
 import useSupplierStore from "@/stores/supplierStore";
 import { ActionType } from '@/enums/action';
 import { createSupplier, updateSupplier } from '@/services/supplierService';
-import { vietnamPhoneValidator } from '@/ultils/validators/phoneValidator';
+import { phoneNumberValidator } from '@/ultils/validators/phoneValidator';
 
 const formItemLayout = {
     labelCol: { span: 6 },
@@ -95,9 +95,9 @@ const SupplierModal = () => {
                     {...formItemLayout}
                     labelAlign="left"
                 >
-                    <Form.Item label="Mã nhà cung cấp" name="supplier_code">
+                    {/* <Form.Item label="Mã nhà cung cấp" name="supplier_code">
                         <Input placeholder="Mã mặc định" />
-                    </Form.Item>
+                    </Form.Item> */}
                     <Form.Item
                         label="Tên nhà cung cấp"
                         name="supplier_name"
@@ -108,7 +108,7 @@ const SupplierModal = () => {
                         label="Điện thoại"
                         name="phone"
                         rules={[
-                            { validator: vietnamPhoneValidator },
+                            { validator: phoneNumberValidator },
                         ]}>
                         <Input />
                     </Form.Item>

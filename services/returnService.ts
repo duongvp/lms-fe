@@ -43,6 +43,7 @@ export interface FullReturnOrderResponse extends ReturnOrderApiResponse {
         discount_total: string
     };
     items: ReturnOrderDetailResponse[];
+    invoiceDetails: any;
 }
 
 export const getReturnOrdersByPage = async (

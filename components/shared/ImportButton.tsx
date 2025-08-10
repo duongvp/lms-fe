@@ -95,9 +95,9 @@ export default function ImportButton({
                     groupedErrors[err.row].push(err.error);
                 });
 
-                const errorList = Object.entries(groupedErrors).map(([row, errors]) => (
-                    <div key={row} className='text-red-500'>
-                        {row && <span>Dòng {row}:</span>}
+                const errorList = Object.entries(groupedErrors).map(([row, errors], index) => (
+                    <div key={index} className='text-red-500'>
+                        {row && row !== "undefined" ? <span>Dòng {row}:</span> : <span>Lỗi:</span>}
                         <ul style={{ paddingLeft: '1rem', margin: 0 }}>
                             {errors.map((err, idx) => (
                                 <li key={idx}>- {err}</li>

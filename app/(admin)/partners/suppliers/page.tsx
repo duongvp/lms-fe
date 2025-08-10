@@ -178,7 +178,6 @@ const Page = () => {
                 title="Tạo nhà cung cấp từ file dữ liệu"
                 onClose={() => setOpenImportModal(false)}
                 notes={[
-                    'Mã nhà cung cấp luôn bắt đầu bằng cụm từ “NCCIP”. Nếu bạn không nhập, hệ thống sẽ tự động thêm vào.',
                     'Hệ thống cho phép import tối đa 500 dòng mỗi lần.',
                     'Hệ thống sẽ kiểm tra nếu nhà cung cấp chưa có sẽ được tạo mới.',
                 ]}

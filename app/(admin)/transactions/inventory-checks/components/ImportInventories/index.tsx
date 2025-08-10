@@ -24,14 +24,14 @@ const ImportInventories: React.FC<IImportInventoriesProps> = ({ slug, type }) =>
     }
 
     return (
-        <Row gutter={16} style={{ height: "100%" }}>
+        <Row gutter={[24, 16]} style={{ height: "100%" }}>
             {/* Left side */}
-            <Col span={16}>
+            <Col xs={24} xl={16} style={{ minHeight: "300px" }}>
                 <InventoryCheckSelect setTotalActualQuantity={setTotalActualQuantity} tableData={tableData} dataSource={dataSource} setDataSource={setDataSource} />
             </Col>
 
             {/* Right side */}
-            <Col span={8}>
+            <Col xs={24} xl={8}>
                 <Card
                     title="Thông tin kiểm kho"
                     style={{ height: "100%", display: "flex", flexDirection: "column", boxShadow: "0 0 10px rgba(0,0,0,0.1)" }}

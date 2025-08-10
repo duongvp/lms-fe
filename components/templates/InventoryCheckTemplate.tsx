@@ -40,11 +40,11 @@ interface ProductSelectProps {
 
 const InventoryCheckSelect = ({ setTotalActualQuantity, tableData, dataSource, setDataSource }: ProductSelectProps) => {
     const [searchTerm, setSearchTerm] = useState('');
-
+    const emptyList = React.useMemo(() => [], []);
     const {
         options,
         handleScroll,
-    } = useProductSelect(searchTerm, true);
+    } = useProductSelect(searchTerm, true, true, emptyList);
 
     const { setModal } = useProductStore();
 

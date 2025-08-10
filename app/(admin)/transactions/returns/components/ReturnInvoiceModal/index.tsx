@@ -132,17 +132,17 @@ const ReturnInvoiceModal = ({ visible, onClose }: Props) => {
     };
 
     const handleSearchInvoiceCode = async (value: string) => {
-        setFilter({ ...filter, invoice_code: value });
+        setFilter({ ...filter, invoice_code: value.trim() });
     };
 
     const handleSearchFollowCustomerName = async (value: string) => {
-        setFilter({ ...filter, customer_name: value });
+        setFilter({ ...filter, customer_name: value.trim() });
     };
     const handleSearchFollowProductCode = async (value: string) => {
-        setFilter({ ...filter, product_code: value });
+        setFilter({ ...filter, product_code: value.trim() });
     };
     const handleSearchFollowProductName = async (value: string) => {
-        setFilter({ ...filter, product_name: value });
+        setFilter({ ...filter, product_name: value.trim() });
     };
 
     const handleFromDateChange = (date: dayjs.Dayjs | null) => {

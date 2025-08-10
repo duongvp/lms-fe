@@ -7,15 +7,17 @@ export function useReturnTableData(returnId: number, deps: React.DependencyList 
     const [returnOrderSummary, setReturnOrderSummary] = useState<any>({});
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
+    const [invoiceDetails, setInvoiceDetails] = useState<any>(null);
 
     useEffect(() => {
         const fetchData = async () => {
             try {
                 setLoading(true);
                 const res = await getReturnOrderById(returnId);
-                const { items, summary, ...rest } = res;
+                const { items, summary, invoiceDetails, ...rest } = res;
                 setTableData(items.map((item: any) => ({ ...item, key: item.return_detail_id })));
                 setReturnOrderDetails(rest);
+                setInvoiceDetails(invoiceDetails);
                 setReturnOrderSummary({ ...summary, discount_amount: summary.discount_total || 0 });
             } catch (err) {
                 console.error(err);
@@ -30,5 +32,5 @@ export function useReturnTableData(returnId: number, deps: React.DependencyList 
         }
     }, [returnId, ...deps]);
 
-    return { tableData, returnOrderDetails, returnOrderSummary, loading, error };
+    return { tableData, returnOrderDetails, returnOrderSummary, invoiceDetails, loading, error };
 }

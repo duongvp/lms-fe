@@ -19,10 +19,6 @@ const LoginForm = () => {
         try {
             const response = await loginUser(values);
             let { accessToken, refreshToken, user, ...userRest } = response.data;
-            console.log("🚀 ~ onFinish ~ user:", user)
-
-            console.log("response.data", response.data);
-            console.log("🚀 ~ onFinish ~ userRest:", userRest)
             setUser(userRest);
             setAccessToken(accessToken);
 
@@ -62,7 +58,7 @@ const LoginForm = () => {
             </div>
             <Form
                 name="login_form"
-                initialValues={{ remember: true }}
+                initialValues={{ rememberMe: true }}
                 onFinish={onFinish}
                 layout="vertical"
             >
@@ -75,7 +71,7 @@ const LoginForm = () => {
                 </Form.Item>
 
                 <Form.Item>
-                    <Form.Item name="remember" valuePropName="checked" noStyle>
+                    <Form.Item name="rememberMe" valuePropName="checked" noStyle>
                         <Checkbox>Duy trì đăng nhập</Checkbox>
                     </Form.Item>
                     <Link style={{ float: 'right' }} onClick={handleForgetPassword}>Quên mật khẩu?</Link>

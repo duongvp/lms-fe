@@ -68,7 +68,7 @@ const Page = () => {
     const [openFilterDrawer, setOpenFilterDrawer] = useState(false);
     const [api, contextHolder] = notification.useNotification();
     const [total, setTotal] = useState<number>(0);
-    const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
+    const [pagination, setPagination] = useState({ current: 1, pageSize: 11 });
     const [openImportModal, setOpenImportModal] = useState(false);
     const hasPermission = useAuthStore(state => state.hasPermission);
     const { warehouseId } = useAuthStore((state) => state.user)
@@ -80,7 +80,8 @@ const Page = () => {
         if (warehouseId === -1) return
         try {
             setLoading(true);
-            const { current, pageSize } = pagination;
+            let { current, pageSize } = pagination;
+            pageSize = pageSize - 1;
             const skip = (current - 1) * pageSize;
             const { data: apiData, total, grand_total } = await getPurchaseOrdersByPage(pageSize, skip, { ...filter, warehouse_id: warehouseId });
 
@@ -178,11 +179,14 @@ const Page = () => {
                 loading={loading}
                 pagination={{
                     position: ["bottomRight"],
-                    showSizeChanger: true,
+                    showSizeChanger: false,
                     total,
-                    pageSizeOptions: ["10", "20", "50", "100"],
                     current: pagination.current,
                     pageSize: pagination.pageSize,
+                    showTotal: (total, range) => {
+                        if (total == 1) return ""
+                        return `Hiển thị ${range[0] == 1 ? range[0] : range[0] - 1}-${range[1] == 11 ? 10 : range[1]} trên tổng số ${total} hóa đơn`;
+                    }
                 }}
                 onChange={handleTableChange}
                 scroll={{ x: "max-content" }}
@@ -204,7 +208,7 @@ const Page = () => {
                     onClick: () => handleRowClick(record),
                     style: { cursor: "pointer" },
                 })}
-                rowClassName={() => "expandable-row"}
+                rowClassName={(record) => record.key === -1 ? "summary-row" : "expandable-row"}
             />
 
             <FilterDrawer

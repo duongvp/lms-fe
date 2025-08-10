@@ -175,6 +175,10 @@ const Page = () => {
                     pageSizeOptions: ["10", "20", "50", "100"],
                     current: pagination.current,
                     pageSize: pagination.pageSize,
+                    showTotal: (total, range) => {
+                        if (total == 1) return ""
+                        return `Hiển thị ${range[0]}-${range[1]} trên tổng số ${total} hóa đơn`;
+                    }
                 }}
                 onChange={handleTableChange}
                 scroll={{ x: "max-content" }}

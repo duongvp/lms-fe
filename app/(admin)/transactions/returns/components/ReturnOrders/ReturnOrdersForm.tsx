@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Form, Typography, Button, Flex, Input, Empty } from 'antd';
+import { Form, Typography, Button, Flex, Input, Divider } from 'antd';
 import { CheckOutlined } from '@ant-design/icons';
-import CustomInput from '@/components/ui/Inputs'; // bạn nhớ tạo cho chuẩn nhé
-import SelectWithButton from '@/components/ui/Selects/SelectWithButton';
-import useCustomerSelect from '@/hooks/useCustomerSelect';
+import CustomInput from '@/components/ui/Inputs';
 import CustomerModal from '@/app/(admin)/partners/customers/components/Modal/CustomerModal';
 import useCustomerStore from '@/stores/customerStore';
 import HeaderForm from '@/components/shared/HeaderForm';
@@ -12,11 +10,10 @@ import { createReturnOrder, updateReturnOrder } from '@/services/returnService';
 import { ActionType } from '@/enums/action';
 import { useAuthStore } from '@/stores/authStore';
 import dayjs from 'dayjs';
-import { isEmpty, set } from 'lodash';
+import { isEmpty } from 'lodash';
 
 import { ITypeImportInvoice } from '@/types/invoice';
 import { IDataTypeProductSelect } from '@/types/productSelect';
-import { PermissionKey } from '@/types/permissions';
 import { useRouter } from 'next/navigation';
 
 const { Text } = Typography;
@@ -38,12 +35,9 @@ export default function ReturnOrdersForm({ subtotal, type, returnOrderDetails, r
     const [customerPayment, setCustomerPayment] = useState<number>(0);
     const [returnFee, setReturnFee] = useState<number>(0);
     const { setModal } = useCustomerStore();
-    const [searchTerm, setSearchTerm] = useState('');
-    const { options, handleScroll } = useCustomerSelect(searchTerm)
     const { userId } = useAuthStore(state => state.user);
     const [userIdSelected, setUserIdSelected] = useState<number>(userId);
     const [dateTimeSelected, setDateTimeSelected] = useState<dayjs.Dayjs | null | undefined>(dayjs());
-    const { hasPermission } = useAuthStore();
     const router = useRouter();
 
     const calculateTotal = () => {
@@ -76,10 +70,12 @@ export default function ReturnOrdersForm({ subtotal, type, returnOrderDetails, r
         //         }
         //     ]
         // }
+        console.log("dataSource", dataSource);
         const details = dataSource.map((item: any) => ({
             product_id: item.id,
             quantity: item.quantity,
-            unit_price: Number(String(item.unitPrice).replace(/,/g, ''))
+            unit_price: Number(String(item.unitPrice).replace(/,/g, '')),
+            max_quantity: item.maxQuantity || item.quantity, // Sử dụng maxQuantity nếu có, ngược lại dùng quantity
         }))
         const newData = {
             "return_order": {
@@ -88,7 +84,7 @@ export default function ReturnOrdersForm({ subtotal, type, returnOrderDetails, r
                 user_id: userIdSelected,                              // ID người tạo
                 invoice_id: returnOrderDetails?.invoice_id, // Optional: ID hóa đơn mua hàng gốc (nếu có)
                 return_date: dayjs(dateTimeSelected).format("YYYY-MM-DD HH:mm:ss"), // Ngày trả hàng
-                customer_id: values.customer_id, // Optional: ID khách hàng (nếu cần lưu)
+                customer_id: returnOrderDetails?.customer_id, // Optional: ID khách hàng (nếu cần lưu)
                 notes: values.notes,
                 status: "completed", // "draft" hoặc "completed"
                 return_fee: returnFee,
@@ -166,25 +162,11 @@ export default function ReturnOrdersForm({ subtotal, type, returnOrderDetails, r
                     />
 
                     {/* Khách hàng */}
-                    <Form.Item name="customer_id">
-                        <SelectWithButton
-                            options={options}
-                            style={{ width: '100%' }}
-                            styleWrapSelect={{ borderBottom: '1px solid #d9d9d9' }}
-                            placeholder="Tìm khách hàng"
-                            disabled
-                            onSearch={setSearchTerm}
-                            onAddClick={hasPermission(PermissionKey.CUSTOMER_CREATE) ? handleAddCustomer : undefined}
-                            onPopupScroll={handleScroll}
-                            notFoundContent={
-                                <Empty
-                                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                    description="Không có kết quả phù hợp"
-                                />
-                            }
-                        // onSelect={handleSelect}
-                        />
-                    </Form.Item>
+                    <Flex justify='space-between' style={{ marginBottom: 8 }}>
+                        <Text strong >Tên khách hàng</Text>
+                        <Text>{returnOrderDetails?.customer_name}</Text>
+                    </Flex>
+                    <Divider />
                     {/* Tổng tiền */}
                     <Flex justify='space-between' style={{ marginBottom: 8 }}>
                         <Text strong >Tổng thành tiền</Text>

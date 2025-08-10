@@ -19,6 +19,8 @@ import { Status } from '@/enums/status';
 import { createInventoryCheck } from '@/services/inventoryCheckService';
 import { isEmpty } from 'lodash';
 import CustomInput from '@/components/ui/Inputs';
+import { start } from 'repl';
+import dayjs from 'dayjs';
 
 const ProductModal = () => {
     const { modal, resetModal, setShouldReload } = useProductStore();
@@ -89,6 +91,7 @@ const ProductModal = () => {
                         status: Status.RECEIVED,
                         user_id: userId,
                         warehouse_id: warehouseId,
+                        start_date: dayjs().format('YYYY-MM-DD HH:mm:ss'),
                         notes: `Phiếu kiểm kho được tạo tự động khi cập nhật Hàng hoá ${modal.product?.product_code}`
                     }
                     await createInventoryCheck(newData);

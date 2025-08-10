@@ -150,7 +150,7 @@ const TableWithActions: React.FC<TableWithActionsProps> = ({ data, invoiceDetail
                                     hasPermission(PermissionKey.RETURN_PROCESS) && (
                                         <ActionButton
                                             type='primary'
-                                            label='Trả hàng'
+                                            label={`Trả hàng (${invoiceDetails.return_code ? 'cập nhật' : 'mới'})`}
                                             color='green'
                                             variant='solid'
                                             icon={<CheckCircleOutlined />}
@@ -201,7 +201,7 @@ const TableWithActions: React.FC<TableWithActionsProps> = ({ data, invoiceDetail
                                     )
                                 }
                                 {
-                                    hasPermission(PermissionKey.INVOICE_VOID) && (
+                                    hasPermission(PermissionKey.INVOICE_VOID) && !invoiceDetails.return_code && (
                                         <ConfirmButton
                                             label="Huỷ bỏ"
                                             customColor="red"

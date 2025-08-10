@@ -115,7 +115,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
               borderRadius: borderRadiusLG,
               display: "flex"
             }}>
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, width: '100%' }}>
                 {children}
               </div>
             </div>

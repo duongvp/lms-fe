@@ -1,4 +1,3 @@
-// hooks/useProductSelect.ts
 import { useEffect, useState } from 'react';
 import { debounce } from 'lodash';
 

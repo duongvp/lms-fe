@@ -8,7 +8,7 @@ import useBranchStore from '@/stores/branchStore';
 import { ActionType } from '@/enums/action';
 import { createWarehouse, updateWarehouse } from '@/services/branchService';
 import { useAuthStore } from '@/stores/authStore';
-import { vietnamPhoneValidator } from '@/ultils/validators/phoneValidator';
+import { phoneNumberValidator } from '@/ultils/validators/phoneValidator';
 
 const formItemLayout = {
     labelCol: { span: 6 },
@@ -99,7 +99,7 @@ const BranchModal = () => {
                         name="phone"
                         rules={[
                             { required: true, message: "Vui lòng nhập số điện thoại!" },
-                            { validator: vietnamPhoneValidator }
+                            { validator: phoneNumberValidator }
                         ]}
                     >
                         <Input />

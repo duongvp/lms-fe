@@ -46,6 +46,7 @@ export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceD
     const { hasPermission } = useAuthStore();
     const { setShouldReload } = useProductStore()
 
+
     const resetForm = () => {
         setDataSource([])
         setSubtotal(0)
@@ -224,6 +225,10 @@ export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceD
                             }}
                         />
                     </div>
+                    {/* <Flex justify="space-between" style={{ marginBottom: 16, marginTop: 12 }}>
+                        <Text strong>Tổng cộng</Text>
+                        <Text>{calculateTotal().toLocaleString()}</Text>
+                    </Flex> */}
                     {/* Cần trả */}
                     <Flex justify="space-between" style={{ marginBottom: 16, marginTop: 12 }}>
                         <Text strong>Khách cần trả</Text>

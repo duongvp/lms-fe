@@ -180,7 +180,6 @@ const Page = () => {
                 title="Tạo khách hàng từ file dữ liệu"
                 onClose={() => setOpenImportModal(false)}
                 notes={[
-                    'Mã khách hàng luôn bắt đầu bằng cụm từ “KHIP”. Nếu bạn không nhập, hệ thống sẽ tự động thêm vào.',
                     'Hệ thống cho phép import tối đa 500 dòng mỗi lần.',
                     'Hệ thống sẽ kiểm tra nếu khách hàng chưa có sẽ được tạo mới khách hàng',
                 ]}

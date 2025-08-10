@@ -36,7 +36,14 @@ const SelectWithButton = ({
                 optionLabelProp="labelText"
                 variant="borderless"
                 value={value}
-                onChange={onChange}
+                // onChange={onChange}
+                onChange={(val, option) => {
+                    if (val === undefined || val === null) {
+                        // Khi clear chọn
+                        onSearch?.(''); // gọi lại để reset searchTerm
+                    }
+                    onChange?.(val, option);
+                }}
                 onSearch={onSearch} // dùng nếu được truyền
                 notFoundContent={
                     <Empty

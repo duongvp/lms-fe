@@ -67,9 +67,9 @@ const ImportGoods: React.FC<IImportGoodsProps> = ({ slug, type }) => {
     if (error) return <div>Error: {error}</div>;
 
     return (
-        <Row gutter={16} style={{ height: "100%" }}>
+        <Row gutter={[24, 16]} style={{ height: "100%" }}>
             {/* Left side */}
-            <Col span={16}>
+            <Col xs={24} xl={16} style={{ minHeight: "300px" }}>
                 <ProductGridTemplate
                     setTotalAmount={setTotalAmount}
                     tableData={tableData}
@@ -80,7 +80,7 @@ const ImportGoods: React.FC<IImportGoodsProps> = ({ slug, type }) => {
             </Col>
 
             {/* Right side */}
-            <Col span={8}>
+            <Col xs={24} xl={8}>
                 <Card
                     title={title}
                     style={{ height: "100%", display: "flex", flexDirection: "column", boxShadow: "0 0 10px rgba(0,0,0,0.1)" }}

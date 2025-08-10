@@ -32,6 +32,7 @@ const ImportOrders: React.FC<{ slug?: number, type: ITypeImportInvoice }> = ({ s
                     tableData={tableData}
                     dataSource={dataSource}
                     setDataSource={setDataSource}
+                    isSelectOption={false}
                 />
             </Col>
 
