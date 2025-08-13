@@ -41,12 +41,12 @@ const ViewToPrint: React.FC<TableWithActionsProps> = ({ data, details, summary, 
                 <Text>Số HD: {details?.return_code}</Text>
                 <Text>Ngày: {dayjs(details.created_at).format('DD/MM/YYYY HH:mm:ss')}</Text>
             </div>
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 16, fontSize: 14 }}>
                 <Text strong>Khách hàng:</Text> {details.customer_name}
                 <br />
-                <Text strong>SĐT:</Text> { }
+                <Text strong>SĐT:</Text> {details.customer_phone}
                 <br />
-                <Text strong>Địa chỉ:</Text> { }
+                <Text strong>Địa chỉ:</Text> {details.customer_address}
                 <br />
                 <Text strong>Người tạo:</Text> {details.created_by}
             </div>
@@ -66,7 +66,7 @@ const ViewToPrint: React.FC<TableWithActionsProps> = ({ data, details, summary, 
                     {data.map((item, index) => (
                         <React.Fragment key={index}>
                             <tr>
-                                <td colSpan={3} style={{ padding: '4px 0' }}>{item.product_name}</td>
+                                <td colSpan={3} style={{ padding: '4px 0', fontSize: 14 }}>{item.product_name}</td>
                             </tr>
                             <tr>
                                 <td style={{ textAlign: 'left', padding: '4px 0' }}>{Number(item.unit_price).toLocaleString()}</td>

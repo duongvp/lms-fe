@@ -37,6 +37,8 @@ export interface IInvoiceDetail {
     warehouse_id: number;
     invoice_code: string;
     customer_id: number | null;
+    customer_phone: string | null;
+    customer_address: string | null;
     customer_name: string;
     user_id: number;
     invoice_date: string;

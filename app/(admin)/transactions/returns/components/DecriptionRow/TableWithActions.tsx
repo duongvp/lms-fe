@@ -1,6 +1,6 @@
 import React from 'react';
 import { Row, Col, Typography, Space } from 'antd';
-import { CheckCircleFilled, CloseCircleFilled, DownloadOutlined } from '@ant-design/icons';
+import { CheckCircleFilled, CloseCircleFilled } from '@ant-design/icons';
 import CustomTable from '@/components/ui/Table';
 import dayjs from 'dayjs';
 import { getReturnOrderStatusLabel, Status } from '@/enums/status';
@@ -13,6 +13,7 @@ import { PermissionKey } from '@/types/permissions';
 import { cancelReturnOrder, exportReturnOrders } from '@/services/returnService';
 import useReturnStore from '@/stores/returnStore';
 import GenericExportButton from '@/components/shared/GenericExportButton';
+import Link from 'next/link';
 
 const { Text } = Typography;
 
@@ -49,12 +50,16 @@ const TableWithActions: React.FC<any> = ({ data, returnOrderDetails, returnOrder
                         <Col><Text>{dayjs(returnOrderDetails.return_date).format('DD/MM/YYYY HH:mm')}</Text></Col>
                     </Row>
                     <Row style={{ marginBottom: 8 }}>
-                        <Col span={8}><Text strong>Người tạo:</Text></Col>
-                        <Col><Text>{returnOrderDetails.created_by}</Text></Col>
+                        <Col span={8}><Text strong>Khách hàng:</Text></Col>
+                        <Col><Link href="#">{returnOrderDetails.customer_name}</Link></Col>
                     </Row>
                     <Row style={{ marginBottom: 8 }}>
-                        <Col span={8}><Text strong>Mã hoá đơn:</Text></Col>
-                        <Col><Text copyable>{returnOrderDetails.invoice_code}</Text></Col>
+                        <Col span={8}><Text strong>SĐT:</Text></Col>
+                        <Col><Text>{returnOrderDetails.customer_phone}</Text></Col>
+                    </Row>
+                    <Row style={{ marginBottom: 8 }}>
+                        <Col span={8}><Text strong>Địa chỉ:</Text></Col>
+                        <Col><Text>{returnOrderDetails.customer_address}</Text></Col>
                     </Row>
                 </Col>
 
@@ -66,6 +71,14 @@ const TableWithActions: React.FC<any> = ({ data, returnOrderDetails, returnOrder
                     <Row style={{ marginBottom: 8 }}>
                         <Col span={8}><Text strong>Chi nhánh:</Text></Col>
                         <Col><Text>{returnOrderDetails.warehouse_name}</Text></Col>
+                    </Row>
+                    <Row style={{ marginBottom: 8 }}>
+                        <Col span={8}><Text strong>Người tạo:</Text></Col>
+                        <Col><Text>{returnOrderDetails.created_by}</Text></Col>
+                    </Row>
+                    <Row style={{ marginBottom: 8 }}>
+                        <Col span={8}><Text strong>Mã hoá đơn:</Text></Col>
+                        <Col><Text copyable>{returnOrderDetails.invoice_code}</Text></Col>
                     </Row>
                 </Col>
 

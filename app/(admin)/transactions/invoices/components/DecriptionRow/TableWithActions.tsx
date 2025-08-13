@@ -79,12 +79,12 @@ const TableWithActions: React.FC<TableWithActionsProps> = ({ data, invoiceDetail
                         <Col><Link href="#">{invoiceDetails.customer_name}</Link></Col>
                     </Row>
                     <Row style={{ marginBottom: 8 }}>
-                        <Col span={8}><Text strong>Người tạo:</Text></Col>
-                        <Col><Text>{invoiceDetails.created_by}</Text></Col>
+                        <Col span={8}><Text strong>SĐT:</Text></Col>
+                        <Col><Text>{invoiceDetails.customer_phone}</Text></Col>
                     </Row>
                     <Row style={{ marginBottom: 8 }}>
-                        <Col span={8}><Text strong>Phiếu trả hàng:</Text></Col>
-                        {invoiceDetails.return_code && <Col><Text copyable>{invoiceDetails.return_code}</Text></Col>}
+                        <Col span={8}><Text strong>Địa chỉ:</Text></Col>
+                        <Col><Text>{invoiceDetails.customer_address}</Text></Col>
                     </Row>
                 </Col>
 
@@ -96,6 +96,14 @@ const TableWithActions: React.FC<TableWithActionsProps> = ({ data, invoiceDetail
                     <Row style={{ marginBottom: 8 }}>
                         <Col span={8}><Text strong>Chi nhánh:</Text></Col>
                         <Col><Text>{invoiceDetails.warehouse_name}</Text></Col>
+                    </Row>
+                    <Row style={{ marginBottom: 8 }}>
+                        <Col span={8}><Text strong>Người tạo:</Text></Col>
+                        <Col><Text>{invoiceDetails.created_by}</Text></Col>
+                    </Row>
+                    <Row style={{ marginBottom: 8 }}>
+                        <Col span={8}><Text strong>Phiếu trả hàng:</Text></Col>
+                        {invoiceDetails.return_code && <Col><Text copyable>{invoiceDetails.return_code}</Text></Col>}
                     </Row>
                 </Col>
                 <Col xs={24} md={24} xl={6} xxl={8} style={{ height: '100%' }}>
@@ -159,7 +167,7 @@ const TableWithActions: React.FC<TableWithActionsProps> = ({ data, invoiceDetail
                                     )
                                 }
                                 {
-                                    hasPermission(PermissionKey.INVOICE_EDIT) && (
+                                    hasPermission(PermissionKey.INVOICE_EDIT) && !invoiceDetails.return_code && (
                                         <ActionButton
                                             type='primary'
                                             label='Cập nhật'
@@ -171,7 +179,7 @@ const TableWithActions: React.FC<TableWithActionsProps> = ({ data, invoiceDetail
                                     )
                                 }
                                 {
-                                    hasPermission(PermissionKey.INVOICE_CREATE) && (
+                                    hasPermission(PermissionKey.INVOICE_CREATE) && !invoiceDetails.return_code && (
                                         <ActionButton
                                             type='primary'
                                             label='Sao chép'
@@ -183,12 +191,12 @@ const TableWithActions: React.FC<TableWithActionsProps> = ({ data, invoiceDetail
                                     )
                                 }
                                 {
-                                    hasPermission(PermissionKey.INVOICE_PRINT) && (
+                                    hasPermission(PermissionKey.INVOICE_PRINT) && !invoiceDetails.return_code && (
                                         <PrintInvoiceWrapper data={data} invoiceDetails={invoiceDetails} invoiceSummary={invoiceSummary} />
                                     )
                                 }
                                 {
-                                    hasPermission(PermissionKey.INVOICE_EXPORT) && (
+                                    hasPermission(PermissionKey.INVOICE_EXPORT) && !invoiceDetails.return_code && (
                                         <GenericExportButton
                                             exportService={exportInvoices}
                                             serviceParams={[[invoiceDetails.invoice_id], warehouseId]}

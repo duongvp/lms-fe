@@ -112,9 +112,9 @@ const InvoiceToPrint: React.FC<TableWithActionsProps> = ({ data, invoiceDetails,
             <div style={{ marginBottom: 16 }}>
                 <Text strong>Khách hàng:</Text> {invoiceDetails.customer_name}
                 <br />
-                <Text strong>SDT:</Text> { }
+                <Text strong>SĐT: </Text> {invoiceDetails.customer_phone}
                 <br />
-                <Text strong>Địa chỉ:</Text> { }
+                <Text strong>Địa chỉ: </Text> {invoiceDetails.customer_address}
                 <br />
                 <Text strong>Người tạo:</Text> {invoiceDetails.created_by}
             </div>
@@ -136,7 +136,7 @@ const InvoiceToPrint: React.FC<TableWithActionsProps> = ({ data, invoiceDetails,
                             {data.map((item, index) => (
                                 <React.Fragment key={index}>
                                     <tr>
-                                        <td colSpan={3} style={{ padding: '4px 0' }}>{item.product_name}</td>
+                                        <td colSpan={3} style={{ padding: '4px 0', fontSize: 14 }}>{item.product_name}</td>
                                     </tr>
                                     <tr>
                                         <td style={{ textAlign: 'left', padding: '4px 0' }}>{Number(item.unit_price).toLocaleString()}</td>
@@ -212,8 +212,10 @@ const InvoiceToPrint: React.FC<TableWithActionsProps> = ({ data, invoiceDetails,
                     </div>
                 )
             }
-            <Text style={{ display: 'block', textAlign: 'center', marginTop: 24, fontStyle: 'italic' }}>
-                Cảm ơn và hẹn gặp lại!
+            <Text style={{ display: 'block', textAlign: 'center', fontWeight: '500', marginTop: 24, fontStyle: 'italic' }}>
+                QUÝ KHÁCH VUI LÒNG KIỂM TRA HÀNG NGAY SAU KHI NHẬN ĐƯỢC HÀNG <br />
+                KHÔNG GIẢI QUYẾT BẤT KỲ KHIẾU NẠI ĐƠN HÀNG SAU 48H NHẬN HÀNG <br />
+                CẢM ƠN VÀ HẸN GẶP LẠI QUÝ KHÁCH
             </Text>
         </div >
     );

@@ -66,7 +66,7 @@ const ViewToPrint: React.FC<TableWithActionsProps> = ({ data, details, summary, 
                     {data.map((item, index) => (
                         <React.Fragment key={index}>
                             <tr>
-                                <td colSpan={3} style={{ padding: '4px 0' }}>{item.product_name}</td>
+                                <td colSpan={3} style={{ padding: '4px 0', fontSize: 14 }}>{item.product_name}</td>
                             </tr>
                             <tr>
                                 <td style={{ textAlign: 'left', padding: '4px 0' }}>{Number(item.unit_price).toLocaleString()}</td>

@@ -60,8 +60,12 @@ const TableWithActions: React.FC<TableWithActionsProps> = ({ poDetail, poInfos, 
                         <Col><Link href="#">{poInfos.supplier_name}</Link></Col>
                     </Row>
                     <Row style={{ marginBottom: 8 }}>
-                        <Col span={8}><Text strong>Người tạo:</Text></Col>
-                        <Col><Text>{poInfos.created_by}</Text></Col>
+                        <Col span={8}><Text strong>SĐT:</Text></Col>
+                        <Col><Text>{poInfos.supplier_phone}</Text></Col>
+                    </Row>
+                    <Row style={{ marginBottom: 8 }}>
+                        <Col span={8}><Text strong>Địa chỉ:</Text></Col>
+                        <Col><Text>{poInfos.supplier_address}</Text></Col>
                     </Row>
                 </Col>
 
@@ -73,6 +77,10 @@ const TableWithActions: React.FC<TableWithActionsProps> = ({ poDetail, poInfos, 
                     <Row style={{ marginBottom: 8 }}>
                         <Col span={8}><Text strong>Chi nhánh:</Text></Col>
                         <Col><Text>{poInfos.warehouse_name}</Text></Col>
+                    </Row>
+                    <Row style={{ marginBottom: 8 }}>
+                        <Col span={8}><Text strong>Người tạo:</Text></Col>
+                        <Col><Text>{poInfos.created_by}</Text></Col>
                     </Row>
                 </Col>
                 <Col xs={24} md={24} xl={6} xxl={8} style={{ height: '100%' }}>
