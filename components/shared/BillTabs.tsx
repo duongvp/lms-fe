@@ -1,7 +1,8 @@
-import React, { use, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Tabs } from "antd";
 import type { TabsProps } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
+import { useTabStore } from "@/stores/tabStore";
 
 type TabItem = {
     title: string;
@@ -15,30 +16,20 @@ interface BillTabsProps {
 }
 
 const BillTabs: React.FC<BillTabsProps> = ({ initialTabs, defaultComponent }) => {
-    console.log("🚀 ~ initialTabs:", initialTabs)
     const [tabs, setTabs] = useState<TabItem[]>(initialTabs);
     const [activeKey, setActiveKey] = useState(initialTabs[0]?.key || "");
+    const { tabToClose, clearCloseTab } = useTabStore();
 
-    // const handleAdd = () => {
-    //     const nextIndex = tabs.length + 1;
-    //     const newKey = `${nextIndex}`;
-    //     const newTab: TabItem = {
-    //         title: `Hóa đơn ${nextIndex}`,
-    //         key: newKey,
-    //         component: defaultComponent(), // tái tạo component
-    //     };
-    //     setTabs([...tabs, newTab]);
-    //     setActiveKey(newKey);
-    // };
     const handleAdd = () => {
         let length = tabs.length;
         let nextIndex = 1;
         let lastKey = tabs[length - 1]?.key;
         if (isNaN(Number(lastKey))) {
-            nextIndex = 2
+            nextIndex = length == 2 ? 2 : 1;
         } else {
             nextIndex = Number(tabs[length - 1].key) + 1; // lấy key của tab cuối cùng và cộng thêm 1
         }
+        console.log("nextIndex", nextIndex);
         const newKey = `${nextIndex}`;
         const newTab: TabItem = {
             title: `Hóa đơn ${nextIndex}`,
@@ -61,6 +52,14 @@ const BillTabs: React.FC<BillTabsProps> = ({ initialTabs, defaultComponent }) =>
             setActiveKey(lastActiveKey);
         }
     };
+
+    // Lắng nghe tín hiệu đóng tab từ store
+    useEffect(() => {
+        if (tabToClose) {
+            handleRemove(tabToClose);
+            clearCloseTab();
+        }
+    }, [tabToClose]);
 
     const onChange = (key: string) => {
         if (key === "add_tab") {

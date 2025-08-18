@@ -1,7 +1,7 @@
 "use client";
 import { DatePicker, Empty, Flex, Typography } from 'antd';
 import dayjs from 'dayjs';
-import React from 'react';
+import React, { useEffect } from 'react';
 import SelectWithButton from '../ui/Selects/SelectWithButton';
 import useUserSelect from '@/hooks/useUserSelect';
 
@@ -17,6 +17,15 @@ interface IHeaderFormProps {
 
 const HeaderForm: React.FC<IHeaderFormProps> = ({ userIdSelected, setUserIdSelected, dateTime, setDateTime, minDateTime }) => {
     const { options } = useUserSelect();
+
+    // ⏰ Cập nhật liên tục theo thời gian thực
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setDateTime(dayjs());
+        }, 1000); // update mỗi giây
+        return () => clearInterval(timer);
+    }, [setDateTime]);
+
 
     return (
         <Flex align="center" justify="space-between" style={{ marginBottom: 16 }}>
@@ -38,7 +47,11 @@ const HeaderForm: React.FC<IHeaderFormProps> = ({ userIdSelected, setUserIdSelec
                     }
                 />
             </Flex>
-            <DatePicker
+
+            <Text>
+                {dateTime ? dateTime.format("DD/MM/YYYY HH:mm") : "--/--/---- --:--:--"}
+            </Text>
+            {/* <DatePicker
                 showTime={{ format: 'HH:mm' }}
                 defaultValue={dateTime}
                 format="DD/MM/YYYY HH:mm"
@@ -46,11 +59,12 @@ const HeaderForm: React.FC<IHeaderFormProps> = ({ userIdSelected, setUserIdSelec
                 value={dateTime}
                 onChange={(value) => setDateTime(value)}
                 allowClear={false}
+                disabled
                 suffixIcon={null}
                 size="small"
                 variant="borderless"
                 className="custom-datepicker"
-            />
+            /> */}
         </Flex>
     );
 }

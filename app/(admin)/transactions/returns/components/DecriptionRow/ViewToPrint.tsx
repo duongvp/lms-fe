@@ -39,7 +39,7 @@ const ViewToPrint: React.FC<TableWithActionsProps> = ({ data, details, summary, 
             </Title>
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 4, marginBottom: 16 }}>
                 <Text>Số HD: {details?.return_code}</Text>
-                <Text>Ngày: {dayjs(details.created_at).format('DD/MM/YYYY HH:mm:ss')}</Text>
+                <Text>Ngày: {dayjs(details.return_date).format('DD/MM/YYYY HH:mm:ss')}</Text>
             </div>
             <div style={{ marginBottom: 16, fontSize: 14 }}>
                 <Text strong>Khách hàng:</Text> {details.customer_name}

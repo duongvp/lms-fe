@@ -18,6 +18,7 @@ import { isEmpty } from 'lodash';
 import { IDataTypeProductSelect } from '@/types/productSelect';
 import { PermissionKey } from '@/types/permissions';
 import useProductStore from '@/stores/productStore';
+import { useTabStore } from '@/stores/tabStore';
 
 const { Text } = Typography;
 
@@ -32,6 +33,7 @@ interface ImportOrdersFormProps {
 }
 
 export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceDetails, invoiceSummary, dataSource, setDataSource }: ImportOrdersFormProps) {
+    console.log("🚀 ~ ImportOrdersForm ~ type:", type)
     const [form] = Form.useForm();
     const [discountAmount, setDiscountAmount] = useState<number>(0);
     const [VAT, setVAT] = useState<number>(0);
@@ -45,7 +47,7 @@ export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceD
     const { options, handleScroll } = useCustomerSelect(searchTerm, form)
     const { hasPermission } = useAuthStore();
     const { setShouldReload } = useProductStore()
-
+    const { closeTab } = useTabStore();
 
     const resetForm = () => {
         setDataSource([])
@@ -97,10 +99,12 @@ export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceD
                 await updateInvoice(invoiceDetails.invoice_id ?? 0, newValues);
                 showSuccessMessage('Cập nhật hoá đơn thành công')
                 setShouldReload(true);
+                closeTab('update');
             } else {
                 await createInvoice(newValues);
                 showSuccessMessage('Tạo hoá đơn thành công')
                 setShouldReload(true);
+                if (type === 'copy') closeTab('copy');
                 resetForm();
             }
         } catch (error: any) {

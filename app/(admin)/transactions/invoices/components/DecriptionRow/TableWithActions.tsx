@@ -34,7 +34,11 @@ const TableWithActions: React.FC<TableWithActionsProps> = ({ data, invoiceDetail
 
     const columns: ColumnsType<Partial<IInvoiceTableData>> = [
         { title: 'Mã hàng', dataIndex: 'product_code', key: 'product_code' },
-        { title: 'Tên hàng', dataIndex: 'product_name', key: 'product_name' },
+        {
+            title: 'Tên hàng',
+            dataIndex: 'product_name',
+            key: 'product_name',
+        },
         { title: 'Số lượng', dataIndex: 'quantity', key: 'quantity' },
         { title: 'Đơn giá', dataIndex: 'unit_price', key: 'unit_price', render: (value: any) => { return <span>{Number(value).toLocaleString()}</span> } },
         { title: 'Giảm giá', dataIndex: 'discount', key: 'discount', render: (value: any) => { return <span>{Number(value).toLocaleString()}</span> } },

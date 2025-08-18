@@ -132,6 +132,10 @@ body {
   .ant-btn {
     padding: 0 8px;
   }
+
+  .ant-picker-panels {
+    flex-direction: column;
+  }
 }
 
 /* bill-tabs */

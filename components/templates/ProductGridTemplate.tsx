@@ -64,8 +64,19 @@ const ProductSelect = ({
             ),
         },
         { title: 'STT', dataIndex: 'no', key: 'no', width: 60 },
-        { title: 'Mã hàng', dataIndex: 'itemCode', key: 'itemCode', render: (value) => <Link href={'#'}>{value}</Link> },
-        { title: 'Tên hàng', dataIndex: 'itemName', key: 'itemName' },
+        {
+            title: 'Mã hàng',
+            dataIndex: 'itemCode',
+            key: 'itemCode',
+            width: 160,
+            render: (value) => <Link href={'#'}>{value}</Link>
+        },
+        {
+            title: 'Tên hàng',
+            dataIndex: 'itemName',
+            key: 'itemName',
+            width: 250,
+        },
         {
             title: 'Số lượng',
             dataIndex: 'quantity',

@@ -107,7 +107,7 @@ const InvoiceToPrint: React.FC<TableWithActionsProps> = ({ data, invoiceDetails,
             </Title>
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 4, marginBottom: 16 }}>
                 <Text>Số HD: {invoiceDetails?.invoice_code}</Text>
-                <Text>Ngày: {dayjs(invoiceDetails.created_at).format('DD/MM/YYYY HH:mm:ss')}</Text>
+                <Text>Ngày: {dayjs(invoiceDetails.invoice_date).format('DD/MM/YYYY HH:mm:ss')}</Text>
             </div>
             <div style={{ marginBottom: 16 }}>
                 <Text strong>Khách hàng:</Text> {invoiceDetails.customer_name}
