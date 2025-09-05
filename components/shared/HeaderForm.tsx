@@ -1,7 +1,7 @@
 "use client";
 import { DatePicker, Empty, Flex, Typography } from 'antd';
 import dayjs from 'dayjs';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import SelectWithButton from '../ui/Selects/SelectWithButton';
 import useUserSelect from '@/hooks/useUserSelect';
 
@@ -10,13 +10,11 @@ const { Text } = Typography;
 interface IHeaderFormProps {
     userIdSelected: number;
     setUserIdSelected: React.Dispatch<React.SetStateAction<number>>;
-    dateTime: dayjs.Dayjs | null | undefined
-    setDateTime: React.Dispatch<React.SetStateAction<dayjs.Dayjs | null | undefined>>
-    minDateTime?: dayjs.Dayjs;
 }
 
-const HeaderForm: React.FC<IHeaderFormProps> = ({ userIdSelected, setUserIdSelected, dateTime, setDateTime, minDateTime }) => {
+const HeaderForm: React.FC<IHeaderFormProps> = ({ userIdSelected, setUserIdSelected }) => {
     const { options } = useUserSelect();
+    const [dateTime, setDateTime] = useState<dayjs.Dayjs | null | undefined>(dayjs());
 
     // ⏰ Cập nhật liên tục theo thời gian thực
     useEffect(() => {

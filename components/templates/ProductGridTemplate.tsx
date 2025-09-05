@@ -162,7 +162,7 @@ const ProductSelect = ({
                         const soLuongNumber = Number(newItem.quantity);
                         const giamGiaNumber = Number(newItem.discount);
 
-                        const total = (donGiaNumber * soLuongNumber) - giamGiaNumber;
+                        const total = (donGiaNumber - giamGiaNumber) * soLuongNumber;
 
                         return {
                             ...newItem,
@@ -244,7 +244,7 @@ const ProductSelect = ({
             const quantity = Number(item.quantity);
             const discount = Number(item.discount);
 
-            return acc + (unitPrice * quantity) - discount;
+            return acc + (unitPrice - discount) * quantity;
         }, 0);
 
         setTotalAmount(total);

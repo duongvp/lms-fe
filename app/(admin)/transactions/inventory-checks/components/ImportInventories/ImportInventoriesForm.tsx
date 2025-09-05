@@ -27,7 +27,6 @@ export default function ImportInventoriesForm({ totalActualQuantity, data, type,
     const [loadingTemporary, setLoadingTemporary] = useState<boolean>(false);
     const { warehouseId, userId } = useAuthStore(state => state.user);
     const [userIdSelected, setUserIdSelected] = useState<number>(userId);
-    const [dateTimeSelected, setDateTimeSelected] = useState<dayjs.Dayjs | null | undefined>(dayjs());
     const { setShouldReload } = useProductStore();
 
     const handleTemporary = async () => {
@@ -65,7 +64,8 @@ export default function ImportInventoriesForm({ totalActualQuantity, data, type,
                 status: status,
                 user_id: userIdSelected,
                 warehouse_id: warehouseId,
-                start_date: dateTimeSelected ? dateTimeSelected.format('YYYY-MM-DD HH:mm:ss') : null,
+                // start_date: dateTimeSelected ? dateTimeSelected.format('YYYY-MM-DD HH:mm:ss') : null,
+                start_date: dayjs().format('YYYY-MM-DD HH:mm:ss'),
                 notes: values.notes
             }
             if (type === "edit") {
@@ -103,8 +103,6 @@ export default function ImportInventoriesForm({ totalActualQuantity, data, type,
                     <HeaderForm
                         userIdSelected={userIdSelected}
                         setUserIdSelected={setUserIdSelected}
-                        dateTime={dateTimeSelected}
-                        setDateTime={setDateTimeSelected}
                     />
 
 

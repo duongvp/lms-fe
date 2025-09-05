@@ -17,6 +17,7 @@ interface TableWithActionsProps {
 }
 
 const InvoiceToPrint: React.FC<TableWithActionsProps> = ({ data, invoiceDetails, invoiceSummary, printMode, sizePrint }) => {
+    console.log("🚀 ~ InvoiceToPrint ~ data:", data)
     console.log("🚀 ~ invoiceDetails:", invoiceDetails)
     const numberToWords = (num: number): string => {
         if (num === 0) return 'không đồng';
@@ -139,9 +140,9 @@ const InvoiceToPrint: React.FC<TableWithActionsProps> = ({ data, invoiceDetails,
                                         <td colSpan={3} style={{ padding: '4px 0', fontSize: 14 }}>{item.product_name}</td>
                                     </tr>
                                     <tr>
-                                        <td style={{ textAlign: 'left', padding: '4px 0' }}>{Number(item.unit_price).toLocaleString()}</td>
+                                        <td style={{ textAlign: 'left', padding: '4px 0' }}>{(Number(item.unit_price) - Number(item.discount)).toLocaleString()}</td>
                                         <td style={{ textAlign: 'center', padding: '4px 0' }}>{item.quantity}</td>
-                                        <td style={{ textAlign: 'right', padding: '4px 0' }}>{(Number(item.unit_price) * (item.quantity ?? 0)).toLocaleString()}</td>
+                                        <td style={{ textAlign: 'right', padding: '4px 0' }}>{((Number(item.unit_price) - Number(item.discount)) * (item.quantity ?? 0)).toLocaleString()}</td>
                                     </tr>
                                 </React.Fragment>
                             ))}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { debounce } from 'lodash';
 
 const LIMIT = 50; // Số lượng sản phẩm mỗi lần gọi API
@@ -16,7 +16,7 @@ import { CustomerApiResponse, getCustomersByPage } from '@/services/customerServ
 import useCustomerStore from '@/stores/customerStore';
 import { FormInstance } from 'antd';
 
-export default function useCustomerSelect(searchTerm: string, form?: FormInstance<any>) {
+export default function useCustomerSelect(searchTerm: string, form: FormInstance<any>, customerDefault: any) {
     const [data, setData] = useState<CustomerApiResponse[]>([]);
     const [loading, setLoading] = useState(false);
     const [hasMore, setHasMore] = useState(true);
@@ -32,35 +32,56 @@ export default function useCustomerSelect(searchTerm: string, form?: FormInstanc
             return result.data;
         } catch (error) {
             console.error("Fetch error:", error);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     };
 
-    useEffect(() => {
-        const delaySearch = debounce(() => {
-            fetchCustomers(0, { search: searchTerm });
-        }, 300);
-        delaySearch();
-        return () => delaySearch.cancel();
-    }, [searchTerm]);
+    const debouncedFetch = useMemo(
+        () =>
+            debounce((term: string) => {
+                fetchCustomers(0, { search: term });
+            }, 300),
+        []
+    );
 
     useEffect(() => {
+        debouncedFetch(searchTerm);
+        return () => {
+            debouncedFetch.cancel();
+        };
+    }, [searchTerm, debouncedFetch]);
+
+    useEffect(() => {
+        console.log("🚀 ~ useCustomerSelect ~ data:", data, searchTerm);
         if (data.length > 0) {
             const newOptions = data.map((item, index) => {
                 let labelText = (item.phone ? `${item.customer_name} - ${item.phone}` : `${item.customer_name}`)
                 return {
                     value: item.customer_id,
                     labelText: labelText,
-                    // disabled: item.max_stock <= 0,
                     data: item,
                     label: labelText
                 }
             });
+            if (customerDefault && customerDefault.customer_id && !searchTerm) {
+                const exists = newOptions.some(option => option.value === customerDefault.customer_id);
+                let labelText = (customerDefault.customer_phone ? `${customerDefault.customer_name} - ${customerDefault.customer_phone}` : `${customerDefault.customer_name}`)
+                customerDefault.customer_deleted === 1 && (labelText = `${labelText} {DEL}`)
+                if (!exists) {
+                    newOptions.unshift({
+                        value: customerDefault.customer_id,
+                        labelText: labelText,
+                        data: customerDefault,
+                        label: labelText
+                    });
+                }
+            }
             setOptions(newOptions);
         } else {
             setOptions([]);
         }
-    }, [data]);
+    }, [data, customerDefault, searchTerm]);
 
     useEffect(() => {
         const handleApiResponse = async () => {

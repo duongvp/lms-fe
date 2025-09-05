@@ -164,7 +164,7 @@ const TableWithActions: React.FC<TableWithActionsProps> = ({ poDetail, poInfos, 
                                     hasPermission(PermissionKey.IMPORT_EXPORT) && (
                                         <GenericExportButton
                                             exportService={exportPurchaseOrders}
-                                            serviceParams={[[poInfos.po_id], warehouseId]}
+                                            serviceParams={[[poInfos.po_id], warehouseId, { exportType: 'detail' }]}
                                             fileNamePrefix={`phieu_nhap_hang_${poInfos.po_code}`}
                                             buttonProps={{
                                                 color: 'orange',

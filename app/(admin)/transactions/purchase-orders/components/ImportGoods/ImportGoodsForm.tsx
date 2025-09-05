@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Form, Typography, Button, Divider, Flex, Input, Empty } from 'antd';
+import { Form, Typography, Button, Flex, Input, Empty } from 'antd';
 import { CheckOutlined } from '@ant-design/icons';
 import CustomInput from '@/components/ui/Inputs'; // bạn nhớ tạo cho chuẩn nhé
 import SelectWithButton from '@/components/ui/Selects/SelectWithButton';
@@ -39,11 +39,11 @@ export default function ImportGoodsForm({ subtotal, poInfos, poSummary, type, da
     const [debt, setDebt] = useState<number>(0);
     const { setModal } = useSupplierStore();
     const [searchTerm, setSearchTerm] = useState('');
-    const { options, handleScroll } = useSupplierSelect(searchTerm, form)
+    const { options, handleScroll } = useSupplierSelect(searchTerm, form, poInfos);
     const [loadingSubmit, setLoadingSubmit] = useState(false);
     const { warehouseId, userId } = useAuthStore(state => state.user);
     const [userIdSelected, setUserIdSelected] = useState<number>(userId);
-    const [dateTimeSelected, setDateTimeSelected] = useState<dayjs.Dayjs | null | undefined>(dayjs());
+    // const [dateTimeSelected, setDateTimeSelected] = useState<dayjs.Dayjs | null | undefined>(dayjs());
     const { setShouldReload } = useProductStore();
     const { hasPermission } = useAuthStore();
 
@@ -73,8 +73,6 @@ export default function ImportGoodsForm({ subtotal, poInfos, poSummary, type, da
         }
     };
 
-    console.log("dateTimeSelected", dayjs(dateTimeSelected).format('YYYY-MM-DD HH:mm:ss'));
-
     const handleCreatePurchaseOrder = async (values: any) => {
         try {
             if (dataSource.length === 0) return
@@ -94,7 +92,7 @@ export default function ImportGoodsForm({ subtotal, poInfos, poSummary, type, da
                 total_amount: calculateTotal(),
                 amount_paid: paymentToSupplier,
                 debt_amount: debt,
-                order_date: dayjs(dateTimeSelected).format('YYYY-MM-DD HH:mm:ss'),
+                order_date: dayjs().format('YYYY-MM-DD HH:mm:ss'),
                 status: PurchaseOrderStatus.RECEIVED,
                 details
             }
@@ -131,7 +129,6 @@ export default function ImportGoodsForm({ subtotal, poInfos, poSummary, type, da
                 form.setFieldsValue({ po_code: poInfos?.po_code });
             }
             setUserIdSelected(poInfos?.user_id as number);
-            setDateTimeSelected(dayjs(poInfos?.order_date));
             if (poSummary) {
                 setDiscountAmount(Number(poSummary?.discount_amount) || 0);
                 setPaymentToSupplier(Number(poSummary?.amount_paid) || 0);
@@ -167,8 +164,6 @@ export default function ImportGoodsForm({ subtotal, poInfos, poSummary, type, da
                     <HeaderForm
                         userIdSelected={userIdSelected}
                         setUserIdSelected={setUserIdSelected}
-                        dateTime={dateTimeSelected}
-                        setDateTime={setDateTimeSelected}
                     />
 
                     <Form.Item name="supplier_id">

@@ -203,7 +203,7 @@ const TableWithActions: React.FC<TableWithActionsProps> = ({ data, invoiceDetail
                                     hasPermission(PermissionKey.INVOICE_EXPORT) && !invoiceDetails.return_code && (
                                         <GenericExportButton
                                             exportService={exportInvoices}
-                                            serviceParams={[[invoiceDetails.invoice_id], warehouseId]}
+                                            serviceParams={[[invoiceDetails.invoice_id], warehouseId, { exportType: 'detail' }]}
                                             fileNamePrefix={`hoa_don_${invoiceDetails.invoice_code}`}
                                             buttonProps={{
                                                 color: 'orange',

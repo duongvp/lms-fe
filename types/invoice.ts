@@ -55,5 +55,6 @@ export interface IInvoiceDetail {
     warehouse_name: string;
     warehouse_address: string;
     warehouse_phone: string;
+    customer_deleted: number;
     return_code: string | null
 }

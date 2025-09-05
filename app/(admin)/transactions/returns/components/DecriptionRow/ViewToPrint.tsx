@@ -69,9 +69,9 @@ const ViewToPrint: React.FC<TableWithActionsProps> = ({ data, details, summary, 
                                 <td colSpan={3} style={{ padding: '4px 0', fontSize: 14 }}>{item.product_name}</td>
                             </tr>
                             <tr>
-                                <td style={{ textAlign: 'left', padding: '4px 0' }}>{Number(item.unit_price).toLocaleString()}</td>
+                                <td style={{ textAlign: 'left', padding: '4px 0' }}>{(Number(item.unit_price) - Number(item.discount)).toLocaleString()}</td>
                                 <td style={{ textAlign: 'center', padding: '4px 0' }}>{item.quantity}</td>
-                                <td style={{ textAlign: 'right', padding: '4px 0' }}>{(Number(item.unit_price) * (item.quantity ?? 0)).toLocaleString()}</td>
+                                <td style={{ textAlign: 'right', padding: '4px 0' }}>{(Number(item.total_price)).toLocaleString()}</td>
                             </tr>
                         </React.Fragment>
                     ))}

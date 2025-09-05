@@ -1,5 +1,5 @@
 // hooks/useSupplierSelect.ts
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { debounce } from 'lodash';
 
 const LIMIT = 50; // Số lượng nhà cung cấp mỗi lần gọi API
@@ -17,7 +17,7 @@ import { SupplierApiResponse, getSuppliersByPage } from '@/services/supplierServ
 import useSupplierStore from '@/stores/supplierStore';
 import { FormInstance } from 'antd';
 
-export default function useSupplierSelect(searchTerm: string, form?: FormInstance<any>) {
+export default function useSupplierSelect(searchTerm: string, form: FormInstance<any>, supplierDefault: any) {
     const [data, setData] = useState<SupplierApiResponse[]>([]);  // Sử dụng SupplierApiResponse thay vì CustomerApiResponse
     const [loading, setLoading] = useState(false);
     const [hasMore, setHasMore] = useState(true);
@@ -33,16 +33,24 @@ export default function useSupplierSelect(searchTerm: string, form?: FormInstanc
             return result.data;
         } catch (error) {
             console.error("Fetch error:", error);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     };
 
+    const debouncedFetch = useMemo(
+        () =>
+            debounce((term: string) => {
+                fetchSuppliers(0, { search: term });
+            }, 300),
+        []
+    );
+
     useEffect(() => {
-        const delaySearch = debounce(() => {
-            fetchSuppliers(0, { search: searchTerm });  // Sử dụng fetchSuppliers
-        }, 300);
-        delaySearch();
-        return () => delaySearch.cancel();
+        debouncedFetch(searchTerm);
+        return () => {
+            debouncedFetch.cancel();
+        };
     }, [searchTerm]);
 
     useEffect(() => {
@@ -52,16 +60,27 @@ export default function useSupplierSelect(searchTerm: string, form?: FormInstanc
                 return {
                     value: item.supplier_id,  // Thay đổi từ customer_id sang supplier_id
                     labelText,  // Chỉnh sửa theo thông tin nhà cung cấp
-                    // disabled: item.max_stock <= 0, // Nếu có trạng thái disabled thì xử lý tại đây
                     data: item,
                     label: labelText,  // Hiển thị thông tin tên và điện thoại nhà cung cấp
                 }
             });
+            if (supplierDefault && supplierDefault.supplier_id && !searchTerm) {
+                const exists = newOptions.some(option => option.value === supplierDefault.supplier_id);
+                let labelText = (supplierDefault.supplier_phone ? `${supplierDefault.supplier_name} - ${supplierDefault.supplier_phone}` : `${supplierDefault.supplier_name}`)
+                if (!exists) {
+                    newOptions.unshift({
+                        value: supplierDefault.supplier_id,
+                        labelText: labelText,
+                        data: supplierDefault,
+                        label: labelText
+                    });
+                }
+            }
             setOptions(newOptions);
         } else {
             setOptions([]);
         }
-    }, [data]);
+    }, [data, supplierDefault, searchTerm]);
 
     useEffect(() => {
         const handleApiResponse = async () => {

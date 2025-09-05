@@ -33,7 +33,6 @@ interface ImportOrdersFormProps {
 }
 
 export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceDetails, invoiceSummary, dataSource, setDataSource }: ImportOrdersFormProps) {
-    console.log("🚀 ~ ImportOrdersForm ~ type:", type)
     const [form] = Form.useForm();
     const [discountAmount, setDiscountAmount] = useState<number>(0);
     const [VAT, setVAT] = useState<number>(0);
@@ -43,8 +42,7 @@ export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceD
     const [loadingSubmit, setLoadingSubmit] = useState(false);
     const { warehouseId, userId } = useAuthStore(state => state.user);
     const [userIdSelected, setUserIdSelected] = useState<number>(userId);
-    const [dateTimeSelected, setDateTimeSelected] = useState<dayjs.Dayjs | null | undefined>(dayjs());
-    const { options, handleScroll } = useCustomerSelect(searchTerm, form)
+    const { options, handleScroll } = useCustomerSelect(searchTerm, form, invoiceDetails)
     const { hasPermission } = useAuthStore();
     const { setShouldReload } = useProductStore()
     const { closeTab } = useTabStore();
@@ -90,7 +88,8 @@ export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceD
                 amount_paid: customerPayment,
                 debt_amount: calculateDebt(),
                 VAT: VAT,
-                invoice_date: dateTimeSelected?.format('YYYY-MM-DD HH:mm:ss'),
+                // invoice_date: dateTimeSelected?.format('YYYY-MM-DD HH:mm:ss'),
+                invoice_date: dayjs().format('YYYY-MM-DD HH:mm:ss'),
                 status: InvoiceStatus.RECEIVED,
                 notes: values.notes,
                 details
@@ -133,7 +132,7 @@ export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceD
                 invoice_code: invoiceDetails?.invoice_code
             });
             setUserIdSelected(invoiceDetails?.user_id as number);
-            setDateTimeSelected(dayjs(invoiceDetails?.invoice_date));
+            // setDateTimeSelected(dayjs(invoiceDetails?.invoice_date));
             setDiscountAmount(invoiceSummary?.discount_amount);
             setVAT(invoiceSummary?.VAT);
             setCustomerPayment(invoiceSummary?.amount_paid);
@@ -166,8 +165,6 @@ export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceD
                     <HeaderForm
                         userIdSelected={userIdSelected}
                         setUserIdSelected={setUserIdSelected}
-                        dateTime={dateTimeSelected}
-                        setDateTime={setDateTimeSelected}
                     />
 
                     {/* Khách hàng */}

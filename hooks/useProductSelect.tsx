@@ -1,5 +1,5 @@
 // hooks/useProductSelect.ts
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { debounce } from 'lodash';
 import { getProductsByPage, ProductApiResponse } from '@/services/productService';
 import { Flex, Image, Tag, Typography } from 'antd';
@@ -40,8 +40,9 @@ export default function useProductSelect(
             setHasMore(result.data.length === LIMIT);
         } catch (error) {
             console.error("Fetch error:", error);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     };
 
     // useEffect(() => {

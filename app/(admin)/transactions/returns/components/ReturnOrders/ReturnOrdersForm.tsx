@@ -27,6 +27,7 @@ interface ImportOrdersFormProps {
 }
 
 export default function ReturnOrdersForm({ subtotal, type, returnOrderDetails, returnOrderSummary, dataSource }: ImportOrdersFormProps) {
+    console.log("🚀 ~ ReturnOrdersForm ~ dataSource:", dataSource)
     console.log("🚀 ~ ReturnOrdersForm ~ returnOrderDetails:", returnOrderDetails)
     const [form] = Form.useForm();
     const [discount, setDiscount] = useState<number>(0);
@@ -37,7 +38,6 @@ export default function ReturnOrdersForm({ subtotal, type, returnOrderDetails, r
     const { setModal } = useCustomerStore();
     const { userId } = useAuthStore(state => state.user);
     const [userIdSelected, setUserIdSelected] = useState<number>(userId);
-    const [dateTimeSelected, setDateTimeSelected] = useState<dayjs.Dayjs | null | undefined>(dayjs());
     const router = useRouter();
 
     const calculateTotal = () => {
@@ -75,6 +75,7 @@ export default function ReturnOrdersForm({ subtotal, type, returnOrderDetails, r
             product_id: item.id,
             quantity: item.quantity,
             unit_price: Number(String(item.unitPrice).replace(/,/g, '')),
+            discount: Number(String(item.discount).replace(/,/g, '')),
             max_quantity: item.maxQuantity || item.quantity, // Sử dụng maxQuantity nếu có, ngược lại dùng quantity
         }))
         const newData = {
@@ -83,7 +84,7 @@ export default function ReturnOrdersForm({ subtotal, type, returnOrderDetails, r
                 warehouse_id: returnOrderDetails?.warehouse_id,
                 user_id: userIdSelected,                              // ID người tạo
                 invoice_id: returnOrderDetails?.invoice_id, // Optional: ID hóa đơn mua hàng gốc (nếu có)
-                return_date: dayjs(dateTimeSelected).format("YYYY-MM-DD HH:mm:ss"), // Ngày trả hàng
+                return_date: dayjs().format("YYYY-MM-DD HH:mm:ss"), // Ngày trả hàng
                 customer_id: returnOrderDetails?.customer_id, // Optional: ID khách hàng (nếu cần lưu)
                 notes: values.notes,
                 status: "completed", // "draft" hoặc "completed"
@@ -134,7 +135,6 @@ export default function ReturnOrdersForm({ subtotal, type, returnOrderDetails, r
     useEffect(() => {
         if (userId !== -1) {
             setUserIdSelected(userId)
-            setDateTimeSelected(dayjs());
         }
     }, [userId])
 
@@ -156,9 +156,6 @@ export default function ReturnOrdersForm({ subtotal, type, returnOrderDetails, r
                     <HeaderForm
                         userIdSelected={userIdSelected}
                         setUserIdSelected={setUserIdSelected}
-                        dateTime={dateTimeSelected}
-                        setDateTime={setDateTimeSelected}
-                        minDateTime={dayjs(returnOrderDetails.invoice_date)}
                     />
 
                     {/* Khách hàng */}

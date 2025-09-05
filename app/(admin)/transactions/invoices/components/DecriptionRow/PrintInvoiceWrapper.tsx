@@ -37,6 +37,7 @@ const PrintInvoiceWrapper: React.FC<PrintWrapperProps> = ({
             const dataUrl = await toPng(componentRef.current, {
                 cacheBust: true,
                 pixelRatio: 2, // tăng độ nét mà không làm to
+                backgroundColor: '#ffffff',
             });
 
             const link = document.createElement('a');

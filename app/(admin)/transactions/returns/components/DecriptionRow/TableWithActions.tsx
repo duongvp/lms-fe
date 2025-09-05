@@ -18,6 +18,7 @@ import Link from 'next/link';
 const { Text } = Typography;
 
 const TableWithActions: React.FC<any> = ({ data, returnOrderDetails, returnOrderSummary }) => {
+    console.log("🚀 ~ TableWithActions ~ data:", data)
     const router = useRouter();
     const hasPermission = useAuthStore(state => state.hasPermission);
     const setShouldReload = useReturnStore(state => state.setShouldReload);
@@ -27,8 +28,9 @@ const TableWithActions: React.FC<any> = ({ data, returnOrderDetails, returnOrder
         { title: 'Mã hàng', dataIndex: 'product_code', key: 'product_code' },
         { title: 'Tên hàng', dataIndex: 'product_name', key: 'product_name' },
         { title: 'Số lượng', dataIndex: 'quantity', key: 'quantity' },
-        { title: 'Giá bán', dataIndex: 'unit_price', key: 'unit_price', render: (value: string) => Number(value).toLocaleString() },
+        { title: 'Giá bán', dataIndex: 'selling_price', key: 'selling_price', render: (value: string) => Number(value).toLocaleString() },
         { title: 'Giá nhập lại', dataIndex: 'unit_price', key: 'unit_price', render: (value: string) => Number(value).toLocaleString() },
+        { title: 'Giảm giá', dataIndex: 'discount', key: 'unit_price', render: (value: string) => Number(value).toLocaleString() },
         {
             title: 'Thành tiền',
             dataIndex: 'total_price',
@@ -153,7 +155,7 @@ const TableWithActions: React.FC<any> = ({ data, returnOrderDetails, returnOrder
                                     hasPermission(PermissionKey.RETURN_EXPORT) && (
                                         <GenericExportButton
                                             exportService={exportReturnOrders}
-                                            serviceParams={[[returnOrderDetails.return_id], warehouseId]}
+                                            serviceParams={[[returnOrderDetails.return_id], warehouseId, { exportType: "detail" }]}
                                             fileNamePrefix={`phiếu trả hàng ${returnOrderDetails.return_code}`}
                                             buttonProps={{
                                                 color: 'orange',
