@@ -40,11 +40,11 @@ const ProductSelect = ({
     const [searchTerm, setSearchTerm] = useState('');
     const { setModal } = useProductStore();
     const stableIds = useMemo(() => listIdProducts || [], [listIdProducts]);
-
     const {
         options,
         handleScroll
     } = useProductSelect(searchTerm, isViewPurchasePrice, isSelectOption, stableIds);
+    console.log("options", options);
 
     const columns: ColumnsType<IDataTypeProductSelect> = [
         {
@@ -192,7 +192,6 @@ const ProductSelect = ({
 
         if (selectedOption && selectedProduct) {
             setDataSource((prevData) => {
-                console.log("prevData", prevData);
                 const existingIndex = prevData.findIndex(
                     (item) => item.itemCode === selectedProduct.product_code
                 );
@@ -215,6 +214,7 @@ const ProductSelect = ({
                 } else {
                     // If product does not exist, add new item
                     const unitPrice = Number(isViewPurchasePrice ? selectedProduct.purchase_price : selectedProduct.selling_price);
+                    const costPrice = Number(selectedProduct.purchase_price) ?? 0;
 
                     return [
                         ...prevData,
@@ -227,6 +227,7 @@ const ProductSelect = ({
                             unit: selectedProduct.unit_name,
                             quantity: 1,
                             unitPrice: unitPrice,
+                            costPrice: costPrice,
                             // maxQuantity: selectedProduct.stock, // trường hợp dành cho hoá đơn 
                             maxQuantity: intialDataSource?.get(selectedProduct.product_id) || selectedProduct.stock, // trường hợp dành cho phiếu nhập kho
                             discount: 0,
@@ -251,12 +252,13 @@ const ProductSelect = ({
     }, [dataSource]);
 
     useEffect(() => {
-        console.log("🚀 ~ tableData:", tableData)
         if (tableData) {
             const newData = tableData.map((item: any, index: number) => {
                 // const unitPrice = Number(item.unit_price || item.selling_price);
                 const unitPrice = Number(item.unit_price);
                 const totalPrice = Number(item.total_price);
+                const costPrice = Number(item.cost_price ?? 0);
+
                 return {
                     id: item.product_id,
                     key: item.product_code,
@@ -268,6 +270,7 @@ const ProductSelect = ({
                     unitPrice: unitPrice,
                     discount: item.discount,
                     totalPrice: totalPrice,
+                    costPrice: costPrice,
                     maxQuantity: item.max_quantity || item.quantity,
                 };
             });

@@ -52,6 +52,16 @@ const columns: ColumnsType<DataType> = [
         render: (value) => Number(value).toLocaleString(),
     },
     {
+        title: "Tổng giá vốn",
+        dataIndex: "total_cost",
+        render: (value) => Number(value).toLocaleString(),
+    },
+    {
+        title: "Lãi suất",
+        dataIndex: "total_profit",
+        render: (value) => Number(value).toLocaleString(),
+    },
+    {
         title: "Trạng thái",
         dataIndex: "status",
         width: 150,
@@ -74,6 +84,8 @@ const Page = () => {
         customer_name: "",
         status: "",
         total_amount: "0",
+        total_cost: "0",
+        total_profit: "0",
         description: null,
         // Add other missing properties from InvoiceApiResponse here with default values if needed
     };
@@ -129,7 +141,7 @@ const Page = () => {
             let { current, pageSize } = pagination;
             pageSize = pageSize - 1;
             const skip = (current - 1) * pageSize;
-            const { data: apiData, total, grand_total } = await getInvoicesByPage(pageSize, skip, { ...filter, warehouse_id: warehouseId });
+            const { data: apiData, total, grand_total, total_cost, total_profit } = await getInvoicesByPage(pageSize, skip, { ...filter, warehouse_id: warehouseId });
 
             setTotal(total);
 
@@ -140,6 +152,8 @@ const Page = () => {
                 description: <DecriptionTable data={item} />,
             }));
             summaryRow.total_amount = grand_total.toLocaleString();
+            summaryRow.total_cost = total_cost.toLocaleString();
+            summaryRow.total_profit = total_profit.toLocaleString();
             setData([summaryRow, ...tableData]);
         } catch (error) {
             api.error({

@@ -17,6 +17,8 @@ const ImportOrders: React.FC<{ slug?: number, type: ITypeImportInvoice }> = ({ s
         invoiceSummary,
     } = useInvoiceTableData(slug ?? 0);
 
+    console.log("tableData", tableData);
+
     useMemo(() => {
         if (type == 'copy') {
             invoiceDetails.status = InvoiceStatus.DRAFT

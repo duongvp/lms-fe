@@ -10,6 +10,8 @@ export interface InvoiceApiResponse {
     user_id: number;
     invoice_date: string;
     total_amount: string;
+    total_cost: string;
+    total_profit: string;
     status: string;
     notes: string | null;
     customer_name: string;
@@ -23,6 +25,7 @@ export interface InvoiceDetailResponse {
     product_id: number;
     quantity: number;
     unit_price: string;
+    cost_price: string;
     total_price: string;
     product_name: string;
     product_code: string;
@@ -66,7 +69,7 @@ export const getAllInvoices = async (): Promise<InvoiceApiResponse[]> => {
     return await fetchInstance(url);
 };
 
-export const getInvoicesByPage = async (limit: number, skip: number, filter: any): Promise<{ data: InvoiceApiResponse[], total: number, grand_total: string }> => {
+export const getInvoicesByPage = async (limit: number, skip: number, filter: any): Promise<{ data: InvoiceApiResponse[], total: number, grand_total: string, total_cost: string, total_profit: string }> => {
     return await fetchInstance(`${API_BASE_URL}/search`, {
         method: 'POST',
         headers: {

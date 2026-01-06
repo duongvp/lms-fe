@@ -76,6 +76,7 @@ export default function ImportOrdersForm({ subtotal, setSubtotal, type, invoiceD
                 quantity: item.quantity,
                 discount: item.discount,
                 unit_price: item.unitPrice,
+                cost_price: item.costPrice,
                 total_price: item.totalPrice
             }))
             const newValues = {
