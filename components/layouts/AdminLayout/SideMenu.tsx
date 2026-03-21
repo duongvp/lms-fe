@@ -326,7 +326,7 @@ const SideMenu: React.FC<SideMenuProps> = ({ collapsed, toggle }) => {
                 <Sider trigger={null} collapsible collapsed={collapsed} theme="light">
                     <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 10, overflow: 'hidden' }}>
                         <Image
-                            src="/warehousepro-logo.png"
+                            src="/A2S.png"
                             alt="Warehouse Logo"
                             width={collapsed ? 40 : 120}
                             height={collapsed ? 40 : 120}

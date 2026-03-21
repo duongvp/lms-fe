@@ -2,8 +2,11 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-    title: "damitl",
-    description: 'Welcome to My Site'
+    title: "A2S Warehouse Management System",
+    description: 'Welcome to My Site',
+    icons: {
+        icon: "/A2S.png",
+    },
 };
 
 export const viewport: Viewport = {
