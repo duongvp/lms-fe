@@ -1,6 +1,6 @@
 'use client'
-import { Button, Row, Col, Flex } from 'antd';
-import { CaretDownOutlined, FilterOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons';
+import { Button, Row, Col, Flex, Dropdown, Menu } from 'antd';
+import { CaretDownOutlined, FilterOutlined, MoreOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons';
 import CustomSearchInput from '@/components/ui/Inputs/CustomSearchInput';
 import React from 'react';
 
@@ -10,6 +10,7 @@ interface SearchAndActionsBarProps {
     onSearch: (value: string) => Promise<any>;
     handleAddBtn?: React.MouseEventHandler<HTMLElement>;
     handleFilterBtn?: React.MouseEventHandler<HTMLElement>;
+    handlePrintBarcode?: () => void;
     placeholder?: string;
     extraButtons?: React.ReactNode;
     extraExportButton?: React.ReactNode;
@@ -25,8 +26,23 @@ export default function SearchAndActionsBar({
     extraButtons,
     extraExportButton,
     handleFilterBtn,
-    handleImportClick
+    handleImportClick,
+    handlePrintBarcode
 }: Partial<SearchAndActionsBarProps>) {
+
+    const menu = (
+        <Menu
+            items={[
+                { key: '1', label: 'In tem mã' },
+                { key: '2', label: 'Xóa hàng hóa' },
+            ]}
+            onClick={(e) => {
+                if (e.key === '1' && handlePrintBarcode) {
+                    handlePrintBarcode();
+                }
+            }}
+        />
+    );
 
     return (
         <Row style={{ width: '100%', marginBottom: '16px' }} gutter={[16, 8]}>
@@ -46,6 +62,15 @@ export default function SearchAndActionsBar({
                     style={{ gap: 8 }} // dùng style thay vì prop gap nếu cần độ tương thích cao
                 >
                     <Flex wrap="wrap" justify="end" gap={8}>
+                        {
+                            handlePrintBarcode && (
+                                <Dropdown overlay={menu} trigger={['click']}>
+                                    <Button type="primary" icon={<MoreOutlined />}>
+                                        Thao tác <CaretDownOutlined />
+                                    </Button>
+                                </Dropdown>
+                            )
+                        }
                         {
                             handleAddBtn && (
                                 <Button type="primary" onClick={handleAddBtn} icon={<PlusOutlined />}>

@@ -15,6 +15,7 @@ import { ActionType } from "@/enums/action";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
 import { notification } from "antd";
+import PrintBarcodeModal from "@/components/shared/PrintBarcodeModal";
 
 // Đây là kiểu dữ liệu cho Table (thêm key + description)
 interface DataType extends ProductApiResponse {
@@ -90,6 +91,14 @@ const Page = () => {
     const { warehouseId } = useAuthStore((state) => state.user)
     const [filters, setFilters] = useState<any>({ warehouse_id: warehouseId });
 
+    const [openPrintModal, setOpenPrintModal] = useState(false);
+    const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+    const [selectedProducts, setSelectedProducts] = useState<any[]>([]);
+    const [allSelectedRows, setAllSelectedRows] = useState<DataType[]>([]);
+
+    const [dataSource, setDataSource] = useState<DataType[]>([]);
+
+
     const { setModal, shouldReload, setShouldReload } = useProductStore();
 
     const fetchData = async (params: Pagination = {}) => {
@@ -148,6 +157,16 @@ const Page = () => {
         setModal({ open: true, type: ActionType.CREATE, product: null });
     }
 
+    const handlePrintBtn = () => {
+        setSelectedProducts(allSelectedRows.map(row => ({
+            id: row.product_id,
+            code: row.product_code,
+            name: row.product_name,
+            quantity: row.stock || 1,
+        })));
+        setOpenPrintModal(true);
+    }
+
     const handleImportClick = () => setOpenImportModal(true);
 
     useEffect(() => {
@@ -161,6 +180,19 @@ const Page = () => {
         }
     }, [shouldReload]);
 
+    const rowSelection = {
+        selectedRowKeys,
+        preserveSelectedRowKeys: true,
+        onChange: (keys: React.Key[], selectedRows: DataType[]) => {
+            setSelectedRowKeys(keys);
+            const keySet = new Set(keys);
+            const newAllSelected = allSelectedRows
+                .filter(row => keySet.has(row.key))
+                .concat(selectedRows.filter(row => !allSelectedRows.some(r => r.key === row.key)));
+            setAllSelectedRows(newAllSelected);
+        },
+    };
+
     return (
         <>
             {contextHolder}
@@ -170,6 +202,7 @@ const Page = () => {
                 handleAddBtn={hasPermission(PermissionKey.PRODUCT_CREATE) ? handleAddBtn : undefined}
                 handleFilterBtn={() => setOpenFilterDrawer(true)}
                 handleImportClick={hasPermission(PermissionKey.PRODUCT_IMPORT) ? handleImportClick : undefined}
+                handlePrintBarcode={hasPermission(PermissionKey.PRODUCT_IMPORT) ? handlePrintBtn : undefined}
                 extraExportButton={
                     hasPermission(PermissionKey.PRODUCT_EXPORT) && (
                         <GenericExportButton
@@ -184,6 +217,7 @@ const Page = () => {
                 columns={columns}
                 dataSource={data}
                 loading={loading}
+                rowSelection={rowSelection}
                 pagination={{
                     ...pagination,
                     total,
@@ -207,6 +241,7 @@ const Page = () => {
                 onClose={() => setOpenImportModal(false)}
             />
             <ProductModal />
+            <PrintBarcodeModal open={openPrintModal} onClose={() => setOpenPrintModal(false)} initialData={selectedProducts} />
         </>
     );
 };
