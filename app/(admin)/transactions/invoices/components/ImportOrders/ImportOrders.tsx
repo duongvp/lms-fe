@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Card, Row, Col } from 'antd';
+import { Card, Row, Col, message } from 'antd';
 import ProductGridTemplate from '@/components/templates/ProductGridTemplate';
 import ImportOrdersForm from './ImportOrdersForm';
 import { useInvoiceTableData } from '@/hooks/useInvoiceTableData';
@@ -39,6 +39,9 @@ const ImportOrders: React.FC<{ slug?: number, type: ITypeImportInvoice }> = ({ s
         console.log("barcode", barcode);
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+
                 if (barcode) {
                     searchProductByCode(barcode);
                     setBarcode('');
@@ -58,40 +61,53 @@ const ImportOrders: React.FC<{ slug?: number, type: ITypeImportInvoice }> = ({ s
     }, [barcode, scannerEnabled]);
 
     const searchProductByCode = async (code: string) => {
-        // 1. Kiểm tra nhanh trong danh sách hiện tại xem đã có sản phẩm này chưa
+        // 1. Kiểm tra nhanh trong danh sách hiện tại (để tránh call API thừa)
         const existingIndex = dataSource.findIndex(item => item.itemCode === code);
 
         if (existingIndex !== -1) {
-            // Nếu đã có, chỉ tăng số lượng
-            const newDataSource = [...dataSource];
-            newDataSource[existingIndex].quantity += 1;
-            newDataSource[existingIndex].totalPrice =
-                newDataSource[existingIndex].quantity * newDataSource[existingIndex].unitPrice;
-            setDataSource(newDataSource);
+            setDataSource(prev => {
+                const newDS = [...prev];
+                newDS[existingIndex].quantity += 1;
+                newDS[existingIndex].totalPrice = newDS[existingIndex].quantity * newDS[existingIndex].unitPrice;
+                return newDS;
+            });
             return;
         }
 
-        // 2. Nếu chưa có mới call API
         try {
-            const response = await getProductsByPage(1, 0, { search: code, warehouse_id: warehouseId, is_active: 1, listIdProducts: [] }); // Chỉ lấy 1 bản ghi
+            const response = await getProductsByPage(1, 0, { search: code, warehouse_id: warehouseId, is_active: 1, listIdProducts: [] });
+
             if (response.data && response.data.length > 0) {
                 const product = response.data[0];
-                const newProduct: IDataTypeProductSelect = {
-                    key: product.product_id.toString(),
-                    no: dataSource.length + 1,
-                    itemCode: product.product_code,
-                    id: product.product_id,
-                    itemName: product.product_name,
-                    unit: 'Cái',
-                    quantity: 1,
-                    unitPrice: Number(product.selling_price),
-                    discount: 0,
-                    totalPrice: Number(product.selling_price),
-                };
-                setDataSource(prev => [...prev, newProduct]);
+
+                setDataSource(prev => {
+                    // KIỂM TRA LẠI: Trong lúc đợi API, sản phẩm này có thể đã được thêm vào rồi
+                    const doubleCheckIndex = prev.findIndex(item => item.itemCode === product.product_code);
+
+                    if (doubleCheckIndex !== -1) {
+                        const updatedDS = [...prev];
+                        updatedDS[doubleCheckIndex].quantity += 1;
+                        updatedDS[doubleCheckIndex].totalPrice = updatedDS[doubleCheckIndex].quantity * updatedDS[doubleCheckIndex].unitPrice;
+                        return updatedDS;
+                    }
+
+                    // Nếu thực sự chưa có thì mới tạo dòng mới
+                    const newProduct: IDataTypeProductSelect = {
+                        key: product.product_id.toString() + Date.now(), // Dùng thêm timestamp để key không bị trùng
+                        no: prev.length + 1, // Dựa trên độ dài mới nhất của danh sách
+                        itemCode: product.product_code,
+                        id: product.product_id,
+                        itemName: product.product_name,
+                        unit: 'Cái',
+                        quantity: 1,
+                        unitPrice: Number(product.selling_price),
+                        discount: 0,
+                        totalPrice: Number(product.selling_price),
+                    };
+                    return [...prev, newProduct];
+                });
             } else {
-                // Có thể thêm thông báo Toast: "Không tìm thấy sản phẩm"
-                console.warn("Mã vạch không tồn tại");
+                message.warning(`Không tìm thấy sản phẩm có mã: ${code}`);
             }
         } catch (error) {
             console.error('Lỗi khi tìm sản phẩm:', error);
@@ -125,7 +141,10 @@ const ImportOrders: React.FC<{ slug?: number, type: ITypeImportInvoice }> = ({ s
                     <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
                         <button
                             type="button"
-                            onClick={() => setScannerEnabled(!scannerEnabled)}
+                            onClick={(e) => {
+                                setScannerEnabled(!scannerEnabled)
+                                e.currentTarget.blur();
+                            }}
                             style={{
                                 border: '1px solid #1890ff',
                                 background: scannerEnabled ? '#e6f7ff' : '#fff',
