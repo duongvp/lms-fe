@@ -8,6 +8,7 @@ import { InvoiceStatus } from '@/enums/invoice';
 import { IDataTypeProductSelect } from '@/types/productSelect';
 import { getProductsByPage } from '@/services/productService';
 import { useAuthStore } from '@/stores/authStore';
+import { BarcodeScannerControl } from '@/components/ui/BarcodeScannerControl';
 
 const ImportOrders: React.FC<{ slug?: number, type: ITypeImportInvoice }> = ({ slug, type }) => {
     const [totalAmount, setTotalAmount] = useState<number>(0);
@@ -59,6 +60,7 @@ const ImportOrders: React.FC<{ slug?: number, type: ITypeImportInvoice }> = ({ s
             if (timeoutRef.current) clearTimeout(timeoutRef.current);
         };
     }, [barcode, scannerEnabled]);
+
 
     const searchProductByCode = async (code: string) => {
         // 1. Kiểm tra nhanh trong danh sách hiện tại (để tránh call API thừa)
@@ -134,41 +136,31 @@ const ImportOrders: React.FC<{ slug?: number, type: ITypeImportInvoice }> = ({ s
                     style={{ height: "100%", display: "flex", flexDirection: "column", boxShadow: "0 0 10px rgba(0,0,0,0.1)" }}
                     styles={{
                         body: {
+                            display: 'flex',
+                            flexDirection: 'column',
+                            overflow: 'hidden',
                             flex: 1,
                         },
                     }}
                 >
-                    <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <button
-                            type="button"
-                            onClick={(e) => {
-                                setScannerEnabled(!scannerEnabled)
-                                e.currentTarget.blur();
-                            }}
-                            style={{
-                                border: '1px solid #1890ff',
-                                background: scannerEnabled ? '#e6f7ff' : '#fff',
-                                color: '#1890ff',
-                                borderRadius: 4,
-                                padding: '4px 10px',
-                                cursor: 'pointer'
-                            }}
-                        >
-                            {scannerEnabled ? 'Tạm dừng quét mã' : 'Bắt đầu quét mã'}
-                        </button>
-                        <span style={{ fontSize: 12, color: '#666' }}>
-                            {(scannerEnabled ? 'Đang quét' : 'Chưa quét') + (barcode ? ` — mã: ${barcode}` : '')}
-                        </span>
+                    <div style={{ flexShrink: 0 }}>
+                        <BarcodeScannerControl
+                            enabled={scannerEnabled}
+                            setEnabled={setScannerEnabled}
+                            barcode={barcode}
+                        />
                     </div>
-                    <ImportOrdersForm
-                        subtotal={totalAmount}
-                        setSubtotal={setTotalAmount}
-                        type={type}
-                        invoiceDetails={invoiceDetails}
-                        invoiceSummary={invoiceSummary}
-                        dataSource={dataSource}
-                        setDataSource={setDataSource}
-                    />
+                    <div style={{ flex: 1, overflowY: 'auto' }}>
+                        <ImportOrdersForm
+                            subtotal={totalAmount}
+                            setSubtotal={setTotalAmount}
+                            type={type}
+                            invoiceDetails={invoiceDetails}
+                            invoiceSummary={invoiceSummary}
+                            dataSource={dataSource}
+                            setDataSource={setDataSource}
+                        />
+                    </div>
                 </Card>
             </Col>
         </Row>
