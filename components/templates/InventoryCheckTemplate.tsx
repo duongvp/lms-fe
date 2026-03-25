@@ -36,9 +36,11 @@ interface ProductSelectProps {
     tableData: Partial<StockTakeItem>[]
     dataSource: DataType[];
     setDataSource: React.Dispatch<React.SetStateAction<DataType[]>>;
+    barcodeEnabled?: boolean;
+    scannedBarcode?: string;
 }
 
-const InventoryCheckSelect = ({ setTotalActualQuantity, tableData, dataSource, setDataSource }: ProductSelectProps) => {
+const InventoryCheckSelect = ({ setTotalActualQuantity, tableData, dataSource, setDataSource, barcodeEnabled, scannedBarcode }: ProductSelectProps) => {
     const [searchTerm, setSearchTerm] = useState('');
     const emptyList = React.useMemo(() => [], []);
     const {
@@ -167,6 +169,19 @@ const InventoryCheckSelect = ({ setTotalActualQuantity, tableData, dataSource, s
             });
         }
     };
+
+    // Handle barcode scanning
+    useEffect(() => {
+        if (barcodeEnabled && scannedBarcode) {
+            const foundProduct = options.find(
+                (item) => item.data?.product_code?.toLowerCase() === scannedBarcode.toLowerCase()
+            );
+
+            if (foundProduct) {
+                handleSelect(foundProduct.value);
+            }
+        }
+    }, [scannedBarcode, barcodeEnabled, options]);
 
     useEffect(() => {
         const total = dataSource.reduce((acc, item) => {

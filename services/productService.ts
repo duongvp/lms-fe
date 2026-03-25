@@ -48,6 +48,24 @@ export const getProductByIdForInventory = async (id: string): Promise<any> => {
     return await fetchInstance(url);
 };
 
+export const deleteProduct = async (id: number): Promise<void> => {
+    const url = `${API_BASE_URL}/${id}`;
+    return await fetchInstance(url, {
+        method: 'DELETE',
+    });
+};
+
+export const deleteMultipleProducts = async (ids: number[]): Promise<void> => {
+    const url = `${API_BASE_URL}/batch-delete`;
+    return await fetchInstance(url, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ids }),
+    });
+};
+
 export const importProductsFromExcel = async (formatData: any): Promise<any> => {
     return await fetchInstance(`${API_BASE_URL}/import`, {
         method: "POST",
@@ -131,11 +149,4 @@ export const toggleProductStatus = async (id: number, payload: { status: 1 | 0 }
         },
     };
     return await fetchInstance(url, options);
-};
-
-export const deleteProduct = async (id: number) => {
-    const url = `${API_BASE_URL}/${id}`;
-    return await fetchInstance(url, {
-        method: 'DELETE',
-    });
 };

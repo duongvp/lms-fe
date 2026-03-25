@@ -3,7 +3,7 @@ import dayjs from "dayjs";
 import React, { useState, useEffect } from "react";
 import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
-import { exportProducts, getProductsByPage, ProductApiResponse } from "@/services/productService";
+import { exportProducts, getProductsByPage, ProductApiResponse, deleteMultipleProducts } from "@/services/productService";
 import DecriptionRow from "./components/DecriptionRow";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
 import ProductModal from "./components/Modal/ProductModal";
@@ -14,7 +14,7 @@ import useProductStore from "@/stores/productStore";
 import { ActionType } from "@/enums/action";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
-import { notification } from "antd";
+import { Checkbox, notification } from "antd";
 import PrintBarcodeModal from "@/components/shared/PrintBarcodeModal";
 
 // Đây là kiểu dữ liệu cho Table (thêm key + description)
@@ -81,7 +81,7 @@ const Page = () => {
     const [data, setData] = useState<DataType[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
-    const [pagination, setPagination] = useState<Pagination>({ current: 1, pageSize: 10 });
+    const [pagination, setPagination] = useState<Pagination>({ current: 1, pageSize: 1 });
     const [total, setTotal] = useState<number>(0);
     const [openFilterDrawer, setOpenFilterDrawer] = useState(false);
     const [api, contextHolder] = notification.useNotification();
@@ -95,6 +95,7 @@ const Page = () => {
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [selectedProducts, setSelectedProducts] = useState<any[]>([]);
     const [allSelectedRows, setAllSelectedRows] = useState<DataType[]>([]);
+    const [isSelectAll, setIsSelectAll] = useState<boolean>(false);
 
     const [dataSource, setDataSource] = useState<DataType[]>([]);
 
@@ -163,11 +164,78 @@ const Page = () => {
             code: row.product_code,
             name: row.product_name,
             quantity: row.stock || 1,
+            price: row.selling_price,
         })));
         setOpenPrintModal(true);
     }
 
+    const handleDeleteProducts = async () => {
+        if (allSelectedRows.length === 0) {
+            api.warning({
+                message: "Chưa chọn sản phẩm",
+                description: "Vui lòng chọn ít nhất một sản phẩm để xóa.",
+            });
+            return;
+        }
+
+        try {
+            setLoading(true);
+            const ids = allSelectedRows.map(row => row.product_id);
+            await deleteMultipleProducts(ids);
+
+            api.success({
+                message: "Xóa sản phẩm thành công",
+                description: `Đã xóa ${allSelectedRows.length} sản phẩm.`,
+            });
+
+            // Reset selections and reload data
+            setSelectedRowKeys([]);
+            setAllSelectedRows([]);
+            setIsSelectAll(false);
+            setShouldReload(true);
+        } catch (error) {
+            api.error({
+                message: "Lỗi khi xóa sản phẩm",
+                description: "Không thể xóa sản phẩm. Vui lòng thử lại sau.",
+            });
+            console.error("Lỗi khi xóa sản phẩm:", error);
+        } finally {
+            setLoading(false);
+        }
+    }
+
     const handleImportClick = () => setOpenImportModal(true);
+
+    const handleSelectAllSystem = async (selected: boolean) => {
+        if (selected) {
+            // Select all products from the entire system
+            try {
+                setLoading(true);
+                const response = await getProductsByPage(total, 0, { ...filters, warehouse_id: warehouseId });
+                const allProducts: DataType[] = response.data.map((item) => ({
+                    ...item,
+                    key: item.product_id,
+                }));
+                const allKeys = allProducts.map(item => item.key);
+                setSelectedRowKeys(allKeys);
+                setAllSelectedRows(allProducts);
+                setIsSelectAll(true);
+            } catch (error) {
+                api.error({
+                    message: "Lỗi khi chọn tất cả",
+                    description: "Không thể tải toàn bộ danh sách sản phẩm. Vui lòng thử lại sau.",
+                });
+                console.error("Lỗi khi chọn tất cả sản phẩm:", error);
+            } finally {
+                setLoading(false);
+            }
+        } else {
+            // Unselect all products
+            setSelectedRowKeys([]);
+            setAllSelectedRows([]);
+            setIsSelectAll(false);
+        }
+    };
 
     useEffect(() => {
         fetchData();
@@ -183,13 +251,37 @@ const Page = () => {
     const rowSelection = {
         selectedRowKeys,
         preserveSelectedRowKeys: true,
+        columnTitle: (
+            <Checkbox
+                indeterminate={selectedRowKeys.length > 0 && selectedRowKeys.length < total}
+                checked={total > 0 && selectedRowKeys.length === total}
+                onChange={(e) => handleSelectAllSystem(e.target.checked)}
+            />
+        ),
         onChange: (keys: React.Key[], selectedRows: DataType[]) => {
             setSelectedRowKeys(keys);
-            const keySet = new Set(keys);
-            const newAllSelected = allSelectedRows
-                .filter(row => keySet.has(row.key))
-                .concat(selectedRows.filter(row => !allSelectedRows.some(r => r.key === row.key)));
-            setAllSelectedRows(newAllSelected);
+
+            if (isSelectAll) {
+                // Nếu đang ở trạng thái select all, loại bỏ items đã bỏ chọn
+                const keySet = new Set(keys);
+                const newAllSelected = allSelectedRows.filter(row => keySet.has(row.key));
+                setAllSelectedRows(newAllSelected);
+
+                // Nếu số lượng selected ít hơn total, không còn ở trạng thái select all
+                if (keys.length < total) {
+                    setIsSelectAll(false);
+                }
+            } else {
+                // Logic thông thường: merge selected rows
+                const keySet = new Set(keys);
+                const newAllSelected = allSelectedRows
+                    .filter(row => keySet.has(row.key))
+                    .concat(selectedRows.filter(row => !allSelectedRows.some(r => r.key === row.key)));
+                setAllSelectedRows(newAllSelected);
+            }
+        },
+        onSelectAll: async (selected: boolean, selectedRows: DataType[], changeRows: DataType[]) => {
+            await handleSelectAllSystem(selected);
         },
     };
 
@@ -203,6 +295,7 @@ const Page = () => {
                 handleFilterBtn={() => setOpenFilterDrawer(true)}
                 handleImportClick={hasPermission(PermissionKey.PRODUCT_IMPORT) ? handleImportClick : undefined}
                 handlePrintBarcode={hasPermission(PermissionKey.PRODUCT_IMPORT) ? handlePrintBtn : undefined}
+                handleDeleteProducts={hasPermission(PermissionKey.PRODUCT_CREATE) ? handleDeleteProducts : undefined}
                 extraExportButton={
                     hasPermission(PermissionKey.PRODUCT_EXPORT) && (
                         <GenericExportButton
@@ -223,6 +316,11 @@ const Page = () => {
                     total,
                     showSizeChanger: true,
                     position: ["bottomRight"],
+
+                    // pageSize: 1, // Sets the default number of items per page
+                    // defaultPageSize: 1, // Alternative for the initial page size
+                    // pageSizeOptions: ['1', '10', '20', '50'],
+
                 }}
                 scroll={{ x: "max-content" }}
                 expandable={{

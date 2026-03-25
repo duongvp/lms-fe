@@ -1,5 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 
+const normalizeBarcodeChar = (char: string) => {
+    // Loại bỏ dấu tiếng Việt (accent) và giữ ký tự ASCII cơ bản
+    return char
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .normalize('NFC');
+};
+
 export const useBarcodeScanner = (onScan: (code: string) => void, enabled: boolean) => {
     const [barcode, setBarcode] = useState<string>('');
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -14,7 +22,8 @@ export const useBarcodeScanner = (onScan: (code: string) => void, enabled: boole
                     setBarcode('');
                 }
             } else if (e.key.length === 1) {
-                setBarcode(prev => prev + e.key);
+                const key = normalizeBarcodeChar(e.key);
+                setBarcode(prev => prev + key);
                 if (timeoutRef.current) clearTimeout(timeoutRef.current);
                 timeoutRef.current = setTimeout(() => setBarcode(''), 150);
             }

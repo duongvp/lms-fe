@@ -5,7 +5,6 @@ import {
     BarcodeOutlined,
     CloseCircleOutlined,
     FileExcelOutlined,
-    EyeOutlined,
     LeftOutlined,
     PrinterOutlined,
     ReloadOutlined,
@@ -13,6 +12,8 @@ import {
 } from "@ant-design/icons";
 import Barcode from 'react-barcode'; // npm install react-barcode
 import CustomInput from "../ui/Inputs";
+import { formatNumber } from "../../ultils/customText";
+import { useAuthStore } from "@/stores/authStore";
 
 const { Text } = Typography;
 
@@ -55,6 +56,8 @@ interface PrintBarcodeModalProps {
 }
 
 const PrintBarcodeModal: React.FC<PrintBarcodeModalProps> = ({ open, onClose, initialData }) => {
+    const warehouseName = useAuthStore(state => state.user.warehouseName);
+    console.log("warehouseName", warehouseName);
     const [dataSource, setDataSource] = useState<ProductItem[]>([]);
     const [isLayer2Open, setIsLayer2Open] = useState(false);
     const [subStep, setSubStep] = useState<2 | 3>(2);
@@ -80,7 +83,6 @@ const PrintBarcodeModal: React.FC<PrintBarcodeModalProps> = ({ open, onClose, in
     // --- LOGIC NGHIỆP VỤ ---
     // 1. Lấy sản phẩm thực tế đầu tiên (bỏ qua dòng total) để làm mẫu Preview
     const previewProduct = dataSource.find(item => item.id !== 'total-row');
-
     // 2. Tạo danh sách tất cả tem dựa trên số lượng để in thực tế
     const getAllStickers = () => {
         const stickers: ProductItem[] = [];
@@ -206,16 +208,21 @@ const PrintBarcodeModal: React.FC<PrintBarcodeModalProps> = ({ open, onClose, in
             <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
                 {previewProduct ? (
                     <div className="preview-sticker-box" style={{ backgroundColor: '#fff', padding: '20px', width: '260px', textAlign: 'center', boxShadow: '0 0 10px rgba(0,0,0,0.5)' }}>
-                        <div style={{ fontSize: 10 }}>{config.showStoreName === 'store' ? 'CỬA HÀNG ABC' : 'Đầu in cho máy in nhiệt'}</div>
-                        <div style={{ margin: '10px 0', display: 'flex', justifyContent: 'center' }}>
-                            {renderBarcodeHelper(previewProduct.code, { width: 1.5, height: 45, fontSize: 12 })}
-                        </div>
-                        <div style={{ fontWeight: 'bold', fontSize: 14 }}>{previewProduct.code}</div>
-                        {config.priceType === 'price' && (
-                            <div style={{ fontSize: 18, fontWeight: 'bold' }}>
-                                {previewProduct.price?.toLocaleString() || "650.000"} {config.showVnd === 'vnd' ? 'VNĐ' : ''}
+                        <div className="sticker-content">
+                            <div className="store-title-vertical">{config.showStoreName === 'store' ? warehouseName || 'CỬA HÀNG' : ''}</div>
+                            <div className="main-content">
+                                <div style={{ fontSize: 12, marginBottom: '10px' }}>{previewProduct.name}</div>
+                                <div style={{ margin: '10px 0', display: 'flex', justifyContent: 'center' }}>
+                                    {renderBarcodeHelper(previewProduct.code, { width: 1.5, height: 45, fontSize: 12 })}
+                                </div>
+                                <div style={{ fontWeight: 'bold', fontSize: 14 }}>{previewProduct.code}</div>
+                                {config.priceType === 'price' && (
+                                    <div style={{ fontSize: 18, fontWeight: 'bold' }}>
+                                        {formatNumber(previewProduct.price) || "650.000"} {config.showVnd === 'vnd' ? 'VNĐ' : ''}
+                                    </div>
+                                )}
                             </div>
-                        )}
+                        </div>
                     </div>
                 ) : <Text style={{ color: '#fff' }}>Chưa có dữ liệu</Text>}
             </div>
@@ -224,12 +231,17 @@ const PrintBarcodeModal: React.FC<PrintBarcodeModalProps> = ({ open, onClose, in
             <div className="print-only-layout">
                 {getAllStickers().map((item, index) => (
                     <div key={index} className={`print-sticker-item paper-${config.selectedPaper}`}>
-                        <div className="store-title">{config.showStoreName === 'store' ? 'CỬA HÀNG ABC' : ''}</div>
-                        <div className="barcode-wrapper">
-                            {renderBarcodeHelper(item.code, { width: 1.2, height: 35, fontSize: 10 })}
+                        <div className="sticker-content">
+                            <div className="store-title-vertical">{config.showStoreName === 'store' ? warehouseName || 'ASIA GROUP' : ''}</div>
+                            <div className="main-content">
+                                <div className="item-name">{item.name}</div>
+                                <div className="barcode-wrapper">
+                                    {renderBarcodeHelper(item.code, { width: 1.2, height: 35, fontSize: 10 })}
+                                </div>
+                                <div className="item-code">{item.code}</div>
+                                {config.priceType === 'price' && <div className="item-price">{formatNumber(item.price) || ""} {config.showVnd === 'vnd' ? 'VNĐ' : ''}</div>}
+                            </div>
                         </div>
-                        <div className="item-code">{item.code}</div>
-                        {config.priceType === 'price' && <div className="item-price">{item.price?.toLocaleString()} VNĐ</div>}
                     </div>
                 ))}
             </div>
@@ -277,6 +289,60 @@ const PrintBarcodeModal: React.FC<PrintBarcodeModalProps> = ({ open, onClose, in
                 .print-barcode-container .ant-table-thead > tr > th { background-color: #e6f7ff !important; }
                 .print-only-layout { display: none; }
                 
+                .sticker-content {
+                    display: flex;
+                    align-items: flex-start;
+                    height: 100%;
+                    box-sizing: border-box;
+                }
+                .store-title-vertical {
+                    writing-mode: vertical-rl;
+                    text-orientation: mixed;
+                    font-size: 8pt;
+                    margin-right: 5px;
+                    transform: rotate(180deg);
+                    flex-shrink: 0;
+                }
+                .main-content {
+                    flex: 1;
+                    text-align: center;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    height: 100%;
+                    box-sizing: border-box;
+                    overflow: hidden;
+                }
+                .item-name {
+                    font-size: 10pt;
+                    margin-bottom: 5px;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+                .barcode-wrapper {
+                    flex: 1;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    margin: 2px 0;
+                }
+                .item-code {
+                    font-size: 12pt;
+                    font-weight: bold;
+                    margin: 2px 0;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+                .item-price {
+                    font-size: 11pt;
+                    font-weight: bold;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+                
                 @media print {
                     body * { visibility: hidden; }
                     .print-only-layout, .print-only-layout * { visibility: visible; }
@@ -288,17 +354,87 @@ const PrintBarcodeModal: React.FC<PrintBarcodeModalProps> = ({ open, onClose, in
                     .print-sticker-item { 
                         text-align: center; 
                         box-sizing: border-box; 
-                        padding: 5px;
+                        padding: 2px;
                         border: 0.1mm solid #eee;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
                     }
                     /* Khổ giấy */
                     .paper-3-label { width: 33.33%; height: 22mm; }
-                    .paper-2-label { width: 50%; height: 22mm; }
-                    .paper-12-label { width: 33.33%; height: 48mm; }
+                    .paper-3-label .store-title-vertical { font-size: 5pt; }
+                    .paper-3-label .item-name { font-size: 6pt; }
+                    .paper-3-label .item-code { font-size: 8pt; }
+                    .paper-3-label .item-price { font-size: 7pt; }
 
-                    .store-title { font-size: 8pt; }
-                    .item-code { font-size: 10pt; font-weight: bold; }
-                    .item-price { font-size: 11pt; font-weight: bold; }
+                    .paper-2-label { width: 50%; height: 22mm; }
+                    .paper-2-label .store-title-vertical { font-size: 6pt; }
+                    .paper-2-label .item-name { font-size: 7pt; }
+                    .paper-2-label .item-code { font-size: 9pt; }
+                    .paper-2-label .item-price { font-size: 8pt; }
+
+                    .paper-12-label { width: 33.33%; height: 48mm; }
+                    .paper-12-label .store-title-vertical { font-size: 8pt; }
+                    .paper-12-label .item-name { font-size: 10pt; }
+                    .paper-12-label .item-code { font-size: 12pt; }
+                    .paper-12-label .item-price { font-size: 11pt; }
+
+                    .paper-65-label { width: 25%; height: 25mm; }
+                    .paper-65-label .store-title-vertical { font-size: 6pt; }
+                    .paper-65-label .item-name { font-size: 7pt; }
+                    .paper-65-label .item-code { font-size: 9pt; }
+                    .paper-65-label .item-price { font-size: 8pt; }
+
+                    .sticker-content {
+                        display: flex;
+                        align-items: flex-start;
+                        height: 100%;
+                        width: 100%;
+                        box-sizing: border-box;
+                    }
+                    .store-title-vertical { 
+                        writing-mode: vertical-rl; 
+                        text-orientation: mixed; 
+                        margin-right: 1px; 
+                        transform: rotate(180deg);
+                        flex-shrink: 0;
+                    }
+                    .main-content { 
+                        flex: 1; 
+                        text-align: center; 
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: space-around;
+                        height: 100%;
+                        box-sizing: border-box;
+                        overflow: hidden;
+                    }
+                    .item-name { 
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                        margin-bottom: 1px;
+                    }
+                    .barcode-wrapper { 
+                        flex: 1;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        margin: 1px 0;
+                    }
+                    .item-code { 
+                        font-weight: bold; 
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                        margin: 1px 0;
+                    }
+                    .item-price { 
+                        font-weight: bold; 
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                    }
                 }
             `}</style>
         </>

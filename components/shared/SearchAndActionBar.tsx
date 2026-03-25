@@ -11,6 +11,7 @@ interface SearchAndActionsBarProps {
     handleAddBtn?: React.MouseEventHandler<HTMLElement>;
     handleFilterBtn?: React.MouseEventHandler<HTMLElement>;
     handlePrintBarcode?: () => void;
+    handleDeleteProducts?: () => void;
     placeholder?: string;
     extraButtons?: React.ReactNode;
     extraExportButton?: React.ReactNode;
@@ -27,18 +28,21 @@ export default function SearchAndActionsBar({
     extraExportButton,
     handleFilterBtn,
     handleImportClick,
-    handlePrintBarcode
+    handlePrintBarcode,
+    handleDeleteProducts
 }: Partial<SearchAndActionsBarProps>) {
 
     const menu = (
         <Menu
             items={[
                 { key: '1', label: 'In tem mã' },
-                { key: '2', label: 'Xóa hàng hóa' },
+                // { key: '2', label: 'Xóa hàng hóa' },
             ]}
             onClick={(e) => {
                 if (e.key === '1' && handlePrintBarcode) {
                     handlePrintBarcode();
+                } else if (e.key === '2' && handleDeleteProducts) {
+                    handleDeleteProducts();
                 }
             }}
         />
@@ -63,8 +67,8 @@ export default function SearchAndActionsBar({
                 >
                     <Flex wrap="wrap" justify="end" gap={8}>
                         {
-                            handlePrintBarcode && (
-                                <Dropdown overlay={menu} trigger={['click']}>
+                            (handlePrintBarcode || handleDeleteProducts) && (
+                                <Dropdown menu={{ items: menu.props.items, onClick: menu.props.onClick }} trigger={['click']}>
                                     <Button type="primary" icon={<MoreOutlined />}>
                                         Thao tác <CaretDownOutlined />
                                     </Button>

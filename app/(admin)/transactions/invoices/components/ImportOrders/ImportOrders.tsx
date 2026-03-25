@@ -100,7 +100,7 @@ const ImportOrders: React.FC<{ slug?: number, type: ITypeImportInvoice }> = ({ s
                         itemCode: product.product_code,
                         id: product.product_id,
                         itemName: product.product_name,
-                        unit: 'Cái',
+                        unit: product.unit_name,
                         quantity: 1,
                         unitPrice: Number(product.selling_price),
                         discount: 0,
