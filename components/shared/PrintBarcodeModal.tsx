@@ -10,14 +10,13 @@ import {
     ReloadOutlined,
     DownloadOutlined
 } from "@ant-design/icons";
-import Barcode from 'react-barcode'; // npm install react-barcode
+import Barcode from 'react-barcode';
 import CustomInput from "../ui/Inputs";
 import { formatNumber } from "../../ultils/customText";
 import { useAuthStore } from "@/stores/authStore";
 
 const { Text } = Typography;
 
-// --- HELPER FUNCTION TẠO MÃ VẠCH ---
 const renderBarcodeHelper = (value: string, config: { width: number, height: number, fontSize: number }) => {
     if (!value) return null;
     return (
@@ -49,15 +48,8 @@ interface PrintConfig {
     selectedPaper: string;
 }
 
-interface PrintBarcodeModalProps {
-    open: boolean;
-    onClose: () => void;
-    initialData: ProductItem[];
-}
-
-const PrintBarcodeModal: React.FC<PrintBarcodeModalProps> = ({ open, onClose, initialData }) => {
+const PrintBarcodeModal: React.FC<{ open: boolean; onClose: () => void; initialData: ProductItem[] }> = ({ open, onClose, initialData }) => {
     const warehouseName = useAuthStore(state => state.user.warehouseName);
-    console.log("warehouseName", warehouseName);
     const [dataSource, setDataSource] = useState<ProductItem[]>([]);
     const [isLayer2Open, setIsLayer2Open] = useState(false);
     const [subStep, setSubStep] = useState<2 | 3>(2);
@@ -80,14 +72,10 @@ const PrintBarcodeModal: React.FC<PrintBarcodeModalProps> = ({ open, onClose, in
         }
     }, [open, initialData]);
 
-    // --- LOGIC NGHIỆP VỤ ---
-    // 1. Lấy sản phẩm thực tế đầu tiên (bỏ qua dòng total) để làm mẫu Preview
-    const previewProduct = dataSource.find(item => item.id !== 'total-row');
-    // 2. Tạo danh sách tất cả tem dựa trên số lượng để in thực tế
     const getAllStickers = () => {
         const stickers: ProductItem[] = [];
         dataSource.filter(item => item.id !== 'total-row').forEach(item => {
-            for (let i = 0; i < item.quantity; i++) {
+            for (let i = 0; i < (item.quantity || 0); i++) {
                 stickers.push(item);
             }
         });
@@ -125,12 +113,11 @@ const PrintBarcodeModal: React.FC<PrintBarcodeModalProps> = ({ open, onClose, in
                 return <Button type="text" danger icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)} />;
             },
         },
-        { title: "Mã hàng", dataIndex: "code", key: "code" },
-        { title: "Tên hàng", dataIndex: "name", key: "name" },
+        { title: "Mã hàng", dataIndex: "code" },
+        { title: "Tên hàng", dataIndex: "name" },
         {
             title: "Số lượng",
             dataIndex: "quantity",
-            key: "quantity",
             align: 'right' as const,
             render: (value: number, record: ProductItem) => {
                 if (record.id === 'total-row') return <Text strong style={{ fontSize: 16 }}>{value}</Text>;
@@ -176,7 +163,10 @@ const PrintBarcodeModal: React.FC<PrintBarcodeModalProps> = ({ open, onClose, in
                     ].map((item, idx) => (
                         <Col span={12} key={idx}>
                             <Card size="small" hoverable styles={{ body: { display: 'flex', gap: 10, padding: 10 } }}>
-                                <div style={{ width: 70, height: 60, backgroundColor: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ccc', fontSize: 10 }}>IMAGE</div>
+                                <div style={{ width: 70, height: 60, backgroundColor: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', fontSize: 10, flexDirection: 'column' }}>
+                                    <BarcodeOutlined style={{ fontSize: 24, marginBottom: 4 }} />
+                                    <span>{item.size}</span>
+                                </div>
                                 <div style={{ flex: 1 }}>
                                     <div style={{ fontWeight: 'bold', fontSize: 13 }}>{item.name}</div>
                                     <div style={{ fontSize: 11, color: '#999', marginBottom: 4 }}>Khổ giấy: {item.size}</div>
@@ -196,245 +186,119 @@ const PrintBarcodeModal: React.FC<PrintBarcodeModalProps> = ({ open, onClose, in
         </Row>
     );
 
-    const renderPrintPreview = () => (
-        <div style={{ backgroundColor: '#525659', borderRadius: '4px' }}>
-            <div style={{ padding: '10px', display: 'flex', justifyContent: 'center', gap: '30px', color: '#fff', borderBottom: '1px solid #333' }}>
-                <ReloadOutlined style={{ cursor: 'pointer', fontSize: 18 }} onClick={() => setSubStep(2)} />
-                <DownloadOutlined style={{ cursor: 'pointer', fontSize: 18 }} />
-                <PrinterOutlined style={{ cursor: 'pointer', fontSize: 22 }} onClick={() => window.print()} />
-            </div>
-
-            {/* TRÊN WEB: CHỈ HIỂN THỊ 1 MẪU ĐẦU TIÊN */}
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
-                {previewProduct ? (
-                    <div className="preview-sticker-box" style={{ backgroundColor: '#fff', padding: '20px', width: '260px', textAlign: 'center', boxShadow: '0 0 10px rgba(0,0,0,0.5)' }}>
-                        <div className="sticker-content">
-                            <div className="store-title-vertical">{config.showStoreName === 'store' ? warehouseName || 'CỬA HÀNG' : ''}</div>
-                            <div className="main-content">
-                                <div style={{ fontSize: 12, marginBottom: '10px' }}>{previewProduct.name}</div>
-                                <div style={{ margin: '10px 0', display: 'flex', justifyContent: 'center' }}>
-                                    {renderBarcodeHelper(previewProduct.code, { width: 1.5, height: 45, fontSize: 12 })}
-                                </div>
-                                <div style={{ fontWeight: 'bold', fontSize: 14 }}>{previewProduct.code}</div>
-                                {config.priceType === 'price' && (
-                                    <div style={{ fontSize: 18, fontWeight: 'bold' }}>
-                                        {formatNumber(previewProduct.price) || "650.000"} {config.showVnd === 'vnd' ? 'VNĐ' : ''}
-                                    </div>
-                                )}
-                            </div>
+    const renderPrintPreview = () => {
+        const previewProduct = dataSource.find(item => item.id !== 'total-row');
+        return (
+            <div style={{ backgroundColor: '#525659', borderRadius: '4px' }}>
+                <div style={{ padding: '10px', display: 'flex', justifyContent: 'center', gap: '30px', color: '#fff' }}>
+                    <ReloadOutlined style={{ cursor: 'pointer' }} onClick={() => setSubStep(2)} />
+                    <PrinterOutlined style={{ cursor: 'pointer', fontSize: 22 }} onClick={() => window.print()} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+                    {previewProduct && (
+                        <div style={{ backgroundColor: '#fff', padding: '20px', width: '260px', textAlign: 'center', boxShadow: '0 0 10px rgba(0,0,0,0.5)' }}>
+                            <Text strong>{previewProduct.name}</Text>
+                            <div style={{ margin: '10px 0' }}>{renderBarcodeHelper(previewProduct.code, { width: 1.5, height: 45, fontSize: 12 })}</div>
+                            <div style={{ fontWeight: 'bold' }}>{previewProduct.code}</div>
+                            {config.priceType === 'price' && <div style={{ fontSize: 18, fontWeight: 'bold' }}>{formatNumber(previewProduct.price)} VNĐ</div>}
                         </div>
-                    </div>
-                ) : <Text style={{ color: '#fff' }}>Chưa có dữ liệu</Text>}
+                    )}
+                </div>
             </div>
-
-            {/* KHI IN: HIỂN THỊ TOÀN BỘ DANH SÁCH (ẨN TRÊN WEB) */}
-            <div className="print-only-layout">
-                {getAllStickers().map((item, index) => (
-                    <div key={index} className={`print-sticker-item paper-${config.selectedPaper}`}>
-                        <div className="sticker-content">
-                            <div className="store-title-vertical">{config.showStoreName === 'store' ? warehouseName || 'ASIA GROUP' : ''}</div>
-                            <div className="main-content">
-                                <div className="item-name">{item.name}</div>
-                                <div className="barcode-wrapper">
-                                    {renderBarcodeHelper(item.code, { width: 1.2, height: 35, fontSize: 10 })}
-                                </div>
-                                <div className="item-code">{item.code}</div>
-                                {config.priceType === 'price' && <div className="item-price">{formatNumber(item.price) || ""} {config.showVnd === 'vnd' ? 'VNĐ' : ''}</div>}
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
+        );
+    };
 
     return (
         <>
-            <Modal
-                title="In tem mã"
-                open={open}
-                onCancel={onClose}
-                width={800}
-                maskClosable={false}
-                footer={[
-                    <Button key="next" type="primary" icon={<BarcodeOutlined />} style={{ backgroundColor: '#00a65a', borderColor: '#00a65a' }} onClick={() => setIsLayer2Open(true)}>
-                        Tiếp theo
-                    </Button>,
-                    <Button key="close" icon={<CloseCircleOutlined />} onClick={onClose} style={{ backgroundColor: '#808080', color: '#fff' }}>
-                        Bỏ qua
-                    </Button>
-                ]}
-            >
-                <div className="print-barcode-container">
-                    <Table dataSource={dataSource} columns={columns} rowKey="id" pagination={false} scroll={{ y: 400 }} size="middle" bordered={false} />
-                </div>
+            {/* MODAL 1: BẢNG CHỌN SẢN PHẨM */}
+            <Modal title="In tem mã" open={open} onCancel={onClose} width={800} footer={[
+                <Button key="next" type="primary" icon={<BarcodeOutlined />} style={{ backgroundColor: '#00a65a' }} onClick={() => setIsLayer2Open(true)}>Tiếp theo</Button>,
+                <Button key="close" onClick={onClose}>Bỏ qua</Button>
+            ]}>
+                <Table dataSource={dataSource} columns={columns} rowKey="id" pagination={false} scroll={{ y: 400 }} />
             </Modal>
 
+            {/* MODAL 2 & 3: CHỌN GIẤY & PREVIEW */}
             <Modal
                 title={subStep === 2 ? "Chọn loại giấy in tem mã" : "In tem mã"}
                 open={isLayer2Open}
                 onCancel={handleCloseLayer2}
                 width={subStep === 2 ? 950 : 550}
                 destroyOnClose
-                styles={{ body: subStep === 3 ? { padding: 0 } : { paddingTop: 24, paddingBottom: 24 } }}
-                footer={subStep === 2 ? [
-                    <Button key="back" icon={<LeftOutlined />} onClick={() => setIsLayer2Open(false)} style={{ float: 'left' }}> Quay lại </Button>,
-                    <Button key="close" icon={<CloseCircleOutlined />} onClick={handleCloseLayer2} style={{ backgroundColor: '#808080', color: '#fff' }}> Bỏ qua </Button>
-                ] : null}
+                footer={subStep === 2 ? [<Button key="back" onClick={() => setIsLayer2Open(false)}>Quay lại</Button>] : null}
             >
                 {subStep === 2 ? renderPaperSelection() : renderPrintPreview()}
             </Modal>
 
+            {/* VÙNG IN THỰC TẾ (ẨN TRÊN WEB, CHỈ HIỂN THỊ KHI IN) */}
+            <div className="print-only-layout">
+                {getAllStickers().map((item, index) => (
+                    <div key={index} className="print-sticker-item">
+                        <div className="sticker-content">
+                            <div className="store-title-vertical">{config.showStoreName === 'store' ? warehouseName : ''}</div>
+                            <div className="main-content">
+                                <div className="item-name">{item.name}</div>
+                                <div className="barcode-wrapper">
+                                    {renderBarcodeHelper(item.code, { width: 1, height: 25, fontSize: 10 })}
+                                </div>
+                                <div className="item-code">{item.code}</div>
+                                {config.priceType === 'price' && <div className="item-price">{formatNumber(item.price)} {config.showVnd === 'vnd' ? 'VNĐ' : ''}</div>}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
             <style jsx global>{`
-                .print-barcode-container .ant-table-thead > tr > th { background-color: #e6f7ff !important; }
                 .print-only-layout { display: none; }
-                
-                .sticker-content {
-                    display: flex;
-                    align-items: flex-start;
-                    height: 100%;
-                    box-sizing: border-box;
-                }
-                .store-title-vertical {
-                    writing-mode: vertical-rl;
-                    text-orientation: mixed;
-                    font-size: 8pt;
-                    margin-right: 5px;
-                    transform: rotate(180deg);
-                    flex-shrink: 0;
-                }
-                .main-content {
-                    flex: 1;
-                    text-align: center;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: center;
-                    height: 100%;
-                    box-sizing: border-box;
-                    overflow: hidden;
-                }
-                .item-name {
-                    font-size: 10pt;
-                    margin-bottom: 5px;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    white-space: nowrap;
-                }
-                .barcode-wrapper {
-                    flex: 1;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    margin: 2px 0;
-                }
-                .item-code {
-                    font-size: 12pt;
-                    font-weight: bold;
-                    margin: 2px 0;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    white-space: nowrap;
-                }
-                .item-price {
-                    font-size: 11pt;
-                    font-weight: bold;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    white-space: nowrap;
-                }
-                
+
                 @media print {
-                    body * { visibility: hidden; }
-                    .print-only-layout, .print-only-layout * { visibility: visible; }
-                    .print-only-layout { 
-                        display: flex !important; 
-                        flex-wrap: wrap; 
-                        position: absolute; left: 0; top: 0; width: 100%; 
+                    /* Hủy diệt chiều cao của tất cả các lớp Modal Ant Design */
+                    html, body, #root, .ant-modal-root, .ant-modal-wrap, .ant-modal, .ant-modal-content, .ant-modal-body {
+                        height: 0 !important;
+                        min-height: 0 !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        overflow: visible !important;
+                        visibility: hidden !important;
                     }
-                    .print-sticker-item { 
-                        text-align: center; 
-                        box-sizing: border-box; 
-                        padding: 2px;
-                        border: 0.1mm solid #eee;
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: center;
-                    }
-                    /* Khổ giấy */
-                    .paper-3-label { width: 33.33%; height: 22mm; }
-                    .paper-3-label .store-title-vertical { font-size: 5pt; }
-                    .paper-3-label .item-name { font-size: 6pt; }
-                    .paper-3-label .item-code { font-size: 8pt; }
-                    .paper-3-label .item-price { font-size: 7pt; }
 
-                    .paper-2-label { width: 50%; height: 22mm; }
-                    .paper-2-label .store-title-vertical { font-size: 6pt; }
-                    .paper-2-label .item-name { font-size: 7pt; }
-                    .paper-2-label .item-code { font-size: 9pt; }
-                    .paper-2-label .item-price { font-size: 8pt; }
+                    @page {
+                        size: ${config.selectedPaper === '2-label' ? '72mm 22mm' : '104mm 22mm'};
+                        margin: 0 !important;
+                    }
 
-                    .paper-12-label { width: 33.33%; height: 48mm; }
-                    .paper-12-label .store-title-vertical { font-size: 8pt; }
-                    .paper-12-label .item-name { font-size: 10pt; }
-                    .paper-12-label .item-code { font-size: 12pt; }
-                    .paper-12-label .item-price { font-size: 11pt; }
+                    .print-only-layout {
+                        display: block !important;
+                        visibility: visible !important;
+                        position: absolute !important;
+                        top: 0 !important;
+                        left: 0 !important;
+                        width: ${config.selectedPaper === '2-label' ? '72mm' : '104mm'} !important;
+                        height: auto !important;
+                        background: white !important;
+                    }
 
-                    .paper-65-label { width: 25%; height: 25mm; }
-                    .paper-65-label .store-title-vertical { font-size: 6pt; }
-                    .paper-65-label .item-name { font-size: 7pt; }
-                    .paper-65-label .item-code { font-size: 9pt; }
-                    .paper-65-label .item-price { font-size: 8pt; }
+                    .print-only-layout * { visibility: visible !important; }
 
-                    .sticker-content {
-                        display: flex;
-                        align-items: flex-start;
-                        height: 100%;
-                        width: 100%;
-                        box-sizing: border-box;
+                    .print-sticker-item {
+                        display: inline-flex !important;
+                        vertical-align: top;
+                        width: ${config.selectedPaper === '2-label' ? '36mm' : '34.6mm'} !important;
+                        height: 22mm !important;
+                        box-sizing: border-box !important;
+                        padding: 1mm !important;
+                        page-break-inside: avoid !important;
+                        break-inside: avoid !important;
                     }
-                    .store-title-vertical { 
-                        writing-mode: vertical-rl; 
-                        text-orientation: mixed; 
-                        margin-right: 1px; 
-                        transform: rotate(180deg);
-                        flex-shrink: 0;
-                    }
-                    .main-content { 
-                        flex: 1; 
-                        text-align: center; 
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: space-around;
-                        height: 100%;
-                        box-sizing: border-box;
-                        overflow: hidden;
-                    }
-                    .item-name { 
-                        overflow: hidden;
-                        text-overflow: ellipsis;
-                        white-space: nowrap;
-                        margin-bottom: 1px;
-                    }
-                    .barcode-wrapper { 
-                        flex: 1;
-                        display: flex;
-                        justify-content: center;
-                        align-items: center;
-                        margin: 1px 0;
-                    }
-                    .item-code { 
-                        font-weight: bold; 
-                        overflow: hidden;
-                        text-overflow: ellipsis;
-                        white-space: nowrap;
-                        margin: 1px 0;
-                    }
-                    .item-price { 
-                        font-weight: bold; 
-                        overflow: hidden;
-                        text-overflow: ellipsis;
-                        white-space: nowrap;
-                    }
+
+                    .sticker-content { display: flex !important; width: 100%; height: 100%; align-items: center; }
+                    .store-title-vertical { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 6pt; font-weight: bold; padding-left: 1px; border-left: 0.1mm solid #eee; }
+                    .main-content { flex: 1; display: flex; flex-direction: column; justify-content: space-between; align-items: center; height: 100%; }
+                    .item-name { font-size: 7pt; font-weight: bold; text-align: center; line-height: 1; max-height: 2em; overflow: hidden; }
+                    .barcode-wrapper svg { max-width: 100% !important; height: 25px !important; }
+                    .item-code { font-size: 6pt; line-height: 1; }
+                    .item-price { font-size: 9pt; font-weight: bold; line-height: 1; }
                 }
             `}</style>
         </>
