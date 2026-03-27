@@ -3,12 +3,9 @@ import { Modal, Table, Button, Typography, Row, Col, Select, Card, Space } from 
 import {
     DeleteOutlined,
     BarcodeOutlined,
-    CloseCircleOutlined,
     FileExcelOutlined,
-    LeftOutlined,
     PrinterOutlined,
     ReloadOutlined,
-    DownloadOutlined
 } from "@ant-design/icons";
 import Barcode from 'react-barcode';
 import CustomInput from "../ui/Inputs";

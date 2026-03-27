@@ -1,7 +1,7 @@
 "use client";
 import { useRouter, usePathname } from "next/navigation";
 import { Drawer, Layout, Menu, MenuProps } from "antd";
-import { AppstoreOutlined, BankOutlined, DashboardOutlined, LogoutOutlined, MailOutlined, SwapOutlined, UsergroupAddOutlined, UserOutlined } from '@ant-design/icons';
+import { AppstoreOutlined, BankOutlined, DashboardOutlined, FileDoneOutlined, LogoutOutlined, MailOutlined, SwapOutlined, UsergroupAddOutlined, UserOutlined } from '@ant-design/icons';
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import { useAuthStore } from "@/stores/authStore";
@@ -133,6 +133,13 @@ const menuConfig = [
     },
     {
         key: '7',
+        icon: <FileDoneOutlined />,
+        label: 'Báo cáo',
+        path: '/reports',
+        permission: PermissionKey.USER_VIEW,
+    },
+    {
+        key: '8',
         icon: <LogoutOutlined />,
         label: 'Đăng xuất',
         path: '/auth/login',
