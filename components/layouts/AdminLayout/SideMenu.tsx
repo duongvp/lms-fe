@@ -88,6 +88,12 @@ const menuConfig = [
                 path: '/transactions/returns',
                 permission: PermissionKey.RETURN_VIEW,
             },
+            {
+                key: '25',
+                label: 'F&B Bán hàng',
+                path: '/transactions/fnb',
+                permission: PermissionKey.INVOICE_VIEW,
+            },
         ],
     },
     {

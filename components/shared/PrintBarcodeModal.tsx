@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Modal, Table, Button, Typography, Row, Col, Select, Card, Space } from "antd";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { Modal, Table, Button, Typography, Row, Col, Select, Card, Space, message } from "antd";
 import {
     DeleteOutlined,
     BarcodeOutlined,
@@ -47,10 +47,10 @@ interface PrintConfig {
 
 const PrintBarcodeModal: React.FC<{ open: boolean; onClose: () => void; initialData: ProductItem[] }> = ({ open, onClose, initialData }) => {
     const warehouseName = useAuthStore(state => state.user.warehouseName);
-    const [dataSource, setDataSource] = useState<ProductItem[]>([]);
+    // Chỉ lưu danh sách sản phẩm (không có dòng total)
+    const [products, setProducts] = useState<ProductItem[]>([]);
     const [isLayer2Open, setIsLayer2Open] = useState(false);
     const [subStep, setSubStep] = useState<2 | 3>(2);
-
     const [config, setConfig] = useState<PrintConfig>({
         typeCode: 'code',
         priceType: 'price',
@@ -60,47 +60,70 @@ const PrintBarcodeModal: React.FC<{ open: boolean; onClose: () => void; initialD
         selectedPaper: '3-label'
     });
 
+    // Tính tổng số lượng từ products
+    const totalQuantity = useMemo(() =>
+        products.reduce((sum, item) => sum + (item.quantity || 0), 0),
+        [products]
+    );
+
+    // Tạo dataSource cho Table (thêm dòng total ở đầu) - dùng useMemo tránh tạo lại mỗi lần render
+    const dataSource = useMemo(() =>
+        [{ id: 'total-row', code: '', name: '', quantity: totalQuantity }, ...products],
+        [products, totalQuantity]
+    );
+
     useEffect(() => {
         if (open) {
-            const total = initialData.reduce((sum, item) => sum + (item.quantity || 0), 0);
-            setDataSource([{ id: 'total-row', code: '', name: '', quantity: total }, ...initialData]);
+            setProducts(initialData);
             setIsLayer2Open(false);
             setSubStep(2);
         }
     }, [open, initialData]);
 
-    const getAllStickers = () => {
+    // Tạo mảng tem để in - có giới hạn số lượng để tránh crash
+    const stickers = useMemo(() => {
+        const total = products.reduce((sum, item) => sum + (item.quantity || 0), 0);
+        console.log("🚀 ~ PrintBarcodeModal ~ total:", total)
+        if (total > 500) {
+            message.warning('Số lượng tem quá lớn (>500), vui lòng giảm số lượng hoặc in theo đợt nhỏ hơn');
+            return [];
+        }
         const stickers: ProductItem[] = [];
-        dataSource.filter(item => item.id !== 'total-row').forEach(item => {
+        products.forEach(item => {
             for (let i = 0; i < (item.quantity || 0); i++) {
                 stickers.push(item);
             }
         });
         return stickers;
+    }, [products]);
+
+    const handleGoToStep2 = () => {
+        const total = products.reduce((sum, item) => sum + (item.quantity || 0), 0);
+        if (total > 500) {
+            message.warning('Số lượng tem quá lớn (>500), vui lòng giảm số lượng hoặc in theo đợt nhỏ hơn');
+            return; // Dừng lại không cho mở modal tiếp theo
+        }
+        setIsLayer2Open(true);
     };
 
-    const handleQuantityChange = (id: string | number, value: number | null) => {
-        const newData = dataSource.map((item) =>
-            item.id === id ? { ...item, quantity: value || 0 } : item
+    const handleQuantityChange = useCallback((id: string | number, value: number | null) => {
+        setProducts(prev =>
+            prev.map(item =>
+                item.id === id ? { ...item, quantity: value || 0 } : item
+            )
         );
-        const onlyProducts = newData.filter(item => item.id !== 'total-row');
-        const newTotal = onlyProducts.reduce((sum, item) => sum + item.quantity, 0);
-        setDataSource([{ id: 'total-row', code: '', name: '', quantity: newTotal }, ...onlyProducts]);
-    };
+    }, []);
 
-    const handleDelete = (id: string | number) => {
-        const newData = dataSource.filter((item) => item.id !== id);
-        const onlyProducts = newData.filter(item => item.id !== 'total-row');
-        const newTotal = onlyProducts.reduce((sum, item) => sum + item.quantity, 0);
-        setDataSource([{ id: 'total-row', code: '', name: '', quantity: newTotal }, ...onlyProducts]);
-    };
+    const handleDelete = useCallback((id: string | number) => {
+        setProducts(prev => prev.filter(item => item.id !== id));
+    }, []);
 
     const handleCloseLayer2 = () => {
         setIsLayer2Open(false);
         setTimeout(() => setSubStep(2), 300);
     };
 
-    const columns = [
+    const columns = useMemo(() => [
         {
             title: "",
             key: "action",
@@ -133,7 +156,7 @@ const PrintBarcodeModal: React.FC<{ open: boolean; onClose: () => void; initialD
                 );
             },
         },
-    ];
+    ], [handleDelete, handleQuantityChange]);
 
     const renderPaperSelection = () => (
         <Row gutter={24}>
@@ -184,7 +207,7 @@ const PrintBarcodeModal: React.FC<{ open: boolean; onClose: () => void; initialD
     );
 
     const renderPrintPreview = () => {
-        const previewProduct = dataSource.find(item => item.id !== 'total-row');
+        const previewProduct = products[0]; // lấy sản phẩm đầu tiên để xem trước
         return (
             <div style={{ backgroundColor: '#525659', borderRadius: '4px' }}>
                 <div style={{ padding: '10px', display: 'flex', justifyContent: 'center', gap: '30px', color: '#fff' }}>
@@ -207,12 +230,19 @@ const PrintBarcodeModal: React.FC<{ open: boolean; onClose: () => void; initialD
 
     return (
         <>
-            {/* MODAL 1: BẢNG CHỌN SẢN PHẨM */}
+            {/* MODAL 1: BẢNG CHỌN SẢN PHẨM - ĐÃ BẬT VIRTUAL SCROLL */}
             <Modal title="In tem mã" open={open} onCancel={onClose} width={800} footer={[
-                <Button key="next" type="primary" icon={<BarcodeOutlined />} style={{ backgroundColor: '#00a65a' }} onClick={() => setIsLayer2Open(true)}>Tiếp theo</Button>,
+                <Button key="next" type="primary" icon={<BarcodeOutlined />} style={{ backgroundColor: '#00a65a' }} onClick={handleGoToStep2}>Tiếp theo</Button>,
                 <Button key="close" onClick={onClose}>Bỏ qua</Button>
             ]}>
-                <Table dataSource={dataSource} columns={columns} rowKey="id" pagination={false} scroll={{ y: 400 }} />
+                <Table
+                    dataSource={dataSource}
+                    columns={columns}
+                    rowKey="id"
+                    pagination={false}
+                    scroll={{ y: 400 }}
+                    virtual // BẬT VIRTUAL SCROLL - CHỈ RENDER DÒNG NHÌN THẤY
+                />
             </Modal>
 
             {/* MODAL 2 & 3: CHỌN GIẤY & PREVIEW */}
@@ -228,23 +258,25 @@ const PrintBarcodeModal: React.FC<{ open: boolean; onClose: () => void; initialD
             </Modal>
 
             {/* VÙNG IN THỰC TẾ (ẨN TRÊN WEB, CHỈ HIỂN THỊ KHI IN) */}
-            <div className="print-only-layout">
-                {getAllStickers().map((item, index) => (
-                    <div key={index} className="print-sticker-item">
-                        <div className="sticker-content">
-                            <div className="store-title-vertical">{config.showStoreName === 'store' ? warehouseName : ''}</div>
-                            <div className="main-content">
-                                <div className="item-name">{item.name}</div>
-                                <div className="barcode-wrapper">
-                                    {renderBarcodeHelper(item.code, { width: 1, height: 25, fontSize: 10 })}
+            {stickers.length > 0 && (
+                <div className="print-only-layout">
+                    {stickers.map((item, index) => (
+                        <div key={index} className="print-sticker-item">
+                            <div className="sticker-content">
+                                <div className="store-title-vertical">{config.showStoreName === 'store' ? warehouseName : ''}</div>
+                                <div className="main-content">
+                                    <div className="item-name">{item.name}</div>
+                                    <div className="barcode-wrapper">
+                                        {renderBarcodeHelper(item.code, { width: 1, height: 25, fontSize: 10 })}
+                                    </div>
+                                    <div className="item-code">{item.code}</div>
+                                    {config.priceType === 'price' && <div className="item-price">{formatNumber(item.price)} {config.showVnd === 'vnd' ? 'VNĐ' : ''}</div>}
                                 </div>
-                                <div className="item-code">{item.code}</div>
-                                {config.priceType === 'price' && <div className="item-price">{formatNumber(item.price)} {config.showVnd === 'vnd' ? 'VNĐ' : ''}</div>}
                             </div>
                         </div>
-                    </div>
-                ))}
-            </div>
+                    ))}
+                </div>
+            )}
 
             <style jsx global>{`
                 .print-only-layout { display: none; }
