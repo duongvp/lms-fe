@@ -17,6 +17,7 @@ import {
     Avatar,
     Divider,
     Tag,
+    Form,
 } from "antd";
 import {
     PlusOutlined,
@@ -39,6 +40,15 @@ import {
     HistoryOutlined,
     CloseOutlined,
 } from "@ant-design/icons";
+import SelectWithButton from "@/components/ui/Selects/SelectWithButton";
+import useProductSelect from "@/hooks/useProductSelect";
+import { ProductApiResponse } from "@/services/productService";
+import useProductStore from "@/stores/productStore";
+import { ActionType } from "@/enums/action";
+import ProductModal from "@/app/(admin)/products/components/Modal/ProductModal";
+import useCustomerSelect from "@/hooks/useCustomerSelect";
+import useCustomerStore from "@/stores/customerStore";
+import CustomerModal from "@/app/(admin)/partners/customers/components/Modal/CustomerModal";
 
 const { Text, Title } = Typography;
 
@@ -166,9 +176,18 @@ export default function FnbSalesPage() {
     const [selectedRoomId, setSelectedRoomId] = useState<string | null>("r23"); // Mock selection
     const [roomStatusFilter, setRoomStatusFilter] = useState<RoomStatus | "all">("all");
     const [activeFloor, setActiveFloor] = useState("all");
-    const [searchTerm, setSearchTerm] = useState("");
     const [orders, setOrders] = useState<Record<string, OrderItem[]>>({});
     const [activeTab, setActiveTab] = useState<"rooms" | "menu">("rooms");
+
+    const [searchTerm, setSearchTerm] = useState("");
+    const { setModal } = useProductStore();
+    const { options, handleScroll } = useProductSelect(searchTerm, false, true, []);
+
+    const [customerSearchTerm, setCustomerSearchTerm] = useState("");
+    const [form] = Form.useForm();
+    const { setModal: setCustomerModal } = useCustomerStore();
+    const { options: customerOptions, handleScroll: handleCustomerScroll } = useCustomerSelect(customerSearchTerm, form, null);
+    const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
 
     const selectedRoom = useMemo(
         () => rooms.find((r) => r.id === selectedRoomId) ?? null,
@@ -214,6 +233,24 @@ export default function FnbSalesPage() {
         message.success(`Đã thêm ${product.name}`);
     };
 
+    const handleSelectProduct = (value: string | number) => {
+        const selectedOption = options.find((item) => item.value === value);
+        const selectedProduct = selectedOption?.data;
+
+        if (selectedProduct) {
+            handleAddProduct({
+                id: selectedProduct.product_id,
+                name: selectedProduct.product_name,
+                price: Number(selectedProduct.selling_price),
+            });
+        }
+    };
+
+    const handleSelectCustomer = (value: string | number) => {
+        const selectedOption = customerOptions.find((item) => item.value === value);
+        setSelectedCustomer(selectedOption?.data || null);
+    };
+
     const totalAmount = currentOrder.reduce(
         (sum, item) => sum + item.product.price * item.quantity,
         0
@@ -256,10 +293,21 @@ export default function FnbSalesPage() {
                         </Button>
                     </Space>
                     <Space>
-                        <Input
-                            prefix={<SearchOutlined />}
+                        <SelectWithButton
+                            options={options}
                             placeholder="Tìm món (F3)"
-                            style={{ width: 250, borderRadius: 20 }}
+                            onSearch={setSearchTerm}
+                            onSelect={handleSelectProduct}
+                            onPopupScroll={handleScroll}
+                            onAddClick={() => setModal({ open: true, type: ActionType.CREATE, product: null })}
+                            style={{ width: 300 }}
+                            styleWrapSelect={{
+                                border: "none",
+                                background: "rgba(255, 255, 255, 0.15)",
+                                borderRadius: 20,
+                                padding: "0 8px",
+                            }}
+                            className="fnb-search-select"
                         />
                         <Button icon={<ThunderboltOutlined />} shape="circle" ghost />
                         <Button icon={<PlusOutlined />} shape="circle" ghost />
@@ -450,17 +498,22 @@ export default function FnbSalesPage() {
                         <Text strong style={{ color: COLORS.primary, fontSize: 16 }}>{selectedRoom?.label ?? "Chưa chọn bàn"}</Text>
                         <SwapOutlined style={{ marginLeft: 8 }} />
                     </Space>
-                    <Input
+                    <SelectWithButton
+                        options={customerOptions}
                         placeholder="Tìm khách hàng (F4)"
-                        prefix={<SearchOutlined />}
-                        suffix={
-                            <Space>
-                                <PlusOutlined style={{ cursor: "pointer" }} />
-                                <ShoppingCartOutlined style={{ cursor: "pointer", color: COLORS.primary }} />
-                                <SwapOutlined style={{ cursor: "pointer" }} />
-                            </Space>
-                        }
-                        style={{ width: 280, borderRadius: 20 }}
+                        onSearch={setCustomerSearchTerm}
+                        onSelect={handleSelectCustomer}
+                        onPopupScroll={handleCustomerScroll}
+                        onAddClick={() => setCustomerModal({ open: true, type: ActionType.CREATE, customer: null })}
+                        value={selectedCustomer?.customer_id}
+                        style={{ width: 320 }}
+                        styleWrapSelect={{
+                            border: "none",
+                            background: "#f5f5f5",
+                            borderRadius: 20,
+                            padding: "0 8px",
+                        }}
+                        className="fnb-customer-select"
                     />
                 </div>
 
@@ -531,6 +584,24 @@ export default function FnbSalesPage() {
                     </Row>
                 </div>
             </div>
+            <ProductModal />
+            <CustomerModal />
+
+            <style jsx global>{`
+                .fnb-search-select .ant-select-selector {
+                    color: white !important;
+                }
+                .fnb-search-select .ant-select-selection-placeholder {
+                    color: rgba(255, 255, 255, 0.7) !important;
+                }
+                .fnb-search-select .ant-select-arrow {
+                    color: white !important;
+                }
+                .fnb-search-select .ant-select-clear {
+                    background: transparent !important;
+                    color: white !important;
+                }
+            `}</style>
         </div>
     );
 }
