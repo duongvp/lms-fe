@@ -17,6 +17,7 @@ import {
     Avatar,
     Divider,
     Tag,
+    Radio,
     Form,
 } from "antd";
 import {
@@ -49,6 +50,8 @@ import ProductModal from "@/app/(admin)/products/components/Modal/ProductModal";
 import useCustomerSelect from "@/hooks/useCustomerSelect";
 import useCustomerStore from "@/stores/customerStore";
 import CustomerModal from "@/app/(admin)/partners/customers/components/Modal/CustomerModal";
+import useRoomStore from "@/stores/roomStore";
+import RoomModal from "./components/RoomModal";
 
 const { Text, Title } = Typography;
 
@@ -61,6 +64,7 @@ type Room = {
     price?: number;
     time?: string;
     customers?: number;
+    floor: string;
 };
 
 type Product = {
@@ -79,6 +83,7 @@ const initialRooms: Room[] = [
         id: `r${i + 1}`,
         label: `Bàn ${i + 1}`,
         status: "available" as RoomStatus,
+        floor: "1",
     })),
     {
         id: "r10",
@@ -87,6 +92,7 @@ const initialRooms: Room[] = [
         price: 80000,
         time: "384g39p",
         customers: 3,
+        floor: "1",
     },
     {
         id: "r11",
@@ -95,6 +101,7 @@ const initialRooms: Room[] = [
         price: 943000,
         time: "33-1",
         customers: 1,
+        floor: "2",
     },
     {
         id: "r12",
@@ -103,6 +110,7 @@ const initialRooms: Room[] = [
         price: 100000,
         time: "4-1",
         customers: 1,
+        floor: "2",
     },
     {
         id: "r13",
@@ -111,8 +119,9 @@ const initialRooms: Room[] = [
         price: 247500,
         time: "9-1",
         customers: 1,
+        floor: "2",
     },
-    { id: "r14", label: "Bàn 14", status: "available" },
+    { id: "r14", label: "Bàn 14", status: "available", floor: "2" },
     {
         id: "r15",
         label: "Bàn 15",
@@ -120,6 +129,7 @@ const initialRooms: Room[] = [
         price: 10000,
         time: "112g5p",
         customers: 1,
+        floor: "2",
     },
     {
         id: "r16",
@@ -128,6 +138,7 @@ const initialRooms: Room[] = [
         price: 3334000,
         time: "135-1",
         customers: 1,
+        floor: "2",
     },
     {
         id: "r17",
@@ -136,17 +147,18 @@ const initialRooms: Room[] = [
         price: 922500,
         time: "763g0p",
         customers: 1,
+        floor: "2",
     },
-    { id: "r18", label: "Bàn 18", status: "occupied", price: 405000, time: "8-1" },
-    { id: "r19", label: "Bàn 19", status: "occupied", price: 220000, time: "10-1" },
-    { id: "r20", label: "Phòng 3D - 01", status: "occupied", price: 80000, time: "642g37p" },
-    { id: "r21", label: "Phòng 3D - 02", status: "available" },
-    { id: "r22", label: "Phòng 3D VIP", status: "available" },
-    { id: "r23", label: "Phòng 3D VIP 2", status: "occupied" },
-    { id: "r24", label: "Bàn 21", status: "available" },
-    { id: "r25", label: "Bàn 22", status: "available" },
-    { id: "r26", label: "Bàn 23", status: "available" },
-    { id: "r27", label: "Bàn 24", status: "occupied", price: 355000, time: "8-1" },
+    { id: "r18", label: "Bàn 18", status: "occupied", price: 405000, time: "8-1", floor: "2" },
+    { id: "r19", label: "Bàn 19", status: "occupied", price: 220000, time: "10-1", floor: "2" },
+    { id: "r20", label: "Phòng 3D - 01", status: "occupied", price: 80000, time: "642g37p", floor: "5" },
+    { id: "r21", label: "Phòng 3D - 02", status: "available", floor: "5" },
+    { id: "r22", label: "Phòng 3D VIP", status: "available", floor: "5" },
+    { id: "r23", label: "Phòng 3D VIP 2", status: "occupied", floor: "5" },
+    { id: "r24", label: "Bàn 21", status: "available", floor: "5" },
+    { id: "r25", label: "Bàn 22", status: "available", floor: "5" },
+    { id: "r26", label: "Bàn 23", status: "available", floor: "5" },
+    { id: "r27", label: "Bàn 24", status: "occupied", price: 355000, time: "8-1", floor: "5" },
 ];
 
 const productCatalog: Product[] = [
@@ -189,24 +201,39 @@ export default function FnbSalesPage() {
     const { options: customerOptions, handleScroll: handleCustomerScroll } = useCustomerSelect(customerSearchTerm, form, null);
     const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
 
+    const { setModal: setRoomModal } = useRoomStore();
+
     const selectedRoom = useMemo(
         () => rooms.find((r) => r.id === selectedRoomId) ?? null,
         [rooms, selectedRoomId]
     );
 
+    const counts = useMemo(() => {
+        const total = rooms.length;
+        const available = rooms.filter(r => r.status === "available").length;
+        const inUse = total - available;
+        return { total, available, inUse };
+    }, [rooms]);
+
     const displayedRooms = useMemo(() => {
         let filtered = rooms;
         if (roomStatusFilter !== "all") {
-            filtered = filtered.filter((r) => r.status === roomStatusFilter);
+            if (roomStatusFilter === ("in-use" as any)) {
+                filtered = filtered.filter((r) => r.status === "occupied" || r.status === "reserved");
+            } else {
+                filtered = filtered.filter((r) => r.status === roomStatusFilter);
+            }
         }
         if (activeFloor !== "all") {
-            // Mock floor logic based on table label/id for now
-            if (activeFloor === "1") filtered = filtered.filter(r => r.id.startsWith("r") && parseInt(r.id.slice(1)) <= 10);
-            if (activeFloor === "2") filtered = filtered.filter(r => r.id.startsWith("r") && parseInt(r.id.slice(1)) > 10 && parseInt(r.id.slice(1)) <= 20);
-            if (activeFloor === "5") filtered = filtered.filter(r => r.id.startsWith("r") && parseInt(r.id.slice(1)) > 20);
+            filtered = filtered.filter(r => r.floor === activeFloor);
         }
         return filtered;
     }, [rooms, roomStatusFilter, activeFloor]);
+
+    const handleAddRoom = (room: Room) => {
+        setRooms((prev) => [...prev, room]);
+        message.success(`Đã thêm ${room.label}`);
+    };
 
     const currentOrder = selectedRoomId ? orders[selectedRoomId] ?? [] : [];
 
@@ -310,7 +337,12 @@ export default function FnbSalesPage() {
                             className="fnb-search-select"
                         />
                         <Button icon={<ThunderboltOutlined />} shape="circle" ghost />
-                        <Button icon={<PlusOutlined />} shape="circle" ghost />
+                        <Button 
+                            icon={<PlusOutlined />} 
+                            shape="circle" 
+                            ghost 
+                            onClick={() => setRoomModal({ open: true, type: ActionType.CREATE, room: null })}
+                        />
                     </Space>
                 </div>
 
@@ -333,20 +365,21 @@ export default function FnbSalesPage() {
                         </Col>
                     </Row>
 
-                    <Space size="large">
-                        <Space>
-                            <Badge color={COLORS.primary} />
-                            <Text>Tất cả (49)</Text>
-                        </Space>
-                        <Space>
-                            <Badge color="#d9d9d9" />
-                            <Text>Sử dụng (12)</Text>
-                        </Space>
-                        <Space>
-                            <Badge color="#fff" style={{ border: "1px solid #d9d9d9" }} />
-                            <Text>Còn trống (37)</Text>
-                        </Space>
-                    </Space>
+                    <Radio.Group
+                        value={roomStatusFilter}
+                        onChange={(e) => setRoomStatusFilter(e.target.value)}
+                        className="table-actions-radio"
+                    >
+                        <Radio value="all">
+                            <Text>Tất cả ({counts.total})</Text>
+                        </Radio>
+                        <Radio value="in-use">
+                            <Text>Sử dụng ({counts.inUse})</Text>
+                        </Radio>
+                        <Radio value="available">
+                            <Text>Còn trống ({counts.available})</Text>
+                        </Radio>
+                    </Radio.Group>
                 </div>
 
                 {/* Table Grid / Menu Grid */}
@@ -586,6 +619,7 @@ export default function FnbSalesPage() {
             </div>
             <ProductModal />
             <CustomerModal />
+            <RoomModal onAdd={handleAddRoom} />
 
             <style jsx global>{`
                 .fnb-search-select .ant-select-selector {
