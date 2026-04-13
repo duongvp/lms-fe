@@ -19,6 +19,7 @@ import {
     Tag,
     Radio,
     Form,
+    InputNumber,
 } from "antd";
 import {
     PlusOutlined,
@@ -40,6 +41,8 @@ import {
     EditOutlined,
     HistoryOutlined,
     CloseOutlined,
+    GroupOutlined,
+    ForkOutlined,
 } from "@ant-design/icons";
 import SelectWithButton from "@/components/ui/Selects/SelectWithButton";
 import useProductSelect from "@/hooks/useProductSelect";
@@ -52,6 +55,10 @@ import useCustomerStore from "@/stores/customerStore";
 import CustomerModal from "@/app/(admin)/partners/customers/components/Modal/CustomerModal";
 import useRoomStore from "@/stores/roomStore";
 import RoomModal from "./components/RoomModal";
+import { CategoryApiResponse, getCategories } from "@/services/categoryService";
+import { getProductsByPage } from "@/services/productService";
+import { Spin } from "antd";
+import { useAuthStore } from "@/stores/authStore";
 
 const { Text, Title } = Typography;
 
@@ -74,6 +81,7 @@ type Product = {
 };
 
 type OrderItem = {
+    uniqueId: string;
     product: Product;
     quantity: number;
 };
@@ -161,14 +169,9 @@ const initialRooms: Room[] = [
     { id: "r27", label: "Bàn 24", status: "occupied", price: 355000, time: "8-1", floor: "5" },
 ];
 
-const productCatalog: Product[] = [
-    { id: 1, name: "Trà sữa trân châu", price: 45000 },
-    { id: 2, name: "Cà phê sữa", price: 30000 },
-    { id: 3, name: "Nước ép cam", price: 35000 },
-    { id: 4, name: "Bánh mì pate", price: 25000 },
-    { id: 5, name: "Phở bò", price: 60000 },
-    { id: 6, name: "Gà rán", price: 70000 },
-];
+// Removed hardcoded productCatalog
+const EMPTY_ARRAY: any[] = [];
+const PAGE_SIZE = 24;
 
 const COLORS = {
     primary: "#3467cc",
@@ -190,10 +193,13 @@ export default function FnbSalesPage() {
     const [activeFloor, setActiveFloor] = useState("all");
     const [orders, setOrders] = useState<Record<string, OrderItem[]>>({});
     const [activeTab, setActiveTab] = useState<"rooms" | "menu">("rooms");
+    const [viewDensity, setViewDensity] = useState<"normal" | "compact">("normal");
+
+    const { warehouseId } = useAuthStore((state) => state.user);
 
     const [searchTerm, setSearchTerm] = useState("");
     const { setModal } = useProductStore();
-    const { options, handleScroll } = useProductSelect(searchTerm, false, true, []);
+    const { options, handleScroll } = useProductSelect(searchTerm, false, true, EMPTY_ARRAY);
 
     const [customerSearchTerm, setCustomerSearchTerm] = useState("");
     const [form] = Form.useForm();
@@ -201,7 +207,49 @@ export default function FnbSalesPage() {
     const { options: customerOptions, handleScroll: handleCustomerScroll } = useCustomerSelect(customerSearchTerm, form, null);
     const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
 
+    const [categories, setCategories] = useState<CategoryApiResponse[]>([]);
+    const [products, setProducts] = useState<ProductApiResponse[]>([]);
+    const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalProducts, setTotalProducts] = useState(0);
+    const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+    // PAGE_SIZE moved to top level
+
     const { setModal: setRoomModal } = useRoomStore();
+
+    React.useEffect(() => {
+        const fetchCats = async () => {
+            try {
+                const data = await getCategories();
+                setCategories(data);
+            } catch (error) {
+                console.error("Failed to fetch categories", error);
+            }
+        };
+        fetchCats();
+    }, []);
+
+    React.useEffect(() => {
+        const fetchProds = async () => {
+            if (warehouseId === -1) return;
+            setIsLoadingProducts(true);
+            try {
+                const skip = (currentPage - 1) * PAGE_SIZE;
+                const filter: any = { warehouse_id: warehouseId, is_active: 1 };
+                if (selectedCategoryId) {
+                    filter.category_id = selectedCategoryId;
+                }
+                const response = await getProductsByPage(PAGE_SIZE, skip, filter);
+                setProducts(response.data);
+                setTotalProducts(response.total);
+            } catch (error) {
+                console.error("Failed to fetch products", error);
+            } finally {
+                setIsLoadingProducts(false);
+            }
+        };
+        fetchProds();
+    }, [selectedCategoryId, currentPage, warehouseId]);
 
     const selectedRoom = useMemo(
         () => rooms.find((r) => r.id === selectedRoomId) ?? null,
@@ -253,7 +301,11 @@ export default function FnbSalesPage() {
             if (existing) {
                 existing.quantity += 1;
             } else {
-                items.push({ product, quantity: 1 });
+                items.push({
+                    uniqueId: `${product.id}-${Date.now()}`,
+                    product,
+                    quantity: 1
+                });
             }
             return { ...prev, [selectedRoomId]: items };
         });
@@ -282,6 +334,59 @@ export default function FnbSalesPage() {
         (sum, item) => sum + item.product.price * item.quantity,
         0
     );
+
+    const updateOrderItem = (uniqueId: string, field: "quantity" | "price", value: number) => {
+        if (!selectedRoomId) return;
+
+        setOrders((prev) => {
+            const items = prev[selectedRoomId] ? [...prev[selectedRoomId]] : [];
+            const updatedItems = items.map((item) => {
+                if (item.uniqueId === uniqueId) {
+                    if (field === "quantity") {
+                        return { ...item, quantity: value };
+                    } else if (field === "price") {
+                        return { ...item, product: { ...item.product, price: value } };
+                    }
+                }
+                return item;
+            });
+            return { ...prev, [selectedRoomId]: updatedItems };
+        });
+    };
+
+    const removeOrderItem = (uniqueId: string) => {
+        if (!selectedRoomId) return;
+
+        setOrders((prev) => {
+            const items = prev[selectedRoomId] ? [...prev[selectedRoomId]] : [];
+            const filteredItems = items.filter((item) => item.uniqueId !== uniqueId);
+            return { ...prev, [selectedRoomId]: filteredItems };
+        });
+    };
+
+    const splitOrderItem = (uniqueId: string) => {
+        if (!selectedRoomId) return;
+
+        setOrders((prev) => {
+            const items = prev[selectedRoomId] ? [...prev[selectedRoomId]] : [];
+            const index = items.findIndex(item => item.uniqueId === uniqueId);
+            if (index !== -1 && items[index].quantity > 1) {
+                const item = items[index];
+                // Create a copy of the list to avoid mutations
+                const newItems = [...items];
+                // Reduce quantity of original
+                newItems[index] = { ...item, quantity: item.quantity - 1 };
+                // Add new row with quantity 1
+                newItems.splice(index + 1, 0, {
+                    uniqueId: `${item.product.id}-${Date.now()}-${Math.random()}`,
+                    product: { ...item.product },
+                    quantity: 1
+                });
+                return { ...prev, [selectedRoomId]: newItems };
+            }
+            return prev;
+        });
+    };
 
     return (
         <div style={{ display: "flex", height: "100vh", background: "#f0f2f5", overflow: "hidden" }}>
@@ -337,16 +442,16 @@ export default function FnbSalesPage() {
                             className="fnb-search-select"
                         />
                         <Button icon={<ThunderboltOutlined />} shape="circle" ghost />
-                        <Button 
-                            icon={<PlusOutlined />} 
-                            shape="circle" 
-                            ghost 
+                        <Button
+                            icon={<PlusOutlined />}
+                            shape="circle"
+                            ghost
                             onClick={() => setRoomModal({ open: true, type: ActionType.CREATE, room: null })}
                         />
                     </Space>
                 </div>
 
-                {/* Floor & Controls */}
+                {/* Floor & Controls (Rooms Tab) */}
                 <div style={{ padding: "8px 16px", background: "#fff", display: activeTab === "rooms" ? "block" : "none" }}>
                     <Row justify="space-between" align="middle" style={{ marginBottom: 8 }}>
                         <Col>
@@ -359,7 +464,24 @@ export default function FnbSalesPage() {
                         </Col>
                         <Col>
                             <Space>
-                                <AppstoreOutlined style={{ fontSize: 18, cursor: "pointer" }} />
+                                {viewDensity === "normal" ? (
+                                    <AppstoreOutlined
+                                        style={{
+                                            fontSize: 18,
+                                            cursor: "pointer",
+                                        }}
+                                        onClick={() => setViewDensity("compact")}
+                                    />
+                                ) : (
+                                    <GroupOutlined
+                                        style={{
+                                            fontSize: 18,
+                                            cursor: "pointer",
+                                            color: COLORS.primary
+                                        }}
+                                        onClick={() => setViewDensity("normal")}
+                                    />
+                                )}
                                 <SearchOutlined style={{ fontSize: 18, cursor: "pointer" }} />
                             </Space>
                         </Col>
@@ -382,20 +504,81 @@ export default function FnbSalesPage() {
                     </Radio.Group>
                 </div>
 
+                {/* Category Filters (Menu Tab) */}
+                <div style={{ padding: "8px 16px", background: "#fff", display: activeTab === "menu" ? "block" : "none", borderBottom: "1px solid #f0f0f0" }}>
+                    <div style={{ overflowX: "auto", whiteSpace: "nowrap", paddingBottom: 4 }}>
+                        <Space size={8}>
+                            <Button
+                                size="small"
+                                type={selectedCategoryId === null ? "primary" : "text"}
+                                style={{
+                                    fontWeight: 600,
+                                    textTransform: "uppercase",
+                                    padding: "0 16px",
+                                    height: 32,
+                                    borderRadius: 16,
+                                    background: selectedCategoryId === null ? COLORS.primary : "transparent",
+                                    color: selectedCategoryId === null ? "#fff" : "#555"
+                                }}
+                                onClick={() => {
+                                    setSelectedCategoryId(null);
+                                    setCurrentPage(1);
+                                }}
+                            >
+                                Tất cả
+                            </Button>
+                            {categories.map((cat) => (
+                                <Button
+                                    key={cat.category_id}
+                                    size="small"
+                                    type={selectedCategoryId === cat.category_id ? "primary" : "text"}
+                                    style={{
+                                        fontWeight: 600,
+                                        textTransform: "uppercase",
+                                        padding: "0 16px",
+                                        height: 32,
+                                        borderRadius: 16,
+                                        background: selectedCategoryId === cat.category_id ? COLORS.primary : "transparent",
+                                        color: selectedCategoryId === cat.category_id ? "#fff" : "#555"
+                                    }}
+                                    onClick={() => {
+                                        setSelectedCategoryId(cat.category_id);
+                                        setCurrentPage(1);
+                                    }}
+                                >
+                                    {cat.category_name}
+                                </Button>
+                            ))}
+                        </Space>
+                    </div>
+                </div>
+
                 {/* Table Grid / Menu Grid */}
-                <div style={{ flex: 1, padding: 16, overflowY: "auto" }}>
+                <div style={{ flex: 1, padding: 16, overflowY: "auto", position: "relative" }}>
+                    {isLoadingProducts && activeTab === "menu" && (
+                        <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.5)", zIndex: 10 }}>
+                            <Spin size="large" />
+                        </div>
+                    )}
                     {activeTab === "rooms" ? (
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 16 }}>
+                        <div style={{
+                            display: "grid",
+                            gridTemplateColumns: viewDensity === "normal"
+                                ? "repeat(auto-fill, minmax(130px, 1fr))"
+                                : "repeat(auto-fill, minmax(85px, 1fr))",
+                            gap: viewDensity === "normal" ? 16 : 8,
+                            transition: "all 0.3s ease"
+                        }}>
                             {/* Takeaway Card */}
                             <Card
                                 hoverable
-                                styles={{ body: { height: 120, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 8 } }}
+                                styles={{ body: { height: viewDensity === "normal" ? 120 : 80, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 8 } }}
                                 style={{ borderRadius: 8, background: "#e6f7ff", border: `1px solid ${COLORS.occupiedBorder}` }}
                             >
-                                <Badge count={<ShoppingCartOutlined style={{ color: '#fff', fontSize: 12 }} />}>
-                                    <Avatar size={64} icon={<ShoppingOutlined />} style={{ backgroundColor: "#cfe9ff", color: COLORS.primary }} />
+                                <Badge count={<ShoppingCartOutlined style={{ color: '#fff', fontSize: viewDensity === "normal" ? 12 : 10 }} />}>
+                                    <Avatar size={viewDensity === "normal" ? 64 : 40} icon={<ShoppingOutlined />} style={{ backgroundColor: "#cfe9ff", color: COLORS.primary }} />
                                 </Badge>
-                                <Text strong style={{ color: "#3467cc", marginTop: 8 }}>Mang về</Text>
+                                <Text strong style={{ color: "#3467cc", marginTop: viewDensity === "normal" ? 8 : 4, fontSize: viewDensity === "normal" ? 14 : 11 }}>Mang về</Text>
                             </Card>
 
                             {displayedRooms.map((room) => {
@@ -428,7 +611,7 @@ export default function FnbSalesPage() {
                                             onClick={() => handleRoomClick(room)}
                                             styles={{
                                                 body: {
-                                                    height: 100,
+                                                    height: viewDensity === "normal" ? 100 : 70,
                                                     display: "flex",
                                                     flexDirection: "column",
                                                     alignItems: "center",
@@ -457,37 +640,41 @@ export default function FnbSalesPage() {
                                                 justifyContent: "center"
                                             }}>
                                                 {room.price && (
-                                                    <Text style={{ fontSize: 11, color: isSelected ? "#fff" : textColor }}>
+                                                    <Text style={{ fontSize: viewDensity === "normal" ? 11 : 9, color: isSelected ? "#fff" : textColor }}>
                                                         {room.price.toLocaleString()}
                                                         {room.time && <span style={{ marginLeft: 4 }}>{room.time}</span>}
                                                     </Text>
                                                 )}
                                                 {room.customers && (
-                                                    <Text style={{ fontSize: 10, color: isSelected ? "#fff" : textColor }}>
+                                                    <Text style={{ fontSize: viewDensity === "normal" ? 10 : 8, color: isSelected ? "#fff" : textColor }}>
                                                         {room.customers}
                                                     </Text>
                                                 )}
                                             </div>
                                         </Card>
-                                        <Text strong style={{ marginTop: 4, display: "block", fontSize: 12 }}>{room.label}</Text>
+                                        <Text strong style={{ marginTop: 4, display: "block", fontSize: viewDensity === "normal" ? 12 : 10 }}>{room.label}</Text>
                                     </div>
                                 );
                             })}
                         </div>
                     ) : (
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16 }}>
-                            {productCatalog.map((product) => (
+                            {products.map((product) => (
                                 <Card
-                                    key={product.id}
+                                    key={product.product_id}
                                     hoverable
-                                    onClick={() => handleAddProduct(product)}
+                                    onClick={() => handleAddProduct({
+                                        id: product.product_id,
+                                        name: product.product_name,
+                                        price: Number(product.selling_price)
+                                    })}
                                     styles={{ body: { padding: 12 } }}
                                 >
                                     <div style={{ height: 100, background: "#f5f5f5", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
                                         <ShoppingOutlined style={{ fontSize: 32, opacity: 0.2 }} />
                                     </div>
-                                    <Text strong style={{ display: "block" }}>{product.name}</Text>
-                                    <Text type="danger">{product.price.toLocaleString()} đ</Text>
+                                    <Text strong style={{ display: "block" }}>{product.product_name}</Text>
+                                    <Text type="danger">{Number(product.selling_price).toLocaleString()} đ</Text>
                                 </Card>
                             ))}
                         </div>
@@ -497,7 +684,16 @@ export default function FnbSalesPage() {
                 {/* Footer */}
                 <div style={{ padding: "8px 16px", borderTop: "1px solid #f0f0f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <Checkbox><Text style={{ fontSize: 12 }}>Mở thực đơn khi chọn bàn</Text></Checkbox>
-                    <Pagination size="small" total={49} pageSize={24} showSizeChanger={false} />
+                    <Pagination
+                        size="small"
+                        current={currentPage}
+                        total={activeTab === "menu" ? totalProducts : 49}
+                        pageSize={PAGE_SIZE}
+                        showSizeChanger={false}
+                        onChange={(page) => setCurrentPage(page)}
+                        style={{ display: activeTab === "menu" ? "block" : "none" }}
+                    />
+                    {activeTab === "rooms" && <Pagination size="small" total={49} pageSize={24} showSizeChanger={false} />}
                 </div>
             </div>
 
@@ -551,9 +747,9 @@ export default function FnbSalesPage() {
                 </div>
 
                 {/* Order Items List */}
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#fff" }}>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "flex-start", justifyContent: "flex-start", background: "#fff", overflowY: "auto" }}>
                     {currentOrder.length === 0 ? (
-                        <div style={{ textAlign: "center", opacity: 0.5 }}>
+                        <div style={{ textAlign: "center", opacity: 0.5, width: "100%", marginTop: 100 }}>
                             <ShoppingOutlined style={{ fontSize: 64, color: COLORS.primary, marginBottom: 16 }} />
                             <Title level={5}>Chưa có món trong đơn</Title>
                             <Text type="secondary">Vui lòng chọn món trong thực đơn bên trái màn hình</Text>
@@ -562,12 +758,98 @@ export default function FnbSalesPage() {
                         <Table
                             dataSource={currentOrder}
                             columns={[
-                                { title: "Tên món", dataIndex: ["product", "name"], key: "name" },
-                                { title: "SL", dataIndex: "quantity", key: "qty" },
-                                { title: "Giá", render: (_, record) => record.product.price.toLocaleString(), key: "price" },
+                                {
+                                    title: "Tên món",
+                                    dataIndex: ["product", "name"],
+                                    key: "name",
+                                    width: "30%",
+                                    render: (name) => <Text strong style={{ fontSize: 13 }}>{name}</Text>
+                                },
+                                {
+                                    title: "SL",
+                                    dataIndex: "quantity",
+                                    key: "qty",
+                                    width: "15%",
+                                    render: (qty, record) => (
+                                        <InputNumber
+                                            min={1}
+                                            value={qty}
+                                            onChange={(val) => updateOrderItem(record.uniqueId, "quantity", val || 1)}
+                                            size="small"
+                                            controls={false}
+                                            style={{
+                                                width: "100%",
+                                                border: 'none',
+                                                borderBottom: '1px solid #d9d9d9',
+                                                borderRadius: 0,
+                                                boxShadow: 'none'
+                                            }}
+                                        />
+                                    )
+                                },
+                                {
+                                    title: "Đơn giá",
+                                    dataIndex: ["product", "price"],
+                                    key: "price",
+                                    width: "25%",
+                                    render: (price, record) => (
+                                        <InputNumber
+                                            min={0}
+                                            value={price}
+                                            onChange={(val) => updateOrderItem(record.uniqueId, "price", val || 0)}
+                                            formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+                                            parser={(value) => value!.replace(/\$\s?|(,*)/g, "")}
+                                            size="small"
+                                            controls={false}
+                                            style={{
+                                                width: "100%",
+                                                border: 'none',
+                                                borderBottom: '1px solid #d9d9d9',
+                                                borderRadius: 0,
+                                                boxShadow: 'none',
+                                                fontSize: 13
+                                            }}
+                                        />
+                                    )
+                                },
+                                {
+                                    title: "Thành tiền",
+                                    key: "subtotal",
+                                    width: "25%",
+                                    render: (_, record) => (
+                                        <Text strong style={{ fontSize: 13 }}>
+                                            {(record.product.price * record.quantity).toLocaleString()}
+                                        </Text>
+                                    )
+                                },
+                                {
+                                    title: "",
+                                    key: "action",
+                                    width: "15%",
+                                    render: (_, record) => (
+                                        <Space size={0}>
+                                            {record.quantity > 1 && (
+                                                <Button
+                                                    type="text"
+                                                    icon={<ForkOutlined style={{ color: COLORS.primary }} />}
+                                                    onClick={() => splitOrderItem(record.uniqueId)}
+                                                    title="Tách dòng"
+                                                />
+                                            )}
+                                            <Button
+                                                type="text"
+                                                danger
+                                                icon={<DeleteOutlined />}
+                                                onClick={() => removeOrderItem(record.uniqueId)}
+                                            />
+                                        </Space>
+                                    )
+                                }
                             ]}
                             pagination={false}
                             style={{ width: "100%" }}
+                            size="small"
+                            rowKey={(record) => record.uniqueId}
                         />
                     )}
                 </div>
