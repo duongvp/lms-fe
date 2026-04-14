@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
     Button,
     Card,
@@ -20,6 +20,8 @@ import {
     Radio,
     Form,
     InputNumber,
+    Modal,
+    Select,
 } from "antd";
 import {
     PlusOutlined,
@@ -43,6 +45,7 @@ import {
     CloseOutlined,
     GroupOutlined,
     ForkOutlined,
+    MergeCellsOutlined,
 } from "@ant-design/icons";
 import SelectWithButton from "@/components/ui/Selects/SelectWithButton";
 import useProductSelect from "@/hooks/useProductSelect";
@@ -188,10 +191,11 @@ const COLORS = {
 
 export default function FnbSalesPage() {
     const [rooms, setRooms] = useState<Room[]>(initialRooms);
-    const [selectedRoomId, setSelectedRoomId] = useState<string | null>("r23"); // Mock selection
     const [roomStatusFilter, setRoomStatusFilter] = useState<RoomStatus | "all">("all");
     const [activeFloor, setActiveFloor] = useState("all");
     const [orders, setOrders] = useState<Record<string, OrderItem[]>>({});
+    const [openRoomIds, setOpenRoomIds] = useState<string[]>(["r23"]); // Default open tab
+    const [selectedRoomId, setSelectedRoomId] = useState<string | null>("r23");
     const [activeTab, setActiveTab] = useState<"rooms" | "menu">("rooms");
     const [viewDensity, setViewDensity] = useState<"normal" | "compact">("normal");
 
@@ -217,7 +221,10 @@ export default function FnbSalesPage() {
 
     const { setModal: setRoomModal } = useRoomStore();
 
-    React.useEffect(() => {
+    const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
+    const [roomsToMerge, setRoomsToMerge] = useState<string[]>([]);
+
+    useEffect(() => {
         const fetchCats = async () => {
             try {
                 const data = await getCategories();
@@ -229,7 +236,7 @@ export default function FnbSalesPage() {
         fetchCats();
     }, []);
 
-    React.useEffect(() => {
+    useEffect(() => {
         const fetchProds = async () => {
             if (warehouseId === -1) return;
             setIsLoadingProducts(true);
@@ -287,7 +294,138 @@ export default function FnbSalesPage() {
 
     const handleRoomClick = (room: Room) => {
         setSelectedRoomId(room.id);
+        if (!openRoomIds.includes(room.id)) {
+            setOpenRoomIds((prev) => [...prev, room.id]);
+        }
     };
+
+    const handleAddOrder = () => {
+        const newId = `temp-${Date.now()}`;
+        setOpenRoomIds((prev) => [...prev, newId]);
+        setSelectedRoomId(newId);
+    };
+
+    const tabItems = useMemo(() => {
+        const items = openRoomIds.map(id => {
+            const room = rooms.find(r => r.id === id);
+            const label = id.startsWith("temp-") ? "Đơn mới" : (room?.label || id);
+            return {
+                label,
+                key: id,
+                closable: true,
+            };
+        });
+
+        // Add trailing "+" tab
+        items.push({
+            label: <PlusOutlined style={{ fontSize: 16 }} />,
+            key: "add_tab",
+            closable: false,
+        } as any);
+
+        return items;
+    }, [openRoomIds, rooms]);
+
+    const handleAssignRoom = (newRoomId: string) => {
+        if (!selectedRoomId) return;
+
+        // If the room already has an open tab, we just switch to it (optionally merging)
+        if (openRoomIds.includes(newRoomId)) {
+            setSelectedRoomId(newRoomId);
+            // Optional: If current temp tab has items, we could merge them here
+            return;
+        }
+
+        const currentItems = orders[selectedRoomId] || [];
+
+        setOpenRoomIds((prev) => {
+            const next = prev.map(id => id === selectedRoomId ? newRoomId : id);
+            return next;
+        });
+
+        setOrders((prev) => {
+            const next = { ...prev };
+            // Move items to the new room key
+            if (currentItems.length > 0) {
+                next[newRoomId] = [...(next[newRoomId] || []), ...currentItems];
+            }
+            // If it was a temp tab, we can delete the temp key
+            if (selectedRoomId.startsWith("temp-")) {
+                delete next[selectedRoomId];
+            }
+            return next;
+        });
+
+        setSelectedRoomId(newRoomId);
+        message.success(`Đã gán đơn cho ${rooms.find(r => r.id === newRoomId)?.label}`);
+    };
+
+    const handleRemoveOrder = (id: string) => {
+        const room = rooms.find(r => r.id === id);
+        const label = id.startsWith("temp-") ? "Đơn mới" : (room?.label || id);
+
+        Modal.confirm({
+            title: `Đóng đơn hàng ${label}`,
+            content: 'Bạn có chắc chắn muốn đóng đơn hàng này? Nếu chưa lưu, dữ liệu sẽ bị mất.',
+            okText: 'Đồng ý',
+            cancelText: 'Bỏ qua',
+            okButtonProps: { danger: true },
+            onOk: () => {
+                setOpenRoomIds((prev) => {
+                    const next = prev.filter((item) => item !== id);
+                    if (id === selectedRoomId) {
+                        setSelectedRoomId(next.length > 0 ? next[next.length - 1] : null);
+                    }
+                    return next;
+                });
+                // Optional: clear order data if it's not saved
+                // setOrders((prev) => {
+                //     const next = { ...prev };
+                //     delete next[id];
+                //     return next;
+                // });
+            },
+        });
+    };
+    const handleMergeRooms = () => {
+        if (!selectedRoomId) return;
+        if (roomsToMerge.length === 0) {
+            message.warning("Vui lòng chọn bàn để ghép.");
+            return;
+        }
+
+        setOrders((prev) => {
+            const next = { ...prev };
+            const targetItems = [...(next[selectedRoomId] || [])];
+
+            roomsToMerge.forEach((id) => {
+                const sourceItems = next[id] || [];
+                sourceItems.forEach((sItem) => {
+                    const existing = targetItems.find(tItem => tItem.product.id === sItem.product.id);
+                    if (existing) {
+                        existing.quantity += sItem.quantity;
+                    } else {
+                        targetItems.push({
+                            ...sItem,
+                            uniqueId: `${sItem.product.id}-${Date.now()}-${Math.random()}`
+                        });
+                    }
+                });
+                // Clear source items
+                delete next[id];
+            });
+
+            return { ...prev, [selectedRoomId]: targetItems };
+        });
+
+        // Close tabs of merged tables
+        setOpenRoomIds((prev) => prev.filter(id => !roomsToMerge.includes(id)));
+
+        setIsMergeModalOpen(false);
+        setRoomsToMerge([]);
+        message.success("Đã ghép bàn thành công.");
+    };
+
 
     const handleAddProduct = (product: Product) => {
         if (!selectedRoomId) {
@@ -697,17 +835,31 @@ export default function FnbSalesPage() {
                 </div>
             </div>
 
-            {/* Right Panel - Order Management */}
-            <div style={{ flex: "1 1 40%", display: "flex", flexDirection: "column", background: "#fff" }}>
+            <div style={{ flex: "1 1 40%", minWidth: 450, maxWidth: 600, display: "flex", flexDirection: "column", background: "#fff", overflow: "hidden" }}>
                 {/* Header Utilities */}
-                <div style={{ padding: "8px 16px", borderBottom: "1px solid #f0f0f0", display: "flex", alignItems: "center", background: "#fff", height: 48 }}>
-                    <div style={{ display: "flex", alignItems: "center", marginRight: "auto" }}>
-                        <Tag color="white" style={{ border: "1px solid #d9d9d9", color: "#333", height: 32, display: "flex", alignItems: "center", padding: "0 12px", borderRadius: 16, cursor: "pointer" }}>
-                            202-14 <CloseOutlined style={{ marginLeft: 8, fontSize: 10 }} />
-                        </Tag>
-                        <PlusOutlined style={{ color: COLORS.primary, cursor: "pointer", fontSize: 18 }} />
+                <div style={{ padding: "12px 16px 0 16px", borderBottom: "1px solid #e5e7eb", background: "#f9fafb", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ width: 280, overflow: "hidden" }}>
+                        <Tabs
+                            type="editable-card"
+                            activeKey={selectedRoomId || undefined}
+                            onChange={(key) => {
+                                if (key === "add_tab") {
+                                    handleAddOrder();
+                                } else {
+                                    setSelectedRoomId(key);
+                                }
+                            }}
+                            onEdit={(targetKey, action) => {
+                                if (action === "remove") {
+                                    handleRemoveOrder(targetKey as string);
+                                }
+                            }}
+                            className="fnb-order-tabs"
+                            items={tabItems}
+                            hideAdd
+                        />
                     </div>
-                    <Space size="middle">
+                    <Space size="middle" style={{ marginLeft: "auto", paddingBottom: 8 }}>
                         <Badge dot><BellOutlined style={{ fontSize: 18 }} /></Badge>
                         <ReloadOutlined style={{ fontSize: 18 }} />
                         <PrinterOutlined style={{ fontSize: 18 }} />
@@ -724,8 +876,33 @@ export default function FnbSalesPage() {
                 <div style={{ padding: "12px 16px", background: "#fff", display: "flex", alignItems: "center", gap: 12 }}>
                     <Space style={{ color: COLORS.primary, flex: 1 }}>
                         <TableOutlined style={{ fontSize: 20 }} />
-                        <Text strong style={{ color: COLORS.primary, fontSize: 16 }}>{selectedRoom?.label ?? "Chưa chọn bàn"}</Text>
-                        <SwapOutlined style={{ marginLeft: 8 }} />
+                        <Select
+                            placeholder="Chọn bàn"
+                            variant="borderless"
+                            value={selectedRoomId?.startsWith("temp-") ? undefined : selectedRoomId}
+                            onChange={(val) => handleAssignRoom(val)}
+                            suffixIcon={null}
+                            dropdownStyle={{ minWidth: 200 }}
+                            style={{ padding: 0 }}
+                            className="fnb-room-assign-select"
+                        >
+                            {rooms.map(room => (
+                                <Select.Option key={room.id} value={room.id}>
+                                    <Badge status={room.status === "available" ? "success" : "processing"} />
+                                    <Text style={{ marginLeft: 8 }}>{room.label} {room.floor && `(Tầng ${room.floor})`}</Text>
+                                </Select.Option>
+                            ))}
+                        </Select>
+                        <Space size={4}>
+                            <SwapOutlined style={{ opacity: 0.5 }} />
+                            <Button
+                                type="text"
+                                icon={<MergeCellsOutlined style={{ color: COLORS.primary }} />}
+                                onClick={() => setIsMergeModalOpen(true)}
+                                size="small"
+                                title="Ghép bàn"
+                            />
+                        </Space>
                     </Space>
                     <SelectWithButton
                         options={customerOptions}
@@ -866,7 +1043,6 @@ export default function FnbSalesPage() {
                             <FieldTimeOutlined style={{ fontSize: 18 }} />
                             <EditOutlined style={{ fontSize: 18 }} />
                             <HistoryOutlined style={{ fontSize: 18 }} />
-                            <DeleteOutlined style={{ fontSize: 18, color: "#ff4d4f" }} />
                         </Space>
                         <div style={{ marginLeft: "auto", textAlign: "right" }}>
                             <Text type="secondary">Tổng tiền: </Text>
@@ -883,7 +1059,7 @@ export default function FnbSalesPage() {
                                 icon={<BellOutlined />}
                                 style={{ width: "100%", height: 50, borderRadius: 8 }}
                             >
-                                Thông báo (F10)
+                                Thông báo
                             </Button>
                         </Col>
                         <Col span={16}>
@@ -903,7 +1079,58 @@ export default function FnbSalesPage() {
             <CustomerModal />
             <RoomModal onAdd={handleAddRoom} />
 
-            <style jsx global>{`
+            <Modal
+                title="Ghép bàn"
+                open={isMergeModalOpen}
+                onOk={handleMergeRooms}
+                onCancel={() => {
+                    setIsMergeModalOpen(false);
+                    setRoomsToMerge([]);
+                }}
+                okText="Ghép bàn"
+                cancelText="Hủy"
+            >
+                <div style={{ padding: "16px 0" }}>
+                    <Text type="secondary" style={{ display: "block", marginBottom: 16 }}>
+                        Chọn các bàn bạn muốn ghép vào bàn hiện tại (**{selectedRoom?.label || "Đơn mới"}**).
+                    </Text>
+                    <Checkbox.Group
+                        style={{ width: "100%" }}
+                        value={roomsToMerge}
+                        onChange={(vals) => setRoomsToMerge(vals as string[])}
+                    >
+                        <Row gutter={[16, 16]}>
+                            {openRoomIds
+                                .filter(id => id !== selectedRoomId)
+                                .map(id => {
+                                    const room = rooms.find(r => r.id === id);
+                                    const label = id.startsWith("temp-") ? "Đơn mới" : (room?.label || id);
+                                    const orderExists = (orders[id]?.length || 0) > 0;
+                                    return (
+                                        <Col span={12} key={id}>
+                                            <Checkbox value={id} disabled={!orderExists}>
+                                                <Space direction="vertical" size={0}>
+                                                    <Text>{label}</Text>
+                                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                                        {orders[id]?.length || 0} món - {orders[id]?.reduce((sum, item) => sum + item.product.price * item.quantity, 0).toLocaleString()} đ
+                                                    </Text>
+                                                </Space>
+                                            </Checkbox>
+                                        </Col>
+                                    );
+                                })}
+                        </Row>
+                    </Checkbox.Group>
+                    {openRoomIds.length <= 1 && (
+                        <div style={{ textAlign: "center", padding: 20, color: "#999" }}>
+                            Chưa có bàn nào khác đang mở để ghép.
+                        </div>
+                    )}
+                </div>
+            </Modal>
+
+            <style dangerouslySetInnerHTML={{
+                __html: `
                 .fnb-search-select .ant-select-selector {
                     color: white !important;
                 }
@@ -917,7 +1144,87 @@ export default function FnbSalesPage() {
                     background: transparent !important;
                     color: white !important;
                 }
-            `}</style>
+                .fnb-order-tabs .ant-tabs-nav {
+                    margin-bottom: 0 !important;
+                }
+                .fnb-order-tabs .ant-tabs-nav::before {
+                    border-bottom: none !important;
+                }
+                .fnb-order-tabs .ant-tabs-tab {
+                    padding: 6px 14px !important;
+                    height: 34px !important;
+                    background: transparent !important;
+                    border: none !important;
+                    border-radius: 6px 6px 0 0 !important;
+                    margin: 0 4px !important;
+                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                    opacity: 0.6;
+                }
+                .fnb-order-tabs .ant-tabs-tab:hover {
+                    background: rgba(0, 0, 0, 0.04) !important;
+                    opacity: 0.8;
+                }
+                .fnb-order-tabs .ant-tabs-tab-active {
+                    background: #fff !important;
+                    opacity: 1;
+                    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1) !important;
+                    height: 38px !important;
+                    margin-top: -4px !important;
+                }
+                .fnb-order-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
+                    color: #111827 !important;
+                    font-weight: 600;
+                    font-size: 13px;
+                }
+                .fnb-order-tabs .ant-tabs-tab-btn {
+                    color: #4b5563 !important;
+                    font-size: 13px;
+                }
+                .fnb-order-tabs .ant-tabs-tab-remove {
+                    margin-left: 8px !important;
+                    margin-right: -4px !important;
+                    font-size: 10px !important;
+                    color: #9ca3af !important;
+                    padding: 4px !important;
+                    border-radius: 50%;
+                    transition: all 0.2s;
+                }
+                .fnb-order-tabs .ant-tabs-tab-remove:hover {
+                    background: rgba(0, 0, 0, 0.05) !important;
+                    color: #ef4444 !important;
+                }
+                .fnb-order-tabs .ant-tabs-tab-active .ant-tabs-tab-remove {
+                    color: #6b7280 !important;
+                }
+                .fnb-order-tabs .ant-tabs-ink-bar {
+                    display: none;
+                }
+                .fnb-order-tabs .ant-tabs-nav-more {
+                    padding: 0 10px !important;
+                    height: 34px !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    background: transparent !important;
+                    border-radius: 6px !important;
+                    transition: background 0.2s;
+                }
+                .fnb-order-tabs .ant-tabs-nav-more:hover {
+                    background: rgba(0, 0, 0, 0.04) !important;
+                }
+                .fnb-room-assign-select .ant-select-selection-item {
+                    color: ${COLORS.primary} !important;
+                    font-weight: 600 !important;
+                    font-size: 16px !important;
+                    padding-left: 0 !important;
+                }
+                .fnb-room-assign-select .ant-select-selection-placeholder {
+                    color: ${COLORS.primary} !important;
+                    opacity: 0.7;
+                    font-weight: 600;
+                    font-size: 16px;
+                    padding-left: 0 !important;
+                }
+            `}} />
         </div>
     );
 }
