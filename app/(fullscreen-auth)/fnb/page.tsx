@@ -66,6 +66,7 @@ import { CategoryApiResponse, getCategories } from "@/services/categoryService";
 import { getProductsByPage } from "@/services/productService";
 import { Spin } from "antd";
 import { useAuthStore } from "@/stores/authStore";
+import PaymentDrawer from "./components/PaymentDrawer";
 
 const { Text, Title } = Typography;
 
@@ -238,6 +239,39 @@ export default function FnbSalesPage() {
     const [modalMode, setModalMode] = useState<"merge" | "split">("merge");
     const [splitQuantities, setSplitQuantities] = useState<Record<string, number>>({});
     const [modalTargetTableType, setModalTargetTableType] = useState<"new" | "existing">("new");
+    const [orderStartTimes, setOrderStartTimes] = useState<Record<string, Date>>({});
+    const [currentTime, setCurrentTime] = useState(new Date());
+    const [isPaymentDrawerOpen, setIsPaymentDrawerOpen] = useState(false);
+
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const formatDuration = (start: Date, current: Date) => {
+        const diffMs = current.getTime() - start.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const hours = Math.floor(diffMins / 60);
+        const mins = diffMins % 60;
+        return `${hours}g${mins}p`;
+    };
+
+    const targetOrderSummary = useMemo(() => {
+        if (!modalTargetRoomId || modalMode !== 'merge') return [];
+        const items = orders[modalTargetRoomId] || [];
+        if (items.length === 0) return [];
+
+        const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
+        const totalAmount = items.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+
+        return [{
+            key: modalTargetRoomId,
+            customerName: "Khách lẻ",
+            orderCode: modalTargetRoomId.startsWith('temp-') ? "Đơn mới" : modalTargetRoomId.replace('r', 'HD-'),
+            totalQty,
+            totalAmount
+        }];
+    }, [orders, modalTargetRoomId, modalMode]);
 
     // Load autoOpenMenu from localStorage
     useEffect(() => {
@@ -387,6 +421,18 @@ export default function FnbSalesPage() {
             return next;
         });
 
+        // Transfer start time if it exists
+        if (orderStartTimes[selectedRoomId]) {
+            setOrderStartTimes(prev => {
+                const next = { ...prev };
+                next[newRoomId] = next[selectedRoomId];
+                if (selectedRoomId.startsWith("temp-")) {
+                    delete next[selectedRoomId];
+                }
+                return next;
+            });
+        }
+
         setSelectedRoomId(newRoomId);
         message.success(`Đã gán đơn cho ${rooms.find(r => r.id === newRoomId)?.label}`);
     };
@@ -418,18 +464,17 @@ export default function FnbSalesPage() {
             },
         });
     };
-    const handleMergeRooms = () => {
-        if (!selectedRoomId) return;
-        if (roomsToMerge.length === 0) {
+    const handleMergeRooms = (sourceIds: string[], targetId: string) => {
+        if (sourceIds.length === 0 || !targetId) {
             message.warning("Vui lòng chọn bàn để ghép.");
             return;
         }
 
         setOrders((prev) => {
             const next = { ...prev };
-            const targetItems = [...(next[selectedRoomId] || [])];
+            const targetItems = [...(next[targetId] || [])];
 
-            roomsToMerge.forEach((id) => {
+            sourceIds.forEach((id) => {
                 const sourceItems = next[id] || [];
                 sourceItems.forEach((sItem) => {
                     const existing = targetItems.find(tItem => tItem.product.id === sItem.product.id);
@@ -446,15 +491,51 @@ export default function FnbSalesPage() {
                 delete next[id];
             });
 
-            return { ...next, [selectedRoomId]: targetItems };
+            return { ...next, [targetId]: targetItems };
         });
 
         // Close tabs of merged tables
-        setOpenRoomIds((prev) => prev.filter(id => !roomsToMerge.includes(id)));
+        setOpenRoomIds((prev) => prev.filter(id => !sourceIds.includes(id)));
+
+        // If current selected room was a source, switch to target
+        if (sourceIds.includes(selectedRoomId!)) {
+            setSelectedRoomId(targetId);
+        }
 
         setIsMergeModalOpen(false);
         setRoomsToMerge([]);
         message.success("Đã ghép bàn thành công.");
+    };
+
+    const handlePayment = () => {
+        if (!selectedRoomId || currentOrder.length === 0) return;
+        setIsPaymentDrawerOpen(true);
+    };
+
+    const confirmPayment = () => {
+        if (!selectedRoomId) return;
+
+        setOrders(prev => {
+            const next = { ...prev };
+            delete next[selectedRoomId];
+            return next;
+        });
+
+        setOrderStartTimes(prev => {
+            const next = { ...prev };
+            delete next[selectedRoomId];
+            return next;
+        });
+
+        setRooms(prev => prev.map(room =>
+            room.id === selectedRoomId ? { ...room, status: 'available' as RoomStatus } : room
+        ));
+
+        setOpenRoomIds(prev => prev.filter(id => id !== selectedRoomId));
+        setSelectedRoomId(null);
+        setIsPaymentDrawerOpen(false);
+
+        message.success("Thanh toán thành công. Bàn đã được giải phóng.");
     };
 
     const handleSplitOrder = () => {
@@ -539,6 +620,14 @@ export default function FnbSalesPage() {
             }
             return { ...prev, [selectedRoomId]: items };
         });
+
+        // Set start time if it's the first item
+        if (!orderStartTimes[selectedRoomId]) {
+            setOrderStartTimes(prev => ({
+                ...prev,
+                [selectedRoomId]: new Date()
+            }));
+        }
         message.success(`Đã thêm ${product.name}`);
     };
 
@@ -815,8 +904,17 @@ export default function FnbSalesPage() {
 
                             {displayedRooms.map((room) => {
                                 const isSelected = selectedRoomId === room.id;
-                                const isOccupied = room.status === "occupied";
+                                const roomItems = orders[room.id] || [];
+                                const hasOrder = roomItems.length > 0;
+                                const isOccupied = room.status === "occupied" || hasOrder;
                                 const isReserved = room.status === "reserved";
+
+                                // Calculate dynamic price and time
+                                const totalPrice = roomItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+                                const startTime = orderStartTimes[room.id];
+                                const timeStr = startTime
+                                    ? formatDuration(startTime, currentTime)
+                                    : (room.time || "");
 
                                 let bg = COLORS.empty;
                                 let border = `1px solid ${COLORS.emptyBorder}`;
@@ -871,10 +969,10 @@ export default function FnbSalesPage() {
                                                 alignItems: "center",
                                                 justifyContent: "center"
                                             }}>
-                                                {room.price && (
+                                                {(totalPrice > 0 || room.price) && (
                                                     <Text style={{ fontSize: viewDensity === "normal" ? 11 : 9, color: isSelected ? "#fff" : textColor }}>
-                                                        {room.price.toLocaleString()}
-                                                        {room.time && <span style={{ marginLeft: 4 }}>{room.time}</span>}
+                                                        {(totalPrice > 0 ? totalPrice : room.price!).toLocaleString()}
+                                                        {timeStr && <span style={{ marginLeft: 4 }}>{timeStr}</span>}
                                                     </Text>
                                                 )}
                                                 {room.customers && (
@@ -1171,6 +1269,7 @@ export default function FnbSalesPage() {
                                 type="primary"
                                 size="large"
                                 icon={<ShoppingOutlined />}
+                                onClick={handlePayment}
                                 style={{ width: "100%", height: 50, borderRadius: 8, background: COLORS.primary, borderColor: COLORS.primary }}
                             >
                                 Yêu cầu thanh toán
@@ -1182,6 +1281,16 @@ export default function FnbSalesPage() {
             <ProductModal />
             <CustomerModal />
             <RoomModal onAdd={handleAddRoom} />
+            <PaymentDrawer
+                open={isPaymentDrawerOpen}
+                onClose={() => setIsPaymentDrawerOpen(false)}
+                onConfirm={confirmPayment}
+                roomLabel={selectedRoom?.label || "Đơn mới"}
+                floor={selectedRoom?.floor}
+                items={currentOrder}
+                totalAmount={totalAmount}
+                customerName={selectedCustomer?.customer_name}
+            />
 
             <Modal
                 title={
@@ -1201,8 +1310,8 @@ export default function FnbSalesPage() {
                 closeIcon={<CloseOutlined style={{ fontSize: 18 }} />}
             >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                    <Radio.Group 
-                        value={modalMode} 
+                    <Radio.Group
+                        value={modalMode}
                         onChange={e => {
                             setModalMode(e.target.value);
                             setSplitQuantities({});
@@ -1211,69 +1320,84 @@ export default function FnbSalesPage() {
                     >
                         <Space size={32}>
                             <Radio value="merge">
-                                <span style={{ fontSize: 16 }}>Ghép đơn</span>
+                                <span style={{ fontSize: 16, fontWeight: modalMode === 'merge' ? 600 : 400 }}>Ghép đơn</span>
                             </Radio>
                             <Radio value="split">
-                                <span style={{ fontSize: 16, fontWeight: 600 }}>Tách đơn</span>
+                                <span style={{ fontSize: 16, fontWeight: modalMode === 'split' ? 600 : 400 }}>Tách đơn</span>
                             </Radio>
                         </Space>
                     </Radio.Group>
 
-                    <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
-                            <Text strong style={{ fontSize: 16, whiteSpace: 'nowrap' }}>Ghép đến</Text>
-                            <Select
-                                value={modalTargetTableType}
-                                onChange={setModalTargetTableType}
-                                style={{ width: '100%', height: 40 }}
-                                options={[
-                                    { label: 'Tạo đơn mới', value: 'new' },
-                                    ...(modalTargetRoomId && (orders[modalTargetRoomId]?.length || 0) > 0 ? [
-                                        { label: 'Ghép vào đơn hiện tại', value: 'existing' }
-                                    ] : [])
-                                ]}
-                            />
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
-                            <Text strong style={{ fontSize: 16, whiteSpace: 'nowrap' }}>Chọn phòng/bàn</Text>
-                            <Select
-                                showSearch
-                                placeholder="Chọn phòng/bàn"
-                                value={modalTargetRoomId}
-                                onChange={(val) => {
-                                    setModalTargetRoomId(val);
-                                    // Default to existing if the room has an order, otherwise new
-                                    if ((orders[val]?.length || 0) > 0) {
-                                        setModalTargetTableType('existing');
-                                    } else {
-                                        setModalTargetTableType('new');
-                                    }
-                                }}
-                                style={{ width: '100%', height: 40 }}
-                                filterOption={(input, option) =>
-                                    (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                        <Text strong style={{ fontSize: 16, whiteSpace: 'nowrap' }}>Ghép đến</Text>
+                        <Select
+                            showSearch
+                            placeholder="Chọn phòng/bàn"
+                            value={modalTargetRoomId}
+                            onChange={(val) => {
+                                setModalTargetRoomId(val);
+                                if (val === "takeaway") {
+                                    setModalTargetTableType('new');
+                                } else if ((orders[val]?.length || 0) > 0) {
+                                    setModalTargetTableType('existing');
+                                } else {
+                                    setModalTargetTableType('new');
                                 }
-                                options={[
-                                    ...rooms
-                                        .filter(r => (orders[r.id]?.length || 0) > 0)
-                                        .map(r => ({ label: `${r.label} (Đang có đơn)`, value: r.id })),
-                                    ...rooms
-                                        .filter(r => (orders[r.id]?.length || 0) === 0)
-                                        .map(r => ({ label: r.label, value: r.id }))
-                                ]}
-                            />
-                        </div>
+                            }}
+                            style={{ width: 300, height: 40 }}
+                            filterOption={(input, option) =>
+                                (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
+                            }
+                            options={[
+                                { label: 'Chọn phòng/bàn', value: null, disabled: true },
+                                { label: 'Mang về', value: 'takeaway' },
+                                ...rooms
+                                    .filter(r => (orders[r.id]?.length || 0) > 0)
+                                    .map(r => ({ label: `${r.label} (Đang có đơn)`, value: r.id })),
+                                ...rooms
+                                    .filter(r => (orders[r.id]?.length || 0) === 0)
+                                    .map(r => ({ label: r.label, value: r.id }))
+                            ]}
+                            className="fnb-modal-target-select"
+                        />
                     </div>
 
                     <div style={{ border: '1px solid #f0f0f0', borderRadius: 12, overflow: 'hidden' }}>
                         <Table
-                            dataSource={currentOrder}
+                            dataSource={(modalMode === 'merge' ? targetOrderSummary : currentOrder) as any[]}
                             pagination={false}
                             size="middle"
-                            columns={[
-                                { 
-                                    title: <Text strong style={{ fontSize: 13 }}>Đồ ăn / Đồ uống</Text>, 
-                                    dataIndex: ['product', 'name'], 
+                            columns={modalMode === 'merge' ? [
+                                {
+                                    title: <Text strong style={{ fontSize: 13 }}>Khách hàng</Text>,
+                                    dataIndex: 'customerName',
+                                    key: 'customer',
+                                    render: (name) => <Text style={{ fontSize: 14 }}>{name}</Text>
+                                },
+                                {
+                                    title: <Text strong style={{ fontSize: 13 }}>Mã đơn</Text>,
+                                    dataIndex: 'orderCode',
+                                    key: 'code',
+                                    render: (code) => <Text style={{ fontSize: 14 }}>{code}</Text>
+                                },
+                                {
+                                    title: <Text strong style={{ fontSize: 13 }}>Số lượng hàng</Text>,
+                                    dataIndex: 'totalQty',
+                                    key: 'qty',
+                                    align: 'center',
+                                    render: (qty) => <Text style={{ fontSize: 14 }}>{qty}</Text>
+                                },
+                                {
+                                    title: <Text strong style={{ fontSize: 13 }}>Tổng tiền</Text>,
+                                    dataIndex: 'totalAmount',
+                                    key: 'amount',
+                                    align: 'right',
+                                    render: (amount) => <Text strong style={{ fontSize: 14 }}>{amount.toLocaleString()}</Text>
+                                }
+                            ] : [
+                                {
+                                    title: <Text strong style={{ fontSize: 13 }}>Đồ ăn / Đồ uống</Text>,
+                                    dataIndex: ['product', 'name'],
                                     key: 'name',
                                     render: (name, record, index) => (
                                         <Space align="start">
@@ -1287,24 +1411,24 @@ export default function FnbSalesPage() {
                                         </Space>
                                     )
                                 },
-                                { 
-                                    title: <Text type="secondary" style={{ fontSize: 12 }}>SL trên đơn gốc</Text>, 
-                                    dataIndex: 'quantity', 
-                                    key: 'original_qty', 
+                                {
+                                    title: <Text type="secondary" style={{ fontSize: 12 }}>SL trên đơn gốc</Text>,
+                                    dataIndex: 'quantity',
+                                    key: 'original_qty',
                                     align: 'center',
                                     width: 150,
                                     render: (val) => <Text style={{ fontSize: 16 }}>{val}</Text>
                                 },
-                                { 
-                                    title: modalMode === 'split' ? <Text type="secondary" style={{ fontSize: 12 }}>SL tách</Text> : null,
+                                {
+                                    title: <Text type="secondary" style={{ fontSize: 12 }}>SL tách</Text>,
                                     key: 'split_qty',
                                     align: 'right',
                                     width: 180,
-                                    render: (_, record) => modalMode === 'split' ? (
+                                    render: (_, record) => (
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16 }}>
-                                            <Button 
-                                                icon={<MinusCircleOutlined style={{ fontSize: 24, color: '#8c8c8c' }} />} 
-                                                type="text" 
+                                            <Button
+                                                icon={<MinusCircleOutlined style={{ fontSize: 24, color: '#8c8c8c' }} />}
+                                                type="text"
                                                 disabled={(splitQuantities[record.uniqueId] || 0) <= 0}
                                                 onClick={() => setSplitQuantities(prev => ({
                                                     ...prev,
@@ -1313,9 +1437,9 @@ export default function FnbSalesPage() {
                                                 style={{ border: 'none', padding: 0, height: 'auto', display: 'flex' }}
                                             />
                                             <Text strong style={{ fontSize: 20, minWidth: 20, textAlign: 'center' }}>{splitQuantities[record.uniqueId] || 0}</Text>
-                                            <Button 
-                                                icon={<PlusCircleOutlined style={{ fontSize: 24, color: '#8c8c8c' }} />} 
-                                                type="text" 
+                                            <Button
+                                                icon={<PlusCircleOutlined style={{ fontSize: 24, color: '#8c8c8c' }} />}
+                                                type="text"
                                                 disabled={(splitQuantities[record.uniqueId] || 0) >= record.quantity}
                                                 onClick={() => setSplitQuantities(prev => ({
                                                     ...prev,
@@ -1324,7 +1448,7 @@ export default function FnbSalesPage() {
                                                 style={{ border: 'none', padding: 0, height: 'auto', display: 'flex' }}
                                             />
                                         </div>
-                                    ) : null
+                                    )
                                 }
                             ]}
                             locale={{ emptyText: <div style={{ padding: '60px 0', color: '#999' }}>Bàn chưa có hóa đơn nào</div> }}
@@ -1332,25 +1456,24 @@ export default function FnbSalesPage() {
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 16, marginTop: 12 }}>
-                        <Button 
+                        <Button
                             type="primary"
                             icon={<CheckSquareFilled />}
                             onClick={() => {
                                 if (modalMode === 'merge') {
                                     if (selectedRoomId && modalTargetRoomId) {
-                                        setRoomsToMerge([modalTargetRoomId]);
-                                        handleMergeRooms();
+                                        handleMergeRooms([selectedRoomId], modalTargetRoomId);
                                         setIsTableActionModalOpen(false);
                                     }
                                 } else {
                                     handleSplitOrder();
                                 }
                             }}
-                            style={{ 
-                                height: 50, 
-                                padding: '0 32px', 
-                                borderRadius: 12, 
-                                background: '#006adc', 
+                            style={{
+                                height: 50,
+                                padding: '0 32px',
+                                borderRadius: 12,
+                                background: '#006adc',
                                 border: 'none',
                                 display: 'flex',
                                 alignItems: 'center',
@@ -1361,18 +1484,18 @@ export default function FnbSalesPage() {
                         >
                             Thực hiện
                         </Button>
-                        <Button 
+                        <Button
                             onClick={() => {
                                 setIsTableActionModalOpen(false);
                                 setSplitQuantities({});
                             }}
                             icon={<StopOutlined />}
-                            style={{ 
-                                height: 50, 
-                                padding: '0 32px', 
-                                borderRadius: 12, 
-                                background: '#8c9196', 
-                                color: '#fff', 
+                            style={{
+                                height: 50,
+                                padding: '0 32px',
+                                borderRadius: 12,
+                                background: '#8c9196',
+                                color: '#fff',
                                 border: 'none',
                                 display: 'flex',
                                 alignItems: 'center',
@@ -1481,6 +1604,13 @@ export default function FnbSalesPage() {
                     font-weight: 600;
                     font-size: 16px;
                     padding-left: 0 !important;
+                }
+                .fnb-modal-target-select .ant-select-selector {
+                    border-radius: 8px !important;
+                    border-color: #d9d9d9 !important;
+                }
+                .fnb-modal-target-select .ant-select-selection-placeholder {
+                    color: #bfbfbf !important;
                 }
             `}} />
         </div>
