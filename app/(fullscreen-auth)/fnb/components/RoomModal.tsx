@@ -1,33 +1,83 @@
 'use client';
-import React, { useEffect } from 'react';
-import { Modal, Form, Input, Select, Button, Row, Col } from 'antd';
+import React, { useEffect, useState } from 'react';
+import { Modal, Form, Input, Select, Button, Row, Col, message } from 'antd';
 import { SaveOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import useRoomStore from '@/stores/roomStore';
+import { getAllAreas, createTable, updateTable, AreaApiResponse } from '@/services/fnbService';
+import { ActionType } from '@/enums/action';
+import { useAuthStore } from '@/stores/authStore';
 
 interface RoomModalProps {
-    onAdd: (room: any) => void;
+    onSuccess: () => void;
 }
 
-const RoomModal: React.FC<RoomModalProps> = ({ onAdd }) => {
+const RoomModal: React.FC<RoomModalProps> = ({ onSuccess }) => {
     const { modal, resetModal } = useRoomStore();
+    const { warehouseId } = useAuthStore((state) => state.user);
     const [form] = Form.useForm();
+    const [areas, setAreas] = useState<AreaApiResponse[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        const fetchAreas = async () => {
+            try {
+                const data = await getAllAreas();
+                setAreas(data);
+            } catch (error) {
+                console.error("Failed to fetch areas", error);
+            }
+        };
+        if (modal.open) {
+            fetchAreas();
+        }
+    }, [modal.open]);
 
     useEffect(() => {
         if (modal.open && modal.room) {
-            form.setFieldsValue(modal.room);
+            form.setFieldsValue({
+                ...modal.room,
+                label: modal.room.label,
+                floor: modal.room.floor ? Number(modal.room.floor) : undefined, // Ensure floor is number for select
+            });
         } else {
             form.resetFields();
-            form.setFieldsValue({ status: 'available', floor: '1' });
+            form.setFieldsValue({ status: 'available' });
         }
     }, [modal.open, modal.room, form]);
 
-    const handleFinish = (values: any) => {
-        onAdd({
-            ...values,
-            id: modal.room?.id || `r${Date.now()}`,
-        });
-        resetModal();
-        form.resetFields();
+    const handleFinish = async (values: any) => {
+        if (warehouseId === -1) {
+            message.error("Vui lòng chọn chi nhánh trước");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const tableData = {
+                table_name: values.label,
+                area_id: Number(values.floor),
+                status: values.status,
+                capacity: values.customers ? Number(values.customers) : undefined,
+                warehouse_id: warehouseId
+            };
+
+            if (modal.type === ActionType.UPDATE && modal.room?.id) {
+                await updateTable(Number(modal.room.id), tableData);
+                message.success('Cập nhật bàn thành công');
+            } else {
+                await createTable(tableData);
+                message.success('Thêm bàn mới thành công');
+            }
+
+            onSuccess();
+            resetModal();
+            form.resetFields();
+        } catch (error) {
+            console.error("Failed to save room", error);
+            message.error('Lỗi khi lưu dữ liệu');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -37,10 +87,10 @@ const RoomModal: React.FC<RoomModalProps> = ({ onAdd }) => {
             onCancel={resetModal}
             onOk={() => form.submit()}
             footer={[
-                <Button key="back" onClick={resetModal} icon={<CloseCircleOutlined />}>
+                <Button key="back" onClick={resetModal} icon={<CloseCircleOutlined />} disabled={loading}>
                     Hủy
                 </Button>,
-                <Button key="submit" type="primary" onClick={() => form.submit()} icon={<SaveOutlined />}>
+                <Button key="submit" type="primary" onClick={() => form.submit()} icon={<SaveOutlined />} loading={loading}>
                     Lưu
                 </Button>,
             ]}
@@ -69,9 +119,11 @@ const RoomModal: React.FC<RoomModalProps> = ({ onAdd }) => {
                             rules={[{ required: true, message: 'Vui lòng chọn tầng' }]}
                         >
                             <Select placeholder="Chọn tầng">
-                                <Select.Option value="1">Tầng 1</Select.Option>
-                                <Select.Option value="2">Tầng 2</Select.Option>
-                                <Select.Option value="5">Tầng 5</Select.Option>
+                                {areas.map(area => (
+                                    <Select.Option key={area.area_id} value={area.area_id}>
+                                        {area.area_name}
+                                    </Select.Option>
+                                ))}
                                 <Select.Option value="takeaway">Mang về</Select.Option>
                             </Select>
                         </Form.Item>
@@ -87,18 +139,6 @@ const RoomModal: React.FC<RoomModalProps> = ({ onAdd }) => {
                                 <Select.Option value="occupied">Đang sử dụng</Select.Option>
                                 <Select.Option value="reserved">Đã đặt trước</Select.Option>
                             </Select>
-                        </Form.Item>
-                    </Col>
-                </Row>
-                <Row gutter={16}>
-                    <Col span={12}>
-                        <Form.Item name="price" label="Giá (nếu có)">
-                            <Input type="number" placeholder="0" suffix="đ" />
-                        </Form.Item>
-                    </Col>
-                    <Col span={12}>
-                        <Form.Item name="customers" label="Số khách">
-                            <Input type="number" placeholder="0" />
                         </Form.Item>
                     </Col>
                 </Row>

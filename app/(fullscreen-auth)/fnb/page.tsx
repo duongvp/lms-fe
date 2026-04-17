@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import {
     Button,
     Card,
@@ -8,7 +8,6 @@ import {
     message,
     Row,
     Space,
-    Table,
     Typography,
     Tabs,
     Badge,
@@ -16,25 +15,21 @@ import {
     Pagination,
     Avatar,
     Divider,
-    Tag,
     Radio,
     Form,
-    InputNumber,
     Modal,
     Select,
+    Grid,
+    Drawer,
 } from "antd";
 import {
     PlusOutlined,
-    DeleteOutlined,
     ShoppingCartOutlined,
     SearchOutlined,
-    ThunderboltOutlined,
     TableOutlined,
     AppstoreOutlined,
     BellOutlined,
     ReloadOutlined,
-    PrinterOutlined,
-    StarOutlined,
     UserOutlined,
     MenuOutlined,
     ShoppingOutlined,
@@ -44,12 +39,9 @@ import {
     HistoryOutlined,
     CloseOutlined,
     GroupOutlined,
-    ForkOutlined,
     MergeCellsOutlined,
-    CheckSquareFilled,
-    StopOutlined,
-    MinusCircleOutlined,
-    PlusCircleOutlined,
+    RollbackOutlined,
+    CarryOutOutlined,
 } from "@ant-design/icons";
 import SelectWithButton from "@/components/ui/Selects/SelectWithButton";
 import useProductSelect from "@/hooks/useProductSelect";
@@ -62,155 +54,52 @@ import useCustomerStore from "@/stores/customerStore";
 import CustomerModal from "@/app/(admin)/partners/customers/components/Modal/CustomerModal";
 import useRoomStore from "@/stores/roomStore";
 import RoomModal from "./components/RoomModal";
+import TableActionModal from "./components/TableActionModal";
+import RoomGrid from "./components/LeftPanel/RoomGrid";
+import MenuGrid from "./components/LeftPanel/MenuGrid";
+import OrderItemsTable from "./components/RightPanel/OrderItemsTable";
+import { COLORS } from "./constants";
+import { formatDuration, playTingSound } from "./utils";
+import { Room, RoomStatus, OrderItem, Product } from "./types";
 import { CategoryApiResponse, getCategories } from "@/services/categoryService";
 import { getProductsByPage } from "@/services/productService";
 import { Spin } from "antd";
 import { useAuthStore } from "@/stores/authStore";
 import PaymentDrawer from "./components/PaymentDrawer";
+import OrderNoteModal from "./components/OrderNoteModal";
+import KitchenHistoryDrawer from "./components/KitchenHistoryDrawer";
+import SettingsDrawer from "./components/SettingsDrawer";
+import ReturnProductModal from "./components/ReturnProductModal";
+import { getAllAreas, getAllTables, AreaApiResponse, TableApiResponse } from "@/services/fnbService";
+import { useFnbSocket } from "@/hooks/useFnbSocket";
 
 const { Text, Title } = Typography;
 
-type RoomStatus = "available" | "occupied" | "reserved";
 
-type Room = {
-    id: string;
-    label: string;
-    status: RoomStatus;
-    price?: number;
-    time?: string;
-    customers?: number;
-    floor: string;
-};
 
-type Product = {
-    id: number;
-    name: string;
-    price: number;
-    category_id?: number;
-    category_name?: string;
-};
-
-type OrderItem = {
-    uniqueId: string;
-    product: Product;
-    quantity: number;
-};
-
-const initialRooms: Room[] = [
-    ...Array.from({ length: 9 }, (_, i) => ({
-        id: `r${i + 1}`,
-        label: `Bàn ${i + 1}`,
-        status: "available" as RoomStatus,
-        floor: "1",
-    })),
-    {
-        id: "r10",
-        label: "Bàn 10",
-        status: "occupied",
-        price: 80000,
-        time: "384g39p",
-        customers: 3,
-        floor: "1",
-    },
-    {
-        id: "r11",
-        label: "Bàn 11",
-        status: "reserved",
-        price: 943000,
-        time: "33-1",
-        customers: 1,
-        floor: "2",
-    },
-    {
-        id: "r12",
-        label: "Bàn 12",
-        status: "occupied",
-        price: 100000,
-        time: "4-1",
-        customers: 1,
-        floor: "2",
-    },
-    {
-        id: "r13",
-        label: "Bàn 13",
-        status: "reserved",
-        price: 247500,
-        time: "9-1",
-        customers: 1,
-        floor: "2",
-    },
-    { id: "r14", label: "Bàn 14", status: "available", floor: "2" },
-    {
-        id: "r15",
-        label: "Bàn 15",
-        status: "occupied",
-        price: 10000,
-        time: "112g5p",
-        customers: 1,
-        floor: "2",
-    },
-    {
-        id: "r16",
-        label: "Bàn 16",
-        status: "reserved",
-        price: 3334000,
-        time: "135-1",
-        customers: 1,
-        floor: "2",
-    },
-    {
-        id: "r17",
-        label: "Bàn 17",
-        status: "occupied",
-        price: 922500,
-        time: "763g0p",
-        customers: 1,
-        floor: "2",
-    },
-    { id: "r18", label: "Bàn 18", status: "occupied", price: 405000, time: "8-1", floor: "2" },
-    { id: "r19", label: "Bàn 19", status: "occupied", price: 220000, time: "10-1", floor: "2" },
-    { id: "r20", label: "Phòng 3D - 01", status: "occupied", price: 80000, time: "642g37p", floor: "5" },
-    { id: "r21", label: "Phòng 3D - 02", status: "available", floor: "5" },
-    { id: "r22", label: "Phòng 3D VIP", status: "available", floor: "5" },
-    { id: "r23", label: "Phòng 3D VIP 2", status: "occupied", floor: "5" },
-    { id: "r24", label: "Bàn 21", status: "available", floor: "5" },
-    { id: "r25", label: "Bàn 22", status: "available", floor: "5" },
-    { id: "r26", label: "Bàn 23", status: "available", floor: "5" },
-    { id: "r27", label: "Bàn 24", status: "occupied", price: 355000, time: "8-1", floor: "5" },
-];
-
-// Removed hardcoded productCatalog
 const EMPTY_ARRAY: any[] = [];
 const PAGE_SIZE = 24;
 
-const COLORS = {
-    primary: "#3467cc",
-    occupied: "#e6f7ff",
-    occupiedText: "#3467cc",
-    occupiedBorder: "#91d5ff",
-    reserved: "#fff7e6",
-    reservedText: "#fa8c16",
-    reservedBorder: "#ffd591",
-    selected: "#3467cc",
-    empty: "#ffffff",
-    emptyBorder: "#d9d9d9",
-};
-
 export default function FnbSalesPage() {
-    const [rooms, setRooms] = useState<Room[]>(initialRooms);
+    const [rooms, setRooms] = useState<Room[]>([]);
+    const [areas, setAreas] = useState<AreaApiResponse[]>([]);
     const [roomStatusFilter, setRoomStatusFilter] = useState<RoomStatus | "all">("all");
     const [activeFloor, setActiveFloor] = useState("all");
     const [orders, setOrders] = useState<Record<string, OrderItem[]>>({});
-    const [openRoomIds, setOpenRoomIds] = useState<string[]>(["r23"]); // Default open tab
-    const [selectedRoomId, setSelectedRoomId] = useState<string | null>("r23");
+    const [openRoomIds, setOpenRoomIds] = useState<string[]>([]); // Default open tab
+    const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<"rooms" | "menu">("rooms");
     const [viewDensity, setViewDensity] = useState<"normal" | "compact">("normal");
 
-    const { warehouseId } = useAuthStore((state) => state.user);
+    const { warehouseId, userId, username: staffName } = useAuthStore((state) => state.user);
 
     const [searchTerm, setSearchTerm] = useState("");
     const { setModal } = useProductStore();
     const { options, handleScroll } = useProductSelect(searchTerm, false, true, EMPTY_ARRAY);
+
+    const screens = Grid.useBreakpoint();
+    const isMobile = !screens.lg && screens.xs !== undefined ? true : false; // Treat < lg as mobile for better POS experience
+    const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
     const [customerSearchTerm, setCustomerSearchTerm] = useState("");
     const [form] = Form.useForm();
@@ -243,18 +132,17 @@ export default function FnbSalesPage() {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [isPaymentDrawerOpen, setIsPaymentDrawerOpen] = useState(false);
 
+    const [orderNotes, setOrderNotes] = useState<Record<string, string>>({});
+    const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
+    const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
+    const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
+
+    const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 60000);
         return () => clearInterval(timer);
     }, []);
-
-    const formatDuration = (start: Date, current: Date) => {
-        const diffMs = current.getTime() - start.getTime();
-        const diffMins = Math.floor(diffMs / 60000);
-        const hours = Math.floor(diffMins / 60);
-        const mins = diffMins % 60;
-        return `${hours}g${mins}p`;
-    };
 
     const targetOrderSummary = useMemo(() => {
         if (!modalTargetRoomId || modalMode !== 'merge') return [];
@@ -285,6 +173,74 @@ export default function FnbSalesPage() {
     useEffect(() => {
         localStorage.setItem("fnb_auto_open_menu", String(autoOpenMenu));
     }, [autoOpenMenu]);
+
+    const fetchAreasAndTables = async () => {
+        try {
+            const [areasData, tablesData] = await Promise.all([
+                getAllAreas(),
+                getAllTables()
+            ]);
+
+            setAreas(areasData);
+
+            const mappedRooms: Room[] = tablesData.map(table => ({
+                id: String(table.table_id),
+                label: table.table_name,
+                status: table.status as RoomStatus,
+                floor: String(table.area_id)
+            }));
+
+            setRooms(mappedRooms);
+        } catch (error) {
+            console.error("Failed to fetch areas and tables", error);
+            message.error("Lỗi khi tải dữ liệu phòng bàn");
+        }
+    };
+
+    useEffect(() => {
+        fetchAreasAndTables();
+    }, []);
+
+    // ─── Socket: callbacks phải dùng useCallback để tránh re-create socket ───
+    const handleSocketTableStatusChange = useCallback(({ tableId, status }: { tableId: string | number; status: string }) => {
+        setRooms(prev => prev.map(r =>
+            r.id === String(tableId)
+                ? { ...r, status: status === 'in_use' ? 'occupied' as RoomStatus : 'available' as RoomStatus }
+                : r
+        ));
+    }, []);
+
+    const handleSocketOrderUpdated = useCallback(({ tableId, orderItems }: { tableId: string | number; orderItems: OrderItem[] }) => {
+        // Silent sync — không show message để tránh spam
+        setOrders(prev => ({ ...prev, [String(tableId)]: orderItems }));
+    }, []);
+
+    // ordersRef để snapshot_requested có thể truy cập state mới nhất mà không cần re-create
+    const ordersRef = React.useRef(orders);
+    useEffect(() => { ordersRef.current = orders; }, [orders]);
+
+    // syncOrderRef để onSnapshotRequested có thể gọi syncOrder mà không tạo circular dependency
+    const syncOrderRef = React.useRef<((tableId: string | number, items: any[]) => void) | null>(null);
+
+    const { joinTable, leaveTable, syncOrder, broadcastTableStatus } = useFnbSocket({
+        warehouseId,
+        userId: userId,
+        userName: staffName || 'Nhân viên',
+        onTableStatusChange: handleSocketTableStatusChange,
+        onOrderUpdated: handleSocketOrderUpdated,
+        onSnapshotRequested: useCallback(({ tableId }: { tableId: string | number }) => {
+            const currentItems = ordersRef.current[String(tableId)];
+            if (currentItems?.length > 0) {
+                // Dùng ref để tránh circular dependency với syncOrder
+                syncOrderRef.current?.(tableId, currentItems);
+            }
+        }, []),
+    });
+
+    // Cập nhật ref sau khi syncOrder đã được khai báo
+    useEffect(() => {
+        syncOrderRef.current = syncOrder;
+    }, [syncOrder]);
 
     useEffect(() => {
         const fetchCats = async () => {
@@ -347,9 +303,8 @@ export default function FnbSalesPage() {
         return filtered;
     }, [rooms, roomStatusFilter, activeFloor]);
 
-    const handleAddRoom = (room: Room) => {
-        setRooms((prev) => [...prev, room]);
-        message.success(`Đã thêm ${room.label}`);
+    const handleAddRoom = () => {
+        fetchAreasAndTables();
     };
 
     const currentOrder = selectedRoomId ? orders[selectedRoomId] ?? [] : [];
@@ -362,6 +317,8 @@ export default function FnbSalesPage() {
         if (autoOpenMenu) {
             setActiveTab("menu");
         }
+        // Socket: vào room bàn, tự động yêu cầu snapshot giỏ hàng từ nhân viên khác
+        joinTable(room.id);
     };
 
     const handleAddOrder = () => {
@@ -448,6 +405,10 @@ export default function FnbSalesPage() {
             cancelText: 'Bỏ qua',
             okButtonProps: { danger: true },
             onOk: () => {
+                // Socket: rời room bàn trước khi đóng tab
+                if (!id.startsWith('temp-')) {
+                    leaveTable(id);
+                }
                 setOpenRoomIds((prev) => {
                     const next = prev.filter((item) => item !== id);
                     if (id === selectedRoomId) {
@@ -455,12 +416,6 @@ export default function FnbSalesPage() {
                     }
                     return next;
                 });
-                // Optional: clear order data if it's not saved
-                // setOrders((prev) => {
-                //     const next = { ...prev };
-                //     delete next[id];
-                //     return next;
-                // });
             },
         });
     };
@@ -531,6 +486,10 @@ export default function FnbSalesPage() {
             room.id === selectedRoomId ? { ...room, status: 'available' as RoomStatus } : room
         ));
 
+        // Socket: broadcast bàn trống cho toàn bộ nhân viên trong warehouse
+        broadcastTableStatus(selectedRoomId, 'empty');
+        leaveTable(selectedRoomId);
+
         setOpenRoomIds(prev => prev.filter(id => id !== selectedRoomId));
         setSelectedRoomId(null);
         setIsPaymentDrawerOpen(false);
@@ -596,9 +555,12 @@ export default function FnbSalesPage() {
 
         setIsTableActionModalOpen(false);
         setSplitQuantities({});
+        playTingSound();
         message.success("Đã tách đơn thành công.");
     };
 
+
+    const syncOrderTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const handleAddProduct = (product: Product) => {
         if (!selectedRoomId) {
@@ -606,6 +568,7 @@ export default function FnbSalesPage() {
             return;
         }
 
+        let updatedItems: OrderItem[] = [];
         setOrders((prev) => {
             const items = prev[selectedRoomId] ? [...prev[selectedRoomId]] : [];
             const existing = items.find((item) => item.product.id === product.id);
@@ -618,6 +581,7 @@ export default function FnbSalesPage() {
                     quantity: 1
                 });
             }
+            updatedItems = items;
             return { ...prev, [selectedRoomId]: items };
         });
 
@@ -628,7 +592,45 @@ export default function FnbSalesPage() {
                 [selectedRoomId]: new Date()
             }));
         }
+
+        // Socket: broadcast thêm món cho nhân viên khác cùng bàn
+        if (!selectedRoomId.startsWith('temp-')) {
+            syncOrder(selectedRoomId, updatedItems);
+        }
+
         message.success(`Đã thêm ${product.name}`);
+    };
+
+    const handleReturnItems = (returnItems: Record<string, number>) => {
+        if (!selectedRoomId) return;
+
+        setOrders(prev => {
+            const next = { ...prev };
+            const currentItems = [...(next[selectedRoomId] || [])];
+
+            const updatedItems = currentItems.map(item => {
+                const returnQty = returnItems[item.uniqueId] || 0;
+                if (returnQty > 0) {
+                    return { ...item, quantity: Math.max(0, item.quantity - returnQty) };
+                }
+                return item;
+            }).filter(item => item.quantity > 0);
+
+            next[selectedRoomId] = updatedItems;
+
+            // If no items left, free the room
+            if (updatedItems.length === 0) {
+                setRooms(prevRooms => prevRooms.map(room =>
+                    room.id === selectedRoomId ? { ...room, status: 'available' as RoomStatus, price: undefined, time: undefined, customers: undefined } : room
+                ));
+                setOpenRoomIds(prevOpen => prevOpen.filter(id => id !== selectedRoomId));
+                setSelectedRoomId(null);
+            }
+
+            return next;
+        });
+
+        message.success("Đã hoàn trả món thành công.");
     };
 
     const handleSelectProduct = (value: string | number) => {
@@ -659,9 +661,10 @@ export default function FnbSalesPage() {
     const updateOrderItem = (uniqueId: string, field: "quantity" | "price", value: number) => {
         if (!selectedRoomId) return;
 
+        let updatedItems: OrderItem[] = [];
         setOrders((prev) => {
             const items = prev[selectedRoomId] ? [...prev[selectedRoomId]] : [];
-            const updatedItems = items.map((item) => {
+            updatedItems = items.map((item) => {
                 if (item.uniqueId === uniqueId) {
                     if (field === "quantity") {
                         return { ...item, quantity: value };
@@ -673,16 +676,30 @@ export default function FnbSalesPage() {
             });
             return { ...prev, [selectedRoomId]: updatedItems };
         });
+
+        // Socket: debounce 600ms để tránh spam khi gõ nhanh
+        if (!selectedRoomId.startsWith('temp-')) {
+            if (syncOrderTimerRef.current) clearTimeout(syncOrderTimerRef.current);
+            syncOrderTimerRef.current = setTimeout(() => {
+                syncOrder(selectedRoomId, updatedItems);
+            }, 600);
+        }
     };
 
     const removeOrderItem = (uniqueId: string) => {
         if (!selectedRoomId) return;
 
+        let filteredItems: OrderItem[] = [];
         setOrders((prev) => {
             const items = prev[selectedRoomId] ? [...prev[selectedRoomId]] : [];
-            const filteredItems = items.filter((item) => item.uniqueId !== uniqueId);
+            filteredItems = items.filter((item) => item.uniqueId !== uniqueId);
             return { ...prev, [selectedRoomId]: filteredItems };
         });
+
+        // Socket: broadcast xóa món cho nhân viên khác cùng bàn
+        if (!selectedRoomId.startsWith('temp-')) {
+            syncOrder(selectedRoomId, filteredItems);
+        }
     };
 
     const splitOrderItem = (uniqueId: string) => {
@@ -709,10 +726,185 @@ export default function FnbSalesPage() {
         });
     };
 
+    const rightPanelContent = (
+        <div style={{ flex: isMobile ? "auto" : "1 1 45%", minWidth: isMobile ? "100%" : 500, maxWidth: isMobile ? "100%" : 700, display: "flex", flexDirection: "column", background: "#fff", overflow: "hidden", height: isMobile ? "100%" : 'auto' }}>
+            {/* Header Utilities */}
+            <div style={{ padding: "12px 16px 0 16px", borderBottom: "1px solid #e5e7eb", background: "#f9fafb", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ width: isMobile ? 220 : 480, overflow: "hidden" }}>
+                    <Tabs
+                        type="editable-card"
+                        activeKey={selectedRoomId || undefined}
+                        onChange={(key) => {
+                            if (key === "add_tab") {
+                                handleAddOrder();
+                            } else {
+                                setSelectedRoomId(key);
+                            }
+                        }}
+                        onEdit={(targetKey, action) => {
+                            if (action === "remove") {
+                                handleRemoveOrder(targetKey as string);
+                            }
+                        }}
+                        className="fnb-order-tabs"
+                        items={tabItems}
+                        hideAdd
+                    />
+                </div>
+                <Space size="middle" style={{ marginLeft: "auto", paddingBottom: 8 }}>
+                    <Badge dot><BellOutlined style={{ fontSize: 18 }} /></Badge>
+                    <ReloadOutlined
+                        style={{ fontSize: 18, cursor: 'pointer' }}
+                        onClick={() => window.location.reload()}
+                    />
+                    <Space>
+                        <Text strong>AsiaGolfVit</Text>
+                        <MenuOutlined
+                            style={{ fontSize: 18, cursor: 'pointer' }}
+                            onClick={() => setIsSettingsDrawerOpen(true)}
+                        />
+                    </Space>
+                </Space>
+            </div>
+
+            {/* Selected Table Sub-header */}
+            <div style={{ padding: "12px 16px", background: "#fff", display: "flex", alignItems: "center", gap: 12, flexWrap: isMobile ? "wrap" : "nowrap" }}>
+                <Space style={{ color: COLORS.primary, flex: 1, minWidth: isMobile ? "100%" : "auto" }}>
+                    <TableOutlined style={{ fontSize: 20 }} />
+                    <Select
+                        placeholder="Chọn bàn"
+                        variant="borderless"
+                        value={selectedRoomId?.startsWith("temp-") ? undefined : selectedRoomId}
+                        onChange={(val) => handleAssignRoom(val)}
+                        suffixIcon={null}
+                        dropdownStyle={{ minWidth: 200 }}
+                        style={{ padding: 0 }}
+                        className="fnb-room-assign-select"
+                    >
+                        {rooms.map(room => (
+                            <Select.Option key={room.id} value={room.id}>
+                                <Badge status={room.status === "available" ? "success" : "processing"} />
+                                <Text style={{ marginLeft: 8 }}>{room.label} {room.floor && `(Tầng ${room.floor})`}</Text>
+                            </Select.Option>
+                        ))}
+                    </Select>
+                </Space>
+                <SelectWithButton
+                    options={customerOptions}
+                    placeholder="Tìm khách hàng (F4)"
+                    onSearch={setCustomerSearchTerm}
+                    onSelect={handleSelectCustomer}
+                    onPopupScroll={handleCustomerScroll}
+                    onAddClick={() => setCustomerModal({ open: true, type: ActionType.CREATE, customer: null })}
+                    value={selectedCustomer?.customer_id}
+                    style={{ width: isMobile ? "100%" : 350 }}
+                    styleWrapSelect={{
+                        border: "none",
+                        background: "#f5f5f5",
+                        borderRadius: 20,
+                        padding: "0 8px",
+                    }}
+                    className="fnb-customer-select"
+                />
+            </div>
+
+            {/* Order Items List */}
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "flex-start", justifyContent: "flex-start", background: "#fff", overflowY: "auto" }}>
+                <OrderItemsTable
+                    currentOrder={currentOrder}
+                    updateOrderItem={updateOrderItem}
+                    splitOrderItem={splitOrderItem}
+                    removeOrderItem={removeOrderItem}
+                />
+            </div>
+
+            {/* Bottom Actions */}
+            <div style={{ padding: 16, borderTop: "1px solid #f0f0f0" }}>
+                <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
+                    <Space size={16}>
+                        <Space size={12}>
+                            <Avatar size={32} icon={<UserOutlined />} style={{ background: '#e6f7ff', color: '#1890ff' }} />
+                            <Text strong style={{ fontSize: 13 }}>admin</Text>
+                        </Space>
+                        <Space size={16}>
+                            <EditOutlined
+                                style={{ fontSize: 18, cursor: 'pointer', color: orderNotes[selectedRoomId || ''] ? COLORS.primary : 'inherit' }}
+                                onClick={() => setIsNoteModalOpen(true)}
+                                title="Ghi chú đơn hàng"
+                            />
+                            <HistoryOutlined
+                                style={{ fontSize: 18, cursor: 'pointer' }}
+                                onClick={() => setIsHistoryDrawerOpen(true)}
+                                title="Lịch sử báo bếp"
+                            />
+                            <CarryOutOutlined
+                                style={{ fontSize: 18, cursor: 'pointer' }}
+                                title="Kiểm đồ"
+                            />
+                            <RollbackOutlined
+                                style={{ fontSize: 18, cursor: 'pointer' }}
+                                title="Trả món"
+                                onClick={() => {
+                                    if (!selectedRoomId || !currentOrder.length) {
+                                        message.warning("Bàn hiện tại không có món để trả.");
+                                        return;
+                                    }
+                                    setIsReturnModalOpen(true);
+                                }}
+                            />
+                            <Space size={8}>
+                                <Button
+                                    type="text"
+                                    icon={<MergeCellsOutlined style={{ color: COLORS.primary }} />}
+                                    onClick={() => setIsTableActionModalOpen(true)}
+                                    size="small"
+                                    title="Tách ghép bàn"
+                                    style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                                >
+                                    <span style={{ fontWeight: 500 }}>Tách ghép</span>
+                                </Button>
+                            </Space>
+                        </Space>
+                    </Space>
+                    <div style={{ marginLeft: "auto", textAlign: "right" }}>
+                        <Text type="secondary">Tổng tiền: </Text>
+                        <Badge count={currentOrder.length} offset={[10, 0]} color={COLORS.primary}>
+                            <Text strong style={{ fontSize: 20 }}>{totalAmount.toLocaleString()} đ</Text>
+                        </Badge>
+                    </div>
+                </div>
+
+                <Row gutter={12}>
+                    <Col span={8}>
+                        <Button
+                            size="large"
+                            icon={<BellOutlined />}
+                            onClick={playTingSound}
+                            style={{ width: "100%", height: 50, borderRadius: 8 }}
+                        >
+                            Thông báo
+                        </Button>
+                    </Col>
+                    <Col span={16}>
+                        <Button
+                            type="primary"
+                            size="large"
+                            icon={<ShoppingOutlined />}
+                            onClick={handlePayment}
+                            style={{ width: "100%", height: 50, borderRadius: 8, background: COLORS.primary, borderColor: COLORS.primary }}
+                        >
+                            Yêu cầu thanh toán
+                        </Button>
+                    </Col>
+                </Row>
+            </div>
+        </div>
+    );
+
     return (
         <div style={{ display: "flex", height: "100vh", background: "#f0f2f5", overflow: "hidden" }}>
             {/* Left Panel - Table Selection */}
-            <div style={{ flex: "1 1 60%", display: "flex", flexDirection: "column", background: "#fff", borderRight: "1px solid #d9d9d9" }}>
+            <div style={{ flex: isMobile ? "1 1 100%" : "1 1 55%", display: "flex", flexDirection: "column", background: "#fff", borderRight: "1px solid #d9d9d9" }}>
                 {/* Top Navigation */}
                 <div style={{ padding: "8px 16px", borderBottom: "1px solid #f0f0f0", display: "flex", alignItems: "center", justifyContent: "space-between", background: COLORS.primary }}>
                     <Space size={0}>
@@ -762,12 +954,26 @@ export default function FnbSalesPage() {
                             }}
                             className="fnb-search-select"
                         />
-                        <Button icon={<ThunderboltOutlined />} shape="circle" ghost />
                         <Button
                             icon={<PlusOutlined />}
                             shape="circle"
                             ghost
                             onClick={() => setRoomModal({ open: true, type: ActionType.CREATE, room: null })}
+                        />
+                        <Button
+                            icon={<EditOutlined />}
+                            shape="circle"
+                            ghost
+                            disabled={!selectedRoomId || selectedRoomId.startsWith('temp-')}
+                            onClick={() => {
+                                if (selectedRoomId && selectedRoom) {
+                                    setRoomModal({ 
+                                        open: true, 
+                                        type: ActionType.UPDATE, 
+                                        room: selectedRoom 
+                                    });
+                                }
+                            }}
                         />
                     </Space>
                 </div>
@@ -777,10 +983,25 @@ export default function FnbSalesPage() {
                     <Row justify="space-between" align="middle" style={{ marginBottom: 8 }}>
                         <Col>
                             <Space>
-                                <Button size="small" type={activeFloor === "all" ? "primary" : "default"} shape="round" onClick={() => setActiveFloor("all")}>Tất cả</Button>
-                                <Button size="small" type={activeFloor === "1" ? "primary" : "default"} shape="round" onClick={() => setActiveFloor("1")}>Tầng 1</Button>
-                                <Button size="small" type={activeFloor === "2" ? "primary" : "default"} shape="round" onClick={() => setActiveFloor("2")}>Tầng 2</Button>
-                                <Button size="small" type={activeFloor === "5" ? "primary" : "default"} shape="round" onClick={() => setActiveFloor("5")}>Tầng 5</Button>
+                                <Button
+                                    size="small"
+                                    type={activeFloor === "all" ? "primary" : "default"}
+                                    shape="round"
+                                    onClick={() => setActiveFloor("all")}
+                                >
+                                    Tất cả
+                                </Button>
+                                {areas.map(area => (
+                                    <Button
+                                        key={area.area_id}
+                                        size="small"
+                                        type={activeFloor === String(area.area_id) ? "primary" : "default"}
+                                        shape="round"
+                                        onClick={() => setActiveFloor(String(area.area_id))}
+                                    >
+                                        {area.area_name}
+                                    </Button>
+                                ))}
                             </Space>
                         </Col>
                         <Col>
@@ -882,134 +1103,20 @@ export default function FnbSalesPage() {
                         </div>
                     )}
                     {activeTab === "rooms" ? (
-                        <div style={{
-                            display: "grid",
-                            gridTemplateColumns: viewDensity === "normal"
-                                ? "repeat(auto-fill, minmax(130px, 1fr))"
-                                : "repeat(auto-fill, minmax(85px, 1fr))",
-                            gap: viewDensity === "normal" ? 16 : 8,
-                            transition: "all 0.3s ease"
-                        }}>
-                            {/* Takeaway Card */}
-                            <Card
-                                hoverable
-                                styles={{ body: { height: viewDensity === "normal" ? 120 : 80, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 8 } }}
-                                style={{ borderRadius: 8, background: "#e6f7ff", border: `1px solid ${COLORS.occupiedBorder}` }}
-                            >
-                                <Badge count={<ShoppingCartOutlined style={{ color: '#fff', fontSize: viewDensity === "normal" ? 12 : 10 }} />}>
-                                    <Avatar size={viewDensity === "normal" ? 64 : 40} icon={<ShoppingOutlined />} style={{ backgroundColor: "#cfe9ff", color: COLORS.primary }} />
-                                </Badge>
-                                <Text strong style={{ color: "#3467cc", marginTop: viewDensity === "normal" ? 8 : 4, fontSize: viewDensity === "normal" ? 14 : 11 }}>Mang về</Text>
-                            </Card>
-
-                            {displayedRooms.map((room) => {
-                                const isSelected = selectedRoomId === room.id;
-                                const roomItems = orders[room.id] || [];
-                                const hasOrder = roomItems.length > 0;
-                                const isOccupied = room.status === "occupied" || hasOrder;
-                                const isReserved = room.status === "reserved";
-
-                                // Calculate dynamic price and time
-                                const totalPrice = roomItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-                                const startTime = orderStartTimes[room.id];
-                                const timeStr = startTime
-                                    ? formatDuration(startTime, currentTime)
-                                    : (room.time || "");
-
-                                let bg = COLORS.empty;
-                                let border = `1px solid ${COLORS.emptyBorder}`;
-                                let textColor = "inherit";
-
-                                if (isSelected) {
-                                    bg = COLORS.primary;
-                                    border = `1px solid ${COLORS.primary}`;
-                                    textColor = "#fff";
-                                } else if (isOccupied) {
-                                    bg = COLORS.occupied;
-                                    border = `1px solid ${COLORS.occupiedBorder}`;
-                                    textColor = COLORS.occupiedText;
-                                } else if (isReserved) {
-                                    bg = COLORS.reserved;
-                                    border = `1px solid ${COLORS.reservedBorder}`;
-                                    textColor = COLORS.reservedText;
-                                }
-
-                                return (
-                                    <div key={room.id} style={{ textAlign: "center" }}>
-                                        <Card
-                                            hoverable
-                                            onClick={() => handleRoomClick(room)}
-                                            styles={{
-                                                body: {
-                                                    height: viewDensity === "normal" ? 100 : 70,
-                                                    display: "flex",
-                                                    flexDirection: "column",
-                                                    alignItems: "center",
-                                                    justifyContent: "center",
-                                                    padding: 4,
-                                                    position: "relative"
-                                                }
-                                            }}
-                                            style={{
-                                                borderRadius: 16,
-                                                background: bg,
-                                                border: border,
-                                                transition: "all 0.3s",
-                                                overflow: "hidden"
-                                            }}
-                                        >
-                                            {/* Visual representation of a table top */}
-                                            <div style={{
-                                                width: "80%",
-                                                height: "70%",
-                                                border: `1.5px solid ${isSelected ? "#fff" : (isOccupied ? COLORS.occupiedBorder : (isReserved ? COLORS.reservedBorder : COLORS.emptyBorder))}`,
-                                                borderRadius: 12,
-                                                display: "flex",
-                                                flexDirection: "column",
-                                                alignItems: "center",
-                                                justifyContent: "center"
-                                            }}>
-                                                {(totalPrice > 0 || room.price) && (
-                                                    <Text style={{ fontSize: viewDensity === "normal" ? 11 : 9, color: isSelected ? "#fff" : textColor }}>
-                                                        {(totalPrice > 0 ? totalPrice : room.price!).toLocaleString()}
-                                                        {timeStr && <span style={{ marginLeft: 4 }}>{timeStr}</span>}
-                                                    </Text>
-                                                )}
-                                                {room.customers && (
-                                                    <Text style={{ fontSize: viewDensity === "normal" ? 10 : 8, color: isSelected ? "#fff" : textColor }}>
-                                                        {room.customers}
-                                                    </Text>
-                                                )}
-                                            </div>
-                                        </Card>
-                                        <Text strong style={{ marginTop: 4, display: "block", fontSize: viewDensity === "normal" ? 12 : 10 }}>{room.label}</Text>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                        <RoomGrid
+                            viewDensity={viewDensity}
+                            displayedRooms={displayedRooms}
+                            selectedRoomId={selectedRoomId}
+                            orders={orders}
+                            orderStartTimes={orderStartTimes}
+                            currentTime={currentTime}
+                            handleRoomClick={handleRoomClick}
+                        />
                     ) : (
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16 }}>
-                            {products.map((product) => (
-                                <Card
-                                    key={product.product_id}
-                                    hoverable
-                                    onClick={() => handleAddProduct({
-                                        id: product.product_id,
-                                        name: product.product_name,
-                                        price: Number(product.selling_price),
-                                        category_id: product.category_id,
-                                        category_name: product.category_name,
-                                    })}
-                                    styles={{ body: { padding: 12 } }}
-                                >
-                                    <div style={{ height: 100, background: "#f5f5f5", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
-                                        <ShoppingOutlined style={{ fontSize: 32, opacity: 0.2 }} />
-                                    </div>
-                                    <Text strong style={{ display: "block" }}>{product.product_name}</Text>
-                                    <Text type="danger">{Number(product.selling_price).toLocaleString()} đ</Text>
-                                </Card>
-                            ))}
-                        </div>
+                        <MenuGrid
+                            products={products}
+                            handleAddProduct={handleAddProduct}
+                        />
                     )}
                 </div>
 
@@ -1034,253 +1141,45 @@ export default function FnbSalesPage() {
                 </div>
             </div>
 
-            <div style={{ flex: "1 1 40%", minWidth: 450, maxWidth: 600, display: "flex", flexDirection: "column", background: "#fff", overflow: "hidden" }}>
-                {/* Header Utilities */}
-                <div style={{ padding: "12px 16px 0 16px", borderBottom: "1px solid #e5e7eb", background: "#f9fafb", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div style={{ width: 280, overflow: "hidden" }}>
-                        <Tabs
-                            type="editable-card"
-                            activeKey={selectedRoomId || undefined}
-                            onChange={(key) => {
-                                if (key === "add_tab") {
-                                    handleAddOrder();
-                                } else {
-                                    setSelectedRoomId(key);
-                                }
-                            }}
-                            onEdit={(targetKey, action) => {
-                                if (action === "remove") {
-                                    handleRemoveOrder(targetKey as string);
-                                }
-                            }}
-                            className="fnb-order-tabs"
-                            items={tabItems}
-                            hideAdd
-                        />
-                    </div>
-                    <Space size="middle" style={{ marginLeft: "auto", paddingBottom: 8 }}>
-                        <Badge dot><BellOutlined style={{ fontSize: 18 }} /></Badge>
-                        <ReloadOutlined style={{ fontSize: 18 }} />
-                        <PrinterOutlined style={{ fontSize: 18 }} />
-                        <StarOutlined style={{ fontSize: 18, color: "#faad14" }} />
-                        <Avatar size="small" src="https://flagcdn.com/w40/vn.png" />
-                        <Space>
-                            <Text strong>AsiaGolfVit</Text>
-                            <MenuOutlined style={{ fontSize: 18 }} />
-                        </Space>
-                    </Space>
-                </div>
+            {isMobile ? (
+                <Drawer
+                    title="Đơn hàng"
+                    placement="right"
+                    width="100%"
+                    closable={true}
+                    onClose={() => setMobileDrawerOpen(false)}
+                    open={mobileDrawerOpen}
+                    styles={{ body: { padding: 0 } }}
+                >
+                    {rightPanelContent}
+                </Drawer>
+            ) : (
+                rightPanelContent
+            )}
 
-                {/* Selected Table Sub-header */}
-                <div style={{ padding: "12px 16px", background: "#fff", display: "flex", alignItems: "center", gap: 12 }}>
-                    <Space style={{ color: COLORS.primary, flex: 1 }}>
-                        <TableOutlined style={{ fontSize: 20 }} />
-                        <Select
-                            placeholder="Chọn bàn"
-                            variant="borderless"
-                            value={selectedRoomId?.startsWith("temp-") ? undefined : selectedRoomId}
-                            onChange={(val) => handleAssignRoom(val)}
-                            suffixIcon={null}
-                            dropdownStyle={{ minWidth: 200 }}
-                            style={{ padding: 0 }}
-                            className="fnb-room-assign-select"
-                        >
-                            {rooms.map(room => (
-                                <Select.Option key={room.id} value={room.id}>
-                                    <Badge status={room.status === "available" ? "success" : "processing"} />
-                                    <Text style={{ marginLeft: 8 }}>{room.label} {room.floor && `(Tầng ${room.floor})`}</Text>
-                                </Select.Option>
-                            ))}
-                        </Select>
-                        <Space size={8}>
-                            <SwapOutlined style={{ opacity: 0.5 }} />
-                            <Button
-                                type="text"
-                                icon={<MergeCellsOutlined style={{ color: COLORS.primary }} />}
-                                onClick={() => setIsTableActionModalOpen(true)}
-                                size="small"
-                                title="Tách ghép bàn"
-                                style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-                            >
-                                <span style={{ fontWeight: 500 }}>Tách ghép</span>
-                            </Button>
-                        </Space>
-                    </Space>
-                    <SelectWithButton
-                        options={customerOptions}
-                        placeholder="Tìm khách hàng (F4)"
-                        onSearch={setCustomerSearchTerm}
-                        onSelect={handleSelectCustomer}
-                        onPopupScroll={handleCustomerScroll}
-                        onAddClick={() => setCustomerModal({ open: true, type: ActionType.CREATE, customer: null })}
-                        value={selectedCustomer?.customer_id}
-                        style={{ width: 320 }}
-                        styleWrapSelect={{
-                            border: "none",
-                            background: "#f5f5f5",
-                            borderRadius: 20,
-                            padding: "0 8px",
-                        }}
-                        className="fnb-customer-select"
-                    />
-                </div>
+            {isMobile && !mobileDrawerOpen && (
+                <Button
+                    type="primary"
+                    shape="circle"
+                    icon={<ShoppingCartOutlined style={{ fontSize: 24 }} />}
+                    size="large"
+                    onClick={() => setMobileDrawerOpen(true)}
+                    style={{
+                        position: 'fixed',
+                        bottom: 24,
+                        right: 24,
+                        height: 64,
+                        width: 64,
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                        zIndex: 999
+                    }}
+                >
+                </Button>
+            )}
 
-                {/* Order Items List */}
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "flex-start", justifyContent: "flex-start", background: "#fff", overflowY: "auto" }}>
-                    {currentOrder.length === 0 ? (
-                        <div style={{ textAlign: "center", opacity: 0.5, width: "100%", marginTop: 100 }}>
-                            <ShoppingOutlined style={{ fontSize: 64, color: COLORS.primary, marginBottom: 16 }} />
-                            <Title level={5}>Chưa có món trong đơn</Title>
-                            <Text type="secondary">Vui lòng chọn món trong thực đơn bên trái màn hình</Text>
-                        </div>
-                    ) : (
-                        <Table
-                            dataSource={currentOrder}
-                            columns={[
-                                {
-                                    title: "Tên món",
-                                    dataIndex: ["product", "name"],
-                                    key: "name",
-                                    width: "30%",
-                                    render: (name) => <Text strong style={{ fontSize: 13 }}>{name}</Text>
-                                },
-                                {
-                                    title: "SL",
-                                    dataIndex: "quantity",
-                                    key: "qty",
-                                    width: "15%",
-                                    render: (qty, record) => (
-                                        <InputNumber
-                                            min={1}
-                                            value={qty}
-                                            onChange={(val) => updateOrderItem(record.uniqueId, "quantity", val || 1)}
-                                            size="small"
-                                            controls={false}
-                                            style={{
-                                                width: "100%",
-                                                border: 'none',
-                                                borderBottom: '1px solid #d9d9d9',
-                                                borderRadius: 0,
-                                                boxShadow: 'none'
-                                            }}
-                                        />
-                                    )
-                                },
-                                {
-                                    title: "Đơn giá",
-                                    dataIndex: ["product", "price"],
-                                    key: "price",
-                                    width: "25%",
-                                    render: (price, record) => (
-                                        <InputNumber
-                                            min={0}
-                                            value={price}
-                                            onChange={(val) => updateOrderItem(record.uniqueId, "price", val || 0)}
-                                            formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                                            parser={(value) => value!.replace(/\$\s?|(,*)/g, "")}
-                                            size="small"
-                                            controls={false}
-                                            style={{
-                                                width: "100%",
-                                                border: 'none',
-                                                borderBottom: '1px solid #d9d9d9',
-                                                borderRadius: 0,
-                                                boxShadow: 'none',
-                                                fontSize: 13
-                                            }}
-                                        />
-                                    )
-                                },
-                                {
-                                    title: "Thành tiền",
-                                    key: "subtotal",
-                                    width: "25%",
-                                    render: (_, record) => (
-                                        <Text strong style={{ fontSize: 13 }}>
-                                            {(record.product.price * record.quantity).toLocaleString()}
-                                        </Text>
-                                    )
-                                },
-                                {
-                                    title: "",
-                                    key: "action",
-                                    width: "15%",
-                                    render: (_, record) => (
-                                        <Space size={0}>
-                                            {record.quantity > 1 && (
-                                                <Button
-                                                    type="text"
-                                                    icon={<ForkOutlined style={{ color: COLORS.primary }} />}
-                                                    onClick={() => splitOrderItem(record.uniqueId)}
-                                                    title="Tách dòng"
-                                                />
-                                            )}
-                                            <Button
-                                                type="text"
-                                                danger
-                                                icon={<DeleteOutlined />}
-                                                onClick={() => removeOrderItem(record.uniqueId)}
-                                            />
-                                        </Space>
-                                    )
-                                }
-                            ]}
-                            pagination={false}
-                            style={{ width: "100%" }}
-                            size="small"
-                            rowKey={(record) => record.uniqueId}
-                        />
-                    )}
-                </div>
-
-                {/* Bottom Actions */}
-                <div style={{ padding: 16, borderTop: "1px solid #f0f0f0" }}>
-                    <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
-                        <Space size="large">
-                            <Avatar shape="square" icon={<UserOutlined />} />
-                            <Space>
-                                <Text strong>Nguyễn ...</Text>
-                                <MenuOutlined style={{ fontSize: 12 }} />
-                            </Space>
-                            <FieldTimeOutlined style={{ fontSize: 18 }} />
-                            <EditOutlined style={{ fontSize: 18 }} />
-                            <HistoryOutlined style={{ fontSize: 18 }} />
-                        </Space>
-                        <div style={{ marginLeft: "auto", textAlign: "right" }}>
-                            <Text type="secondary">Tổng tiền: </Text>
-                            <Badge count={currentOrder.length} offset={[10, 0]} color={COLORS.primary}>
-                                <Text strong style={{ fontSize: 20 }}>{totalAmount.toLocaleString()} đ</Text>
-                            </Badge>
-                        </div>
-                    </div>
-
-                    <Row gutter={12}>
-                        <Col span={8}>
-                            <Button
-                                size="large"
-                                icon={<BellOutlined />}
-                                style={{ width: "100%", height: 50, borderRadius: 8 }}
-                            >
-                                Thông báo
-                            </Button>
-                        </Col>
-                        <Col span={16}>
-                            <Button
-                                type="primary"
-                                size="large"
-                                icon={<ShoppingOutlined />}
-                                onClick={handlePayment}
-                                style={{ width: "100%", height: 50, borderRadius: 8, background: COLORS.primary, borderColor: COLORS.primary }}
-                            >
-                                Yêu cầu thanh toán
-                            </Button>
-                        </Col>
-                    </Row>
-                </div>
-            </div>
             <ProductModal />
             <CustomerModal />
-            <RoomModal onAdd={handleAddRoom} />
+            <RoomModal onSuccess={fetchAreasAndTables} />
             <PaymentDrawer
                 open={isPaymentDrawerOpen}
                 onClose={() => setIsPaymentDrawerOpen(false)}
@@ -1292,223 +1191,60 @@ export default function FnbSalesPage() {
                 customerName={selectedCustomer?.customer_name}
             />
 
-            <Modal
-                title={
-                    <span style={{ fontSize: 20, fontWeight: 700 }}>
-                        {selectedRoom ? `${selectedRoom.id.replace('r', '202-')} - ${selectedRoom.label} Tầng ${selectedRoom.floor}` : "Đơn mới"}
-                    </span>
-                }
+            <TableActionModal
                 open={isTableActionModalOpen}
                 onCancel={() => {
                     setIsTableActionModalOpen(false);
                     setModalTargetRoomId(null);
                     setSplitQuantities({});
                 }}
-                footer={null}
-                width={850}
-                styles={{ body: { padding: '24px 32px' } }}
-                closeIcon={<CloseOutlined style={{ fontSize: 18 }} />}
-            >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                    <Radio.Group
-                        value={modalMode}
-                        onChange={e => {
-                            setModalMode(e.target.value);
-                            setSplitQuantities({});
-                        }}
-                        style={{ marginBottom: 8 }}
-                    >
-                        <Space size={32}>
-                            <Radio value="merge">
-                                <span style={{ fontSize: 16, fontWeight: modalMode === 'merge' ? 600 : 400 }}>Ghép đơn</span>
-                            </Radio>
-                            <Radio value="split">
-                                <span style={{ fontSize: 16, fontWeight: modalMode === 'split' ? 600 : 400 }}>Tách đơn</span>
-                            </Radio>
-                        </Space>
-                    </Radio.Group>
+                selectedRoom={selectedRoom}
+                rooms={rooms}
+                orders={orders}
+                modalMode={modalMode}
+                setModalMode={setModalMode}
+                modalTargetRoomId={modalTargetRoomId}
+                setModalTargetRoomId={setModalTargetRoomId}
+                splitQuantities={splitQuantities}
+                setSplitQuantities={setSplitQuantities}
+                handleMergeRooms={handleMergeRooms}
+                handleSplitOrder={handleSplitOrder}
+                targetOrderSummary={targetOrderSummary}
+                currentOrder={currentOrder}
+                setModalTargetTableType={setModalTargetTableType}
+            />
 
-                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                        <Text strong style={{ fontSize: 16, whiteSpace: 'nowrap' }}>Ghép đến</Text>
-                        <Select
-                            showSearch
-                            placeholder="Chọn phòng/bàn"
-                            value={modalTargetRoomId}
-                            onChange={(val) => {
-                                setModalTargetRoomId(val);
-                                if (val === "takeaway") {
-                                    setModalTargetTableType('new');
-                                } else if ((orders[val]?.length || 0) > 0) {
-                                    setModalTargetTableType('existing');
-                                } else {
-                                    setModalTargetTableType('new');
-                                }
-                            }}
-                            style={{ width: 300, height: 40 }}
-                            filterOption={(input, option) =>
-                                (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
-                            }
-                            options={[
-                                { label: 'Chọn phòng/bàn', value: null, disabled: true },
-                                { label: 'Mang về', value: 'takeaway' },
-                                ...rooms
-                                    .filter(r => (orders[r.id]?.length || 0) > 0)
-                                    .map(r => ({ label: `${r.label} (Đang có đơn)`, value: r.id })),
-                                ...rooms
-                                    .filter(r => (orders[r.id]?.length || 0) === 0)
-                                    .map(r => ({ label: r.label, value: r.id }))
-                            ]}
-                            className="fnb-modal-target-select"
-                        />
-                    </div>
+            <OrderNoteModal
+                open={isNoteModalOpen}
+                note={selectedRoomId ? (orderNotes[selectedRoomId] || "") : ""}
+                onSave={(note) => {
+                    if (selectedRoomId) {
+                        setOrderNotes(prev => ({ ...prev, [selectedRoomId]: note }));
+                        setIsNoteModalOpen(false);
+                        message.success("Đã lưu ghi chú đơn hàng");
+                    }
+                }}
+                onCancel={() => setIsNoteModalOpen(false)}
+            />
 
-                    <div style={{ border: '1px solid #f0f0f0', borderRadius: 12, overflow: 'hidden' }}>
-                        <Table
-                            dataSource={(modalMode === 'merge' ? targetOrderSummary : currentOrder) as any[]}
-                            pagination={false}
-                            size="middle"
-                            columns={modalMode === 'merge' ? [
-                                {
-                                    title: <Text strong style={{ fontSize: 13 }}>Khách hàng</Text>,
-                                    dataIndex: 'customerName',
-                                    key: 'customer',
-                                    render: (name) => <Text style={{ fontSize: 14 }}>{name}</Text>
-                                },
-                                {
-                                    title: <Text strong style={{ fontSize: 13 }}>Mã đơn</Text>,
-                                    dataIndex: 'orderCode',
-                                    key: 'code',
-                                    render: (code) => <Text style={{ fontSize: 14 }}>{code}</Text>
-                                },
-                                {
-                                    title: <Text strong style={{ fontSize: 13 }}>Số lượng hàng</Text>,
-                                    dataIndex: 'totalQty',
-                                    key: 'qty',
-                                    align: 'center',
-                                    render: (qty) => <Text style={{ fontSize: 14 }}>{qty}</Text>
-                                },
-                                {
-                                    title: <Text strong style={{ fontSize: 13 }}>Tổng tiền</Text>,
-                                    dataIndex: 'totalAmount',
-                                    key: 'amount',
-                                    align: 'right',
-                                    render: (amount) => <Text strong style={{ fontSize: 14 }}>{amount.toLocaleString()}</Text>
-                                }
-                            ] : [
-                                {
-                                    title: <Text strong style={{ fontSize: 13 }}>Đồ ăn / Đồ uống</Text>,
-                                    dataIndex: ['product', 'name'],
-                                    key: 'name',
-                                    render: (name, record, index) => (
-                                        <Space align="start">
-                                            <span style={{ color: '#8c8c8c', width: 24, display: 'inline-block', paddingTop: 2 }}>{index + 1}</span>
-                                            <div>
-                                                <Text strong style={{ fontSize: 15 }}>{name}</Text>
-                                                {record.product.category_name && (
-                                                    <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: -2 }}>{record.product.category_name}</div>
-                                                )}
-                                            </div>
-                                        </Space>
-                                    )
-                                },
-                                {
-                                    title: <Text type="secondary" style={{ fontSize: 12 }}>SL trên đơn gốc</Text>,
-                                    dataIndex: 'quantity',
-                                    key: 'original_qty',
-                                    align: 'center',
-                                    width: 150,
-                                    render: (val) => <Text style={{ fontSize: 16 }}>{val}</Text>
-                                },
-                                {
-                                    title: <Text type="secondary" style={{ fontSize: 12 }}>SL tách</Text>,
-                                    key: 'split_qty',
-                                    align: 'right',
-                                    width: 180,
-                                    render: (_, record) => (
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16 }}>
-                                            <Button
-                                                icon={<MinusCircleOutlined style={{ fontSize: 24, color: '#8c8c8c' }} />}
-                                                type="text"
-                                                disabled={(splitQuantities[record.uniqueId] || 0) <= 0}
-                                                onClick={() => setSplitQuantities(prev => ({
-                                                    ...prev,
-                                                    [record.uniqueId]: (prev[record.uniqueId] || 0) - 1
-                                                }))}
-                                                style={{ border: 'none', padding: 0, height: 'auto', display: 'flex' }}
-                                            />
-                                            <Text strong style={{ fontSize: 20, minWidth: 20, textAlign: 'center' }}>{splitQuantities[record.uniqueId] || 0}</Text>
-                                            <Button
-                                                icon={<PlusCircleOutlined style={{ fontSize: 24, color: '#8c8c8c' }} />}
-                                                type="text"
-                                                disabled={(splitQuantities[record.uniqueId] || 0) >= record.quantity}
-                                                onClick={() => setSplitQuantities(prev => ({
-                                                    ...prev,
-                                                    [record.uniqueId]: (prev[record.uniqueId] || 0) + 1
-                                                }))}
-                                                style={{ border: 'none', padding: 0, height: 'auto', display: 'flex' }}
-                                            />
-                                        </div>
-                                    )
-                                }
-                            ]}
-                            locale={{ emptyText: <div style={{ padding: '60px 0', color: '#999' }}>Bàn chưa có hóa đơn nào</div> }}
-                        />
-                    </div>
+            <KitchenHistoryDrawer
+                open={isHistoryDrawerOpen}
+                onClose={() => setIsHistoryDrawerOpen(false)}
+                historyData={[]}
+            />
 
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 16, marginTop: 12 }}>
-                        <Button
-                            type="primary"
-                            icon={<CheckSquareFilled />}
-                            onClick={() => {
-                                if (modalMode === 'merge') {
-                                    if (selectedRoomId && modalTargetRoomId) {
-                                        handleMergeRooms([selectedRoomId], modalTargetRoomId);
-                                        setIsTableActionModalOpen(false);
-                                    }
-                                } else {
-                                    handleSplitOrder();
-                                }
-                            }}
-                            style={{
-                                height: 50,
-                                padding: '0 32px',
-                                borderRadius: 12,
-                                background: '#006adc',
-                                border: 'none',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 8,
-                                fontSize: 18,
-                                fontWeight: 600
-                            }}
-                        >
-                            Thực hiện
-                        </Button>
-                        <Button
-                            onClick={() => {
-                                setIsTableActionModalOpen(false);
-                                setSplitQuantities({});
-                            }}
-                            icon={<StopOutlined />}
-                            style={{
-                                height: 50,
-                                padding: '0 32px',
-                                borderRadius: 12,
-                                background: '#8c9196',
-                                color: '#fff',
-                                border: 'none',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 8,
-                                fontSize: 18,
-                                fontWeight: 600
-                            }}
-                        >
-                            Bỏ qua
-                        </Button>
-                    </div>
-                </div>
-            </Modal>
+            <SettingsDrawer
+                open={isSettingsDrawerOpen}
+                onClose={() => setIsSettingsDrawerOpen(false)}
+            />
+
+            <ReturnProductModal
+                open={isReturnModalOpen}
+                onClose={() => setIsReturnModalOpen(false)}
+                room={rooms.find(r => r.id === selectedRoomId) || null}
+                orderItems={currentOrder}
+                onReturn={handleReturnItems}
+            />
 
             <style dangerouslySetInnerHTML={{
                 __html: `
