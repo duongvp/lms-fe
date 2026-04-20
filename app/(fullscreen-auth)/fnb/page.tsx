@@ -72,6 +72,7 @@ import SettingsDrawer from "./components/SettingsDrawer";
 import ReturnProductModal from "./components/ReturnProductModal";
 import { getAllAreas, getAllTables, AreaApiResponse, TableApiResponse } from "@/services/fnbService";
 import { useFnbSocket } from "@/hooks/useFnbSocket";
+import { useFnbStore } from "@/stores/fnbStore";
 
 const { Text, Title } = Typography;
 
@@ -241,6 +242,26 @@ export default function FnbSalesPage() {
     useEffect(() => {
         syncOrderRef.current = syncOrder;
     }, [syncOrder]);
+
+    const tablesState = useFnbStore(state => state.tables);
+    // Sync store state sang local orders/startTimes (chỉ ảnh hưởng real tables, bỏ qua temp tabs)
+    useEffect(() => {
+        setOrders(prev => {
+            const next = { ...prev };
+            Object.entries(tablesState).forEach(([id, state]) => {
+                if (state.order_draft) next[id] = state.order_draft;
+            });
+            return next;
+        });
+
+        setOrderStartTimes(prev => {
+            const next = { ...prev };
+            Object.entries(tablesState).forEach(([id, state]) => {
+                if (state.start_time) next[id] = new Date(state.start_time);
+            });
+            return next;
+        });
+    }, [tablesState]);
 
     useEffect(() => {
         const fetchCats = async () => {

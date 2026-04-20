@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { useFnbStore, FnbTableState } from '../stores/fnbStore';
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000';
 
@@ -24,6 +25,7 @@ export interface TableStatusChangePayload {
     occupantCount?: number;
     joinedBy?: { userId: string; userName: string };
     disconnectedUser?: string;
+    state?: FnbTableState;
 }
 
 export interface OrderUpdatedPayload {
@@ -58,6 +60,9 @@ export function useFnbSocket({
 }: UseFnbSocketOptions) {
     const socketRef = useRef<Socket | null>(null);
     const currentTableIdRef = useRef<string | number | null>(null);
+    
+    const initTables = useFnbStore(state => state.initTables);
+    const updateTable = useFnbStore(state => state.updateTable);
 
     // Giữ ref tới callbacks để tránh re-create socket khi callback thay đổi
     const onTableStatusChangeRef = useRef(onTableStatusChange);
@@ -113,8 +118,26 @@ export function useFnbSocket({
             console.warn('[FnB Socket] Disconnected:', reason);
         });
 
-        // Nhận thay đổi trạng thái bàn (từ mọi bàn trong warehouse)
+        // Nhận trạng thái toàn bộ bàn lúc vừa join hoặc F5
+        socket.on('init_table_states', (payload: { warehouseId: number, data: Record<string, FnbTableState> }) => {
+            if (payload.data) {
+                initTables(payload.data);
+            }
+        });
+
+        // Nhận thay đổi trạng thái của 1 bàn duy nhất (khi người ngoài click vào đổi món)
+        socket.on('table_state_changed', (payload: { tableId: string | number, state: FnbTableState }) => {
+            updateTable(payload.tableId, payload.state);
+        });
+
+        // Nhận thay đổi trạng thái bàn (từ mọi bàn trong warehouse) - logic cũ duy trì tương thích
         socket.on('table_status_change', (payload: TableStatusChangePayload) => {
+            // Tự cập nhật store nếu có state đính kèm để đảm bảo sync (cả status vs timer)
+            if (payload.state) {
+                updateTable(payload.tableId, payload.state);
+            } else {
+                updateTable(payload.tableId, { status: payload.status, occupantCount: payload.occupantCount || 0 });
+            }
             onTableStatusChangeRef.current?.(payload);
         });
 
