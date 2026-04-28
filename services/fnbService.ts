@@ -72,3 +72,35 @@ export const deleteTable = async (id: number) => {
         method: 'DELETE',
     });
 };
+
+// ================= CHECKOUT =================
+export interface CheckoutItem {
+    product_id: number;
+    quantity: number;
+    unit_price: number;
+}
+
+export interface CheckoutPayload {
+    tableId: string | null;
+    items: CheckoutItem[];
+    paymentMethod: 'cash' | 'transfer' | 'card';
+    finalAmount: number;
+    discount: number;
+    otherFeesTotal: number;
+    customerId?: number | null;
+    notes?: string | null;
+}
+
+export interface CheckoutResult {
+    message: string;
+    invoice_id: number;
+    invoice_code: string;
+}
+
+export const checkoutFnbOrder = async (payload: CheckoutPayload): Promise<CheckoutResult> => {
+    return await fetchInstance(`${API_BASE_URL}/checkout`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+    });
+};
+

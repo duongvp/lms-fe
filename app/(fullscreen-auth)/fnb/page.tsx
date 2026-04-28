@@ -70,7 +70,7 @@ import OrderNoteModal from "./components/OrderNoteModal";
 import KitchenHistoryDrawer from "./components/KitchenHistoryDrawer";
 import SettingsDrawer from "./components/SettingsDrawer";
 import ReturnProductModal from "./components/ReturnProductModal";
-import { getAllAreas, getAllTables, AreaApiResponse, TableApiResponse } from "@/services/fnbService";
+import { getAllAreas, getAllTables, AreaApiResponse, TableApiResponse, checkoutFnbOrder } from "@/services/fnbService";
 import { useFnbSocket } from "@/hooks/useFnbSocket";
 import { useFnbStore } from "@/stores/fnbStore";
 
@@ -132,6 +132,7 @@ export default function FnbSalesPage() {
     const [orderStartTimes, setOrderStartTimes] = useState<Record<string, Date>>({});
     const [currentTime, setCurrentTime] = useState(new Date());
     const [isPaymentDrawerOpen, setIsPaymentDrawerOpen] = useState(false);
+    const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
 
     const [orderNotes, setOrderNotes] = useState<Record<string, string>>({});
     const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
@@ -488,34 +489,69 @@ export default function FnbSalesPage() {
         setIsPaymentDrawerOpen(true);
     };
 
-    const confirmPayment = () => {
+    const confirmPayment = async (payload: {
+        paymentMethod: 'cash' | 'transfer' | 'card';
+        finalAmount: number;
+        discount: number;
+        otherFeesTotal: number;
+        voucherDiscountAmount: number;
+        customerPaid: number;
+    }) => {
         if (!selectedRoomId) return;
 
-        setOrders(prev => {
-            const next = { ...prev };
-            delete next[selectedRoomId];
-            return next;
-        });
+        setIsCheckoutLoading(true);
+        try {
+            // Map món hiện tại sang format API
+            const checkoutItems = currentOrder.map(item => ({
+                product_id: item.product.id,
+                quantity: item.quantity,
+                unit_price: item.product.price,
+            }));
 
-        setOrderStartTimes(prev => {
-            const next = { ...prev };
-            delete next[selectedRoomId];
-            return next;
-        });
+            await checkoutFnbOrder({
+                tableId: selectedRoomId,
+                items: checkoutItems,
+                paymentMethod: payload.paymentMethod,
+                finalAmount: payload.finalAmount,
+                discount: payload.discount + payload.voucherDiscountAmount,
+                otherFeesTotal: payload.otherFeesTotal,
+                customerId: selectedCustomer?.customer_id ?? null,
+                notes: orderNotes[selectedRoomId] ?? null,
+            });
 
-        setRooms(prev => prev.map(room =>
-            room.id === selectedRoomId ? { ...room, status: 'available' as RoomStatus } : room
-        ));
+            // Chỉ clear order sau khi API thành công
+            setOrders(prev => {
+                const next = { ...prev };
+                delete next[selectedRoomId];
+                return next;
+            });
 
-        // Socket: broadcast bàn trống cho toàn bộ nhân viên trong warehouse
-        broadcastTableStatus(selectedRoomId, 'empty');
-        leaveTable(selectedRoomId);
+            setOrderStartTimes(prev => {
+                const next = { ...prev };
+                delete next[selectedRoomId];
+                return next;
+            });
 
-        setOpenRoomIds(prev => prev.filter(id => id !== selectedRoomId));
-        setSelectedRoomId(null);
-        setIsPaymentDrawerOpen(false);
+            setRooms(prev => prev.map(room =>
+                room.id === selectedRoomId ? { ...room, status: 'available' as RoomStatus } : room
+            ));
 
-        message.success("Thanh toán thành công. Bàn đã được giải phóng.");
+            // Socket: broadcast bàn trống cho toàn bộ nhân viên trong warehouse
+            broadcastTableStatus(selectedRoomId, 'empty');
+            leaveTable(selectedRoomId);
+
+            setOpenRoomIds(prev => prev.filter(id => id !== selectedRoomId));
+            setSelectedRoomId(null);
+            setIsPaymentDrawerOpen(false);
+
+            message.success('Thanh toán thành công. Bàn đã được giải phóng.');
+        } catch (error: any) {
+            console.error('Checkout error:', error);
+            message.error(error?.message || 'Thanh toán thất bại. Vui lòng thử lại.');
+            // Không clear order khi lỗi
+        } finally {
+            setIsCheckoutLoading(false);
+        }
     };
 
     const handleSplitOrder = () => {
@@ -1210,6 +1246,7 @@ export default function FnbSalesPage() {
                 items={currentOrder}
                 totalAmount={totalAmount}
                 customerName={selectedCustomer?.customer_name}
+                loading={isCheckoutLoading}
             />
 
             <TableActionModal

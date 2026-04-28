@@ -49,12 +49,20 @@ type OrderItem = {
 interface PaymentDrawerProps {
     open: boolean;
     onClose: () => void;
-    onConfirm: () => void;
+    onConfirm: (payload: {
+        paymentMethod: 'cash' | 'transfer' | 'card';
+        finalAmount: number;
+        discount: number;
+        otherFeesTotal: number;
+        voucherDiscountAmount: number;
+        customerPaid: number;
+    }) => void;
     roomLabel: string;
     floor?: string;
     items: OrderItem[];
     totalAmount: number;
     customerName?: string;
+    loading?: boolean;
 }
 
 const COLORS = {
@@ -75,7 +83,8 @@ const PaymentDrawer: React.FC<PaymentDrawerProps> = ({
     floor,
     items,
     totalAmount,
-    customerName = "Khách lẻ"
+    customerName = "Khách lẻ",
+    loading = false,
 }) => {
     const [paymentMethod, setPaymentMethod] = useState("cash");
     const [customerPaid, setCustomerPaid] = useState<number>(totalAmount);
@@ -347,10 +356,19 @@ const PaymentDrawer: React.FC<PaymentDrawerProps> = ({
                                         type="primary"
                                         block
                                         size="large"
-                                        onClick={onConfirm}
-                                        style={{ height: 48, borderRadius: 10, background: COLORS.primary, fontWeight: 700, fontSize: 16 }}
+                                        loading={loading}
+                                        disabled={loading}
+                                        onClick={() => onConfirm({
+                                            paymentMethod: paymentMethod as 'cash' | 'transfer' | 'card',
+                                            finalAmount: totalAmount - discount - voucherDiscountAmount + otherFeesTotal,
+                                            discount,
+                                            otherFeesTotal,
+                                            voucherDiscountAmount,
+                                            customerPaid,
+                                        })}
+                                        style={{ height: 48, borderRadius: 10, background: loading ? undefined : COLORS.primary, fontWeight: 700, fontSize: 16 }}
                                     >
-                                        Thanh toán
+                                        {loading ? 'Đang xử lý...' : 'Thanh toán'}
                                     </Button>
                                 </Col>
                             </Row>
