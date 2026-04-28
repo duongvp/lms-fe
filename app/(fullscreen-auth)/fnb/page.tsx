@@ -42,6 +42,7 @@ import {
     MergeCellsOutlined,
     RollbackOutlined,
     CarryOutOutlined,
+    MinusOutlined,
 } from "@ant-design/icons";
 import SelectWithButton from "@/components/ui/Selects/SelectWithButton";
 import useProductSelect from "@/hooks/useProductSelect";
@@ -141,6 +142,17 @@ export default function FnbSalesPage() {
 
     const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
 
+    const [kitchenSentSnapshots, setKitchenSentSnapshots] = useState<Record<string, OrderItem[]>>({});
+    const [isNotifyingKitchen, setIsNotifyingKitchen] = useState(false);
+
+    // Trạng thái cho modal xác nhận giảm/hủy món đã báo bếp
+    const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+    const [cancelItem, setCancelItem] = useState<OrderItem | null>(null);
+    const [cancelQty, setCancelQty] = useState(1);
+    const [cancelReason, setCancelReason] = useState("Khác");
+    const [cancelOtherReason, setCancelOtherReason] = useState("");
+    const [onCancelConfirm, setOnCancelConfirm] = useState<{ fn: (qty: number, reason: string) => void } | null>(null);
+
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 60000);
         return () => clearInterval(timer);
@@ -224,7 +236,7 @@ export default function FnbSalesPage() {
     // syncOrderRef để onSnapshotRequested có thể gọi syncOrder mà không tạo circular dependency
     const syncOrderRef = React.useRef<((tableId: string | number, items: any[]) => void) | null>(null);
 
-    const { joinTable, leaveTable, syncOrder, broadcastTableStatus } = useFnbSocket({
+    const { joinTable, leaveTable, syncOrder, broadcastTableStatus, notifyKitchen, clearKitchenForTable } = useFnbSocket({
         warehouseId,
         userId: userId,
         userName: staffName || 'Nhân viên',
@@ -330,6 +342,18 @@ export default function FnbSalesPage() {
     };
 
     const currentOrder = selectedRoomId ? orders[selectedRoomId] ?? [] : [];
+
+    // true khi đơn hiện tại có thay đổi so với lần cuối đã báo bếp
+    const hasKitchenChanges = useMemo(() => {
+        if (!selectedRoomId || currentOrder.length === 0) return false;
+        const snapshot = kitchenSentSnapshots[selectedRoomId];
+        if (!snapshot) return currentOrder.length > 0; // Chưa báo bếp lần nào
+        if (snapshot.length !== currentOrder.length) return true;
+        return currentOrder.some((item) => {
+            const snapItem = snapshot.find(s => s.uniqueId === item.uniqueId);
+            return !snapItem || snapItem.quantity !== item.quantity;
+        });
+    }, [currentOrder, kitchenSentSnapshots, selectedRoomId]);
 
     const handleRoomClick = (room: Room) => {
         setSelectedRoomId(room.id);
@@ -537,8 +561,19 @@ export default function FnbSalesPage() {
             ));
 
             // Socket: broadcast bàn trống cho toàn bộ nhân viên trong warehouse
+            if (!selectedRoomId.startsWith('temp-')) {
+                syncOrder(selectedRoomId, []);
+                clearKitchenForTable(selectedRoomId); // Xóa bàn này khỏi màn hình bếp
+            }
             broadcastTableStatus(selectedRoomId, 'empty');
             leaveTable(selectedRoomId);
+
+            // Xóa kitchen snapshot khi thanh toán xong
+            setKitchenSentSnapshots(prev => {
+                const next = { ...prev };
+                delete next[selectedRoomId];
+                return next;
+            });
 
             setOpenRoomIds(prev => prev.filter(id => id !== selectedRoomId));
             setSelectedRoomId(null);
@@ -552,6 +587,26 @@ export default function FnbSalesPage() {
         } finally {
             setIsCheckoutLoading(false);
         }
+    };
+
+    const handleNotifyKitchen = () => {
+        if (!selectedRoomId || currentOrder.length === 0) {
+            message.warning('Chưa có món nào trong đơn để báo bếp.');
+            return;
+        }
+        setIsNotifyingKitchen(true);
+        const tableLabel = rooms.find(r => r.id === selectedRoomId)?.label
+            || (selectedRoomId.startsWith('temp-') ? 'Đơn mới' : selectedRoomId);
+        const kitchenItems = currentOrder.map(item => ({
+            productName: item.product.name,
+            quantity: item.quantity,
+        }));
+        notifyKitchen(selectedRoomId, tableLabel, kitchenItems, staffName || 'Nhân viên');
+        // Lưu snapshot đơn hàng tại thời điểm báo bếp
+        setKitchenSentSnapshots(prev => ({ ...prev, [selectedRoomId]: [...currentOrder] }));
+        setIsNotifyingKitchen(false);
+        message.success(`Đã gửi ${kitchenItems.length} món lên bếp!`);
+        playTingSound();
     };
 
     const handleSplitOrder = () => {
@@ -718,6 +773,33 @@ export default function FnbSalesPage() {
     const updateOrderItem = (uniqueId: string, field: "quantity" | "price", value: number) => {
         if (!selectedRoomId) return;
 
+        // Nếu giảm số lượng và món đã báo bếp -> Hiện modal xác nhận
+        const snapshot = kitchenSentSnapshots[selectedRoomId] || [];
+        const snapItem = snapshot.find(i => i.uniqueId === uniqueId);
+        const currentItem = currentOrder.find(i => i.uniqueId === uniqueId);
+
+        if (field === "quantity" && snapItem && currentItem && value < snapItem.quantity) {
+            setCancelItem(currentItem);
+            setCancelQty(snapItem.quantity - value);
+            setCancelReason("Khác");
+            setCancelOtherReason("");
+            setOnCancelConfirm({
+                fn: (qty, reason) => {
+                    const finalValue = snapItem.quantity - qty;
+                    executeOrderUpdate(uniqueId, "quantity", finalValue);
+                    // Có thể thêm logic thông báo hủy món tới bếp ở đây
+                    message.success(`Đã hủy ${qty} ${currentItem.product.name}. Lý do: ${reason}`);
+                }
+            });
+            setIsCancelModalOpen(true);
+            return;
+        }
+
+        executeOrderUpdate(uniqueId, field, value);
+    };
+
+    const executeOrderUpdate = (uniqueId: string, field: "quantity" | "price", value: number) => {
+        if (!selectedRoomId) return;
         let updatedItems: OrderItem[] = [];
         setOrders((prev) => {
             const items = prev[selectedRoomId] ? [...prev[selectedRoomId]] : [];
@@ -746,6 +828,31 @@ export default function FnbSalesPage() {
     const removeOrderItem = (uniqueId: string) => {
         if (!selectedRoomId) return;
 
+        // Nếu xóa món và món đã báo bếp -> Hiện modal xác nhận
+        const snapshot = kitchenSentSnapshots[selectedRoomId] || [];
+        const snapItem = snapshot.find(i => i.uniqueId === uniqueId);
+        const currentItem = currentOrder.find(i => i.uniqueId === uniqueId);
+
+        if (snapItem && currentItem) {
+            setCancelItem(currentItem);
+            setCancelQty(snapItem.quantity);
+            setCancelReason("Khác");
+            setCancelOtherReason("");
+            setOnCancelConfirm({
+                fn: (qty, reason) => {
+                    executeOrderRemove(uniqueId);
+                    message.success(`Đã hủy toàn bộ ${currentItem.product.name}. Lý do: ${reason}`);
+                }
+            });
+            setIsCancelModalOpen(true);
+            return;
+        }
+
+        executeOrderRemove(uniqueId);
+    };
+
+    const executeOrderRemove = (uniqueId: string) => {
+        if (!selectedRoomId) return;
         let filteredItems: OrderItem[] = [];
         setOrders((prev) => {
             const items = prev[selectedRoomId] ? [...prev[selectedRoomId]] : [];
@@ -932,17 +1039,34 @@ export default function FnbSalesPage() {
                 </div>
 
                 <Row gutter={12}>
-                    <Col span={8}>
-                        <Button
-                            size="large"
-                            icon={<BellOutlined />}
-                            onClick={playTingSound}
-                            style={{ width: "100%", height: 50, borderRadius: 8 }}
+                    <Col span={10}>
+                        <Badge
+                            dot={hasKitchenChanges}
+                            offset={[-4, 4]}
+                            color="#f5222d"
+                            title={hasKitchenChanges ? 'Có món chưa gửi bếp' : ''}
                         >
-                            Thông báo
-                        </Button>
+                            <Button
+                                size="large"
+                                icon={<BellOutlined />}
+                                onClick={handleNotifyKitchen}
+                                loading={isNotifyingKitchen}
+                                disabled={!selectedRoomId || currentOrder.length === 0}
+                                style={{
+                                    width: "100%",
+                                    height: 50,
+                                    borderRadius: 8,
+                                    borderColor: hasKitchenChanges ? '#f5222d' : '#d9d9d9',
+                                    color: hasKitchenChanges ? '#f5222d' : undefined,
+                                    fontWeight: hasKitchenChanges ? 600 : undefined,
+                                    transition: 'all 0.3s',
+                                }}
+                            >
+                                Thông báo
+                            </Button>
+                        </Badge>
                     </Col>
-                    <Col span={16}>
+                    <Col span={14}>
                         <Button
                             type="primary"
                             size="large"
@@ -1303,6 +1427,99 @@ export default function FnbSalesPage() {
                 orderItems={currentOrder}
                 onReturn={handleReturnItems}
             />
+
+            {/* Modal xác nhận giảm/hủy món */}
+            <Modal
+                title={<Title level={4} style={{ margin: 0 }}>Xác nhận giảm / Hủy món</Title>}
+                open={isCancelModalOpen}
+                onCancel={() => setIsCancelModalOpen(false)}
+                footer={[
+                    <Button 
+                        key="back" 
+                        size="large"
+                        shape="round"
+                        icon={<CloseOutlined />}
+                        onClick={() => setIsCancelModalOpen(false)}
+                        style={{ minWidth: 120 }}
+                    >
+                        Bỏ qua
+                    </Button>,
+                    <Button 
+                        key="submit" 
+                        type="primary" 
+                        danger 
+                        size="large"
+                        shape="round"
+                        icon={<PlusOutlined rotate={45} />} // X icon
+                        onClick={() => {
+                            onCancelConfirm?.fn(cancelQty, cancelReason === "Khác" ? cancelOtherReason : cancelReason);
+                            setIsCancelModalOpen(false);
+                        }}
+                        style={{ minWidth: 120, background: '#f5222d' }}
+                    >
+                        Chắc chắn
+                    </Button>
+                ]}
+                width={500}
+                centered
+                styles={{
+                    mask: { backdropFilter: 'blur(4px)' }
+                }}
+            >
+                <div style={{ padding: '10px 0' }}>
+                    <Text style={{ fontSize: 16 }}>
+                        Bạn có chắc chắn muốn hủy món <Text strong>{cancelItem?.product.name}</Text> không?
+                    </Text>
+
+                    <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Text strong style={{ fontSize: 15 }}>Số lượng hủy</Text>
+                        <Space size={16}>
+                            <Button 
+                                shape="circle" 
+                                icon={<MinusOutlined />} 
+                                disabled={cancelQty <= 1}
+                                onClick={() => setCancelQty(prev => prev - 1)}
+                            />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <Title level={3} style={{ margin: 0, minWidth: 20, textAlign: 'center' }}>{cancelQty}</Title>
+                                <Text type="secondary" style={{ fontSize: 18 }}>/ {cancelItem?.quantity}</Text>
+                            </div>
+                            <Button 
+                                shape="circle" 
+                                icon={<PlusOutlined />} 
+                                disabled={cancelQty >= (cancelItem?.quantity || 1)}
+                                onClick={() => setCancelQty(prev => prev + 1)}
+                            />
+                        </Space>
+                    </div>
+
+                    <div style={{ marginTop: 24 }}>
+                        <Text strong style={{ fontSize: 15, display: 'block', marginBottom: 8 }}>Lý do hủy</Text>
+                        <Select 
+                            style={{ width: '100%' }} 
+                            size="large"
+                            value={cancelReason}
+                            onChange={setCancelReason}
+                            options={[
+                                { value: 'Khách đổi món', label: 'Khách đổi món' },
+                                { value: 'Nhập nhầm', label: 'Nhập nhầm' },
+                                { value: 'Hết hàng', label: 'Hết hàng' },
+                                { value: 'Khác', label: 'Khác' },
+                            ]}
+                        />
+                        
+                        {cancelReason === "Khác" && (
+                            <Input 
+                                style={{ marginTop: 12 }} 
+                                placeholder="Nhập lý do khác..." 
+                                value={cancelOtherReason}
+                                onChange={e => setCancelOtherReason(e.target.value)}
+                                prefix={<EditOutlined style={{ color: '#bfbfbf' }} />}
+                            />
+                        )}
+                    </div>
+                </div>
+            </Modal>
 
             <style dangerouslySetInnerHTML={{
                 __html: `

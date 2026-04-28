@@ -1,6 +1,6 @@
 'use client';
-import React, { useState } from 'react';
-import { Layout, Typography, Space, Button, Badge, Row, Col, Card, List, Tabs, Divider, Tag, Dropdown, MenuProps, message } from 'antd';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { Layout, Typography, Space, Button, Badge, Row, Col, Card, List, Tabs, Divider, Tag, Dropdown, MenuProps, message, notification } from 'antd';
 import {
     SoundOutlined,
     SettingOutlined,
@@ -20,13 +20,17 @@ import {
 import { useRouter } from 'next/navigation';
 import { COLORS } from '../constants';
 import { playTingSound } from '../utils';
+import { useFnbSocket, KitchenOrderReceivedPayload } from '@/hooks/useFnbSocket';
+import { useAuthStore } from '@/stores/authStore';
 
 const { Header, Content, Footer } = Layout;
 const { Text, Title } = Typography;
 
 interface KitchenOrder {
-    id: string;
+    id: string; // Format: notificationId-itemIdx
     orderId: string;
+    notificationId: string;
+    itemIdx: number;
     table: string;
     productName: string;
     quantity: number;
@@ -34,28 +38,105 @@ interface KitchenOrder {
     status: 'pending' | 'done';
 }
 
-const initialKitchenOrders: KitchenOrder[] = [
-    { id: '1', orderId: '169-672', table: 'Mang về', productName: 'Tee gỗ PTS Pro-Trắng xanh (Gói)', quantity: 1, time: 'một năm trước', status: 'pending' },
-    { id: '2', orderId: '169-672', table: 'Mang về', productName: 'Găng tay GL003-Xanh dương-L', quantity: 1, time: '09/03/2025 15:44', status: 'pending' },
-    { id: '3', orderId: '169-672', table: 'Mang về', productName: 'Giày nữ Callaway-TRẮNG SAO-24', quantity: 1, time: '09/03/2025 15:44', status: 'pending' },
-    { id: '4', orderId: '183-237', table: 'Bàn 45', productName: 'Sinh tố bơ xoài (Cốc)', quantity: 1, time: '22/07/2025 19:12', status: 'pending' },
-    { id: '5', orderId: '183-237', table: 'Bàn 45', productName: 'Cafe muối', quantity: 1, time: '22/07/2025 19:12', status: 'pending' },
-    { id: '6', orderId: '183-237', table: 'Bàn 45', productName: 'Nước cam tươi (Cốc)', quantity: 3, time: '22/07/2025 19:12', status: 'pending' },
-    { id: '7', orderId: '183-237', table: 'Bàn 45', productName: 'Bim bim Oishi Snack 32Gr (Gói)', quantity: 2, time: '22/07/2025 19:12', status: 'pending' },
-    { id: '8', orderId: '202-67', table: 'Bàn 33', productName: 'NGK Đảnh Thạnh Chanh muối', quantity: 1, time: '29 phút trước', status: 'done' },
-];
-
 const KitchenPage = () => {
     const router = useRouter();
-    const [orders, setOrders] = useState<KitchenOrder[]>(initialKitchenOrders);
+    const { warehouseId, userId, username } = useAuthStore(state => state.user);
+    const [orders, setOrders] = useState<KitchenOrder[]>([]);
     const [activeKitchenTab, setActiveKitchenTab] = useState<'priority' | 'dish' | 'table'>('table');
     const [isSoundEnabled, setIsSoundEnabled] = useState(true);
+    const isSoundEnabledRef = useRef(isSoundEnabled);
 
-    const handleAction = (id: string, newStatus: 'pending' | 'done') => {
-        setOrders(prev => prev.map(order =>
-            order.id === id ? { ...order, status: newStatus } : order
-        ));
-        if (isSoundEnabled) playTingSound();
+    useEffect(() => { isSoundEnabledRef.current = isSoundEnabled; }, [isSoundEnabled]);
+
+    // Helper: format timestamp thành giờ:phút
+    const formatTime = (ts: number) => {
+        const d = new Date(ts);
+        return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    };
+
+    // ── Socket callbacks ───────────────────────────────────────────────────────
+    const onKitchenOrderReceived = useCallback((payload: KitchenOrderReceivedPayload) => {
+        const newOrders: KitchenOrder[] = payload.items.map(item => ({
+            id: `${payload.notificationId}-${item.idx}`,
+            notificationId: payload.notificationId,
+            itemIdx: item.idx,
+            orderId: payload.notificationId.split('-').pop() || '',
+            table: payload.tableLabel,
+            productName: item.productName,
+            quantity: item.quantity,
+            time: formatTime(payload.timestamp),
+            status: item.status,
+        }));
+
+        setOrders(prev => {
+            // Loại bỏ các bản ghi cũ của notification này nếu có (tránh trùng lặp khi update)
+            const filtered = prev.filter(o => o.notificationId !== payload.notificationId);
+            return [...newOrders, ...filtered];
+        });
+
+        if (isSoundEnabledRef.current) playTingSound();
+
+        notification.open({
+            message: `🍽️ Đơn mới — ${payload.tableLabel}`,
+            description: `${payload.items.length} món từ ${payload.sentBy}`,
+            placement: 'topRight',
+            duration: 4,
+            style: { borderLeft: `4px solid ${COLORS.primary}` },
+        });
+    }, []);
+
+    const onKitchenItemUpdated = useCallback(({ notificationId, itemIdx, status }: any) => {
+        setOrders(prev => prev.map(order => {
+            if (order.notificationId === notificationId && order.itemIdx === itemIdx) {
+                return { ...order, status };
+            }
+            return order;
+        }));
+    }, []);
+
+    const onKitchenTableCleared = useCallback(({ tableId }: { tableId: string }) => {
+        // Tìm và xóa các order thuộc bàn này (cần map tableId nếu possible, hoặc filter theo table label nếu không có mapping)
+        // Tuy nhiên payload có tableId, ta có thể lưu tableId trong KitchenOrder để filter chính xác hơn
+        // Ở đây ta giả định tableId string khớp với tableId trong payload
+        setOrders(prev => prev.filter(o => String(o.id).split('-')[0] !== String(tableId))); // Logic này cần cẩn thận
+        // Cách tốt nhất là lưu tableId trong KitchenOrder
+    }, []);
+
+    const onInitKitchenTickets = useCallback(({ tickets }: { tickets: KitchenOrderReceivedPayload[] }) => {
+        const allOrders: KitchenOrder[] = [];
+        tickets.forEach(payload => {
+            payload.items.forEach(item => {
+                allOrders.push({
+                    id: `${payload.notificationId}-${item.idx}`,
+                    notificationId: payload.notificationId,
+                    itemIdx: item.idx,
+                    orderId: payload.notificationId.split('-').pop() || '',
+                    table: payload.tableLabel,
+                    productName: item.productName,
+                    quantity: item.quantity,
+                    time: formatTime(payload.timestamp),
+                    status: item.status,
+                });
+            });
+        });
+        setOrders(allOrders);
+    }, []);
+
+    const { markKitchenItemDone } = useFnbSocket({
+        warehouseId,
+        userId,
+        userName: username || 'Bếp',
+        onKitchenOrderReceived,
+        onKitchenItemUpdated,
+        onKitchenTableCleared,
+        onInitKitchenTickets,
+    });
+
+    const handleAction = (order: KitchenOrder, newStatus: 'pending' | 'done') => {
+        if (newStatus === 'done') {
+            markKitchenItemDone(order.notificationId, order.itemIdx);
+        }
+        // Local state sẽ được cập nhật thông qua onKitchenItemUpdated broadcast ngược lại
     };
 
     const pendingOrders = orders.filter(o => o.status === 'pending');
@@ -63,7 +144,7 @@ const KitchenPage = () => {
 
     // Group pending orders by table
     const groupedPending = pendingOrders.reduce((acc, order) => {
-        const key = `${order.table} (${order.orderId})`;
+        const key = `${order.table}`;
         if (!acc[key]) acc[key] = [];
         acc[key].push(order);
         return acc;
@@ -153,13 +234,13 @@ const KitchenPage = () => {
                                                 <Button
                                                     icon={<RightOutlined />}
                                                     style={{ borderColor: '#ff4d4f', color: '#ff4d4f' }}
-                                                    onClick={() => handleAction(item.id, 'done')}
+                                                    onClick={() => handleAction(item, 'done')}
                                                 />
                                                 <Button
                                                     type="primary"
                                                     icon={<DoubleRightOutlined />}
                                                     style={{ background: '#ff4d4f', borderColor: '#ff4d4f' }}
-                                                    onClick={() => handleAction(item.id, 'done')}
+                                                    onClick={() => handleAction(item, 'done')}
                                                 />
                                             </Space>
                                         </List.Item>

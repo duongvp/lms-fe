@@ -42,16 +42,15 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ open, onClose }) => {
 
     const topApps = [
         { icon: <ShopOutlined style={{ fontSize: 22, color: '#fff' }} />, label: 'Quản lý', color: '#1890ff' },
-        { 
-            icon: <CoffeeOutlined style={{ fontSize: 22, color: '#fff' }} />, 
-            label: 'Nhà bếp', 
-            color: '#722ed1', 
+        {
+            icon: <CoffeeOutlined style={{ fontSize: 22, color: '#fff' }} />,
+            label: 'Nhà bếp',
+            color: '#722ed1',
             onClick: () => {
                 onClose();
                 router.push('/fnb/kitchen');
-            } 
+            }
         },
-        { icon: <DesktopOutlined style={{ fontSize: 22, color: '#fff' }} />, label: 'Màn hình phụ', color: '#1890ff' },
     ];
 
     const menuItems = [
@@ -90,29 +89,29 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ open, onClose }) => {
             {/* App Shortcuts Grid */}
             <div style={{ padding: '0 20px 16px 20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 {topApps.map((app, index) => (
-                    <div 
-                        key={index} 
+                    <div
+                        key={index}
                         className="settings-app-card"
-                        style={{ 
-                            padding: '12px', 
-                            background: '#f5f5f5', 
-                            borderRadius: 12, 
-                            display: 'flex', 
-                            alignItems: 'center', 
+                        style={{
+                            padding: '12px',
+                            background: '#f5f5f5',
+                            borderRadius: 12,
+                            display: 'flex',
+                            alignItems: 'center',
                             gap: 12,
                             cursor: 'pointer',
                             transition: 'all 0.2s'
                         }}
                         onClick={app.onClick}
                     >
-                        <div style={{ 
-                            width: 36, 
-                            height: 36, 
-                            borderRadius: 8, 
-                            background: app.color, 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'center' 
+                        <div style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: 8,
+                            background: app.color,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
                         }}>
                             {app.icon}
                         </div>
@@ -130,9 +129,9 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ open, onClose }) => {
                     item.divider ? (
                         <Divider style={{ margin: '8px 0' }} />
                     ) : (
-                        <List.Item 
-                            style={{ 
-                                padding: '14px 24px', 
+                        <List.Item
+                            style={{
+                                padding: '14px 24px',
                                 cursor: 'pointer',
                                 border: 'none',
                             }}

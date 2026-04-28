@@ -37,7 +37,8 @@ const RoomModal: React.FC<RoomModalProps> = ({ onSuccess }) => {
             form.setFieldsValue({
                 ...modal.room,
                 label: modal.room.label,
-                floor: modal.room.floor ? Number(modal.room.floor) : undefined, // Ensure floor is number for select
+                floor: modal.room.floor === 'null' ? 'takeaway' : (modal.room.floor ? Number(modal.room.floor) : undefined),
+                status: (modal.room.status === 'in_use' || modal.room.status === 'occupied') ? 'occupied' : 'available',
             });
         } else {
             form.resetFields();
@@ -55,17 +56,17 @@ const RoomModal: React.FC<RoomModalProps> = ({ onSuccess }) => {
         try {
             const tableData = {
                 table_name: values.label,
-                area_id: Number(values.floor),
-                status: values.status,
-                capacity: values.customers ? Number(values.customers) : undefined,
+                area_id: values.floor === 'takeaway' ? null : Number(values.floor),
+                status: values.status === 'occupied' ? 'in_use' : 'empty',
+                seat_count: 4,
                 warehouse_id: warehouseId
             };
 
             if (modal.type === ActionType.UPDATE && modal.room?.id) {
-                await updateTable(Number(modal.room.id), tableData);
+                await updateTable(Number(modal.room.id), tableData as any);
                 message.success('Cập nhật bàn thành công');
             } else {
-                await createTable(tableData);
+                await createTable(tableData as any);
                 message.success('Thêm bàn mới thành công');
             }
 
