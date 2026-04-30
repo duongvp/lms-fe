@@ -1,6 +1,6 @@
 import React from 'react';
-import { Form, Input, Button, Checkbox, Typography } from 'antd';
-import { LockOutlined, UserOutlined } from '@ant-design/icons';
+import { Form, Input, Button, Checkbox, Typography, Segmented } from 'antd';
+import { LockOutlined, UserOutlined, ShopOutlined, DesktopOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import { showErrorMessage } from '@/ultils/message';
 import { loginUser } from '@/services/authService';
@@ -16,28 +16,33 @@ const LoginForm = () => {
 
     const onFinish = async (values: any) => {
         setLoading(true);
+        const { mode, ...loginData } = values;
         try {
-            const response = await loginUser(values);
+            const response = await loginUser(loginData);
             let { accessToken, refreshToken, user, ...userRest } = response.data;
             setUser(userRest);
             setAccessToken(accessToken);
-
 
             document.cookie = `refreshToken=${refreshToken}; path=/; secure; sameSite=Lax`;
             document.cookie = `user=${user}; path=/; secure; sameSite=Lax`;
 
             localStorage.setItem('login', Date.now().toString());
+            localStorage.setItem('lastLoginMode', mode);
 
-            // Tìm route đầu tiên mà user có quyền
+            if (mode === 'fnb') {
+                router.push('/fnb');
+                return;
+            }
+
+            // Tìm route đầu tiên mà user có quyền (thường là dashboard)
             const firstAllowedRoute = protectedRoutes.find(route =>
                 userRest.permissions?.includes(route.permission)
             );
-            console.log("🚀 ~ onFinish ~ firstAllowedRoute:", firstAllowedRoute);
-
+            
             if (firstAllowedRoute) {
                 router.push(firstAllowedRoute.path);
             } else {
-                router.push('/403'); // fallback nếu không có quyền nào
+                router.push('/dashboard'); // fallback
             }
         } catch (error) {
             console.log("🚀 ~ onFinish ~ error:", error)
@@ -58,10 +63,23 @@ const LoginForm = () => {
             </div>
             <Form
                 name="login_form"
-                initialValues={{ rememberMe: true }}
+                initialValues={{ 
+                    rememberMe: true,
+                    mode: typeof window !== 'undefined' ? localStorage.getItem('lastLoginMode') || 'admin' : 'admin'
+                }}
                 onFinish={onFinish}
                 layout="vertical"
+                size="large"
             >
+                <Form.Item name="mode" style={{ marginBottom: 24 }}>
+                    <Segmented
+                        block
+                        options={[
+                            { label: 'Bán hàng', value: 'fnb', icon: <ShopOutlined /> },
+                            { label: 'Quản lý', value: 'admin', icon: <DesktopOutlined /> }
+                        ]}
+                    />
+                </Form.Item>
                 <Form.Item name="username" label="Tên đăng nhập" rules={[{ required: true, message: 'Vui lòng nhập tên đăng nhập' }]}>
                     <Input prefix={<UserOutlined />} placeholder="Tên đăng nhập" allowClear />
                 </Form.Item>

@@ -113,3 +113,46 @@ export const cancelInvoice = async (id: number) => {
         method: 'POST',
     });
 };
+
+export interface ProductReportItem {
+    product_code: string;
+    product_name: string;
+    sold_qty: number;
+    revenue: number;
+    total_cost: number;
+    net_revenue: number;
+    return_qty: number;
+    return_value: number;
+}
+
+export interface CreatorReportItem {
+    user_id: number;
+    username: string;
+    created_by: string;
+    total_invoices: number;
+    revenue: number;
+}
+
+export const getReportByProduct = async (filter: {
+    warehouse_id?: number;
+    user_id?: number;
+    date?: [string, string];
+}): Promise<ProductReportItem[]> => {
+    return await fetchInstance(`${API_BASE_URL}/report/product`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(filter),
+    });
+};
+
+export const getReportByCreator = async (filter: {
+    warehouse_id?: number;
+    date?: [string, string];
+}): Promise<CreatorReportItem[]> => {
+    return await fetchInstance(`${API_BASE_URL}/report/creator`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(filter),
+    });
+};
+

@@ -91,7 +91,7 @@ const menuConfig = [
             {
                 key: '25',
                 label: 'F&B Bán hàng',
-                path: '/transactions/fnb',
+                path: '/fnb',
                 permission: PermissionKey.INVOICE_VIEW,
             },
         ],

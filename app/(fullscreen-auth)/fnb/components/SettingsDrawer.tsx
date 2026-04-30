@@ -19,6 +19,7 @@ import {
     RightOutlined
 } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/stores/authStore';
 
 const { Text, Title } = Typography;
 
@@ -27,21 +28,39 @@ interface SettingsDrawerProps {
     onClose: () => void;
 }
 
+interface MenuItem {
+    icon?: React.ReactNode;
+    label?: string;
+    color?: string;
+    onClick?: () => void;
+    divider?: boolean;
+    suffix?: React.ReactNode;
+}
+
 const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ open, onClose }) => {
     const router = useRouter();
+    const { user, logout } = useAuthStore();
+    const username = user?.username || 'Người dùng';
 
     const handleLogout = () => {
         message.loading("Đang đăng xuất...");
         setTimeout(() => {
-            // Local storage cleanup or store reset could go here
+            logout();
             message.success("Đã đăng xuất thành công");
             onClose();
-            // router.push('/login');
         }, 800);
     };
 
     const topApps = [
-        { icon: <ShopOutlined style={{ fontSize: 22, color: '#fff' }} />, label: 'Quản lý', color: '#1890ff' },
+        {
+            icon: <ShopOutlined style={{ fontSize: 22, color: '#fff' }} />,
+            label: 'Quản lý',
+            color: '#1890ff',
+            onClick: () => {
+                onClose();
+                router.push('/dashboard');
+            }
+        },
         {
             icon: <CoffeeOutlined style={{ fontSize: 22, color: '#fff' }} />,
             label: 'Nhà bếp',
@@ -53,17 +72,17 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ open, onClose }) => {
         },
     ];
 
-    const menuItems = [
+    const menuItems: MenuItem[] = [
         { icon: <LineChartOutlined />, label: 'Báo cáo cuối ngày' },
-        { icon: <FileTextOutlined />, label: 'Lập phiếu thu' },
-        { icon: <HistoryOutlined />, label: 'Chọn hóa đơn trả hàng' },
-        { divider: true },
-        { icon: <SettingOutlined />, label: 'Cài đặt chung' },
-        { icon: <DollarOutlined />, label: 'Thiết lập giá' },
-        { icon: <UnorderedListOutlined />, label: 'Món có sẵn trong đơn' },
-        { icon: <KeyOutlined />, label: 'Phím tắt', suffix: <RightOutlined style={{ fontSize: 12, color: '#bfbfbf' }} /> },
-        { divider: true },
-        { icon: <LockOutlined />, label: 'Đổi mật khẩu' },
+        // { icon: <FileTextOutlined />, label: 'Lập phiếu thu' },
+        // { icon: <HistoryOutlined />, label: 'Chọn hóa đơn trả hàng' },
+        // { divider: true },
+        // { icon: <SettingOutlined />, label: 'Cài đặt chung' },
+        // { icon: <DollarOutlined />, label: 'Thiết lập giá' },
+        // { icon: <UnorderedListOutlined />, label: 'Món có sẵn trong đơn' },
+        // { icon: <KeyOutlined />, label: 'Phím tắt', suffix: <RightOutlined style={{ fontSize: 12, color: '#bfbfbf' }} /> },
+        // { divider: true },
+        // { icon: <LockOutlined />, label: 'Đổi mật khẩu' },
         { icon: <LogoutOutlined style={{ color: '#ff4d4f' }} />, label: 'Đăng xuất', color: '#ff4d4f', onClick: handleLogout },
     ];
 
@@ -81,7 +100,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ open, onClose }) => {
             <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Space size={12}>
                     <Avatar size={40} icon={<UserOutlined />} style={{ background: '#e6f7ff', color: '#1890ff' }} />
-                    <Title level={5} style={{ margin: 0 }}>admin</Title>
+                    <Title level={5} style={{ margin: 0 }}>{username}</Title>
                 </Space>
                 <Button type="text" icon={<CloseOutlined />} onClick={onClose} style={{ color: '#bfbfbf' }} />
             </div>

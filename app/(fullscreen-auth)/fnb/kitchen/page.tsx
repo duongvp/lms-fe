@@ -161,6 +161,7 @@ const KitchenPage = () => {
             key: 'manage',
             label: 'Quản lý',
             icon: <AppstoreOutlined />,
+            onClick: () => router.push('/dashboard')
         },
         {
             key: 'exit',

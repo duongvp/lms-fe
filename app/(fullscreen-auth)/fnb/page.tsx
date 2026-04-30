@@ -1041,7 +1041,7 @@ export default function FnbSalesPage() {
                         onClick={() => window.location.reload()}
                     />
                     <Space>
-                        <Text strong>AsiaGolfVit</Text>
+                        <Text strong>{staffName}</Text>
                         <MenuOutlined
                             style={{ fontSize: 18, cursor: 'pointer' }}
                             onClick={() => setIsSettingsDrawerOpen(true)}

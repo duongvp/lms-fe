@@ -19,20 +19,22 @@ interface ReportChartProps {
 const ReportChart: React.FC<ReportChartProps> = ({ data, type = 'line', title, reportType, onTypeChange }) => {
     const titleText = title ?? (reportType === 'profit' ? 'Lợi nhuận theo hàng hóa' : reportType === 'inventory' ? 'Xuất nhập tồn theo hàng hóa' : 'Doanh thu theo hàng hóa');
 
+    const tooltipFormatter = (datum: any) => {
+        // G2Plot / @ant-design/charts might pass raw object or nested in `data`
+        const d = datum.data || datum;
+        const name = d.name || titleText || 'Giá trị';
+        const value = Number(d.value || 0);
+        return { name, value: `${value.toLocaleString('vi-VN')} VND` };
+    };
+
     const lineConfig = {
         data,
         xField: 'name',
         yField: 'value',
         smooth: true,
-        tooltip: {
-            formatter: (datum: any) => ({ name: titleText, value: `${datum.value.toLocaleString('vi-VN')} VND` }),
-        },
-        xAxis: {
-            label: { autoRotate: true },
-        },
-        yAxis: {
-            label: { formatter: (v: number) => v.toLocaleString('vi-VN') },
-        },
+        tooltip: { formatter: tooltipFormatter },
+        xAxis: { label: { autoRotate: true } },
+        yAxis: { label: { formatter: (v: number) => v.toLocaleString('vi-VN') } },
         animation: { appear: { animation: 'scale-in-y' } },
         height: 340,
     };
@@ -45,7 +47,7 @@ const ReportChart: React.FC<ReportChartProps> = ({ data, type = 'line', title, r
         radius: 0.9,
         label: { type: 'inner', offset: '-30%', content: '{percentage}', style: { textAlign: 'center', fontSize: 12 } },
         interactions: [{ type: 'element-active' }],
-        tooltip: { formatter: (datum: any) => ({ name: datum.name, value: `${datum.value.toLocaleString('vi-VN')} VND` }) },
+        tooltip: { formatter: tooltipFormatter },
         height: 340,
     };
 
@@ -56,7 +58,7 @@ const ReportChart: React.FC<ReportChartProps> = ({ data, type = 'line', title, r
         label: { position: 'middle', style: { fill: '#FFFFFF', opacity: 0.6 } },
         xAxis: { label: { autoRotate: true } },
         yAxis: { label: { formatter: (v: number) => v.toLocaleString('vi-VN') } },
-        tooltip: { formatter: (datum: any) => ({ name: datum.name, value: `${datum.value.toLocaleString('vi-VN')} VND` }) },
+        tooltip: { formatter: tooltipFormatter },
         animation: { appear: { animation: 'scale-in-y' } },
         height: 340,
     };
