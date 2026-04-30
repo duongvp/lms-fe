@@ -91,10 +91,8 @@ const TableActionModal: React.FC<TableActionModalProps> = ({
                             setModalTargetRoomId(val);
                             if (val === "takeaway") {
                                 setModalTargetTableType('new');
-                            } else if ((orders[val]?.length || 0) > 0) {
-                                setModalTargetTableType('existing');
                             } else {
-                                setModalTargetTableType('new');
+                                setModalTargetTableType('existing');
                             }
                         }}
                         style={{ width: 300, height: 40 }}

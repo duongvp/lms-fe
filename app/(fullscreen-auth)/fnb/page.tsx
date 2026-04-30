@@ -142,9 +142,6 @@ export default function FnbSalesPage() {
 
     const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
 
-    const [kitchenSentSnapshots, setKitchenSentSnapshots] = useState<Record<string, OrderItem[]>>({});
-    const [isNotifyingKitchen, setIsNotifyingKitchen] = useState(false);
-
     // Trạng thái cho modal xác nhận giảm/hủy món đã báo bếp
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
     const [cancelItem, setCancelItem] = useState<OrderItem | null>(null);
@@ -249,6 +246,27 @@ export default function FnbSalesPage() {
                 syncOrderRef.current?.(tableId, currentItems);
             }
         }, []),
+        onKitchenItemUpdated: useCallback(({ notificationId, itemIdx, status, uniqueId, tableId }: any) => {
+            if (!tableId || !uniqueId) return;
+            setOrders(prev => {
+                const roomOrders = prev[String(tableId)];
+                if (!roomOrders) return prev;
+
+                const updatedOrders = roomOrders.map(item => {
+                    if (item.uniqueId === uniqueId) {
+                        return { ...item, kitchenStatus: status };
+                    }
+                    return item;
+                });
+
+                // Đồng bộ thay đổi này ra các client khác
+                if (syncOrderRef.current) {
+                    syncOrderRef.current(tableId, updatedOrders);
+                }
+
+                return { ...prev, [String(tableId)]: updatedOrders };
+            });
+        }, []),
     });
 
     // Cập nhật ref sau khi syncOrder đã được khai báo
@@ -346,14 +364,8 @@ export default function FnbSalesPage() {
     // true khi đơn hiện tại có thay đổi so với lần cuối đã báo bếp
     const hasKitchenChanges = useMemo(() => {
         if (!selectedRoomId || currentOrder.length === 0) return false;
-        const snapshot = kitchenSentSnapshots[selectedRoomId];
-        if (!snapshot) return currentOrder.length > 0; // Chưa báo bếp lần nào
-        if (snapshot.length !== currentOrder.length) return true;
-        return currentOrder.some((item) => {
-            const snapItem = snapshot.find(s => s.uniqueId === item.uniqueId);
-            return !snapItem || snapItem.quantity !== item.quantity;
-        });
-    }, [currentOrder, kitchenSentSnapshots, selectedRoomId]);
+        return currentOrder.some(item => (item.sentQuantity || 0) < item.quantity);
+    }, [currentOrder, selectedRoomId]);
 
     const handleRoomClick = (room: Room) => {
         setSelectedRoomId(room.id);
@@ -465,40 +477,64 @@ export default function FnbSalesPage() {
             },
         });
     };
-    const handleMergeRooms = (sourceIds: string[], targetId: string) => {
-        if (sourceIds.length === 0 || !targetId) {
+    const handleMergeRooms = (rawSourceIds: string[], rawTargetId: string) => {
+        if (rawSourceIds.length === 0 || !rawTargetId) {
             message.warning("Vui lòng chọn bàn để ghép.");
             return;
         }
 
-        setOrders((prev) => {
-            const next = { ...prev };
-            const targetItems = [...(next[targetId] || [])];
+        const targetId = String(rawTargetId);
+        const sourceIds = rawSourceIds.map(String);
 
-            sourceIds.forEach((id) => {
-                const sourceItems = next[id] || [];
-                sourceItems.forEach((sItem) => {
-                    const existing = targetItems.find(tItem => tItem.product.id === sItem.product.id);
-                    if (existing) {
-                        existing.quantity += sItem.quantity;
-                    } else {
-                        targetItems.push({
-                            ...sItem,
-                            uniqueId: `${sItem.product.id}-${Date.now()}-${Math.random()}`
-                        });
-                    }
-                });
-                // Clear source items
-                delete next[id];
+        const newOrders = { ...orders };
+        const targetItems = [...(newOrders[targetId] || [])];
+
+        sourceIds.forEach((id) => {
+            const sourceItems = newOrders[id] || [];
+            sourceItems.forEach((sItem) => {
+                const existingIdx = targetItems.findIndex(tItem => tItem.product.id === sItem.product.id);
+                if (existingIdx !== -1) {
+                    targetItems[existingIdx] = {
+                        ...targetItems[existingIdx],
+                        quantity: targetItems[existingIdx].quantity + sItem.quantity
+                    };
+                } else {
+                    targetItems.push({
+                        ...sItem,
+                        uniqueId: `${sItem.product.id}-${Date.now()}-${Math.random()}`
+                    });
+                }
             });
+            // Xóa món ở bàn nguồn
+            delete newOrders[id];
 
-            return { ...next, [targetId]: targetItems };
+            // Đồng bộ Socket cho bàn nguồn
+            if (!id.startsWith('temp-')) {
+                syncOrder(id, []);
+                broadcastTableStatus(id, 'empty');
+            }
         });
 
-        // Close tabs of merged tables
+        newOrders[targetId] = targetItems;
+        setOrders(newOrders);
+
+        // Cập nhật trạng thái các bàn trong danh sách rooms
+        setRooms(prev => prev.map(room => {
+            if (sourceIds.includes(room.id)) return { ...room, status: 'available' as RoomStatus };
+            if (room.id === targetId) return { ...room, status: 'occupied' as RoomStatus };
+            return room;
+        }));
+
+        // Đồng bộ Socket cho bàn đích
+        if (!targetId.startsWith('temp-')) {
+            broadcastTableStatus(targetId, 'in_use');
+            syncOrder(targetId, targetItems);
+        }
+
+        // Đóng tab của các bàn đã ghép
         setOpenRoomIds((prev) => prev.filter(id => !sourceIds.includes(id)));
 
-        // If current selected room was a source, switch to target
+        // Nếu bàn đang chọn là một trong các bàn nguồn, chuyển sang bàn đích
         if (sourceIds.includes(selectedRoomId!)) {
             setSelectedRoomId(targetId);
         }
@@ -507,6 +543,7 @@ export default function FnbSalesPage() {
         setRoomsToMerge([]);
         message.success("Đã ghép bàn thành công.");
     };
+
 
     const handlePayment = () => {
         if (!selectedRoomId || currentOrder.length === 0) return;
@@ -568,13 +605,6 @@ export default function FnbSalesPage() {
             broadcastTableStatus(selectedRoomId, 'empty');
             leaveTable(selectedRoomId);
 
-            // Xóa kitchen snapshot khi thanh toán xong
-            setKitchenSentSnapshots(prev => {
-                const next = { ...prev };
-                delete next[selectedRoomId];
-                return next;
-            });
-
             setOpenRoomIds(prev => prev.filter(id => id !== selectedRoomId));
             setSelectedRoomId(null);
             setIsPaymentDrawerOpen(false);
@@ -589,6 +619,8 @@ export default function FnbSalesPage() {
         }
     };
 
+    const [isNotifyingKitchen, setIsNotifyingKitchen] = useState(false);
+
     const handleNotifyKitchen = () => {
         if (!selectedRoomId || currentOrder.length === 0) {
             message.warning('Chưa có món nào trong đơn để báo bếp.');
@@ -597,13 +629,35 @@ export default function FnbSalesPage() {
         setIsNotifyingKitchen(true);
         const tableLabel = rooms.find(r => r.id === selectedRoomId)?.label
             || (selectedRoomId.startsWith('temp-') ? 'Đơn mới' : selectedRoomId);
-        const kitchenItems = currentOrder.map(item => ({
-            productName: item.product.name,
-            quantity: item.quantity,
-        }));
+
+        // Chỉ gửi những món chưa gửi đủ số lượng
+        const kitchenItems = currentOrder
+            .filter(item => (item.sentQuantity || 0) < item.quantity)
+            .map(item => ({
+                uniqueId: item.uniqueId,
+                productName: item.product.name,
+                quantity: item.quantity - (item.sentQuantity || 0),
+            }));
+
         notifyKitchen(selectedRoomId, tableLabel, kitchenItems, staffName || 'Nhân viên');
-        // Lưu snapshot đơn hàng tại thời điểm báo bếp
-        setKitchenSentSnapshots(prev => ({ ...prev, [selectedRoomId]: [...currentOrder] }));
+        const currentTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+
+        // Cập nhật lại số lượng đã gửi và trạng thái pending trên order_draft
+        const updatedOrder = currentOrder.map(item => {
+            if ((item.sentQuantity || 0) < item.quantity) {
+                return {
+                    ...item,
+                    sentQuantity: item.quantity,
+                    kitchenStatus: 'pending' as const,
+                    sentTime: item.sentTime || currentTime
+                };
+            }
+            return item;
+        });
+
+        setOrders(prev => ({ ...prev, [selectedRoomId]: updatedOrder }));
+        syncOrder(selectedRoomId, updatedOrder);
+
         setIsNotifyingKitchen(false);
         message.success(`Đã gửi ${kitchenItems.length} món lên bếp!`);
         playTingSound();
@@ -617,10 +671,9 @@ export default function FnbSalesPage() {
             return;
         }
 
-        let targetId = modalTargetRoomId;
+        let targetId = modalTargetRoomId ? String(modalTargetRoomId) : null;
         if (modalTargetTableType === "new") {
             targetId = `temp-${Date.now()}`;
-            setOpenRoomIds(prev => [...prev, targetId!]);
         }
 
         if (!targetId) {
@@ -628,48 +681,94 @@ export default function FnbSalesPage() {
             return;
         }
 
-        setOrders(prev => {
-            const next = { ...prev };
-            const currentItems = [...(next[selectedRoomId!] || [])];
-            const targetItems = [...(next[targetId!] || [])];
+        if (targetId === selectedRoomId) {
+            message.warning("Bàn đích không được trùng với bàn hiện tại.");
+            return;
+        }
 
-            itemsToSplit.forEach(splitItem => {
-                const qtyToMove = splitQuantities[splitItem.uniqueId];
-                const originalItemIndex = currentItems.findIndex(i => i.uniqueId === splitItem.uniqueId);
+        const sourceItems = [...(orders[selectedRoomId] || [])];
+        const targetItems = [...(orders[targetId] || [])];
 
-                if (originalItemIndex !== -1) {
-                    const originalItem = currentItems[originalItemIndex];
-                    // Reduce from source
-                    if (originalItem.quantity === qtyToMove) {
-                        currentItems.splice(originalItemIndex, 1);
-                    } else {
-                        currentItems[originalItemIndex] = { ...originalItem, quantity: originalItem.quantity - qtyToMove };
-                    }
+        itemsToSplit.forEach(splitItem => {
+            const qtyToMove = splitQuantities[splitItem.uniqueId];
+            const originalItemIndex = sourceItems.findIndex(i => i.uniqueId === splitItem.uniqueId);
 
-                    // Add to target
-                    const existingTarget = targetItems.find(i => i.product.id === splitItem.product.id);
-                    if (existingTarget) {
-                        existingTarget.quantity += qtyToMove;
-                    } else {
-                        targetItems.push({
-                            ...splitItem,
-                            uniqueId: `${splitItem.product.id}-${Date.now()}-${Math.random()}`,
-                            quantity: qtyToMove
-                        });
-                    }
+            if (originalItemIndex !== -1) {
+                const originalItem = sourceItems[originalItemIndex];
+
+                // Giảm từ bàn nguồn
+                if (originalItem.quantity === qtyToMove) {
+                    sourceItems.splice(originalItemIndex, 1);
+                } else {
+                    sourceItems[originalItemIndex] = { ...originalItem, quantity: originalItem.quantity - qtyToMove };
                 }
-            });
 
-            next[selectedRoomId!] = currentItems;
-            next[targetId!] = targetItems;
-            return next;
+                // Thêm vào bàn đích
+                const existingTargetIdx = targetItems.findIndex(i => i.product.id === splitItem.product.id);
+                if (existingTargetIdx !== -1) {
+                    targetItems[existingTargetIdx] = {
+                        ...targetItems[existingTargetIdx],
+                        quantity: targetItems[existingTargetIdx].quantity + qtyToMove
+                    };
+                } else {
+                    targetItems.push({
+                        ...splitItem,
+                        uniqueId: `${splitItem.product.id}-${Date.now()}-${Math.random()}`,
+                        quantity: qtyToMove
+                    });
+                }
+            }
         });
+
+        // Cập nhật state orders
+        setOrders(prev => ({
+            ...prev,
+            [selectedRoomId]: sourceItems,
+            [targetId!]: targetItems
+        }));
+
+        // Cập nhật thời gian bắt đầu cho bàn đích nếu chưa có
+        if (!orderStartTimes[targetId!]) {
+            setOrderStartTimes(prev => ({ ...prev, [targetId!]: new Date() }));
+        }
+
+        // Cập nhật trạng thái bàn và danh sách tab đang mở
+        if (modalTargetTableType === "new") {
+            setOpenRoomIds(prev => [...prev, targetId!]);
+        } else {
+            // Nếu bàn đích là bàn thật, cập nhật trạng thái thành 'occupied'
+            setRooms(prev => prev.map(room =>
+                room.id === targetId ? { ...room, status: 'occupied' as RoomStatus } : room
+            ));
+            if (!targetId.startsWith('temp-')) {
+                broadcastTableStatus(targetId, 'in_use');
+            }
+            // Mở tab cho bàn đích nếu chưa mở
+            if (!openRoomIds.includes(targetId)) {
+                setOpenRoomIds(prev => [...prev, targetId]);
+            }
+        }
+
+        // Đồng bộ qua Socket
+        if (!selectedRoomId.startsWith('temp-')) {
+            syncOrder(selectedRoomId, sourceItems);
+        }
+        if (!targetId.startsWith('temp-')) {
+            syncOrder(targetId, targetItems);
+        }
+
+        // Nếu bàn nguồn hết món, giải phóng bàn (tùy chọn - ở đây tôi giữ nguyên để user tự xử lý hoặc checkout)
+        if (sourceItems.length === 0) {
+            // Có thể thêm logic tự động giải phóng bàn ở đây nếu muốn
+        }
 
         setIsTableActionModalOpen(false);
         setSplitQuantities({});
+        setSelectedRoomId(targetId);
         playTingSound();
         message.success("Đã tách đơn thành công.");
     };
+
 
 
     const syncOrderTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -774,20 +873,25 @@ export default function FnbSalesPage() {
         if (!selectedRoomId) return;
 
         // Nếu giảm số lượng và món đã báo bếp -> Hiện modal xác nhận
-        const snapshot = kitchenSentSnapshots[selectedRoomId] || [];
-        const snapItem = snapshot.find(i => i.uniqueId === uniqueId);
         const currentItem = currentOrder.find(i => i.uniqueId === uniqueId);
+        const sentQty = currentItem?.sentQuantity || 0;
 
-        if (field === "quantity" && snapItem && currentItem && value < snapItem.quantity) {
+        if (field === "quantity" && currentItem && value < sentQty) {
             setCancelItem(currentItem);
-            setCancelQty(snapItem.quantity - value);
+            setCancelQty(sentQty - value);
             setCancelReason("Khác");
             setCancelOtherReason("");
             setOnCancelConfirm({
                 fn: (qty, reason) => {
-                    const finalValue = snapItem.quantity - qty;
+                    const finalValue = sentQty - qty;
                     executeOrderUpdate(uniqueId, "quantity", finalValue);
-                    // Có thể thêm logic thông báo hủy món tới bếp ở đây
+                    // Cập nhật lại sentQuantity vì đã xác nhận hủy
+                    setOrders(prev => {
+                        const items = prev[selectedRoomId!] ? [...prev[selectedRoomId!]] : [];
+                        const updated = items.map(i => i.uniqueId === uniqueId ? { ...i, sentQuantity: finalValue } : i);
+                        syncOrder(selectedRoomId!, updated);
+                        return { ...prev, [selectedRoomId!]: updated };
+                    });
                     message.success(`Đã hủy ${qty} ${currentItem.product.name}. Lý do: ${reason}`);
                 }
             });
@@ -829,13 +933,12 @@ export default function FnbSalesPage() {
         if (!selectedRoomId) return;
 
         // Nếu xóa món và món đã báo bếp -> Hiện modal xác nhận
-        const snapshot = kitchenSentSnapshots[selectedRoomId] || [];
-        const snapItem = snapshot.find(i => i.uniqueId === uniqueId);
         const currentItem = currentOrder.find(i => i.uniqueId === uniqueId);
+        const sentQty = currentItem?.sentQuantity || 0;
 
-        if (snapItem && currentItem) {
+        if (currentItem && sentQty > 0) {
             setCancelItem(currentItem);
-            setCancelQty(snapItem.quantity);
+            setCancelQty(sentQty);
             setCancelReason("Khác");
             setCancelOtherReason("");
             setOnCancelConfirm({
@@ -874,16 +977,32 @@ export default function FnbSalesPage() {
             const index = items.findIndex(item => item.uniqueId === uniqueId);
             if (index !== -1 && items[index].quantity > 1) {
                 const item = items[index];
-                // Create a copy of the list to avoid mutations
                 const newItems = [...items];
-                // Reduce quantity of original
-                newItems[index] = { ...item, quantity: item.quantity - 1 };
-                // Add new row with quantity 1
+
+                // Giảm số lượng dòng cũ
+                const newQuantity = item.quantity - 1;
+                const newSentQuantity = item.sentQuantity ? Math.min(item.sentQuantity, newQuantity) : undefined;
+                newItems[index] = {
+                    ...item,
+                    quantity: newQuantity,
+                    sentQuantity: newSentQuantity
+                };
+
+                // Thêm dòng mới, kế thừa trạng thái bếp nếu cần
+                const inheritedSentQuantity = item.sentQuantity && item.sentQuantity > newQuantity ? 1 : undefined;
                 newItems.splice(index + 1, 0, {
                     uniqueId: `${item.product.id}-${Date.now()}-${Math.random()}`,
                     product: { ...item.product },
-                    quantity: 1
+                    quantity: 1,
+                    sentQuantity: inheritedSentQuantity,
+                    kitchenStatus: inheritedSentQuantity ? item.kitchenStatus : undefined
                 });
+
+                // Sync qua socket
+                if (!selectedRoomId.startsWith('temp-')) {
+                    syncOrder(selectedRoomId, newItems);
+                }
+
                 return { ...prev, [selectedRoomId]: newItems };
             }
             return prev;
@@ -972,7 +1091,6 @@ export default function FnbSalesPage() {
                 />
             </div>
 
-            {/* Order Items List */}
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "flex-start", justifyContent: "flex-start", background: "#fff", overflowY: "auto" }}>
                 <OrderItemsTable
                     currentOrder={currentOrder}
@@ -1000,10 +1118,6 @@ export default function FnbSalesPage() {
                                 style={{ fontSize: 18, cursor: 'pointer' }}
                                 onClick={() => setIsHistoryDrawerOpen(true)}
                                 title="Lịch sử báo bếp"
-                            />
-                            <CarryOutOutlined
-                                style={{ fontSize: 18, cursor: 'pointer' }}
-                                title="Kiểm đồ"
                             />
                             <RollbackOutlined
                                 style={{ fontSize: 18, cursor: 'pointer' }}
@@ -1040,31 +1154,34 @@ export default function FnbSalesPage() {
 
                 <Row gutter={12}>
                     <Col span={10}>
-                        <Badge
-                            dot={hasKitchenChanges}
-                            offset={[-4, 4]}
-                            color="#f5222d"
-                            title={hasKitchenChanges ? 'Có món chưa gửi bếp' : ''}
-                        >
-                            <Button
-                                size="large"
-                                icon={<BellOutlined />}
-                                onClick={handleNotifyKitchen}
-                                loading={isNotifyingKitchen}
-                                disabled={!selectedRoomId || currentOrder.length === 0}
-                                style={{
-                                    width: "100%",
-                                    height: 50,
-                                    borderRadius: 8,
-                                    borderColor: hasKitchenChanges ? '#f5222d' : '#d9d9d9',
-                                    color: hasKitchenChanges ? '#f5222d' : undefined,
-                                    fontWeight: hasKitchenChanges ? 600 : undefined,
-                                    transition: 'all 0.3s',
-                                }}
+                        <div style={{ width: '100%' }}>
+                            <Badge
+                                dot={hasKitchenChanges}
+                                offset={[-4, 4]}
+                                color="#f5222d"
+                                title={hasKitchenChanges ? 'Có món chưa gửi bếp' : ''}
+                                style={{ display: 'block' }}
                             >
-                                Thông báo
-                            </Button>
-                        </Badge>
+                                <Button
+                                    size="large"
+                                    icon={<BellOutlined />}
+                                    onClick={handleNotifyKitchen}
+                                    loading={isNotifyingKitchen}
+                                    disabled={!selectedRoomId || currentOrder.length === 0 || !hasKitchenChanges}
+                                    style={{
+                                        width: "100%",
+                                        height: 50,
+                                        borderRadius: 8,
+                                        borderColor: hasKitchenChanges ? '#f5222d' : '#d9d9d9',
+                                        color: hasKitchenChanges ? '#f5222d' : undefined,
+                                        fontWeight: hasKitchenChanges ? 600 : undefined,
+                                        transition: 'all 0.3s',
+                                    }}
+                                >
+                                    Thông báo
+                                </Button>
+                            </Badge>
+                        </div>
                     </Col>
                     <Col span={14}>
                         <Button
@@ -1081,6 +1198,18 @@ export default function FnbSalesPage() {
             </div>
         </div>
     );
+
+    const kitchenHistoryData = useMemo(() => {
+        return currentOrder
+            .filter(item => (item.sentQuantity || 0) > 0)
+            .map(item => ({
+                id: item.uniqueId,
+                time: item.sentTime || '---',
+                productName: item.product.name,
+                quantity: item.sentQuantity || 0,
+                status: (item.kitchenStatus === 'done' ? 'finished' : 'pending') as 'pending' | 'cooking' | 'finished'
+            }));
+    }, [currentOrder]);
 
     return (
         <div style={{ display: "flex", height: "100vh", background: "#f0f2f5", overflow: "hidden" }}>
@@ -1148,10 +1277,10 @@ export default function FnbSalesPage() {
                             disabled={!selectedRoomId || selectedRoomId.startsWith('temp-')}
                             onClick={() => {
                                 if (selectedRoomId && selectedRoom) {
-                                    setRoomModal({ 
-                                        open: true, 
-                                        type: ActionType.UPDATE, 
-                                        room: selectedRoom 
+                                    setRoomModal({
+                                        open: true,
+                                        type: ActionType.UPDATE,
+                                        room: selectedRoom
                                     });
                                 }
                             }}
@@ -1412,7 +1541,7 @@ export default function FnbSalesPage() {
             <KitchenHistoryDrawer
                 open={isHistoryDrawerOpen}
                 onClose={() => setIsHistoryDrawerOpen(false)}
-                historyData={[]}
+                historyData={kitchenHistoryData}
             />
 
             <SettingsDrawer
@@ -1434,8 +1563,8 @@ export default function FnbSalesPage() {
                 open={isCancelModalOpen}
                 onCancel={() => setIsCancelModalOpen(false)}
                 footer={[
-                    <Button 
-                        key="back" 
+                    <Button
+                        key="back"
                         size="large"
                         shape="round"
                         icon={<CloseOutlined />}
@@ -1444,10 +1573,10 @@ export default function FnbSalesPage() {
                     >
                         Bỏ qua
                     </Button>,
-                    <Button 
-                        key="submit" 
-                        type="primary" 
-                        danger 
+                    <Button
+                        key="submit"
+                        type="primary"
+                        danger
                         size="large"
                         shape="round"
                         icon={<PlusOutlined rotate={45} />} // X icon
@@ -1474,9 +1603,9 @@ export default function FnbSalesPage() {
                     <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <Text strong style={{ fontSize: 15 }}>Số lượng hủy</Text>
                         <Space size={16}>
-                            <Button 
-                                shape="circle" 
-                                icon={<MinusOutlined />} 
+                            <Button
+                                shape="circle"
+                                icon={<MinusOutlined />}
                                 disabled={cancelQty <= 1}
                                 onClick={() => setCancelQty(prev => prev - 1)}
                             />
@@ -1484,9 +1613,9 @@ export default function FnbSalesPage() {
                                 <Title level={3} style={{ margin: 0, minWidth: 20, textAlign: 'center' }}>{cancelQty}</Title>
                                 <Text type="secondary" style={{ fontSize: 18 }}>/ {cancelItem?.quantity}</Text>
                             </div>
-                            <Button 
-                                shape="circle" 
-                                icon={<PlusOutlined />} 
+                            <Button
+                                shape="circle"
+                                icon={<PlusOutlined />}
                                 disabled={cancelQty >= (cancelItem?.quantity || 1)}
                                 onClick={() => setCancelQty(prev => prev + 1)}
                             />
@@ -1495,8 +1624,8 @@ export default function FnbSalesPage() {
 
                     <div style={{ marginTop: 24 }}>
                         <Text strong style={{ fontSize: 15, display: 'block', marginBottom: 8 }}>Lý do hủy</Text>
-                        <Select 
-                            style={{ width: '100%' }} 
+                        <Select
+                            style={{ width: '100%' }}
                             size="large"
                             value={cancelReason}
                             onChange={setCancelReason}
@@ -1507,11 +1636,11 @@ export default function FnbSalesPage() {
                                 { value: 'Khác', label: 'Khác' },
                             ]}
                         />
-                        
+
                         {cancelReason === "Khác" && (
-                            <Input 
-                                style={{ marginTop: 12 }} 
-                                placeholder="Nhập lý do khác..." 
+                            <Input
+                                style={{ marginTop: 12 }}
+                                placeholder="Nhập lý do khác..."
                                 value={cancelOtherReason}
                                 onChange={e => setCancelOtherReason(e.target.value)}
                                 prefix={<EditOutlined style={{ color: '#bfbfbf' }} />}

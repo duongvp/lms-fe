@@ -38,7 +38,13 @@ const OrderItemsTable: React.FC<OrderItemsTableProps> = ({
                     dataIndex: ["product", "name"],
                     key: "name",
                     width: "30%",
-                    render: (name) => <Text strong style={{ fontSize: 13 }}>{name}</Text>
+                    render: (name, record) => {
+                        const status = record.kitchenStatus;
+                        let color = 'inherit';
+                        if (status === 'pending') color = '#f5222d'; // Đỏ (đã báo bếp, đang làm)
+                        else if (status === 'done') color = '#52c41a'; // Xanh (bếp đã làm xong)
+                        return <Text strong style={{ fontSize: 13, color }}>{name}</Text>;
+                    }
                 },
                 {
                     title: "SL",

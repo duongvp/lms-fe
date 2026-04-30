@@ -22,4 +22,7 @@ export type OrderItem = {
     uniqueId: string;
     product: Product;
     quantity: number;
+    sentQuantity?: number;
+    kitchenStatus?: 'pending' | 'done';
+    sentTime?: string;
 };
