@@ -38,7 +38,7 @@ const LoginForm = () => {
             const firstAllowedRoute = protectedRoutes.find(route =>
                 userRest.permissions?.includes(route.permission)
             );
-            
+
             if (firstAllowedRoute) {
                 router.push(firstAllowedRoute.path);
             } else {
@@ -63,7 +63,7 @@ const LoginForm = () => {
             </div>
             <Form
                 name="login_form"
-                initialValues={{ 
+                initialValues={{
                     rememberMe: true,
                     mode: typeof window !== 'undefined' ? localStorage.getItem('lastLoginMode') || 'admin' : 'admin'
                 }}

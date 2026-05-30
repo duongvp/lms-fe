@@ -43,6 +43,10 @@ const permissionsStructure = {
         "Tổng quan": {
             actions: ["Xem DS"],
             keys: ["dashboard_view"]
+        },
+        "Báo cáo": {
+            actions: ["Xem DS"],
+            keys: ["report_view"]
         }
     },
     "Hàng hóa": {
@@ -71,6 +75,10 @@ const permissionsStructure = {
         "Nhập hàng": {
             actions: ["Xem DS", "Tạo mới", "Hủy", "Cập nhật", "Import excel", "Xuất excel", "In phiếu nhập"],
             keys: ["import_view", "import_create", "import_void", "import_edit", "import_import", "import_export", "import_print"]
+        },
+        "Voucher": {
+            actions: ["Xem DS", "Thêm mới", "Cập nhật", "Xoá"],
+            keys: ["voucher_view", "voucher_create", "voucher_edit", "voucher_delete"]
         }
     },
     "Đối tác": {
@@ -81,6 +89,12 @@ const permissionsStructure = {
         "Nhà cung cấp": {
             actions: ["Xem DS", "Thêm mới", "Cập nhật", "Xoá", "Import excel", "Xuất excel"],
             keys: ["supplier_view", "supplier_create", "supplier_edit", "supplier_delete", "supplier_import", "supplier_export"]
+        }
+    },
+    "Golf": {
+        "Golf Simulator": {
+            actions: ["Xem DS", "Quản lý", "Checkout", "Membership", "Báo cáo", "Quản lý Line"],
+            keys: ["golf_view", "golf_manage", "golf_checkout", "golf_membership", "golf_report", "golf_line_manage"]
         }
     }
 };

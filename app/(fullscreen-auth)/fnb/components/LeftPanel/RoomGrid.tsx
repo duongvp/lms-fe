@@ -1,6 +1,6 @@
 import React from "react";
 import { Card, Badge, Avatar, Typography } from "antd";
-import { ShoppingCartOutlined, ShoppingOutlined } from "@ant-design/icons";
+import { ShoppingCartOutlined, ShoppingOutlined, PlayCircleOutlined } from "@ant-design/icons";
 import { Room, OrderItem } from "../../types";
 import { COLORS } from "../../constants";
 import { formatDuration } from "../../utils";
@@ -51,15 +51,21 @@ const RoomGrid: React.FC<RoomGridProps> = ({
                 const isSelected = selectedRoomId === room.id;
                 const roomItems = orders[room.id] || [];
                 const hasOrder = roomItems.length > 0;
-                const isOccupied = room.status === "occupied" || hasOrder;
+                const isOccupied = room.status === "occupied" || hasOrder || (room.isGolf && room.golfData?.active_order);
                 const isReserved = room.status === "reserved";
 
                 // Calculate dynamic price and time
-                const totalPrice = roomItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-                const startTime = orderStartTimes[room.id];
-                const timeStr = startTime
-                    ? formatDuration(startTime, currentTime)
-                    : (room.time || "");
+                const fnbPrice = roomItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+                const golfPrice = room.isGolf ? (room.golfData?.estimated_bill || 0) : 0;
+                const totalPrice = fnbPrice + golfPrice;
+
+                let timeStr = "";
+                if (room.isGolf) {
+                    timeStr = room.golfData?.active_order ? formatDuration(room.golfData.elapsed_seconds || 0) : "";
+                } else {
+                    const startTime = orderStartTimes[room.id];
+                    timeStr = startTime ? formatDuration(startTime, currentTime) : (room.time || "");
+                }
 
                 let bg = COLORS.empty;
                 let border = `1px solid ${COLORS.emptyBorder}`;
@@ -73,6 +79,11 @@ const RoomGrid: React.FC<RoomGridProps> = ({
                     bg = COLORS.occupied;
                     border = `1px solid ${COLORS.occupiedBorder}`;
                     textColor = COLORS.occupiedText;
+                    if (room.isGolf && room.golfData?.active_order?.status === 'PLAYING') {
+                        bg = '#f6ffed';
+                        border = `1px solid #b7eb8f`;
+                        textColor = '#389e0d';
+                    }
                 } else if (isReserved) {
                     bg = COLORS.reserved;
                     border = `1px solid ${COLORS.reservedBorder}`;
@@ -103,11 +114,13 @@ const RoomGrid: React.FC<RoomGridProps> = ({
                                 overflow: "hidden"
                             }}
                         >
-                            {/* Visual representation of a table top */}
+                            {room.isGolf && (
+                                <PlayCircleOutlined style={{ position: 'absolute', top: 6, right: 8, color: isSelected ? '#fff' : (isOccupied ? '#52c41a' : '#d9d9d9'), fontSize: 12 }} />
+                            )}
                             <div style={{
                                 width: "80%",
                                 height: "70%",
-                                border: `1.5px solid ${isSelected ? "#fff" : (isOccupied ? COLORS.occupiedBorder : (isReserved ? COLORS.reservedBorder : COLORS.emptyBorder))}`,
+                                border: `1.5px solid ${isSelected ? "#fff" : (isOccupied ? (room.isGolf ? '#b7eb8f' : COLORS.occupiedBorder) : (isReserved ? COLORS.reservedBorder : COLORS.emptyBorder))}`,
                                 borderRadius: 12,
                                 display: "flex",
                                 flexDirection: "column",

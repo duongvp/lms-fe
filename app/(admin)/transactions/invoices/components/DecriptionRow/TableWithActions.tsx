@@ -159,7 +159,7 @@ const TableWithActions: React.FC<TableWithActionsProps> = ({ data, invoiceDetail
                         <Col>
                             <Space>
                                 {
-                                    hasPermission(PermissionKey.RETURN_PROCESS) && (
+                                    hasPermission(PermissionKey.RETURN_PROCESS) && !invoiceDetails.invoice_code?.startsWith('HD-GOLF') && (
                                         <ActionButton
                                             type='primary'
                                             label={`Trả hàng (${invoiceDetails.return_code ? 'cập nhật' : 'mới'})`}
@@ -183,7 +183,7 @@ const TableWithActions: React.FC<TableWithActionsProps> = ({ data, invoiceDetail
                                     )
                                 }
                                 {
-                                    hasPermission(PermissionKey.INVOICE_CREATE) && !invoiceDetails.return_code && (
+                                    hasPermission(PermissionKey.INVOICE_CREATE) && !invoiceDetails.return_code && !invoiceDetails.invoice_code?.startsWith('HD-GOLF') && (
                                         <ActionButton
                                             type='primary'
                                             label='Sao chép'

@@ -1,7 +1,7 @@
 "use client";
 import { useRouter, usePathname } from "next/navigation";
 import { Drawer, Layout, Menu, MenuProps } from "antd";
-import { AppstoreOutlined, BankOutlined, DashboardOutlined, FileDoneOutlined, LogoutOutlined, MailOutlined, SwapOutlined, UsergroupAddOutlined, UserOutlined } from '@ant-design/icons';
+import { AppstoreOutlined, BankOutlined, CoffeeOutlined, DashboardOutlined, FileDoneOutlined, LogoutOutlined, MailOutlined, SwapOutlined, UsergroupAddOutlined, UserOutlined } from '@ant-design/icons';
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import { useAuthStore } from "@/stores/authStore";
@@ -90,14 +90,21 @@ const menuConfig = [
             },
             {
                 key: '25',
-                label: 'F&B Bán hàng',
-                path: '/fnb',
-                permission: PermissionKey.INVOICE_VIEW,
+                label: 'Voucher',
+                path: '/vouchers',
+                permission: PermissionKey.VOUCHER_VIEW,
             },
         ],
     },
     {
         key: '3',
+        icon: <CoffeeOutlined />,
+        label: 'Thu ngân',
+        path: '/fnb',
+        permission: PermissionKey.INVOICE_VIEW,
+    },
+    {
+        key: '4',
         icon: <MailOutlined />,
         label: 'Đối tác',
         permission: PermissionKey.CUSTOMER_VIEW,
@@ -117,35 +124,35 @@ const menuConfig = [
         ],
     },
     {
-        key: '4',
+        key: '5',
         icon: <BankOutlined />,
         label: 'Quản lý chi nhánh',
         path: '/branches',
         permission: PermissionKey.BRANCH_VIEW,
     },
     {
-        key: '5',
+        key: '6',
         icon: <UserOutlined />,
         label: 'Quản trị viên',
         path: '/users',
         permission: PermissionKey.USER_VIEW,
     },
     {
-        key: '6',
+        key: '7',
         icon: <UsergroupAddOutlined />,
         label: 'Vai trò thành viên',
         path: '/member-roles',
         permission: PermissionKey.USER_VIEW,
     },
     {
-        key: '7',
+        key: '8',
         icon: <FileDoneOutlined />,
         label: 'Báo cáo',
         path: '/reports',
-        permission: PermissionKey.USER_VIEW,
+        permission: PermissionKey.REPORT_VIEW,
     },
     {
-        key: '8',
+        key: '9',
         icon: <LogoutOutlined />,
         label: 'Đăng xuất',
         path: '/auth/login',

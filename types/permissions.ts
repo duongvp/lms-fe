@@ -66,4 +66,19 @@ export enum PermissionKey {
     SUPPLIER_DELETE = 'supplier_delete',
     SUPPLIER_IMPORT = 'supplier_import',
     SUPPLIER_EXPORT = 'supplier_export',
+
+    REPORT_VIEW = 'report_view',
+
+    VOUCHER_VIEW = 'voucher_view',
+    VOUCHER_CREATE = 'voucher_create',
+    VOUCHER_EDIT = 'voucher_edit',
+    VOUCHER_DELETE = 'voucher_delete',
+
+    // Golf
+    GOLF_VIEW = 'golf_view',
+    GOLF_MANAGE = 'golf_manage',
+    GOLF_CHECKOUT = 'golf_checkout',
+    GOLF_MEMBERSHIP = 'golf_membership',
+    GOLF_REPORT = 'golf_report',
+    GOLF_LINE_MANAGE = 'golf_line_manage',
 }

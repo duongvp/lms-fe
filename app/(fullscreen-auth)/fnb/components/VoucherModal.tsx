@@ -37,28 +37,24 @@ const VoucherModal: React.FC<VoucherModalProps> = ({ open, onClose, onApply, cur
         }
 
         setLoading(true);
-        // Simulate API call
-        setTimeout(() => {
-            const found = MOCK_VOUCHERS.find(v => v.code.toUpperCase() === code.toUpperCase());
-            
-            if (!found) {
-                message.error("Mã voucher không hợp lệ hoặc đã hết hạn");
+        import('@/services/golfService').then(async (service) => {
+            try {
+                const res = await service.validateGolfVoucher(code, currentTotal);
+                message.success(`Áp dụng mã ${res.code} thành công!`);
+                onApply({
+                    code: res.code,
+                    discountValue: Number(res.discount_value),
+                    discountType: res.discount_type,
+                    description: res.discount_type === 'percentage' ? `Giảm ${res.discount_value}%` : `Giảm ${Number(res.discount_value).toLocaleString()}đ`
+                });
+                setCode("");
+                onClose();
+            } catch (error: any) {
+                message.error(error.message || "Mã voucher không hợp lệ");
+            } finally {
                 setLoading(false);
-                return;
             }
-
-            if (found.minOrderValue && currentTotal < found.minOrderValue) {
-                message.error(`Đơn hàng tối thiểu ${found.minOrderValue.toLocaleString()}đ để sử dụng mã này`);
-                setLoading(false);
-                return;
-            }
-
-            message.success(`Áp dụng mã ${found.code} thành công!`);
-            onApply(found);
-            setCode("");
-            setLoading(false);
-            onClose();
-        }, 600);
+        });
     };
 
     return (

@@ -14,6 +14,7 @@ import GenericExportButton from "@/components/shared/GenericExportButton";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
 import { notification } from "antd";
+import dayjs from "dayjs";
 
 interface Pagination {
     current?: number;
@@ -40,6 +41,16 @@ const columns: ColumnsType<DataType> = [
     {
         title: "Điện thoại",
         dataIndex: "phone",
+    },
+    {
+        title: "Giới tính",
+        dataIndex: "gender",
+        render: (value) => value === 'male' ? 'Nam' : value === 'female' ? 'Nữ' : value === 'other' ? 'Khác' : '-'
+    },
+    {
+        title: "Ngày sinh",
+        dataIndex: "birthday",
+        render: (value) => value ? dayjs(value).format('DD/MM/YYYY') : '-'
     },
     {
         title: "Email",

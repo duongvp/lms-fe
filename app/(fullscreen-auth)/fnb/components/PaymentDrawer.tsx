@@ -28,7 +28,11 @@ import {
     CalendarOutlined,
     ClockCircleOutlined,
     UserOutlined,
+    PrinterFilled,
 } from "@ant-design/icons";
+import { useReactToPrint } from "react-to-print";
+import InvoiceToPrint from "@/components/shared/InvoiceToPrint";
+import { useAuthStore } from "@/stores/authStore";
 
 const { Text, Title } = Typography;
 
@@ -50,11 +54,12 @@ interface PaymentDrawerProps {
     open: boolean;
     onClose: () => void;
     onConfirm: (payload: {
-        paymentMethod: 'cash' | 'transfer' | 'card';
+        paymentMethod: 'cash' | 'transfer' | 'card' | 'prepaid';
         finalAmount: number;
         discount: number;
         otherFeesTotal: number;
         voucherDiscountAmount: number;
+        voucherCode?: string;
         customerPaid: number;
     }) => void;
     roomLabel: string;
@@ -63,6 +68,8 @@ interface PaymentDrawerProps {
     totalAmount: number;
     customerName?: string;
     loading?: boolean;
+    // Props for proforma print
+    warehouseData?: any;
 }
 
 const COLORS = {
@@ -85,7 +92,12 @@ const PaymentDrawer: React.FC<PaymentDrawerProps> = ({
     totalAmount,
     customerName = "Khách lẻ",
     loading = false,
+    warehouseData,
 }) => {
+    const componentRef = React.useRef<HTMLDivElement>(null);
+    const handlePrint = useReactToPrint({ contentRef: componentRef });
+    const { user } = useAuthStore();
+
     const [paymentMethod, setPaymentMethod] = useState("cash");
     const [customerPaid, setCustomerPaid] = useState<number>(totalAmount);
     const [discount, setDiscount] = useState(0);
@@ -299,19 +311,24 @@ const PaymentDrawer: React.FC<PaymentDrawerProps> = ({
                                 <div style={{ marginTop: 8 }}>
                                     <Radio.Group value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} style={{ width: '100%' }}>
                                         <Row gutter={8}>
-                                            <Col span={8}>
+                                            <Col span={6}>
                                                 <Radio.Button value="cash" className="custom-payment-radio">
                                                     <Space size={4}><WalletOutlined /> Tiền mặt</Space>
                                                 </Radio.Button>
                                             </Col>
-                                            <Col span={8}>
+                                            <Col span={6}>
                                                 <Radio.Button value="transfer" className="custom-payment-radio">
-                                                    <Space size={4}><SwapOutlined /> Chuyển khoản</Space>
+                                                    <Space size={4}><SwapOutlined /> C.Khoản</Space>
                                                 </Radio.Button>
                                             </Col>
-                                            <Col span={8}>
+                                            <Col span={6}>
                                                 <Radio.Button value="card" className="custom-payment-radio">
                                                     <Space size={4}><CreditCardOutlined /> Thẻ</Space>
+                                                </Radio.Button>
+                                            </Col>
+                                            <Col span={6}>
+                                                <Radio.Button value="prepaid" className="custom-payment-radio">
+                                                    <Space size={4}><UserOutlined /> Trả trước</Space>
                                                 </Radio.Button>
                                             </Col>
                                         </Row>
@@ -346,6 +363,7 @@ const PaymentDrawer: React.FC<PaymentDrawerProps> = ({
                                         block
                                         size="large"
                                         icon={<PrinterOutlined />}
+                                        onClick={() => handlePrint()}
                                         style={{ height: 48, borderRadius: 10, fontSize: 15 }}
                                     >
                                         In tạm tính
@@ -359,11 +377,12 @@ const PaymentDrawer: React.FC<PaymentDrawerProps> = ({
                                         loading={loading}
                                         disabled={loading}
                                         onClick={() => onConfirm({
-                                            paymentMethod: paymentMethod as 'cash' | 'transfer' | 'card',
+                                            paymentMethod: paymentMethod as 'cash' | 'transfer' | 'card' | 'prepaid',
                                             finalAmount: totalAmount - discount - voucherDiscountAmount + otherFeesTotal,
                                             discount,
                                             otherFeesTotal,
                                             voucherDiscountAmount,
+                                            voucherCode: appliedVoucher?.code,
                                             customerPaid,
                                         })}
                                         style={{ height: 48, borderRadius: 10, background: loading ? undefined : COLORS.primary, fontWeight: 700, fontSize: 16 }}
@@ -423,6 +442,39 @@ const PaymentDrawer: React.FC<PaymentDrawerProps> = ({
                 onApply={setAppliedVoucher}
                 currentTotal={totalAmount}
             />
+
+            {/* Hidden Print Content */}
+            <div style={{ display: 'none' }}>
+                <div ref={componentRef}>
+                    <InvoiceToPrint
+                        sizePrint="300px"
+                        data={items.map(item => ({
+                            product_code: '',
+                            product_name: item.product.name,
+                            quantity: item.quantity,
+                            unit_price: item.product.price.toString(),
+                            discount: 0,
+                            total_price: (item.product.price * item.quantity).toString()
+                        }))}
+                        invoiceDetails={{
+                            invoice_code: 'TẠM TÍNH',
+                            invoice_date: new Date().toISOString(),
+                            customer_name: customerName,
+                            warehouse_name: warehouseData?.warehouse_name || 'NQY Golf',
+                            warehouse_address: warehouseData?.address,
+                            warehouse_phone: warehouseData?.phone,
+                            created_by: user?.username || 'Admin'
+                        }}
+                        invoiceSummary={{
+                            subtotal: totalAmount,
+                            discount_amount: discount + voucherDiscountAmount,
+                            total_amount: totalAmount - discount - voucherDiscountAmount + otherFeesTotal,
+                            VAT: 0
+                        }}
+                        printMode="full"
+                    />
+                </div>
+            </div>
         </>
     );
 };

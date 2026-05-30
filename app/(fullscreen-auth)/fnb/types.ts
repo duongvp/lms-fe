@@ -8,6 +8,8 @@ export type Room = {
     time?: string;
     customers?: number;
     floor: string;
+    isGolf?: boolean;
+    golfData?: any;
 };
 
 export type Product = {

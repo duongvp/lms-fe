@@ -1,5 +1,13 @@
-export const formatDuration = (start: Date, current: Date) => {
-    const diffMs = current.getTime() - start.getTime();
+export const formatDuration = (startOrSeconds: Date | number, current?: Date) => {
+    if (typeof startOrSeconds === 'number') {
+        const safeSeconds = Math.max(0, startOrSeconds);
+        const hours = Math.floor(safeSeconds / 3600);
+        const mins = Math.floor((safeSeconds % 3600) / 60);
+        const secs = Math.floor(safeSeconds % 60);
+        return `${hours}g${mins}p${secs}s`;
+    }
+    if (!current) return "0g0p";
+    const diffMs = Math.max(0, current.getTime() - startOrSeconds.getTime());
     const diffMins = Math.floor(diffMs / 60000);
     const hours = Math.floor(diffMins / 60);
     const mins = diffMins % 60;

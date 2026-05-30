@@ -1,5 +1,5 @@
 'use client';
-import { Modal, Form, Input, Button } from 'antd';
+import { Modal, Form, Input, Button, Select, DatePicker } from 'antd';
 import React, { useEffect, useState } from 'react';
 import { CloseCircleOutlined, SaveOutlined } from '@ant-design/icons';
 import CustomSpin from '@/components/ui/Spins';
@@ -8,6 +8,7 @@ import useCustomerStore from '@/stores/customerStore';
 import { createCustomer, updateCustomer } from '@/services/customerService';
 import { ActionType } from '@/enums/action';
 import { phoneNumberValidator } from '@/ultils/validators/phoneValidator';
+import dayjs from 'dayjs';
 
 const formItemLayout = {
     labelCol: { span: 6 },
@@ -31,6 +32,9 @@ const CustomerModal = () => {
                 Object.entries(rawValues).map(([key, value]) => {
                     if (typeof value === 'string') {
                         return [key, value.trim()];
+                    }
+                    if (key === 'birthday' && value) {
+                        return [key, dayjs(value as any).format('YYYY-MM-DD')];
                     }
                     return [key, value];
                 })
@@ -60,6 +64,7 @@ const CustomerModal = () => {
         if (modal.open) {
             form.setFieldsValue({
                 ...modal.customer,
+                birthday: modal.customer?.birthday ? dayjs(modal.customer.birthday) : null
             });
         }
     }, [modal.open]);
@@ -102,6 +107,22 @@ const CustomerModal = () => {
                         rules={[{ required: true, message: 'Vui lòng nhập tên khách hàng!' }]}
                     >
                         <Input />
+                    </Form.Item>
+                    <Form.Item
+                        label="Giới tính"
+                        name="gender"
+                    >
+                        <Select placeholder="Chọn giới tính">
+                            <Select.Option value="male">Nam</Select.Option>
+                            <Select.Option value="female">Nữ</Select.Option>
+                            <Select.Option value="other">Khác</Select.Option>
+                        </Select>
+                    </Form.Item>
+                    <Form.Item
+                        label="Ngày sinh"
+                        name="birthday"
+                    >
+                        <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" placeholder="Chọn ngày sinh" />
                     </Form.Item>
                     <Form.Item
                         label="Điện thoại"

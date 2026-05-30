@@ -10,6 +10,8 @@ export interface CustomerApiResponse {
     email: string;
     phone: string;
     address: string;
+    gender: string;
+    birthday: string;
     created_at: Date;
     updated_at: Date;
 }

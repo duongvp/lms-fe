@@ -9,6 +9,7 @@ import { ActionType } from '@/enums/action';
 import BtnDeActiveDetete from '@/components/shared/BtnDeActiveDetete';
 import { PermissionKey } from '@/types/permissions';
 import { useAuthStore } from '@/stores/authStore';
+import dayjs from 'dayjs';
 
 const { Text } = Typography;
 
@@ -31,6 +32,14 @@ const CustomerDetail: React.FC<SupplierDetailProps> = ({ record }) => {
     const dataRow = [
         { label: 'Mã khách hàng:', value: record.customer_code },
         { label: 'Tên khách hàng:', value: record.customer_name },
+        {
+            label: 'Giới tính:',
+            value: record.gender === 'male' ? 'Nam' : record.gender === 'female' ? 'Nữ' : record.gender === 'other' ? 'Khác' : ''
+        },
+        {
+            label: 'Ngày sinh:',
+            value: record.birthday ? dayjs(record.birthday).format('DD/MM/YYYY') : ''
+        },
         { label: 'Số điện thoại:', value: record.phone },
         { label: 'Email:', value: record.email },
         { label: 'Địa chỉ:', value: record.address },

@@ -43,6 +43,9 @@ import {
     RollbackOutlined,
     CarryOutOutlined,
     MinusOutlined,
+    PlayCircleOutlined,
+    PauseCircleOutlined,
+    ClockCircleOutlined,
 } from "@ant-design/icons";
 import SelectWithButton from "@/components/ui/Selects/SelectWithButton";
 import useProductSelect from "@/hooks/useProductSelect";
@@ -74,6 +77,9 @@ import ReturnProductModal from "./components/ReturnProductModal";
 import { getAllAreas, getAllTables, AreaApiResponse, TableApiResponse, checkoutFnbOrder } from "@/services/fnbService";
 import { useFnbSocket } from "@/hooks/useFnbSocket";
 import { useFnbStore } from "@/stores/fnbStore";
+import { getGolfDashboard, startGolfOrder, pauseGolfOrder, resumeGolfOrder, cancelGolfOrder, checkoutGolfOrder as apiCheckoutGolfOrder, createGolfOrder, addFnbItems, setGolfOrderCustomer } from "@/services/golfService";
+import { getWarehouseById, WarehouseApiResponse } from "@/services/branchService";
+import { useSocketStore } from "@/stores/socketStore";
 
 const { Text, Title } = Typography;
 
@@ -133,6 +139,7 @@ export default function FnbSalesPage() {
     const [orderStartTimes, setOrderStartTimes] = useState<Record<string, Date>>({});
     const [currentTime, setCurrentTime] = useState(new Date());
     const [isPaymentDrawerOpen, setIsPaymentDrawerOpen] = useState(false);
+    const [warehouseData, setWarehouseData] = useState<WarehouseApiResponse | null>(null);
     const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
 
     const [orderNotes, setOrderNotes] = useState<Record<string, string>>({});
@@ -187,12 +194,18 @@ export default function FnbSalesPage() {
 
     const fetchAreasAndTables = async () => {
         try {
-            const [areasData, tablesData] = await Promise.all([
+            const [areasData, tablesData, golfLines] = await Promise.all([
                 getAllAreas(),
-                getAllTables()
+                getAllTables(),
+                getGolfDashboard().catch(() => []) // Fallback in case golf is not available
             ]);
 
-            setAreas(areasData);
+            const golfAreaId = 9999; // Numeric ID to match AreaApiResponse type
+            const combinedAreas: any[] = [...areasData];
+            // Always show Golf area so user knows where to find them or configure them
+            combinedAreas.push({ area_id: golfAreaId, area_name: 'Khu vực Golf', description: null, branch_id: 1, warehouse_id: 1 });
+            console.log('FNB: Loaded areas', combinedAreas);
+            setAreas(combinedAreas);
 
             const mappedRooms: Room[] = tablesData.map(table => ({
                 id: String(table.table_id),
@@ -201,7 +214,19 @@ export default function FnbSalesPage() {
                 floor: String(table.area_id)
             }));
 
-            setRooms(mappedRooms);
+            console.log('FNB: Raw golf data from server', golfLines);
+            const mappedGolfLines: Room[] = (golfLines || []).map(line => ({
+                id: `golf-${line.line_id}`,
+                label: line.line_name,
+                status: line.status === 'AVAILABLE' ? 'available' : 'occupied',
+                floor: String(golfAreaId),
+                isGolf: true,
+                golfData: line
+            }));
+
+            const allRooms = [...mappedRooms, ...mappedGolfLines];
+            console.log('FNB: Final combined rooms', allRooms);
+            setRooms(allRooms);
         } catch (error) {
             console.error("Failed to fetch areas and tables", error);
             message.error("Lỗi khi tải dữ liệu phòng bàn");
@@ -209,8 +234,81 @@ export default function FnbSalesPage() {
     };
 
     useEffect(() => {
-        fetchAreasAndTables();
-    }, []);
+        if (warehouseId && warehouseId !== -1) {
+            fetchAreasAndTables();
+            getWarehouseById(warehouseId).then(setWarehouseData).catch(console.error);
+        }
+    }, [warehouseId]);
+
+    const globalSocket = useSocketStore((state) => state.socket);
+
+    useEffect(() => {
+        if (!globalSocket || !warehouseId || warehouseId === -1) return;
+
+        const onTimerTick = (data: any) => {
+            const ticks = Array.isArray(data) ? data : [data];
+            setRooms(prev => prev.map(room => {
+                const tick = ticks.find((item: any) => room.isGolf && room.golfData?.active_order?.golf_order_id === item.golf_order_id);
+                if (tick) {
+                    return {
+                        ...room,
+                        golfData: {
+                            ...room.golfData,
+                            elapsed_seconds: tick.elapsed_seconds,
+                            estimated_bill: tick.estimated_bill,
+                            active_order: {
+                                ...room.golfData.active_order,
+                                status: tick.status,
+                            }
+                        }
+                    };
+                }
+                return room;
+            }));
+        };
+
+        const onLineUpdated = () => {
+            fetchAreasAndTables();
+        };
+
+        const onLineReset = (data: { line_id: number; warehouse_id: number }) => {
+            setRooms(prev => prev.map(room => {
+                if (room.isGolf && room.id === `golf-${data.line_id}`) {
+                    return {
+                        ...room,
+                        status: 'available',
+                        golfData: {
+                            ...room.golfData,
+                            elapsed_seconds: 0,
+                            estimated_bill: 0,
+                            active_order: null,
+                            status: 'AVAILABLE'
+                        }
+                    };
+                }
+                return room;
+            }));
+
+            // Nếu line đang mở tab, có thể muốn tự động xóa giỏ hàng FnB nếu cần
+            setOrders(prev => {
+                const next = { ...prev };
+                delete next[`golf-${data.line_id}`];
+                return next;
+            });
+        };
+
+        globalSocket.on('golf:timer_tick', onTimerTick);
+        globalSocket.on('golf:line_updated', onLineUpdated);
+        globalSocket.on('golf:line_reset', onLineReset);
+
+        globalSocket.emit('golf:join_dashboard', { warehouse_id: warehouseId });
+
+        return () => {
+            globalSocket.off('golf:timer_tick', onTimerTick);
+            globalSocket.off('golf:line_updated', onLineUpdated);
+            globalSocket.off('golf:line_reset', onLineReset);
+        };
+    }, [globalSocket, warehouseId]);
 
     // ─── Socket: callbacks phải dùng useCallback để tránh re-create socket ───
     const handleSocketTableStatusChange = useCallback(({ tableId, status }: { tableId: string | number; status: string }) => {
@@ -288,7 +386,11 @@ export default function FnbSalesPage() {
         setOrderStartTimes(prev => {
             const next = { ...prev };
             Object.entries(tablesState).forEach(([id, state]) => {
-                if (state.start_time) next[id] = new Date(state.start_time);
+                if (state.start_time) {
+                    next[id] = new Date(state.start_time);
+                } else {
+                    delete next[id];
+                }
             });
             return next;
         });
@@ -546,39 +648,70 @@ export default function FnbSalesPage() {
 
 
     const handlePayment = () => {
-        if (!selectedRoomId || currentOrder.length === 0) return;
+        if (!selectedRoomId || (currentOrder.length === 0 && !selectedRoom?.isGolf)) {
+            message.warning("Vui lòng chọn bàn đã có khách hoặc thêm món trước khi thanh toán.")
+            return
+        }
         setIsPaymentDrawerOpen(true);
     };
 
     const confirmPayment = async (payload: {
-        paymentMethod: 'cash' | 'transfer' | 'card';
+        paymentMethod: 'cash' | 'transfer' | 'card' | 'prepaid';
         finalAmount: number;
         discount: number;
         otherFeesTotal: number;
         voucherDiscountAmount: number;
+        voucherCode?: string;
         customerPaid: number;
     }) => {
-        if (!selectedRoomId) return;
+        if (!selectedRoomId || !selectedRoom) return;
 
         setIsCheckoutLoading(true);
         try {
-            // Map món hiện tại sang format API
-            const checkoutItems = currentOrder.map(item => ({
-                product_id: item.product.id,
-                quantity: item.quantity,
-                unit_price: item.product.price,
-            }));
+            if (selectedRoom.isGolf) {
+                if (!selectedRoom.golfData?.active_order) {
+                    throw new Error('Chưa có đơn hàng Golf nào để thanh toán.');
+                }
+                const golfOrderId = selectedRoom.golfData.active_order.golf_order_id;
 
-            await checkoutFnbOrder({
-                tableId: selectedRoomId,
-                items: checkoutItems,
-                paymentMethod: payload.paymentMethod,
-                finalAmount: payload.finalAmount,
-                discount: payload.discount + payload.voucherDiscountAmount,
-                otherFeesTotal: payload.otherFeesTotal,
-                customerId: selectedCustomer?.customer_id ?? null,
-                notes: orderNotes[selectedRoomId] ?? null,
-            });
+                if (currentOrder.length > 0) {
+                    const fnbItems = currentOrder.map(item => ({
+                        product_id: item.product.id,
+                        quantity: item.quantity,
+                        unit_price: item.product.price,
+                    }));
+                    await addFnbItems(golfOrderId, fnbItems);
+                }
+
+                await apiCheckoutGolfOrder(golfOrderId, {
+                    payment_method: payload.paymentMethod === 'prepaid' ? 'PREPAID' : 'CASH_OR_BANK',
+                    cash_amount: payload.paymentMethod === 'cash' ? payload.customerPaid : 0,
+                    bank_amount: ['transfer', 'card'].includes(payload.paymentMethod) ? payload.customerPaid : 0,
+                    prepaid_amount: payload.paymentMethod === 'prepaid' ? payload.customerPaid : 0,
+                    voucher_code: payload.voucherCode,
+                });
+            } else {
+                if (payload.paymentMethod === 'prepaid') {
+                    throw new Error('Thanh toán trả trước chỉ hỗ trợ cho đơn Golf.');
+                }
+
+                const checkoutItems = currentOrder.map(item => ({
+                    product_id: item.product.id,
+                    quantity: item.quantity,
+                    unit_price: item.product.price,
+                }));
+
+                await checkoutFnbOrder({
+                    tableId: selectedRoomId,
+                    items: checkoutItems,
+                    paymentMethod: payload.paymentMethod,
+                    finalAmount: payload.finalAmount,
+                    discount: payload.discount + payload.voucherDiscountAmount,
+                    otherFeesTotal: payload.otherFeesTotal,
+                    customerId: selectedCustomer?.customer_id ?? null,
+                    notes: orderNotes[selectedRoomId] ?? null,
+                });
+            }
 
             // Chỉ clear order sau khi API thành công
             setOrders(prev => {
@@ -593,9 +726,22 @@ export default function FnbSalesPage() {
                 return next;
             });
 
-            setRooms(prev => prev.map(room =>
-                room.id === selectedRoomId ? { ...room, status: 'available' as RoomStatus } : room
-            ));
+            setRooms(prev => prev.map(room => {
+                if (room.id !== selectedRoomId) return room;
+                if (!room.isGolf) return { ...room, status: 'available' as RoomStatus };
+
+                return {
+                    ...room,
+                    status: 'available' as RoomStatus,
+                    golfData: {
+                        ...room.golfData,
+                        status: 'AVAILABLE',
+                        active_order: null,
+                        elapsed_seconds: 0,
+                        estimated_bill: 0,
+                    }
+                };
+            }));
 
             // Socket: broadcast bàn trống cho toàn bộ nhân viên trong warehouse
             if (!selectedRoomId.startsWith('temp-')) {
@@ -728,7 +874,7 @@ export default function FnbSalesPage() {
         }));
 
         // Cập nhật thời gian bắt đầu cho bàn đích nếu chưa có
-        if (!orderStartTimes[targetId!]) {
+        if (targetId!.startsWith('temp-') && !orderStartTimes[targetId!]) {
             setOrderStartTimes(prev => ({ ...prev, [targetId!]: new Date() }));
         }
 
@@ -796,8 +942,8 @@ export default function FnbSalesPage() {
             return { ...prev, [selectedRoomId]: items };
         });
 
-        // Set start time if it's the first item
-        if (!orderStartTimes[selectedRoomId]) {
+        // Temp orders do not live in Redis, so keep their timer local.
+        if (selectedRoomId.startsWith('temp-') && !orderStartTimes[selectedRoomId]) {
             setOrderStartTimes(prev => ({
                 ...prev,
                 [selectedRoomId]: new Date()
@@ -859,15 +1005,53 @@ export default function FnbSalesPage() {
         }
     };
 
-    const handleSelectCustomer = (value: string | number) => {
+    const handleSelectCustomer = async (value: string | number) => {
         const selectedOption = customerOptions.find((item) => item.value === value);
-        setSelectedCustomer(selectedOption?.data || null);
+        const customer = selectedOption?.data || null;
+        setSelectedCustomer(customer);
+
+        if (selectedRoom?.isGolf && selectedRoom.golfData?.active_order && customer) {
+            try {
+                await setGolfOrderCustomer(selectedRoom.golfData.active_order.golf_order_id, customer.customer_id);
+                message.success(`Đã gán khách hàng ${customer.customer_name} cho sân golf`);
+                fetchAreasAndTables();
+            } catch (error) {
+                console.error("Failed to assign customer to golf order", error);
+                message.error("Lỗi khi gán khách hàng cho sân golf");
+            }
+        }
     };
 
-    const totalAmount = currentOrder.reduce(
-        (sum, item) => sum + item.product.price * item.quantity,
-        0
-    );
+    const totalAmount = useMemo(() => {
+        const fnbTotal = currentOrder.reduce(
+            (sum, item) => sum + item.product.price * item.quantity,
+            0
+        );
+        const golfTotal = (selectedRoom?.isGolf && selectedRoom.golfData?.active_order)
+            ? (selectedRoom.golfData.estimated_bill || 0)
+            : 0;
+        return fnbTotal + golfTotal;
+    }, [currentOrder, selectedRoom]);
+
+    const paymentItems = useMemo(() => {
+        const items = [...currentOrder];
+        if (selectedRoom?.isGolf && selectedRoom.golfData?.active_order) {
+            const bill = selectedRoom.golfData.estimated_bill || 0;
+            if (bill > 0) {
+                items.push({
+                    uniqueId: 'golf-play-time',
+                    product: {
+                        id: 999999,
+                        name: `Tiền giờ Golf (${formatDuration(selectedRoom.golfData.elapsed_seconds || 0)})`,
+                        price: bill,
+                        category_name: 'GOLF'
+                    },
+                    quantity: 1
+                } as any);
+            }
+        }
+        return items;
+    }, [currentOrder, selectedRoom]);
 
     const updateOrderItem = (uniqueId: string, field: "quantity" | "price", value: number) => {
         if (!selectedRoomId) return;
@@ -1009,6 +1193,28 @@ export default function FnbSalesPage() {
         });
     };
 
+    const handleGolfAction = async (action: 'start' | 'pause' | 'resume') => {
+        if (!selectedRoom || !selectedRoom.isGolf || !selectedRoom.golfData) return;
+        try {
+            if (action === 'start') {
+                if (!selectedRoom.golfData.active_order) {
+                    const order = await createGolfOrder(selectedRoom.golfData.line_id);
+                    await startGolfOrder(order.golf_order_id);
+                } else {
+                    await startGolfOrder(selectedRoom.golfData.active_order.golf_order_id);
+                }
+            } else if (action === 'pause') {
+                await pauseGolfOrder(selectedRoom.golfData.active_order.golf_order_id);
+            } else if (action === 'resume') {
+                await resumeGolfOrder(selectedRoom.golfData.active_order.golf_order_id);
+            }
+            message.success(`Thành công`);
+            fetchAreasAndTables();
+        } catch (error: any) {
+            message.error(error.message || `Lỗi khi thực hiện thao tác`);
+        }
+    };
+
     const rightPanelContent = (
         <div style={{ flex: isMobile ? "auto" : "1 1 45%", minWidth: isMobile ? "100%" : 500, maxWidth: isMobile ? "100%" : 700, display: "flex", flexDirection: "column", background: "#fff", overflow: "hidden", height: isMobile ? "100%" : 'auto' }}>
             {/* Header Utilities */}
@@ -1091,13 +1297,56 @@ export default function FnbSalesPage() {
                 />
             </div>
 
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "flex-start", justifyContent: "flex-start", background: "#fff", overflowY: "auto" }}>
+            {selectedRoom?.isGolf && (
+                <div style={{ padding: "0 16px 12px 16px", background: "#fff" }}>
+                    <div style={{ padding: 12, background: "#f6ffed", border: "1px solid #b7eb8f", borderRadius: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <Space direction="vertical" size={0}>
+                            <Text strong style={{ color: "#389e0d" }}>Golf Simulator - {selectedRoom.label}</Text>
+                            {selectedRoom.golfData?.active_order ? (
+                                <Space size={16}>
+                                    <Text>Trạng thái: <Badge status={selectedRoom.golfData.active_order.status === 'PLAYING' ? 'success' : 'warning'} text={selectedRoom.golfData.active_order.status} /></Text>
+                                    <Text>Thời gian: {formatDuration(selectedRoom.golfData.elapsed_seconds || 0)}</Text>
+                                    <Text strong style={{ color: COLORS.primary }}>Tạm tính: {(selectedRoom.golfData.estimated_bill || 0).toLocaleString()}đ</Text>
+                                </Space>
+                            ) : (
+                                <Text type="secondary">Trống - Chưa có đơn hàng</Text>
+                            )}
+                        </Space>
+                        <Space>
+                            {(!selectedRoom.golfData?.active_order || selectedRoom.golfData?.active_order.status === 'OPENING') && (
+                                <Button type="primary" onClick={() => handleGolfAction('start')} icon={<PlayCircleOutlined />}>Mở Line</Button>
+                            )}
+                            {selectedRoom.golfData?.active_order?.status === 'PLAYING' && (
+                                <Button onClick={() => handleGolfAction('pause')} icon={<PauseCircleOutlined />}>Tạm dừng</Button>
+                            )}
+                            {selectedRoom.golfData?.active_order?.status === 'PAUSED' && (
+                                <Button type="primary" onClick={() => handleGolfAction('resume')} icon={<PlayCircleOutlined />}>Tiếp tục</Button>
+                            )}
+                        </Space>
+                    </div>
+                </div>
+            )}
+
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "flex-start", justifyContent: "flex-start", background: "#fff", overflowY: "auto", width: '100%' }}>
                 <OrderItemsTable
                     currentOrder={currentOrder}
                     updateOrderItem={updateOrderItem}
                     splitOrderItem={splitOrderItem}
                     removeOrderItem={removeOrderItem}
                 />
+                {selectedRoom?.isGolf && selectedRoom.golfData?.active_order && (selectedRoom.golfData.estimated_bill || 0) > 0 && (
+                    <div style={{ padding: '12px 16px', borderTop: '1px dashed #d9d9d9', width: '100%', background: '#fffbe6' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Space>
+                                <ClockCircleOutlined style={{ color: '#faad14' }} />
+                                <Text strong>Tiền giờ Golf ({formatDuration(selectedRoom.golfData.elapsed_seconds || 0)})</Text>
+                            </Space>
+                            <Text strong style={{ color: '#faad14' }}>
+                                {(selectedRoom.golfData.estimated_bill || 0).toLocaleString()} đ
+                            </Text>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Bottom Actions */}
@@ -1154,34 +1403,32 @@ export default function FnbSalesPage() {
 
                 <Row gutter={12}>
                     <Col span={10}>
-                        <div style={{ width: '100%' }}>
-                            <Badge
-                                dot={hasKitchenChanges}
-                                offset={[-4, 4]}
-                                color="#f5222d"
-                                title={hasKitchenChanges ? 'Có món chưa gửi bếp' : ''}
-                                style={{ display: 'block' }}
+                        <Badge
+                            dot={hasKitchenChanges}
+                            offset={[-4, 4]}
+                            color="#f5222d"
+                            title={hasKitchenChanges ? 'Có món chưa gửi bếp' : ''}
+                            styles={{ root: { display: 'block', width: '100%' } }}
+                        >
+                            <Button
+                                block
+                                size="large"
+                                icon={<BellOutlined />}
+                                onClick={handleNotifyKitchen}
+                                loading={isNotifyingKitchen}
+                                disabled={!selectedRoomId || currentOrder.length === 0 || !hasKitchenChanges}
+                                style={{
+                                    height: 50,
+                                    borderRadius: 8,
+                                    borderColor: hasKitchenChanges ? '#f5222d' : '#d9d9d9',
+                                    color: hasKitchenChanges ? '#f5222d' : undefined,
+                                    fontWeight: hasKitchenChanges ? 600 : undefined,
+                                    transition: 'all 0.3s',
+                                }}
                             >
-                                <Button
-                                    size="large"
-                                    icon={<BellOutlined />}
-                                    onClick={handleNotifyKitchen}
-                                    loading={isNotifyingKitchen}
-                                    disabled={!selectedRoomId || currentOrder.length === 0 || !hasKitchenChanges}
-                                    style={{
-                                        width: "100%",
-                                        height: 50,
-                                        borderRadius: 8,
-                                        borderColor: hasKitchenChanges ? '#f5222d' : '#d9d9d9',
-                                        color: hasKitchenChanges ? '#f5222d' : undefined,
-                                        fontWeight: hasKitchenChanges ? 600 : undefined,
-                                        transition: 'all 0.3s',
-                                    }}
-                                >
-                                    Thông báo
-                                </Button>
-                            </Badge>
-                        </div>
+                                Thông báo
+                            </Button>
+                        </Badge>
                     </Col>
                     <Col span={14}>
                         <Button
@@ -1496,10 +1743,11 @@ export default function FnbSalesPage() {
                 onConfirm={confirmPayment}
                 roomLabel={selectedRoom?.label || "Đơn mới"}
                 floor={selectedRoom?.floor}
-                items={currentOrder}
+                items={paymentItems}
                 totalAmount={totalAmount}
                 customerName={selectedCustomer?.customer_name}
                 loading={isCheckoutLoading}
+                warehouseData={warehouseData}
             />
 
             <TableActionModal

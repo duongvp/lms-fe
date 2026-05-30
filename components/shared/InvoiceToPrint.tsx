@@ -17,8 +17,6 @@ interface TableWithActionsProps {
 }
 
 const InvoiceToPrint: React.FC<TableWithActionsProps> = ({ data, invoiceDetails, invoiceSummary, printMode, sizePrint }) => {
-    console.log("🚀 ~ InvoiceToPrint ~ data:", data)
-    console.log("🚀 ~ invoiceDetails:", invoiceDetails)
     const numberToWords = (num: number): string => {
         if (num === 0) return 'không đồng';
 
@@ -121,8 +119,6 @@ const InvoiceToPrint: React.FC<TableWithActionsProps> = ({ data, invoiceDetails,
             </div>
 
             <Divider style={{ margin: '12px 0', borderTop: '1px dashed #000' }} />
-
-
             {
                 printMode === 'full' ? (
                     <table style={{ width: '100%', marginBottom: 16, borderCollapse: 'collapse' }}>

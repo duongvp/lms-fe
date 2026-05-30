@@ -39,6 +39,10 @@ const columns: ColumnsType<DataType> = [
         dataIndex: "product_name",
     },
     {
+        title: "Nhóm hàng",
+        dataIndex: "category_name",
+    },
+    {
         title: "Giá bán",
         dataIndex: "selling_price",
         render: (value) => {

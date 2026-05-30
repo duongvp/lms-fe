@@ -8,9 +8,11 @@ export const protectedRoutes = [
     { path: '/transactions/invoices', permission: PermissionKey.INVOICE_VIEW },
     { path: '/transactions/purchase-orders', permission: PermissionKey.IMPORT_VIEW },
     { path: '/transactions/returns', permission: PermissionKey.RETURN_VIEW },
+    { path: '/vouchers', permission: PermissionKey.VOUCHER_VIEW },
     { path: '/partners/customers', permission: PermissionKey.CUSTOMER_VIEW },
     { path: '/partners/suppliers', permission: PermissionKey.SUPPLIER_VIEW },
     { path: '/branches', permission: PermissionKey.BRANCH_VIEW },
     { path: '/users', permission: PermissionKey.USER_VIEW },
     { path: '/member-roles', permission: PermissionKey.USER_VIEW },
+    { path: '/reports', permission: PermissionKey.REPORT_VIEW },
 ];

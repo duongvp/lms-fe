@@ -16,7 +16,8 @@ import {
     KeyOutlined,
     LockOutlined,
     LogoutOutlined,
-    RightOutlined
+    RightOutlined,
+    PlayCircleOutlined
 } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
@@ -73,7 +74,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ open, onClose }) => {
     ];
 
     const menuItems: MenuItem[] = [
-        { icon: <LineChartOutlined />, label: 'Báo cáo cuối ngày' },
+        { icon: <LineChartOutlined />, label: 'Báo cáo cuối ngày', onClick: () => { onClose(); router.push('/reports'); } },
         // { icon: <FileTextOutlined />, label: 'Lập phiếu thu' },
         // { icon: <HistoryOutlined />, label: 'Chọn hóa đơn trả hàng' },
         // { divider: true },
@@ -106,7 +107,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({ open, onClose }) => {
             </div>
 
             {/* App Shortcuts Grid */}
-            <div style={{ padding: '0 20px 16px 20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ padding: '0 20px 16px 20px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
                 {topApps.map((app, index) => (
                     <div
                         key={index}
