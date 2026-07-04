@@ -9,7 +9,7 @@ import { ActionType } from '@/enums/action';
 import { useAuthStore } from '@/stores/authStore';
 
 interface RoomModalProps {
-    onSuccess: () => void;
+    onSuccess: (payload?: { action: 'created' | 'updated'; roomType: 'fnb' | 'golf' | 'area' }) => void;
 }
 
 const RoomModal: React.FC<RoomModalProps> = ({ onSuccess }) => {
@@ -80,6 +80,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ onSuccess }) => {
 
         setLoading(true);
         try {
+            const action = modal.type === ActionType.UPDATE ? 'updated' : 'created';
             if (isGolfType) {
                 const golfLineData = {
                     line_name: values.label,
@@ -117,7 +118,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ onSuccess }) => {
                 }
             }
 
-            onSuccess();
+            onSuccess({ action, roomType: isGolfType ? 'golf' : 'fnb' });
             resetModal();
             form.resetFields();
         } catch (error) {
@@ -141,6 +142,7 @@ const RoomModal: React.FC<RoomModalProps> = ({ onSuccess }) => {
             } as any);
             message.success('Thêm khu vực thành công');
             await fetchAreas(); // Refresh list
+            onSuccess({ action: 'created', roomType: 'area' });
             form.setFieldValue('floor', newArea.area_id); // Auto select new area
             setIsAreaModalOpen(false);
             setNewAreaName('');

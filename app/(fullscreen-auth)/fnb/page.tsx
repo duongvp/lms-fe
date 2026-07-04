@@ -331,11 +331,14 @@ export default function FnbSalesPage() {
     // syncOrderRef để onSnapshotRequested có thể gọi syncOrder mà không tạo circular dependency
     const syncOrderRef = React.useRef<((tableId: string | number, items: any[]) => void) | null>(null);
 
-    const { joinTable, leaveTable, syncOrder, broadcastTableStatus, notifyKitchen, clearKitchenForTable } = useFnbSocket({
+    const { joinTable, leaveTable, syncOrder, broadcastTableStatus, broadcastRoomsChanged, notifyKitchen, clearKitchenForTable } = useFnbSocket({
         warehouseId,
         userId: userId,
         userName: staffName || 'Nhân viên',
         onTableStatusChange: handleSocketTableStatusChange,
+        onRoomsChanged: useCallback(() => {
+            fetchAreasAndTables();
+        }, []),
         onOrderUpdated: handleSocketOrderUpdated,
         onSnapshotRequested: useCallback(({ tableId }: { tableId: string | number }) => {
             const currentItems = ordersRef.current[String(tableId)];
@@ -1736,7 +1739,12 @@ export default function FnbSalesPage() {
 
             <ProductModal />
             <CustomerModal />
-            <RoomModal onSuccess={fetchAreasAndTables} />
+            <RoomModal
+                onSuccess={(payload) => {
+                    fetchAreasAndTables();
+                    broadcastRoomsChanged(payload);
+                }}
+            />
             <PaymentDrawer
                 open={isPaymentDrawerOpen}
                 onClose={() => setIsPaymentDrawerOpen(false)}

@@ -40,6 +40,13 @@ export interface SnapshotRequestedPayload {
     requestedBy: string;
 }
 
+export interface RoomsChangedPayload {
+    warehouseId: number;
+    action?: 'created' | 'updated' | 'deleted';
+    roomType?: 'fnb' | 'golf' | 'area';
+    timestamp?: number;
+}
+
 // ── Kitchen Types ─────────────────────────────────────────────────────────────
 export interface KitchenNotifyItem {
     productName: string;
@@ -74,6 +81,7 @@ interface UseFnbSocketOptions {
     userId?: string | number;
     userName?: string;
     onTableStatusChange?: (payload: TableStatusChangePayload) => void;
+    onRoomsChanged?: (payload: RoomsChangedPayload) => void;
     onOrderUpdated?: (payload: OrderUpdatedPayload) => void;
     onSnapshotRequested?: (payload: SnapshotRequestedPayload) => void;
     // Kitchen callbacks
@@ -89,6 +97,7 @@ export function useFnbSocket({
     userId,
     userName,
     onTableStatusChange,
+    onRoomsChanged,
     onOrderUpdated,
     onSnapshotRequested,
     onKitchenOrderReceived,
@@ -104,6 +113,7 @@ export function useFnbSocket({
 
     // Giữ ref tới callbacks để tránh re-create socket khi callback thay đổi
     const onTableStatusChangeRef = useRef(onTableStatusChange);
+    const onRoomsChangedRef = useRef(onRoomsChanged);
     const onOrderUpdatedRef = useRef(onOrderUpdated);
     const onSnapshotRequestedRef = useRef(onSnapshotRequested);
     const onKitchenOrderReceivedRef = useRef(onKitchenOrderReceived);
@@ -112,6 +122,7 @@ export function useFnbSocket({
     const onInitKitchenTicketsRef = useRef(onInitKitchenTickets);
 
     useEffect(() => { onTableStatusChangeRef.current = onTableStatusChange; }, [onTableStatusChange]);
+    useEffect(() => { onRoomsChangedRef.current = onRoomsChanged; }, [onRoomsChanged]);
     useEffect(() => { onOrderUpdatedRef.current = onOrderUpdated; }, [onOrderUpdated]);
     useEffect(() => { onSnapshotRequestedRef.current = onSnapshotRequested; }, [onSnapshotRequested]);
     useEffect(() => { onKitchenOrderReceivedRef.current = onKitchenOrderReceived; }, [onKitchenOrderReceived]);
@@ -177,6 +188,10 @@ export function useFnbSocket({
                 updateTable(payload.tableId, { status: payload.status, occupantCount: payload.occupantCount || 0 });
             }
             onTableStatusChangeRef.current?.(payload);
+        });
+
+        socket.on('rooms_changed', (payload: RoomsChangedPayload) => {
+            onRoomsChangedRef.current?.(payload);
         });
 
         // Nhận cập nhật giỏ hàng từ nhân viên khác cùng bàn
@@ -253,6 +268,11 @@ export function useFnbSocket({
         socketRef.current?.emit('table_status_update', { tableId, warehouseId, status });
     }, [warehouseId]);
 
+    /** Broadcast khi danh sách bàn/phòng/line thay đổi để client khác fetch lại sơ đồ */
+    const broadcastRoomsChanged = useCallback((payload: Omit<RoomsChangedPayload, 'warehouseId' | 'timestamp'> = {}) => {
+        socketRef.current?.emit('rooms_changed', { warehouseId, ...payload });
+    }, [warehouseId]);
+
     /**
      * Gửi thông báo danh sách món lên bếp
      * Gọi khi nhân viên bấm nút "Báo bếp"
@@ -290,11 +310,13 @@ export function useFnbSocket({
         socketRef.current?.emit('kitchen_order_cancelled', { warehouseId, tableId });
     }, [warehouseId]);
 
+
     return {
         joinTable,
         leaveTable,
         syncOrder,
         broadcastTableStatus,
+        broadcastRoomsChanged,
         notifyKitchen,
         markKitchenItemDone,
         clearKitchenForTable,
