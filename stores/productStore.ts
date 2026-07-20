@@ -34,9 +34,9 @@ const useProductStore = create<ProductStore>((set, get) => ({
             ...partial,
             // Auto-update title based on type
             title: partial.title || (partial.type === ActionType.CREATE
-                ? 'Thêm sản phẩm'
+                ? 'Tạo mới lịch học'
                 : partial.type === ActionType.UPDATE
-                    ? 'Cập nhật sản phẩm'
+                    ? 'Cập nhật lịch học'
                     : state.modal.title)
         };
         return { modal: newModal };

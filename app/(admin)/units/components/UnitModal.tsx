@@ -23,10 +23,10 @@ const UnitModal = () => {
             form.resetFields();
             setShouldReload(true);
             onCloseModal();
-            showSuccessMessage('Thêm đơn vị tính thành công!');
+            showSuccessMessage('Thêm giáo viên thành công!');
         } catch (error) {
             console.error('Lỗi submit:', error);
-            showErrorMessage('Thêm đơn vị tính thất bại!');
+            showErrorMessage('Thêm giáo viên thất bại!');
         } finally {
             setLoadingModalVisible(false);
         }
@@ -65,8 +65,8 @@ const UnitModal = () => {
                 onFinish={handleFormSubmit}
             >
                 <Flex style={{ flexDirection: 'column' }}>
-                    <Form.Item label="Tên đơn vị" name="unit_name" rules={[{ required: true, message: 'Vui lòng nhập tên đơn vị' }]}>
-                        <Input placeholder="Tên đơn vị" />
+                    <Form.Item label="Tên giáo viên" name="unit_name" rules={[{ required: true, message: 'Vui lòng nhập tên đơn vị' }]}>
+                        <Input placeholder="Tên giáo viên" />
                     </Form.Item>
                 </Flex>
             </Form>

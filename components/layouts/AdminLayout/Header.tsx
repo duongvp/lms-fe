@@ -1,73 +1,210 @@
 import { useAuthStore } from "@/stores/authStore";
 import { handleLogout } from "@/ultils/auth";
-import { EnvironmentOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
-import { Avatar, Button, Dropdown, Flex, Layout, Space, theme } from "antd";
+import { EnvironmentOutlined, MenuOutlined } from "@ant-design/icons";
+import { Avatar, Button, Dropdown, Flex, Layout, Space, Menu, Grid } from "antd";
 import { MenuProps } from "antd/lib";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import React from "react";
+import Image from "next/image";
+import { menuConfig, getActiveKeys } from "./SideMenu";
 
 const { Header: AntdHeader } = Layout;
+const { useBreakpoint } = Grid;
 
 interface HeaderProps {
-  collapsed: boolean;
-  toggle: () => void;
+  onToggleMenu: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ collapsed, toggle }) => {
+const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
   const { user } = useAuthStore();
-  const { username, warehouseName } = user
-  const {
-    token: { colorBgContainer },
-  } = theme.useToken();
-  const router = useRouter()
+  const { username, warehouseName } = user;
+  const router = useRouter();
+  const pathname = usePathname();
+  const screens = useBreakpoint();
+  const isMobile = screens && !screens.xl;
+
+  const { hasPermission: _hasPermission } = useAuthStore();
+
+  const hasPermission = (permission: string | null) => {
+    // MOCK DATA: Tạm thời return true để hiển thị full menu
+    return true;
+    // if (permission === null) return true;
+    // return _hasPermission(permission);
+  };
 
   const logout = () => {
     handleLogout();
     router.push('/auth/login');
-  }
+  };
 
-  const items: MenuProps['items'] = [
+  // Get active key based on current URL path
+  const { activeTopKey, activeSideKey } = getActiveKeys(pathname);
+
+  // Get allowed top level menu items for the desktop header (exclude Logout '9')
+  const headerItems = menuConfig
+    .filter(item => {
+      if (item.key === '9') return false;
+      if (item.children) {
+        return item.children.some(child => hasPermission(child.permission)) || hasPermission(item.permission);
+      }
+      return hasPermission(item.permission);
+    })
+    .map(item => {
+      const allowedChildren = item.children?.filter(child => hasPermission(child.permission));
+      return {
+        key: item.key,
+        label: item.label,
+        children: allowedChildren && allowedChildren.length > 0
+          ? allowedChildren.map(child => ({ key: child.key, label: child.label }))
+          : undefined,
+      };
+    });
+
+  const onHeaderMenuClick: MenuProps['onClick'] = ({ key }) => {
+    let targetPath = '';
+
+    // Check if it's a main item
+    const mainItem = menuConfig.find(item => item.key === key);
+    if (mainItem) {
+      if (mainItem.children && mainItem.children.length > 0) {
+        const allowedChild = mainItem.children.find(child => hasPermission(child.permission));
+        if (allowedChild) {
+          targetPath = allowedChild.path;
+        }
+      } else {
+        targetPath = mainItem.path || '';
+      }
+    } else {
+      // It might be a child item from the dropdown
+      for (const item of menuConfig) {
+        if (item.children) {
+          const child = item.children.find(c => c.key === key);
+          if (child) {
+            targetPath = child.path;
+            break;
+          }
+        }
+      }
+    }
+
+    if (targetPath) {
+      router.push(targetPath);
+    }
+  };
+
+  const profileMenuItems: MenuProps['items'] = [
     {
       key: 'profile',
-      label: username,
-      onClick: () => { }
+      label: (
+        <div style={{ padding: '4px 8px' }}>
+          <div style={{ fontWeight: 600, color: '#262626' }}>{username}</div>
+          <div style={{ fontSize: 12, color: '#8c8c8c' }}>Tài khoản quản trị</div>
+        </div>
+      ),
+      disabled: true,
+    },
+    {
+      type: 'divider',
     },
     {
       key: 'logout',
       label: 'Đăng xuất',
-      onClick: () => { logout() }
+      danger: true,
+      onClick: logout,
     }
   ];
 
   return (
-    <AntdHeader style={{ padding: 0, background: colorBgContainer }}>
-      <Flex align="center" justify="space-between" style={{ width: "100%" }}>
-        <Button
-          type="text"
-          icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-          onClick={() => toggle()}
-          style={{
-            fontSize: "16px",
-            width: 64,
-            height: 64,
-          }}
-        />
-        <Space style={{ marginRight: 24 }} size="middle">
-          <Flex align="center" gap={4}>
-            <EnvironmentOutlined />
-            <span style={{ fontWeight: "normal" }}>{warehouseName}</span>
+    <AntdHeader style={{ padding: '0 24px', background: '#ffffff', borderBottom: '1px solid #f0f0f0', height: 64, display: 'flex', alignItems: 'center' }}>
+      <Flex align="center" justify="space-between" style={{ width: "100%", height: "100%" }}>
+        {/* Left Side: Hamburger (mobile) + Logo */}
+        {/* <Flex align="center" gap={12} style={{ flex: 1, minWidth: 0 }}>
+          {isMobile && (
+            <Button
+              type="text"
+              icon={<MenuOutlined />}
+              onClick={onToggleMenu}
+              style={{ fontSize: "18px", width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            />
+          )}
+          <Flex align="center" gap={8} style={{ cursor: 'pointer' }} onClick={() => router.push('/dashboard')}>
+            <img
+              src="https://hocmai.vn/study/public/images/logo.png"
+              alt="Warehouse Logo"
+              width={36}
+              height={36}
+              style={{ objectFit: 'contain' }}
+            />
+            <span style={{ fontSize: 20, fontWeight: 600, color: '#1890ff' }}>STREAM</span>
           </Flex>
-          <Dropdown menu={{ items }} placement="bottomRight">
-            <Avatar style={{ backgroundColor: '#fde3cf', color: '#f56a00' }}>
-              {username ? username.charAt(0).toUpperCase() : 'U'}
-            </Avatar>
-          </Dropdown>
-        </Space>
+        </Flex> */}
+
+        {/* Center: Horizontal Navigation Menu (Desktop only) */}
+        {!isMobile && (
+          <div style={{ flex: 2, minWidth: 0, height: '100%', display: 'flex', justifyContent: 'center' }}>
+            <Flex >
+              {isMobile && (
+                <Button
+                  type="text"
+                  icon={<MenuOutlined />}
+                  onClick={onToggleMenu}
+                  style={{ fontSize: "18px", width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                />
+              )}
+              <Flex align="center" gap={8} style={{ cursor: 'pointer' }} onClick={() => router.push('/dashboard')}>
+                <img
+                  src="https://hocmai.vn/study/public/images/logo.png"
+                  alt="Warehouse Logo"
+                  width={36}
+                  height={36}
+                  style={{ objectFit: 'contain' }}
+                />
+                <span style={{ fontSize: 20, fontWeight: 600, color: '#1890ff' }}>STREAM</span>
+              </Flex>
+            </Flex>
+            <Menu
+              mode="horizontal"
+              selectedKeys={[activeTopKey, activeSideKey]}
+              onClick={onHeaderMenuClick}
+              items={headerItems}
+              style={{
+                borderBottom: 'none',
+                height: 64,
+                lineHeight: '64px',
+                fontSize: 14,
+                fontWeight: 500,
+                minWidth: 400,
+                justifyContent: 'center',
+                flex: 1
+              }}
+            />
+          </div>
+        )}
+
+        {/* Right Side: Warehouse Selector + Profile */}
+        <Flex align="center" justify="flex-end" style={{ flex: 1, minWidth: 0 }}>
+          <Space size="large">
+            <Flex align="center" gap={6} style={{ color: '#595959', fontSize: 13 }}>
+              <EnvironmentOutlined style={{ color: '#1890ff' }} />
+              <span style={{ fontWeight: 500 }}>{warehouseName}</span>
+            </Flex>
+            <Dropdown menu={{ items: profileMenuItems }} placement="bottomRight" arrow>
+              <Flex align="center" gap={8} style={{ cursor: 'pointer' }}>
+                <Avatar style={{ backgroundColor: '#fde3cf', color: '#f56a00', verticalAlign: 'middle' }}>
+                  {username ? username.charAt(0).toUpperCase() : 'U'}
+                </Avatar>
+                {!isMobile && (
+                  <span style={{ fontWeight: 500, fontSize: 14, color: '#262626' }}>
+                    {username}
+                  </span>
+                )}
+              </Flex>
+            </Dropdown>
+          </Space>
+        </Flex>
       </Flex>
     </AntdHeader>
   );
-}
+};
 
-export default Header
-
-
+export default Header;

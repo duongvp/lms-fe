@@ -43,9 +43,9 @@ const useUnitStore = create<UnitStore>((set, get) => ({
             ...state.modal,
             ...partial,
             title: partial.type === ActionType.CREATE
-                ? 'Thêm đơn vị'
+                ? 'Thêm giáo viên'
                 : partial.type === ActionType.UPDATE
-                    ? 'Cập nhật đơn vị'
+                    ? 'Cập nhật giáo viên'
                     : state.modal.title
         };
         return { modal: newModal };

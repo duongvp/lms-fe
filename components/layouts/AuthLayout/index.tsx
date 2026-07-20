@@ -7,14 +7,19 @@ const { Content } = Layout;
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
     return (
         <Layout style={{ maxHeight: '100vh', height: '100vh' }}>
-            <Content style={{ position: 'relative', height: '100vh', width: '100%' }}>
-                <Image
+            <Content style={{ position: 'relative', height: '100vh', width: '100%', overflow: 'hidden' }}>
+                {/* <Image
                     src="/assets/bg-warehouse.jpg"
                     alt="warehouse"
                     fill
                     sizes="100vw"
                     style={{ objectFit: "cover", zIndex: 0 }}
                     priority
+                /> */}
+                <img
+                    src="https://huongnghiep.hocmai.vn/wp-content/uploads/2025/12/Thumbnail-video-YT_huyennk.png"
+                    alt="warehouse"
+                    style={{ objectFit: "cover", maxHeight: "100vh", width: "100%", zIndex: 0 }}
                 />
                 <div
                     style={{

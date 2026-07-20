@@ -71,15 +71,6 @@ const LoginForm = () => {
                 layout="vertical"
                 size="large"
             >
-                <Form.Item name="mode" style={{ marginBottom: 24 }}>
-                    <Segmented
-                        block
-                        options={[
-                            { label: 'Bán hàng', value: 'fnb', icon: <ShopOutlined /> },
-                            { label: 'Quản lý', value: 'admin', icon: <DesktopOutlined /> }
-                        ]}
-                    />
-                </Form.Item>
                 <Form.Item name="username" label="Tên đăng nhập" rules={[{ required: true, message: 'Vui lòng nhập tên đăng nhập' }]}>
                     <Input prefix={<UserOutlined />} placeholder="Tên đăng nhập" allowClear />
                 </Form.Item>

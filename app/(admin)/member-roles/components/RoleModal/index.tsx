@@ -7,7 +7,10 @@ import {
     Row,
     Col,
     Checkbox,
-    Typography
+    Typography,
+    Tabs,
+    Collapse,
+    Table
 } from "antd";
 import React, { useEffect, useState } from "react";
 import {
@@ -28,6 +31,48 @@ const formItemLayout = {
     labelCol: { span: 8 },
     wrapperCol: { span: 16 },
 };
+
+const MOCK_MODULES = [
+    {
+        code: 'schedule_summary',
+        name: 'Tổng quan lịch học',
+        fields: [
+            { fieldCode: 'date', fieldLabel: 'Ngày học' },
+            { fieldCode: 'time', fieldLabel: 'Giờ học' },
+            { fieldCode: 'class_name', fieldLabel: 'Tên lớp' },
+            { fieldCode: 'room', fieldLabel: 'Phòng học' }
+        ]
+    },
+    {
+        code: 'schedule_detail',
+        name: 'Chi tiết lịch học',
+        fields: [
+            { fieldCode: 'date', fieldLabel: 'Ngày học' },
+            { fieldCode: 'time', fieldLabel: 'Giờ học' },
+            { fieldCode: 'class_name', fieldLabel: 'Tên lớp' },
+            { fieldCode: 'room', fieldLabel: 'Phòng học' },
+            { fieldCode: 'subject', fieldLabel: 'Môn học' }
+        ]
+    },
+    {
+        code: 'class_list',
+        name: 'Danh sách lớp',
+        fields: [
+            { fieldCode: 'class_name', fieldLabel: 'Tên lớp' },
+            { fieldCode: 'grade', fieldLabel: 'Khối' },
+            { fieldCode: 'room', fieldLabel: 'Phòng học' }
+        ]
+    },
+    {
+        code: 'student_list',
+        name: 'Danh sách học viên',
+        fields: [
+            { fieldCode: 'student_code', fieldLabel: 'Mã học viên' },
+            { fieldCode: 'full_name', fieldLabel: 'Họ và tên' },
+            { fieldCode: 'class_name', fieldLabel: 'Tên lớp' }
+        ]
+    }
+];
 
 // Cấu trúc permission chi tiết với các action có sẵn cho từng mục
 const permissionsStructure = {
@@ -105,12 +150,14 @@ const RoleModal = () => {
     const [loadingModalVisible, setLoadingModalVisible] = useState(false);
     const [expandedGroups, setExpandedGroups] = useState<{ [key: string]: boolean }>({});
     const [checkedGroups, setCheckedGroups] = useState<{ [key: string]: string[] }>({});
+    const [fieldPolicy, setFieldPolicy] = useState<Record<string, { visible_fields: string[], editable_fields: string[] }>>({});
 
     const onCloseModal = () => {
         resetModal();
         form.resetFields();
         setCheckedGroups({});
         setExpandedGroups({});
+        setFieldPolicy({});
     };
 
     const toggleGroup = (key: string) => {
@@ -146,7 +193,8 @@ const RoleModal = () => {
             const roleData = {
                 role_name: values.roleName,
                 description: values.description || "",
-                permissions
+                permissions,
+                fieldPolicy
             };
 
             // Gọi API ở đây
@@ -263,6 +311,12 @@ const RoleModal = () => {
             setCheckedGroups(initialChecked);
             form.setFieldValue('permissions', initialChecked);
 
+            if (modal.role.fieldPolicy) {
+                setFieldPolicy(modal.role.fieldPolicy);
+            } else {
+                setFieldPolicy({});
+            }
+
             // // Mở rộng tất cả các nhóm khi là chỉnh sửa
             // const allGroups = Object.values(permissionsStructure).flatMap(group => Object.keys(group));
             // const expandedState = allGroups.reduce((acc, group) => ({ ...acc, [group]: true }), {});
@@ -272,6 +326,7 @@ const RoleModal = () => {
             form.resetFields();
             setCheckedGroups({});
             setExpandedGroups({});
+            setFieldPolicy({});
         }
     }, [modal.role, form, modal.open]);
 
@@ -282,7 +337,7 @@ const RoleModal = () => {
                 title={modal.title}
                 open={modal.open}
                 onCancel={onCloseModal}
-                width={800}
+                width={900}
                 centered
                 footer={[
                     <Button
@@ -302,7 +357,7 @@ const RoleModal = () => {
                     </Button>,
                 ]}
             >
-                <div style={{ maxHeight: 520, overflowY: 'auto', overflowX: 'hidden', paddingRight: 8 }}>
+                <div style={{ maxHeight: 568, overflowY: 'auto', overflowX: 'hidden', paddingRight: 8 }}>
                     <Form
                         form={form}
                         onFinish={handleFormSubmit}
@@ -329,71 +384,162 @@ const RoleModal = () => {
                                 <Text type="danger">Chú ý: vì là vai trò {form.getFieldValue("roleName")} nên mặc định 3 quyền Người dùng, Chi nhánh và Tổng quan sẽ không thể sửa</Text>
                             )
                         }
-                        <Title level={5}>Phân quyền </Title>
-                        <Row gutter={[24, 16]}>
-                            {Object.entries(permissionsStructure).map(([groupName, groupItems]) => (
-                                <Col xs={24} sm={12} md={8} key={groupName}>
-                                    <p style={{ fontWeight: 500, marginBottom: 12 }}>{groupName}</p>
-                                    {Object.keys(groupItems).map((itemName) => {
-                                        const isExpanded = expandedGroups[itemName] ?? false;
-                                        const currentChecked = checkedGroups[itemName] || [];
-                                        const itemData = getItemData(itemName);
-                                        const actionsToShow = itemData?.actions || [];
 
-                                        return (
-                                            <div
-                                                key={itemName}
-                                                style={{
-                                                    paddingBottom: 8,
-                                                    marginBottom: 8,
-                                                    borderBottom: '1px solid #f0f0f0'
-                                                }}
-                                            >
-                                                <div
-                                                    style={{
-                                                        display: "flex",
-                                                        alignItems: "center",
-                                                        gap: 4,
-                                                    }}
-                                                >
-                                                    <span
-                                                        onClick={() => toggleGroup(itemName)}
-                                                        style={{ cursor: "pointer", display: "flex", alignItems: "center" }}
-                                                    >
-                                                        {isExpanded ? <CaretDownFilled style={{ color: 'rgb(107 102 102)' }} /> : <CaretRightFilled style={{ color: 'rgb(107 102 102)' }} />}
-                                                    </span>
-                                                    <Checkbox
-                                                        checked={isAllChecked(itemName)}
-                                                        indeterminate={isIndeterminate(itemName)}
-                                                        onChange={(e) => onParentCheck(itemName, e.target.checked)}
-                                                        disabled={modal.role?.role_id === 1 && (itemName === "Người dùng" || itemName === "Chi nhánh" || itemName == "Tổng quan")}
-                                                    >
-                                                        {itemName}
-                                                    </Checkbox>
-                                                </div>
+                        <Tabs defaultActiveKey="1" style={{ marginTop: 16 }}>
+                            <Tabs.TabPane tab="Quyền thao tác" key="1">
+                                <Title level={5}>Phân quyền thao tác</Title>
+                                <Row gutter={[24, 16]}>
+                                    {Object.entries(permissionsStructure).map(([groupName, groupItems]) => (
+                                        <Col xs={24} sm={12} md={8} key={groupName}>
+                                            <p style={{ fontWeight: 500, marginBottom: 12 }}>{groupName}</p>
+                                            {Object.keys(groupItems).map((itemName) => {
+                                                const isExpanded = expandedGroups[itemName] ?? false;
+                                                const currentChecked = checkedGroups[itemName] || [];
+                                                const itemData = getItemData(itemName);
+                                                const actionsToShow = itemData?.actions || [];
 
-                                                {isExpanded && itemData && (
-                                                    <Form.Item
-                                                        name={['permissions', itemName]}
-                                                        style={{ marginTop: 8, marginLeft: 40 }}
+                                                return (
+                                                    <div
+                                                        key={itemName}
+                                                        style={{
+                                                            paddingBottom: 8,
+                                                            marginBottom: 8,
+                                                            borderBottom: '1px solid #f0f0f0'
+                                                        }}
                                                     >
-                                                        <Checkbox.Group
-                                                            style={{ display: 'flex', flexDirection: 'column' }}
-                                                            options={actionsToShow}
-                                                            value={currentChecked}
-                                                            onChange={(checked) =>
-                                                                onChildCheck(itemName, checked as string[])
-                                                            }
-                                                            disabled={modal.role?.role_id === 1 && (itemName === "Người dùng" || itemName === "Chi nhánh" || itemName == "Tổng quan")}
+                                                        <div
+                                                            style={{
+                                                                display: "flex",
+                                                                alignItems: "center",
+                                                                gap: 4,
+                                                            }}
+                                                        >
+                                                            <span
+                                                                onClick={() => toggleGroup(itemName)}
+                                                                style={{ cursor: "pointer", display: "flex", alignItems: "center" }}
+                                                            >
+                                                                {isExpanded ? <CaretDownFilled style={{ color: 'rgb(107 102 102)' }} /> : <CaretRightFilled style={{ color: 'rgb(107 102 102)' }} />}
+                                                            </span>
+                                                            <Checkbox
+                                                                checked={isAllChecked(itemName)}
+                                                                indeterminate={isIndeterminate(itemName)}
+                                                                onChange={(e) => onParentCheck(itemName, e.target.checked)}
+                                                                disabled={modal.role?.role_id === 1 && (itemName === "Người dùng" || itemName === "Chi nhánh" || itemName == "Tổng quan")}
+                                                            >
+                                                                {itemName}
+                                                            </Checkbox>
+                                                        </div>
+
+                                                        {isExpanded && itemData && (
+                                                            <Form.Item
+                                                                name={['permissions', itemName]}
+                                                                style={{ marginTop: 8, marginLeft: 40 }}
+                                                            >
+                                                                <Checkbox.Group
+                                                                    style={{ display: 'flex', flexDirection: 'column' }}
+                                                                    options={actionsToShow}
+                                                                    value={currentChecked}
+                                                                    onChange={(checked) =>
+                                                                        onChildCheck(itemName, checked as string[])
+                                                                    }
+                                                                    disabled={modal.role?.role_id === 1 && (itemName === "Người dùng" || itemName === "Chi nhánh" || itemName == "Tổng quan")}
+                                                                />
+                                                            </Form.Item>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </Col>
+                                    ))}
+                                </Row>
+                            </Tabs.TabPane>
+
+                            <Tabs.TabPane tab="Quyền dữ liệu (Field-Level)" key="2">
+                                <Title level={5}>Cấu hình quyền trên trường dữ liệu</Title>
+                                <Collapse defaultActiveKey={MOCK_MODULES.map(m => m.code)}>
+                                    {MOCK_MODULES.map(module => {
+                                        const dataSource = module.fields.map(f => ({ ...f, key: f.fieldCode }));
+                                        const columns = [
+                                            { title: 'Trường dữ liệu', dataIndex: 'fieldLabel', key: 'fieldLabel' },
+                                            {
+                                                title: 'Xem',
+                                                key: 'view',
+                                                render: (_: any, record: any) => {
+                                                    const isChecked = fieldPolicy[module.code]?.visible_fields?.includes(record.fieldCode) || false;
+                                                    return (
+                                                        <Checkbox
+                                                            checked={isChecked}
+                                                            onChange={(e) => {
+                                                                const checked = e.target.checked;
+                                                                setFieldPolicy(prev => {
+                                                                    const modulePolicy = prev[module.code] || { visible_fields: [], editable_fields: [] };
+                                                                    let newVisible = [...(modulePolicy.visible_fields || [])];
+                                                                    let newEditable = [...(modulePolicy.editable_fields || [])];
+
+                                                                    if (checked) {
+                                                                        if (!newVisible.includes(record.fieldCode)) newVisible.push(record.fieldCode);
+                                                                    } else {
+                                                                        newVisible = newVisible.filter(f => f !== record.fieldCode);
+                                                                        newEditable = newEditable.filter(f => f !== record.fieldCode);
+                                                                    }
+
+                                                                    return {
+                                                                        ...prev,
+                                                                        [module.code]: { ...modulePolicy, visible_fields: newVisible, editable_fields: newEditable }
+                                                                    };
+                                                                });
+                                                            }}
                                                         />
-                                                    </Form.Item>
-                                                )}
-                                            </div>
+                                                    );
+                                                }
+                                            },
+                                            {
+                                                title: 'Sửa',
+                                                key: 'edit',
+                                                render: (_: any, record: any) => {
+                                                    const isChecked = fieldPolicy[module.code]?.editable_fields?.includes(record.fieldCode) || false;
+                                                    return (
+                                                        <Checkbox
+                                                            checked={isChecked}
+                                                            onChange={(e) => {
+                                                                const checked = e.target.checked;
+                                                                setFieldPolicy(prev => {
+                                                                    const modulePolicy = prev[module.code] || { visible_fields: [], editable_fields: [] };
+                                                                    let newVisible = [...(modulePolicy.visible_fields || [])];
+                                                                    let newEditable = [...(modulePolicy.editable_fields || [])];
+
+                                                                    if (checked) {
+                                                                        if (!newEditable.includes(record.fieldCode)) newEditable.push(record.fieldCode);
+                                                                        if (!newVisible.includes(record.fieldCode)) newVisible.push(record.fieldCode);
+                                                                    } else {
+                                                                        newEditable = newEditable.filter(f => f !== record.fieldCode);
+                                                                    }
+
+                                                                    return {
+                                                                        ...prev,
+                                                                        [module.code]: { ...modulePolicy, visible_fields: newVisible, editable_fields: newEditable }
+                                                                    };
+                                                                });
+                                                            }}
+                                                        />
+                                                    );
+                                                }
+                                            }
+                                        ];
+                                        return (
+                                            <Collapse.Panel header={module.name} key={module.code}>
+                                                <Table
+                                                    dataSource={dataSource}
+                                                    columns={columns}
+                                                    pagination={false}
+                                                    size="small"
+                                                />
+                                            </Collapse.Panel>
                                         );
                                     })}
-                                </Col>
-                            ))}
-                        </Row>
+                                </Collapse>
+                            </Tabs.TabPane>
+                        </Tabs>
                     </Form>
                 </div>
             </Modal>

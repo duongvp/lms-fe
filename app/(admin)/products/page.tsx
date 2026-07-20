@@ -31,15 +31,15 @@ interface Pagination {
 // Columns hiển thị
 const columns: ColumnsType<DataType> = [
     {
-        title: "Mã hàng",
+        title: "Mã",
         dataIndex: "product_code",
     },
     {
-        title: "Tên hàng",
+        title: "Buổi",
         dataIndex: "product_name",
     },
     {
-        title: "Nhóm hàng",
+        title: "Môn / Tiêu đề",
         dataIndex: "category_name",
     },
     {

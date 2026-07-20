@@ -12,6 +12,7 @@ export interface RoleApiResponse {
     role_name: string;
     permissions: RolePermission[];
     description?: string;
+    fieldPolicy?: any;
     created_at?: Date;
 }
 
