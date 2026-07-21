@@ -29,10 +29,10 @@ const LoginForm = () => {
             localStorage.setItem('login', Date.now().toString());
             localStorage.setItem('lastLoginMode', mode);
 
-            if (mode === 'fnb') {
-                router.push('/fnb');
-                return;
-            }
+            // if (mode === 'fnb') {
+            //     router.push('/fnb');
+            //     return;
+            // }
 
             // Tìm route đầu tiên mà user có quyền (thường là dashboard)
             const firstAllowedRoute = protectedRoutes.find(route =>
