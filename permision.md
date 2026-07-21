@@ -67,8 +67,11 @@ model ModuleField {
   @@map("module_fields")
 }
 
+---
 
-dữ liệu mẫu fieldPolicy
+## 3. Quy chuẩn cấu trúc JSON của fieldPolicy
+Khi lưu thông tin phân quyền trường vào bảng Role, cấu trúc của object JSON lưu trữ trong trường fieldPolicy bắt buộc phải tuân theo format mảng (visible_fields và editable_fields) như sau:
+
 {
   "schedule_summary": {
     "visible_fields": ["date", "time", "class_name", "room"],
@@ -76,14 +79,25 @@ dữ liệu mẫu fieldPolicy
   },
   "schedule_detail": {
     "visible_fields": ["date", "time", "class_name", "room", "subject"],
-    "editable_fields": []
-  },
-  "class_list": {
-    "visible_fields": ["class_name", "grade", "room"],
-    "editable_fields": []
+    "editable_fields": ["room", "subject"]
   },
   "student_list": {
     "visible_fields": ["student_code", "full_name", "class_name"],
-    "editable_fields": []
+    "editable_fields": ["full_name"]
   }
 }
+
+## 4. Yêu cầu Cải tiến Giao diện (UI/UX)
+Dựa trên Form "Thêm/Sửa vai trò" hiện tại (giao diện phân quyền theo cụm hệ thống):
+
+Nút kích hoạt cấu hình trường:
+
+Bên cạnh mỗi tên Module con (Ví dụ: bên phải chữ "Sản phẩm", "Hóa đơn", "Lịch học"), bổ sung thêm một icon Cài đặt (Gear icon) hoặc một text link nhỏ: [Cấu hình trường].
+
+Khu vực hiển thị Ma trận Checkbox (Field Matrix):
+
+Khi click vào [Cấu hình trường], hệ thống sẽ mở ra một Popover / Drawer bên cạnh, hoặc mở rộng một vùng Collapse ngay phía dưới module đó.
+
+Tại đây, render danh sách các trường dữ liệu thuộc module đó (lấy dynamic từ dữ liệu bảng ModuleField).
+
+Mỗi trường sẽ đi kèm với 2 Checkbox độc lập: Xem và Sửa.
