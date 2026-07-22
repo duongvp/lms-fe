@@ -74,3 +74,11 @@ Hoặc cấu hình khác nhau cho từng ngày học, đáp ứng các lớp có
 
 
 dựa vào cấu trúc api  được mô tả trong file  livestreamApi.md và trong .env . Trong  modal ScheduleModal.tsx khi submit sẽ phải convert giá trị time giống với phần body  và  hãy tính hợp api tạo mới trong folder service (endpoint).
+
+
+phần thêm mới lịch học: thêm 1 buổi hoặc thêm nhiều lịch tự động sẽ làm thêm 1 modal preview để người dùng dễ hình dung khi thêm mới lịch nó sẽ như nào
++ đối với thêm nhiều tự động sẽ không cần đến ngày kết thúc thay vào đó là số buổi học
+ví dụ người dùng chọn ngày bắt đầu là 22/7 và số buổi người dùng chọn 5 buổi , phần các ngày trong tuần tick thứ 3 thứ 5 thứ 6 .thì lịch nó sẽ như sau thứ 5(22/7) thứ 6 (23/7) , thứ 3(28/7) tiếp theo là thứ 5(29/7) nhưng vì ngày đó ngày nghỉ nên là 2 thứ tiếp theo là thứ 6 (30/7) và thứ 3 (4/8). bổ sung thêm phần ui để người dùng chọn thứ 5 (29/7) bỏ qua.
+
+tương tự với phần sửa lịch , dời lịch cũng phải hiện modal preview để người dùng tiện theo dõi trước khi save 
+

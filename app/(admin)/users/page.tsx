@@ -30,11 +30,7 @@ const columns: ColumnsType<DataType> = [
     },
     {
         title: "Tên người dùng",
-        dataIndex: "full_name",
-    },
-    {
-        title: "Chi nhánh hoạt động",
-        dataIndex: "warehouse_name",
+        dataIndex: "name",
     },
     {
         title: "Thời gian khởi tạo",
@@ -66,11 +62,12 @@ const Page = () => {
     const fetchUsers = async () => {
         try {
             const apiData = await getUsers();
+            console.log("apiData", apiData)
 
             // map lại dữ liệu cho Table
-            const tableData: DataType[] = apiData.map((item) => ({
+            const tableData: DataType[] = apiData?.data.map((item) => ({
                 ...item,
-                key: item.user_id,
+                key: item.id,
                 description: (
                     <DecriptionRow record={item} /> // truyền data xuống component DecriptionTable
                 ),
@@ -78,6 +75,7 @@ const Page = () => {
 
             setData(tableData);
         } catch (error) {
+            console.log("error", error)
             console.error("Lỗi fetch API:", error);
             api.error({
                 message: "Lỗi khi tải dữ liệu",

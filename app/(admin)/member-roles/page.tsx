@@ -22,7 +22,7 @@ interface DataType extends RoleApiResponse {
 const columns: ColumnsType<DataType> = [
     {
         title: "Tên vai trò",
-        dataIndex: "role_name",
+        dataIndex: "name",
     },
     {
         title: "Mô tả",
@@ -30,9 +30,8 @@ const columns: ColumnsType<DataType> = [
     },
     {
         title: "Thời gian khởi tạo",
-        dataIndex: "created_at",
+        dataIndex: "createdAt",
         render: (value) => dayjs(value).format("DD/MM/YY HH:mm"),
-        sorter: (a, b) => dayjs(a.created_at).unix() - dayjs(b.created_at).unix(),
     },
 ];
 
@@ -50,7 +49,7 @@ const Page = () => {
             // map lại dữ liệu cho Table
             const tableData: DataType[] = apiData.map((item) => ({
                 ...item,
-                key: item.role_id,
+                key: item.id,
                 description_row: (
                     <DecriptionRow record={item} /> // truyền data xuống component DecriptionTable
                 ),

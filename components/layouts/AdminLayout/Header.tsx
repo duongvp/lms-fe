@@ -1,6 +1,6 @@
 import { useAuthStore } from "@/stores/authStore";
 import { handleLogout } from "@/ultils/auth";
-import { EnvironmentOutlined, MenuOutlined } from "@ant-design/icons";
+import { MenuOutlined } from "@ant-design/icons";
 import { Avatar, Button, Dropdown, Flex, Layout, Space, Menu, Grid } from "antd";
 import { MenuProps } from "antd/lib";
 import { useRouter, usePathname } from "next/navigation";
@@ -17,7 +17,7 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
   const { user } = useAuthStore();
-  const { username, warehouseName } = user;
+  const { username } = user;
   const router = useRouter();
   const pathname = usePathname();
   const screens = useBreakpoint();
@@ -69,7 +69,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
       if (mainItem.children && mainItem.children.length > 0) {
         const allowedChild = mainItem.children.find(child => hasPermission(child.permission));
         if (allowedChild) {
-          targetPath = allowedChild.path;
+          targetPath = allowedChild.path as string;
         }
       } else {
         targetPath = mainItem.path || '';
@@ -80,7 +80,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
         if (item.children) {
           const child = item.children.find(c => c.key === key);
           if (child) {
-            targetPath = child.path;
+            targetPath = child.path as string;
             break;
           }
         }
@@ -140,7 +140,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
         </Flex> */}
 
         {/* Center: Horizontal Navigation Menu (Desktop only) */}
-        {!isMobile && (
+        {/* {!isMobile && (
           <div style={{ flex: 2, minWidth: 0, height: '100%', display: 'flex', justifyContent: 'center' }}>
             <Flex >
               {isMobile && (
@@ -179,15 +179,51 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
               }}
             />
           </div>
-        )}
+        )} */}
+        <div style={{ flex: 2, minWidth: 0, height: '100%', display: 'flex', justifyContent: 'start', alignItems: 'center', gap: 32 }}>
+          <Flex align="center" >
+            {isMobile && (
+              <Button
+                type="text"
+                icon={<MenuOutlined />}
+                onClick={onToggleMenu}
+                style={{ fontSize: "18px", width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              />
+            )}
+            <Flex align="center" gap={8} style={{ cursor: 'pointer' }} onClick={() => router.push('/dashboard')}>
+              <img
+                src="https://hocmai.vn/study/public/images/logo.png"
+                alt="Warehouse Logo"
+                width={36}
+                height={36}
+                style={{ objectFit: 'contain' }}
+              />
+              <span style={{ fontSize: 20, fontWeight: 600, color: '#1890ff' }}>STREAM</span>
+            </Flex>
+          </Flex>
+          {!isMobile && (
+            <Menu
+              mode="horizontal"
+              selectedKeys={[activeTopKey, activeSideKey]}
+              onClick={onHeaderMenuClick}
+              items={headerItems}
+              style={{
+                borderBottom: 'none',
+                height: 64,
+                lineHeight: '64px',
+                fontSize: 14,
+                fontWeight: 500,
+                minWidth: 400,
+                justifyContent: 'start',
+                flex: 1
+              }}
+            />
+          )}
+        </div>
 
         {/* Right Side: Warehouse Selector + Profile */}
         <Flex align="center" justify="flex-end" style={{ flex: 1, minWidth: 0 }}>
           <Space size="large">
-            <Flex align="center" gap={6} style={{ color: '#595959', fontSize: 13 }}>
-              <EnvironmentOutlined style={{ color: '#1890ff' }} />
-              <span style={{ fontWeight: 500 }}>{warehouseName}</span>
-            </Flex>
             <Dropdown menu={{ items: profileMenuItems }} placement="bottomRight" arrow>
               <Flex align="center" gap={8} style={{ cursor: 'pointer' }}>
                 <Avatar style={{ backgroundColor: '#fde3cf', color: '#f56a00', verticalAlign: 'middle' }}>

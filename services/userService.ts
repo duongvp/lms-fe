@@ -1,45 +1,60 @@
 // services/userService.ts
 
 import { fetchInstance } from "@/ultils/fetchInstance";
+
 const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/api/users`;
 
-export interface UserApiResponse {
-    user_id: number
-    username: string
-    password: string
-    full_name: string
-    email: string
-    phone: string
-    is_active: number
-    warehouse_id: number
-    roles: { role_id: number, role_name: string }[],
-    created_at: string
-    updated_at: string
+// ---------- Interface ----------
+export interface RoleInfo {
+    role_id: number;   // id của role (BE trả về là id, nhưng để thống nhất với store có thể map)
+    role_code: string;
+    role_name: string;
 }
 
-export const getUsers = async (): Promise<UserApiResponse[]> => {
+export interface UserApiResponse {
+    id: number;
+    username: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    code: string;
+    learn_number: number;
+    class_id: string | null;
+    room_id: number | null;
+    islearn: number;
+    created_at: string;
+    updated_at: string;
+    roles: RoleInfo[];
+}
+
+// Payload dùng cho update user
+export interface UpdateUserPayload {
+    name?: string;
+    email?: string;
+    phone?: string;
+    username?: string;
+    islearn?: number;
+    class_id?: string;
+    room_id?: number;
+    roleIds?: number[];
+}
+
+// ---------- API functions ----------
+
+// Lấy danh sách users
+export const getUsers = async (): Promise<{ data: UserApiResponse[] }> => {
     const url = API_BASE_URL;
     return await fetchInstance(url);
 };
 
-export const getUsersFollowWarehouse = async (warehouseId: number): Promise<Omit<UserApiResponse, 'roles'>[]> => {
-    const url = API_BASE_URL;
-    return await fetchInstance(`${url}/with-warehouses/${warehouseId}`);
+// Lấy chi tiết 1 user
+export const getUserById = async (id: number): Promise<UserApiResponse> => {
+    const url = `${API_BASE_URL}/${id}`;
+    return await fetchInstance(url);
 };
 
-export const createUser = async (payload: { username: string; email: string; first_name: string; last_name: string; password: string; role_id: number }) => {
-    const url = API_BASE_URL;
-    const options = {
-        method: 'POST',
-        body: JSON.stringify(payload),
-        headers: {
-            'Content-Type': 'application/json',
-        },
-    };
-    return await fetchInstance(url, options);
-};
-
-export const updateUser = async (id: number, payload: any) => {
+// Cập nhật user
+export const updateUser = async (id: number, payload: UpdateUserPayload) => {
     const url = `${API_BASE_URL}/${id}`;
     const options = {
         method: 'PUT',
@@ -49,23 +64,8 @@ export const updateUser = async (id: number, payload: any) => {
         },
     };
     return await fetchInstance(url, options);
-}
-
-export const toggleUserStatus = async (id: number, payload: { status: 1 | 0 }) => {
-    const url = `${API_BASE_URL}/toggle/${id}`;
-    const options = {
-        method: 'PUT',
-        body: JSON.stringify(payload),
-        headers: {
-            'Content-Type': 'application/json',
-        },
-    };
-    return await fetchInstance(url, options);
 };
 
-export const deleteUser = async (id: number) => {
-    const url = `${API_BASE_URL}/${id}`;
-    return await fetchInstance(url, {
-        method: 'DELETE',
-    });
-};
+// (Tạm thời bỏ delete, toggle do schema chưa hỗ trợ, nếu cần sau có thể thêm)
+// export const deleteUser = ...
+// export const toggleUserStatus = ...

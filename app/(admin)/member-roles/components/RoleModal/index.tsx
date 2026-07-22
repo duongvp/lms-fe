@@ -10,9 +10,9 @@ import {
     Typography,
     Tabs,
     Collapse,
-    Table
+    Table,
 } from "antd";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
     CloseCircleOutlined,
     SaveOutlined,
@@ -23,125 +23,141 @@ import CustomSpin from "@/components/ui/Spins";
 import { showErrorMessage, showSuccessMessage } from "@/ultils/message";
 import useRoleStore from "@/stores/roleStore";
 import { ActionType } from "@/enums/action";
-import { createRole, updateRole } from "@/services/roleService";
+import {
+    createRole,
+    updateRole,
+    getModulesStructure,
+    getPermissionsStructure,
+    type ModuleStructure,
+    type PermissionStructure,
+} from "@/services/roleService";
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 
 const formItemLayout = {
     labelCol: { span: 8 },
     wrapperCol: { span: 16 },
 };
 
-const MOCK_MODULES = [
-    {
-        code: 'schedule_summary',
-        name: 'Tổng quan lịch học',
-        fields: [
-            { fieldCode: 'date', fieldLabel: 'Ngày học' },
-            { fieldCode: 'time', fieldLabel: 'Giờ học' },
-            { fieldCode: 'class_name', fieldLabel: 'Tên lớp' },
-            { fieldCode: 'room', fieldLabel: 'Phòng học' }
-        ]
-    },
-    {
-        code: 'schedule_detail',
-        name: 'Chi tiết lịch học',
-        fields: [
-            { fieldCode: 'date', fieldLabel: 'Ngày học' },
-            { fieldCode: 'time', fieldLabel: 'Giờ học' },
-            { fieldCode: 'class_name', fieldLabel: 'Tên lớp' },
-            { fieldCode: 'room', fieldLabel: 'Phòng học' },
-            { fieldCode: 'subject', fieldLabel: 'Môn học' }
-        ]
-    },
-    {
-        code: 'class_list',
-        name: 'Danh sách lớp',
-        fields: [
-            { fieldCode: 'class_name', fieldLabel: 'Tên lớp' },
-            { fieldCode: 'grade', fieldLabel: 'Khối' },
-            { fieldCode: 'room', fieldLabel: 'Phòng học' }
-        ]
-    },
-    {
-        code: 'student_list',
-        name: 'Danh sách học viên',
-        fields: [
-            { fieldCode: 'student_code', fieldLabel: 'Mã học viên' },
-            { fieldCode: 'full_name', fieldLabel: 'Họ và tên' },
-            { fieldCode: 'class_name', fieldLabel: 'Tên lớp' }
-        ]
-    }
-];
+// ---------- Kiểu dữ liệu cho fieldPolicy ----------
+// Định dạng BE (như trong seed)
+interface FieldPolicyBE {
+    modules: Record<
+        string,
+        {
+            fields: Record<string, { visible: boolean; editable: boolean }>;
+        }
+    >;
+}
 
-// Cấu trúc permission chi tiết với các action có sẵn cho từng mục
-const permissionsStructure = {
-    "Hệ thống": {
-        "Người dùng": {
-            actions: ["Xem DS", "Thêm mới", "Cập nhật", "Xoá"],
-            keys: ["user_view", "user_create", "user_edit", "user_delete"]
-        },
-        "Chi nhánh": {
-            actions: ["Xem DS", "Thêm mới", "Cập nhật", "Xoá"],
-            keys: ["branch_view", "branch_create", "branch_edit", "branch_delete"]
-        },
-        "Tổng quan": {
-            actions: ["Xem DS"],
-            keys: ["dashboard_view"]
-        },
-        "Báo cáo": {
-            actions: ["Xem DS"],
-            keys: ["report_view"]
+// Định dạng FE dùng để quản lý state (phẳng hơn)
+type FieldPolicyFE = Record<
+    string,
+    {
+        visible_fields: string[];
+        editable_fields: string[];
+    }
+>;
+
+// ---------- Hàm chuyển đổi ----------
+
+/**
+ * Chuyển fieldPolicy từ BE sang FE.
+ * Xử lý cả wildcard '*' và field cụ thể.
+ */
+const convertFieldPolicyFromBE = (
+    bePolicy: any,
+    modules: ModuleStructure[]
+): FieldPolicyFE => {
+    const fe: FieldPolicyFE = {};
+
+    if (!bePolicy || !bePolicy.modules) return fe;
+    const beModules = bePolicy.modules as Record<string, any>;
+
+    for (const mod of modules) {
+        const modCode = mod.code;
+        const modPolicy = beModules[modCode]?.fields;
+        if (!modPolicy) continue;
+
+        const visibleFieldsSet = new Set<string>();
+        const editableFieldsSet = new Set<string>();
+
+        // Wildcard
+        const wildcard = modPolicy["*"];
+        if (wildcard) {
+            for (const field of mod.fields) {
+                if (wildcard.visible) visibleFieldsSet.add(field.fieldCode);
+                if (wildcard.editable) editableFieldsSet.add(field.fieldCode);
+            }
         }
-    },
-    "Hàng hóa": {
-        "Sản phẩm": {
-            actions: ["Xem DS", "Thêm mới", "Cập nhật", "Xoá", "Import excel", "Xuất excel"],
-            keys: ["product_view", "product_create", "product_edit", "product_delete", "product_import", "product_export"]
-        },
-        "Nhóm hàng": {
-            actions: ["Xem DS", "Thêm mới", "Cập nhật", "Xoá"],
-            keys: ["category_view", "category_create", "category_edit", "category_delete"]
-        },
-        "Kiểm kho": {
-            actions: ["Xem DS", "Điều chỉnh", "Huỷ", "Cập nhật", "Xuất excel"],
-            keys: ["stock_check_view", "stock_check_create", "stock_check_edit", "stock_check_delete", "stock_check_export"]
+
+        // Duyệt từng field cụ thể (ghi đè wildcard nếu có)
+        for (const field of mod.fields) {
+            const rule = modPolicy[field.fieldCode];
+            if (rule) {
+                if (rule.visible) {
+                    visibleFieldsSet.add(field.fieldCode);
+                } else {
+                    visibleFieldsSet.delete(field.fieldCode);
+                }
+                if (rule.editable) {
+                    editableFieldsSet.add(field.fieldCode);
+                } else {
+                    editableFieldsSet.delete(field.fieldCode);
+                }
+            }
         }
-    },
-    "Giao dịch": {
-        "Hóa đơn": {
-            actions: ["Xem DS", "Tạo mới", "Hủy", "Cập nhật", "Import excel", "Xuất excel", "In hóa đơn"],
-            keys: ["invoice_view", "invoice_create", "invoice_edit", "invoice_void", "invoice_import", "invoice_export", "invoice_print"]
-        },
-        "Trả hàng": {
-            actions: ["Xem DS", "Xử lý", "Hủy", "Cập nhật", "Xuất excel", "In trả hàng"],
-            keys: ["return_view", "return_process", "return_void", "return_edit", "return_export", "return_print"]
-        },
-        "Nhập hàng": {
-            actions: ["Xem DS", "Tạo mới", "Hủy", "Cập nhật", "Import excel", "Xuất excel", "In phiếu nhập"],
-            keys: ["import_view", "import_create", "import_void", "import_edit", "import_import", "import_export", "import_print"]
-        },
-        "Voucher": {
-            actions: ["Xem DS", "Thêm mới", "Cập nhật", "Xoá"],
-            keys: ["voucher_view", "voucher_create", "voucher_edit", "voucher_delete"]
-        }
-    },
-    "Đối tác": {
-        "Khách hàng": {
-            actions: ["Xem DS", "Thêm mới", "Cập nhật", "Xoá", "Import excel", "Xuất excel"],
-            keys: ["customer_view", "customer_create", "customer_edit", "customer_delete", "customer_import", "customer_export"]
-        },
-        "Nhà cung cấp": {
-            actions: ["Xem DS", "Thêm mới", "Cập nhật", "Xoá", "Import excel", "Xuất excel"],
-            keys: ["supplier_view", "supplier_create", "supplier_edit", "supplier_delete", "supplier_import", "supplier_export"]
-        }
-    },
-    "Golf": {
-        "Golf Simulator": {
-            actions: ["Xem DS", "Quản lý", "Checkout", "Membership", "Báo cáo", "Quản lý Line"],
-            keys: ["golf_view", "golf_manage", "golf_checkout", "golf_membership", "golf_report", "golf_line_manage"]
+
+        if (visibleFieldsSet.size > 0 || editableFieldsSet.size > 0) {
+            fe[modCode] = {
+                visible_fields: Array.from(visibleFieldsSet),
+                editable_fields: Array.from(editableFieldsSet),
+            };
         }
     }
+
+    return fe;
+};
+
+/**
+ * Chuyển fieldPolicy từ FE sang BE.
+ * Nếu tất cả field được chọn thì dùng wildcard cho gọn, ngược lại liệt kê từng field.
+ */
+const convertFieldPolicyToBE = (
+    fePolicy: FieldPolicyFE,
+    modules: ModuleStructure[]
+): FieldPolicyBE => {
+    const beModules: Record<string, any> = {};
+
+    for (const mod of modules) {
+        const modFe = fePolicy[mod.code];
+        if (!modFe) continue;
+
+        const allVisible = mod.fields.every((f) =>
+            modFe.visible_fields?.includes(f.fieldCode)
+        );
+        const allEditable = mod.fields.every((f) =>
+            modFe.editable_fields?.includes(f.fieldCode)
+        );
+
+        const fields: Record<string, { visible: boolean; editable: boolean }> = {};
+
+        if (allVisible && allEditable) {
+            fields["*"] = { visible: true, editable: true };
+        } else {
+            for (const field of mod.fields) {
+                const visible = modFe.visible_fields?.includes(field.fieldCode) || false;
+                const editable = modFe.editable_fields?.includes(field.fieldCode) || false;
+                if (visible || editable) {
+                    fields[field.fieldCode] = { visible, editable };
+                }
+            }
+        }
+
+        beModules[mod.code] = { fields };
+    }
+
+    return { modules: beModules };
 };
 
 const RoleModal = () => {
@@ -150,8 +166,48 @@ const RoleModal = () => {
     const [loadingModalVisible, setLoadingModalVisible] = useState(false);
     const [expandedGroups, setExpandedGroups] = useState<{ [key: string]: boolean }>({});
     const [checkedGroups, setCheckedGroups] = useState<{ [key: string]: string[] }>({});
-    const [fieldPolicy, setFieldPolicy] = useState<Record<string, { visible_fields: string[], editable_fields: string[] }>>({});
+    const [fieldPolicy, setFieldPolicy] = useState<FieldPolicyFE>({});
+    const [modulesStructure, setModulesStructure] = useState<ModuleStructure[]>([]);
+    const [permissionsStructure, setPermissionsStructure] = useState<PermissionStructure>({});
 
+    // Lấy cấu trúc modules và permissions từ API
+    useEffect(() => {
+        if (!modal.open) return;
+
+        const fetchStructures = async () => {
+            try {
+                const [modulesResponse, permissionsResponse] = await Promise.all([
+                    getModulesStructure(),
+                    getPermissionsStructure(),
+                ]);
+
+                // Modules
+                let modulesArray: ModuleStructure[] = [];
+                if (Array.isArray(modulesResponse)) {
+                    modulesArray = modulesResponse;
+                } else {
+                    console.warn("Modules structure không đúng định dạng", modulesResponse);
+                }
+                setModulesStructure(modulesArray);
+
+                // Permissions
+                let permissionsObj: PermissionStructure = {};
+                if (typeof permissionsResponse === "object" && !Array.isArray(permissionsResponse)) {
+                    permissionsObj = permissionsResponse as PermissionStructure;
+                } else {
+                    console.warn("Permissions structure không đúng định dạng", permissionsResponse);
+                }
+                setPermissionsStructure(permissionsObj);
+            } catch (error) {
+                console.error("Lỗi lấy cấu trúc phân quyền:", error);
+                showErrorMessage("Không thể tải cấu trúc phân quyền!");
+            }
+        };
+
+        fetchStructures();
+    }, [modal.open]);
+
+    // Đóng modal, reset state
     const onCloseModal = () => {
         resetModal();
         form.resetFields();
@@ -161,50 +217,129 @@ const RoleModal = () => {
     };
 
     const toggleGroup = (key: string) => {
-        setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
+        setExpandedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
     };
 
-    const onParentCheck = (key: string, checked: boolean) => {
-        // Lấy danh sách actions có sẵn cho item này
-        let itemActions: string[] = [];
-        Object.values(permissionsStructure).forEach(group => {
-            if (key in group) {
-                itemActions = (group[key as keyof typeof group] as { actions: string[] }).actions;
+    // Lấy thông tin actions/keys của một item
+    const getItemData = useCallback(
+        (itemName: string): { actions: string[]; keys: string[] } | null => {
+            for (const group of Object.values(permissionsStructure)) {
+                if (group[itemName]) {
+                    return group[itemName];
+                }
             }
-        });
+            return null;
+        },
+        [permissionsStructure]
+    );
 
-        const actions = checked ? itemActions : [];
-        setCheckedGroups(prev => ({ ...prev, [key]: actions }));
-        form.setFieldValue(['permissions', key], actions);
+    const onParentCheck = (key: string, checked: boolean) => {
+        const itemData = getItemData(key);
+        if (!itemData) return;
+        const actions = checked ? [...itemData.actions] : [];
+        setCheckedGroups((prev) => ({ ...prev, [key]: actions }));
+        form.setFieldValue(["permissions", key], actions);
     };
 
     const onChildCheck = (key: string, values: string[]) => {
-        setCheckedGroups(prev => ({ ...prev, [key]: values }));
-        // form.setFieldValue(['permissions', key], values);
+        setCheckedGroups((prev) => ({ ...prev, [key]: values }));
     };
 
+    // Chuyển dữ liệu form permissions thành mảng string keys
+    const convertFormPermissionsToApi = (formPermissions: Record<string, string[]> = {}): string[] => {
+        const result: string[] = [];
+        Object.entries(permissionsStructure).forEach(([_, groupItems]) => {
+            Object.entries(groupItems).forEach(([itemName, itemData]) => {
+                const { actions, keys } = itemData;
+                const formActions = formPermissions[itemName] || [];
+                actions.forEach((action, index) => {
+                    if (formActions.includes(action)) {
+                        result.push(keys[index]);
+                    }
+                });
+            });
+        });
+        return result;
+    };
+
+    const isAllChecked = (itemName: string) => {
+        const itemData = getItemData(itemName);
+        if (!itemData) return false;
+        return (checkedGroups[itemName] || []).length === itemData.actions.length;
+    };
+
+    const isIndeterminate = (itemName: string) => {
+        const itemData = getItemData(itemName);
+        if (!itemData) return false;
+        const checkedCount = (checkedGroups[itemName] || []).length;
+        return checkedCount > 0 && checkedCount < itemData.actions.length;
+    };
+
+    // Khi modal mở với role có sẵn (edit), load dữ liệu
+    useEffect(() => {
+        if (
+            !modal.open ||
+            !modal.role ||
+            Object.keys(permissionsStructure).length === 0 ||
+            modulesStructure.length === 0
+        )
+            return;
+
+        // Form cơ bản
+        form.setFieldsValue({
+            roleName: modal.role.name,
+            description: modal.role.description,
+        });
+
+        // Permissions
+        const apiPermissions = new Set(
+            (modal.role.permissions || []).map((p: any) =>
+                typeof p === "string" ? p : p.key
+            )
+        );
+        const initialChecked: { [key: string]: string[] } = {};
+        Object.entries(permissionsStructure).forEach(([_, groupItems]) => {
+            Object.entries(groupItems).forEach(([itemName, itemData]) => {
+                const { actions, keys } = itemData;
+                const itemActions: string[] = [];
+                keys.forEach((key, index) => {
+                    if (apiPermissions.has(key)) {
+                        itemActions.push(actions[index]);
+                    }
+                });
+                if (itemActions.length > 0) {
+                    initialChecked[itemName] = itemActions;
+                }
+            });
+        });
+        setCheckedGroups(initialChecked);
+        form.setFieldValue("permissions", initialChecked);
+
+        // Field policy: chuyển đổi từ BE sang FE
+        const fePolicy = convertFieldPolicyFromBE(modal.role.fieldPolicy, modulesStructure);
+        setFieldPolicy(fePolicy);
+    }, [modal.role, form, modal.open, permissionsStructure, modulesStructure]);
+
+    // Submit form
     const handleFormSubmit = async (values: any) => {
         try {
             setLoadingModalVisible(true);
 
-            // Chuyển đổi dữ liệu từ form sang dạng API cần
-            const permissions = convertFormPermissionsToApi(form.getFieldValue('permissions') || {});
+            const permissions = convertFormPermissionsToApi(form.getFieldValue("permissions") || {});
+            const fieldPolicyBE = convertFieldPolicyToBE(fieldPolicy, modulesStructure);
 
             const roleData = {
                 role_name: values.roleName,
                 description: values.description || "",
                 permissions,
-                fieldPolicy
+                fieldPolicy: fieldPolicyBE, // gửi định dạng BE
             };
 
-            // Gọi API ở đây
-            console.log('Data to submit:', roleData);
-            console.log('Modal type:', modal);
-            await new Promise((resolve) => setTimeout(resolve, 1500));
             if (modal.type === ActionType.CREATE) {
                 await createRole(roleData);
             } else if (modal.type === ActionType.UPDATE) {
-                await updateRole(modal.role?.role_id || 0, roleData);
+                const roleId = modal.role?.id || 0;
+                await updateRole(roleId, roleData);
             }
 
             showSuccessMessage(`${modal.title} thành công!`);
@@ -218,118 +353,25 @@ const RoleModal = () => {
         }
     };
 
-    const convertFormPermissionsToApi = (
-        formPermissions: Record<string, string[]> = {}
-    ): Array<{ key: string, name: string }> => {
-        console.log('🚀 ~ convertFormPermissionsToApi ~ formPermissions:', formPermissions);
-        const result: Array<{ key: string, name: string }> = [];
+    // Nếu đang mở modal nhưng chưa load xong cấu trúc
+    if (modal.open && Object.keys(permissionsStructure).length === 0) {
+        return (
+            <Modal
+                title={modal.title}
+                open={modal.open}
+                onCancel={onCloseModal}
+                width={900}
+                centered
+                footer={null}
+            >
+                <div style={{ textAlign: "center", padding: 40 }}>
+                    <CustomSpin openSpin={true} />
+                </div>
+            </Modal>
+        );
+    }
 
-        Object.entries(permissionsStructure).forEach(([groupName, groupItems]) => {
-            Object.entries(groupItems).forEach(([itemName, itemData]) => {
-                const { actions, keys } = itemData;
-                const formActions = formPermissions?.[itemName] || [];
-
-                actions.forEach((action, index) => {
-                    if (formActions.includes(action)) {
-                        const key = keys[index];
-                        const permission = modal.role?.permissions.find(p => p.key === key) || {
-                            key,
-                            name: `${itemName} ${key.split('_').pop()}`
-                        };
-                        result.push({
-                            key: permission.key,
-                            name: permission.name,
-                        });
-                    }
-                });
-            });
-        });
-
-        return result;
-    };
-
-
-    // Hàm kiểm tra xem một item có được chọn toàn bộ hay không
-    const isAllChecked = (itemName: string) => {
-        const itemData = getItemData(itemName);
-        if (!itemData) return false;
-
-        return checkedGroups[itemName]?.length === itemData.actions.length;
-    };
-
-    // Hàm kiểm tra xem một item có được chọn một phần hay không
-    const isIndeterminate = (itemName: string) => {
-        const itemData = getItemData(itemName);
-        if (!itemData) return false;
-
-        const checkedCount = checkedGroups[itemName]?.length || 0;
-        return checkedCount > 0 && checkedCount < itemData.actions.length;
-    };
-
-    // Hàm lấy dữ liệu item
-    const getItemData = (itemName: string): { actions: string[]; keys: string[] } | null => {
-        for (const group of Object.values(permissionsStructure)) {
-            if (group[itemName as keyof typeof group]) {
-                return group[itemName as keyof typeof group] as { actions: string[]; keys: string[] };
-            }
-        }
-        return null;
-    };
-
-    useEffect(() => {
-        if (!modal.open) return;
-        if (modal.role) {
-            // Đặt giá trị cơ bản
-            form.setFieldsValue({
-                roleName: modal.role.role_name,
-                description: modal.role.description
-            });
-
-            // Xử lý permissions từ API
-            const initialChecked: { [key: string]: string[] } = {};
-
-            const apiPermissions = new Set(modal.role.permissions.map(p => p.key));
-
-            // Duyệt qua cấu trúc permissions để map đúng checkbox
-            Object.entries(permissionsStructure).forEach(([groupName, groupItems]) => {
-                Object.entries(groupItems).forEach(([itemName, itemData]) => {
-                    const { actions, keys } = itemData;
-                    const itemActions: string[] = [];
-
-                    keys.forEach((key, index) => {
-                        if (apiPermissions.has(key)) {
-                            itemActions.push(actions[index]);
-                        }
-                    });
-
-                    if (itemActions.length > 0) {
-                        initialChecked[itemName] = itemActions;
-                    }
-                });
-            });
-
-            setCheckedGroups(initialChecked);
-            form.setFieldValue('permissions', initialChecked);
-
-            if (modal.role.fieldPolicy) {
-                setFieldPolicy(modal.role.fieldPolicy);
-            } else {
-                setFieldPolicy({});
-            }
-
-            // // Mở rộng tất cả các nhóm khi là chỉnh sửa
-            // const allGroups = Object.values(permissionsStructure).flatMap(group => Object.keys(group));
-            // const expandedState = allGroups.reduce((acc, group) => ({ ...acc, [group]: true }), {});
-            // setExpandedGroups(expandedState);
-        } else {
-            // Nếu là thêm mới, reset tất cả
-            form.resetFields();
-            setCheckedGroups({});
-            setExpandedGroups({});
-            setFieldPolicy({});
-        }
-    }, [modal.role, form, modal.open]);
-
+    // ================== JSX chính ==================
     return (
         <>
             <CustomSpin openSpin={loadingModalVisible} />
@@ -340,30 +382,16 @@ const RoleModal = () => {
                 width={900}
                 centered
                 footer={[
-                    <Button
-                        key="back"
-                        onClick={onCloseModal}
-                        icon={<CloseCircleOutlined />}
-                    >
+                    <Button key="back" onClick={onCloseModal} icon={<CloseCircleOutlined />}>
                         Huỷ
                     </Button>,
-                    <Button
-                        key="submit"
-                        type="primary"
-                        onClick={() => form.submit()}
-                        icon={<SaveOutlined />}
-                    >
+                    <Button key="submit" type="primary" onClick={() => form.submit()} icon={<SaveOutlined />}>
                         Lưu
                     </Button>,
                 ]}
             >
-                <div style={{ maxHeight: 568, overflowY: 'auto', overflowX: 'hidden', paddingRight: 8 }}>
-                    <Form
-                        form={form}
-                        onFinish={handleFormSubmit}
-                        {...formItemLayout}
-                        labelAlign="left"
-                    >
+                <div style={{ maxHeight: 568, overflowY: "auto", overflowX: "hidden", paddingRight: 8 }}>
+                    <Form form={form} onFinish={handleFormSubmit} {...formItemLayout} labelAlign="left">
                         <Form.Item
                             name="roleName"
                             label="Vai trò"
@@ -372,20 +400,12 @@ const RoleModal = () => {
                             <Input placeholder="Nhập tên vai trò" />
                         </Form.Item>
 
-                        <Form.Item
-                            name="description"
-                            label="Mô tả"
-                        >
+                        <Form.Item name="description" label="Mô tả">
                             <Input.TextArea placeholder="Nhập mô tả" rows={3} />
                         </Form.Item>
 
-                        {
-                            modal.role?.role_id === 1 && (
-                                <Text type="danger">Chú ý: vì là vai trò {form.getFieldValue("roleName")} nên mặc định 3 quyền Người dùng, Chi nhánh và Tổng quan sẽ không thể sửa</Text>
-                            )
-                        }
-
                         <Tabs defaultActiveKey="1" style={{ marginTop: 16 }}>
+                            {/* Tab Quyền thao tác */}
                             <Tabs.TabPane tab="Quyền thao tác" key="1">
                                 <Title level={5}>Phân quyền thao tác</Title>
                                 <Row gutter={[24, 16]}>
@@ -404,27 +424,28 @@ const RoleModal = () => {
                                                         style={{
                                                             paddingBottom: 8,
                                                             marginBottom: 8,
-                                                            borderBottom: '1px solid #f0f0f0'
+                                                            borderBottom: "1px solid #f0f0f0",
                                                         }}
                                                     >
-                                                        <div
-                                                            style={{
-                                                                display: "flex",
-                                                                alignItems: "center",
-                                                                gap: 4,
-                                                            }}
-                                                        >
+                                                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                                                             <span
                                                                 onClick={() => toggleGroup(itemName)}
-                                                                style={{ cursor: "pointer", display: "flex", alignItems: "center" }}
+                                                                style={{
+                                                                    cursor: "pointer",
+                                                                    display: "flex",
+                                                                    alignItems: "center",
+                                                                }}
                                                             >
-                                                                {isExpanded ? <CaretDownFilled style={{ color: 'rgb(107 102 102)' }} /> : <CaretRightFilled style={{ color: 'rgb(107 102 102)' }} />}
+                                                                {isExpanded ? (
+                                                                    <CaretDownFilled style={{ color: "rgb(107 102 102)" }} />
+                                                                ) : (
+                                                                    <CaretRightFilled style={{ color: "rgb(107 102 102)" }} />
+                                                                )}
                                                             </span>
                                                             <Checkbox
                                                                 checked={isAllChecked(itemName)}
                                                                 indeterminate={isIndeterminate(itemName)}
                                                                 onChange={(e) => onParentCheck(itemName, e.target.checked)}
-                                                                disabled={modal.role?.role_id === 1 && (itemName === "Người dùng" || itemName === "Chi nhánh" || itemName == "Tổng quan")}
                                                             >
                                                                 {itemName}
                                                             </Checkbox>
@@ -432,17 +453,16 @@ const RoleModal = () => {
 
                                                         {isExpanded && itemData && (
                                                             <Form.Item
-                                                                name={['permissions', itemName]}
+                                                                name={["permissions", itemName]}
                                                                 style={{ marginTop: 8, marginLeft: 40 }}
                                                             >
                                                                 <Checkbox.Group
-                                                                    style={{ display: 'flex', flexDirection: 'column' }}
+                                                                    style={{ display: "flex", flexDirection: "column" }}
                                                                     options={actionsToShow}
                                                                     value={currentChecked}
                                                                     onChange={(checked) =>
                                                                         onChildCheck(itemName, checked as string[])
                                                                     }
-                                                                    disabled={modal.role?.role_id === 1 && (itemName === "Người dùng" || itemName === "Chi nhánh" || itemName == "Tổng quan")}
                                                                 />
                                                             </Form.Item>
                                                         )}
@@ -454,77 +474,114 @@ const RoleModal = () => {
                                 </Row>
                             </Tabs.TabPane>
 
+                            {/* Tab Quyền dữ liệu (Field-Level) */}
                             <Tabs.TabPane tab="Quyền dữ liệu (Field-Level)" key="2">
                                 <Title level={5}>Cấu hình quyền trên trường dữ liệu</Title>
-                                <Collapse defaultActiveKey={MOCK_MODULES.map(m => m.code)}>
-                                    {MOCK_MODULES.map(module => {
-                                        const dataSource = module.fields.map(f => ({ ...f, key: f.fieldCode }));
+                                <Collapse defaultActiveKey={modulesStructure.map((m) => m.code)}>
+                                    {modulesStructure.map((module) => {
+                                        const dataSource = module.fields.map((f) => ({
+                                            ...f,
+                                            key: f.fieldCode,
+                                        }));
                                         const columns = [
-                                            { title: 'Trường dữ liệu', dataIndex: 'fieldLabel', key: 'fieldLabel' },
                                             {
-                                                title: 'Xem',
-                                                key: 'view',
-                                                render: (_: any, record: any) => {
-                                                    const isChecked = fieldPolicy[module.code]?.visible_fields?.includes(record.fieldCode) || false;
-                                                    return (
-                                                        <Checkbox
-                                                            checked={isChecked}
-                                                            onChange={(e) => {
-                                                                const checked = e.target.checked;
-                                                                setFieldPolicy(prev => {
-                                                                    const modulePolicy = prev[module.code] || { visible_fields: [], editable_fields: [] };
-                                                                    let newVisible = [...(modulePolicy.visible_fields || [])];
-                                                                    let newEditable = [...(modulePolicy.editable_fields || [])];
-
-                                                                    if (checked) {
-                                                                        if (!newVisible.includes(record.fieldCode)) newVisible.push(record.fieldCode);
-                                                                    } else {
-                                                                        newVisible = newVisible.filter(f => f !== record.fieldCode);
-                                                                        newEditable = newEditable.filter(f => f !== record.fieldCode);
-                                                                    }
-
-                                                                    return {
-                                                                        ...prev,
-                                                                        [module.code]: { ...modulePolicy, visible_fields: newVisible, editable_fields: newEditable }
-                                                                    };
-                                                                });
-                                                            }}
-                                                        />
-                                                    );
-                                                }
+                                                title: "Trường dữ liệu",
+                                                dataIndex: "fieldLabel",
+                                                key: "fieldLabel",
                                             },
                                             {
-                                                title: 'Sửa',
-                                                key: 'edit',
+                                                title: "Xem",
+                                                key: "view",
                                                 render: (_: any, record: any) => {
-                                                    const isChecked = fieldPolicy[module.code]?.editable_fields?.includes(record.fieldCode) || false;
+                                                    const isChecked =
+                                                        fieldPolicy[module.code]?.visible_fields?.includes(
+                                                            record.fieldCode
+                                                        ) || false;
                                                     return (
                                                         <Checkbox
                                                             checked={isChecked}
                                                             onChange={(e) => {
                                                                 const checked = e.target.checked;
-                                                                setFieldPolicy(prev => {
-                                                                    const modulePolicy = prev[module.code] || { visible_fields: [], editable_fields: [] };
-                                                                    let newVisible = [...(modulePolicy.visible_fields || [])];
-                                                                    let newEditable = [...(modulePolicy.editable_fields || [])];
+                                                                setFieldPolicy((prev) => {
+                                                                    const modulePolicy = prev[module.code] || {
+                                                                        visible_fields: [],
+                                                                        editable_fields: [],
+                                                                    };
+                                                                    let newVisible = [...modulePolicy.visible_fields];
+                                                                    let newEditable = [...modulePolicy.editable_fields];
 
                                                                     if (checked) {
-                                                                        if (!newEditable.includes(record.fieldCode)) newEditable.push(record.fieldCode);
-                                                                        if (!newVisible.includes(record.fieldCode)) newVisible.push(record.fieldCode);
+                                                                        if (!newVisible.includes(record.fieldCode))
+                                                                            newVisible.push(record.fieldCode);
                                                                     } else {
-                                                                        newEditable = newEditable.filter(f => f !== record.fieldCode);
+                                                                        newVisible = newVisible.filter(
+                                                                            (f) => f !== record.fieldCode
+                                                                        );
+                                                                        newEditable = newEditable.filter(
+                                                                            (f) => f !== record.fieldCode
+                                                                        );
                                                                     }
 
                                                                     return {
                                                                         ...prev,
-                                                                        [module.code]: { ...modulePolicy, visible_fields: newVisible, editable_fields: newEditable }
+                                                                        [module.code]: {
+                                                                            ...modulePolicy,
+                                                                            visible_fields: newVisible,
+                                                                            editable_fields: newEditable,
+                                                                        },
                                                                     };
                                                                 });
                                                             }}
                                                         />
                                                     );
-                                                }
-                                            }
+                                                },
+                                            },
+                                            {
+                                                title: "Sửa",
+                                                key: "edit",
+                                                render: (_: any, record: any) => {
+                                                    const isChecked =
+                                                        fieldPolicy[module.code]?.editable_fields?.includes(
+                                                            record.fieldCode
+                                                        ) || false;
+                                                    return (
+                                                        <Checkbox
+                                                            checked={isChecked}
+                                                            onChange={(e) => {
+                                                                const checked = e.target.checked;
+                                                                setFieldPolicy((prev) => {
+                                                                    const modulePolicy = prev[module.code] || {
+                                                                        visible_fields: [],
+                                                                        editable_fields: [],
+                                                                    };
+                                                                    let newVisible = [...modulePolicy.visible_fields];
+                                                                    let newEditable = [...modulePolicy.editable_fields];
+
+                                                                    if (checked) {
+                                                                        if (!newEditable.includes(record.fieldCode))
+                                                                            newEditable.push(record.fieldCode);
+                                                                        if (!newVisible.includes(record.fieldCode))
+                                                                            newVisible.push(record.fieldCode);
+                                                                    } else {
+                                                                        newEditable = newEditable.filter(
+                                                                            (f) => f !== record.fieldCode
+                                                                        );
+                                                                    }
+
+                                                                    return {
+                                                                        ...prev,
+                                                                        [module.code]: {
+                                                                            ...modulePolicy,
+                                                                            visible_fields: newVisible,
+                                                                            editable_fields: newEditable,
+                                                                        },
+                                                                    };
+                                                                });
+                                                            }}
+                                                        />
+                                                    );
+                                                },
+                                            },
                                         ];
                                         return (
                                             <Collapse.Panel header={module.name} key={module.code}>

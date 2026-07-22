@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Drawer, Menu, MenuProps, Grid } from "antd";
 import {
@@ -33,8 +33,18 @@ interface LevelKeysProps {
 
 type MenuItem = Required<MenuProps>["items"][number];
 
+
+export interface IMenuItem {
+    key: string;
+    label: string;
+    icon?: ReactNode;
+    path?: string;
+    permission: PermissionKey | null;
+    children?: IMenuItem[];
+}
+
 // Mapping key to URL path và permission tương ứng
-export const menuConfig = [
+export const menuConfig: IMenuItem[] = [
     {
         key: "0",
         icon: <DashboardOutlined />,
@@ -42,91 +52,91 @@ export const menuConfig = [
         path: "/dashboard",
         permission: PermissionKey.DASHBOARD_VIEW,
     },
-    {
-        key: "1",
-        icon: <AppstoreOutlined />,
-        label: "QL live",
-        permission: PermissionKey.PRODUCT_VIEW,
-        children: [
-            {
-                key: "11",
-                label: "Sản phẩm",
-                path: "/products",
-                permission: PermissionKey.PRODUCT_VIEW,
-            },
-            {
-                key: "12",
-                label: "Nhóm hàng",
-                path: "/categories",
-                permission: PermissionKey.CATEGORY_VIEW,
-            },
-            {
-                key: "14",
-                label: "Kiểm kho",
-                path: "/transactions/inventory-checks",
-                permission: PermissionKey.STOCK_CHECK_VIEW,
-            },
-        ],
-    },
-    {
-        key: "2",
-        icon: <SwapOutlined />,
-        label: "Giao dịch",
-        permission: PermissionKey.PRODUCT_VIEW,
-        children: [
-            {
-                key: "22",
-                label: "Hoá đơn",
-                path: "/transactions/invoices",
-                permission: PermissionKey.INVOICE_VIEW,
-            },
-            {
-                key: "23",
-                label: "Nhập hàng",
-                path: "/transactions/purchase-orders",
-                permission: PermissionKey.IMPORT_VIEW,
-            },
-            {
-                key: "24",
-                label: "Trả hàng",
-                path: "/transactions/returns",
-                permission: PermissionKey.RETURN_VIEW,
-            },
-            {
-                key: "25",
-                label: "Voucher",
-                path: "/vouchers",
-                permission: PermissionKey.VOUCHER_VIEW,
-            },
-        ],
-    },
-    {
-        key: "3",
-        icon: <CoffeeOutlined />,
-        label: "Thu ngân",
-        path: "/fnb",
-        permission: PermissionKey.INVOICE_VIEW,
-    },
-    {
-        key: "4",
-        icon: <MailOutlined />,
-        label: "Đối tác",
-        permission: PermissionKey.CUSTOMER_VIEW,
-        children: [
-            {
-                key: "31",
-                label: "Khách hàng",
-                path: "/partners/customers",
-                permission: PermissionKey.CUSTOMER_VIEW,
-            },
-            {
-                key: "32",
-                label: "Nhà cung cấp",
-                path: "/partners/suppliers",
-                permission: PermissionKey.SUPPLIER_VIEW,
-            },
-        ],
-    },
+    // {
+    //     key: "1",
+    //     icon: <AppstoreOutlined />,
+    //     label: "QL live",
+    //     permission: PermissionKey.PRODUCT_VIEW,
+    //     children: [
+    //         {
+    //             key: "11",
+    //             label: "Sản phẩm",
+    //             path: "/products",
+    //             permission: PermissionKey.PRODUCT_VIEW,
+    //         },
+    //         {
+    //             key: "12",
+    //             label: "Nhóm hàng",
+    //             path: "/categories",
+    //             permission: PermissionKey.CATEGORY_VIEW,
+    //         },
+    //         {
+    //             key: "14",
+    //             label: "Kiểm kho",
+    //             path: "/transactions/inventory-checks",
+    //             permission: PermissionKey.STOCK_CHECK_VIEW,
+    //         },
+    //     ],
+    // },
+    // {
+    //     key: "2",
+    //     icon: <SwapOutlined />,
+    //     label: "Giao dịch",
+    //     permission: PermissionKey.PRODUCT_VIEW,
+    //     children: [
+    //         {
+    //             key: "22",
+    //             label: "Hoá đơn",
+    //             path: "/transactions/invoices",
+    //             permission: PermissionKey.INVOICE_VIEW,
+    //         },
+    //         {
+    //             key: "23",
+    //             label: "Nhập hàng",
+    //             path: "/transactions/purchase-orders",
+    //             permission: PermissionKey.IMPORT_VIEW,
+    //         },
+    //         {
+    //             key: "24",
+    //             label: "Trả hàng",
+    //             path: "/transactions/returns",
+    //             permission: PermissionKey.RETURN_VIEW,
+    //         },
+    //         {
+    //             key: "25",
+    //             label: "Voucher",
+    //             path: "/vouchers",
+    //             permission: PermissionKey.VOUCHER_VIEW,
+    //         },
+    //     ],
+    // },
+    // {
+    //     key: "3",
+    //     icon: <CoffeeOutlined />,
+    //     label: "Thu ngân",
+    //     path: "/fnb",
+    //     permission: PermissionKey.INVOICE_VIEW,
+    // },
+    // {
+    //     key: "4",
+    //     icon: <MailOutlined />,
+    //     label: "Đối tác",
+    //     permission: PermissionKey.CUSTOMER_VIEW,
+    //     children: [
+    //         {
+    //             key: "31",
+    //             label: "Khách hàng",
+    //             path: "/partners/customers",
+    //             permission: PermissionKey.CUSTOMER_VIEW,
+    //         },
+    //         {
+    //             key: "32",
+    //             label: "Nhà cung cấp",
+    //             path: "/partners/suppliers",
+    //             permission: PermissionKey.SUPPLIER_VIEW,
+    //         },
+    //     ],
+    // },
     {
         key: "5",
         icon: <BankOutlined />,

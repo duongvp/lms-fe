@@ -2,7 +2,8 @@
 import React from 'react';
 import { Row, Col, Typography, Space, Button } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
-import { deleteUser, toggleUserStatus, UserApiResponse } from '@/services/userService';
+// import { deleteUser, toggleUserStatus, UserApiResponse } from '@/services/userService';
+import { UserApiResponse } from '@/services/userService';
 import useUserStore from '@/stores/userStore';
 import { ActionType } from '@/enums/action';
 import BtnDeActiveDetete from '@/components/shared/BtnDeActiveDetete';
@@ -29,7 +30,7 @@ const UserDetail: React.FC<UserDetailProps> = ({ record }) => {
     };
 
     const dataRow = [
-        { label: 'Tên người dùng:', value: record.full_name },
+        { label: 'Tên người dùng:', value: record.name },
         { label: 'Tên đăng nhập:', value: record.username },
         { label: 'Số điện thoại:', value: record.phone },
         { label: 'Email:', value: record.email },
@@ -58,7 +59,7 @@ const UserDetail: React.FC<UserDetailProps> = ({ record }) => {
                 <Col>
                     <Space>
                         {
-                            hasPermission(PermissionKey.USER_EDIT) && (
+                            !hasPermission(PermissionKey.USER_EDIT) && (
                                 <Button
                                     type="primary"
                                     icon={<UploadOutlined />}
@@ -68,7 +69,7 @@ const UserDetail: React.FC<UserDetailProps> = ({ record }) => {
                                 </Button>
                             )
                         }
-                        {
+                        {/* {
                             hasPermission(PermissionKey.USER_DELETE) && (userId != record.user_id) && (
                                 <BtnDeActiveDetete
                                     record={{ id: record.user_id, ...record }}
@@ -80,7 +81,7 @@ const UserDetail: React.FC<UserDetailProps> = ({ record }) => {
                                     setShouldReload={setShouldReload}
                                 />
                             )
-                        }
+                        } */}
                     </Space>
                 </Col>
             </Row>

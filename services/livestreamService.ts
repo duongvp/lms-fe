@@ -33,6 +33,31 @@ export const createLivestream = (payload: LivestreamPayload) =>
 export const createLivestreamBulk = (payload: BulkLivestreamPayload) =>
     request(`${API_BASE_URL}/bulk`, payload);
 
+// Hàm mới: lấy danh sách lịch
+export const getLivestreams = (params: {
+    page?: number;
+    limit?: number;
+    teacher?: string;
+    code?: string;
+    start_time?: string;
+    end_time?: string;
+}) => {
+    const query = new URLSearchParams();
+    if (params.page) query.append('page', String(params.page));
+    if (params.limit) query.append('limit', String(params.limit));
+    if (params.teacher) query.append('teacher', params.teacher);
+    if (params.code) query.append('code', params.code);
+    if (params.start_time) query.append('start_time', params.start_time);
+    if (params.end_time) query.append('end_time', params.end_time);
+
+    return fetchInstance(`${API_BASE_URL}?${query.toString()}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+    });
+};
+
+
 export const updateLivestream = (id: string, payload: any) =>
     fetchInstance(`${API_BASE_URL}/${id}`, {
         method: "PUT",
@@ -130,4 +155,68 @@ export const toUpdateLivestreamPayload = (values: any): any => {
         start_time: payload.start_time,
         end_time: payload.end_time,
     };
+};
+
+
+//update hàng loạt
+export interface BulkUpdateLivestreamPayload {
+    ids: (string | number)[];
+    // Backend của bạn yêu cầu cấu trúc update như thế nào thì bạn điều chỉnh ở đây.
+    // Ví dụ phổ biến:
+    config_mode: 'common' | 'separate';
+    common_data?: any;
+    separate_data?: any;
+}
+
+// API gọi cập nhật hàng loạt
+export const updateLivestreamBulk = (payload: any) =>
+    fetchInstance(`${API_BASE_URL}/bulk`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+    });
+
+/** 
+ * Chuyển dữ liệu từ form BulkEditModal thành payload gửi lên BE 
+ */
+export const toBulkUpdatePayload = (
+    values: any,
+    selectedLessons: (string | number)[]
+) => {
+    // Nếu chọn cấu hình chung (áp dụng cho tất cả bài được chọn)
+    if (values.config_mode === 'common') {
+        return {
+            ids: selectedLessons,
+            config_mode: 'common',
+            update_data: {
+                start_time: values.common_start_time ? values.common_start_time.format("HH:mm") : undefined,
+                end_time: values.common_end_time ? values.common_end_time.format("HH:mm") : undefined,
+                teacher: values.common_teacher,
+                room: values.common_room,
+            }
+        };
+    }
+
+    // Nếu chọn cấu hình riêng (từng bài một)
+    if (values.config_mode === 'separate') {
+        const separateDataArray = selectedLessons.map(lessonId => {
+            const lessonConfig = values.separate_config?.[lessonId] || {};
+            return {
+                id: lessonId,
+                start_time: lessonConfig.start_time ? lessonConfig.start_time.format("HH:mm") : undefined,
+                end_time: lessonConfig.end_time ? lessonConfig.end_time.format("HH:mm") : undefined,
+                teacher: lessonConfig.teacher,
+                room: lessonConfig.room,
+            };
+        });
+
+        return {
+            ids: selectedLessons,
+            config_mode: 'separate',
+            update_data: separateDataArray
+        };
+    }
+
+    return { ids: selectedLessons, ...values };
 };

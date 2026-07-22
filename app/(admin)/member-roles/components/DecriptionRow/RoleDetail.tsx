@@ -24,7 +24,7 @@ const RoleDetail: React.FC<RoleDetailProps> = ({ record }) => {
     console.log("🚀 ~ user:", user)
 
     const handleUpdate = async () => {
-        const res = await getRoleById(record.role_id);
+        const res = await getRoleById(record.id);
         setModal({
             open: true,
             type: ActionType.UPDATE,
@@ -41,7 +41,7 @@ const RoleDetail: React.FC<RoleDetailProps> = ({ record }) => {
         try {
             console.log('Xoá người dùng...');
             // TODO: Gọi API xoá ở đây
-            await deleteRole(record.role_id);
+            await deleteRole(record.id);
             setShouldReload(true);
             showSuccessMessage('Xoá thành công');
             setConfirmOpen(false);
@@ -57,7 +57,7 @@ const RoleDetail: React.FC<RoleDetailProps> = ({ record }) => {
     };
 
     const dataRow = [
-        { label: 'Tên vai trò:', value: record.role_name },
+        { label: 'Tên vai trò:', value: record.name },
         { label: 'Mô tả:', value: record.description },
     ];
 
@@ -91,7 +91,7 @@ const RoleDetail: React.FC<RoleDetailProps> = ({ record }) => {
                             Cập nhật
                         </Button>
                         {
-                            record.role_id !== 1 && (
+                            record.id !== 1 && (
                                 <Button
                                     type="primary"
                                     icon={<DeleteOutlined />}
