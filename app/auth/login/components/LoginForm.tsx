@@ -19,14 +19,19 @@ const LoginForm = () => {
         const { mode, ...loginData } = values;
         try {
             const response = await loginUser(loginData);
-            let { accessToken, refreshToken, user, ...userRest } = response.data;
-            setUser(userRest);
+            const { accessToken, refreshToken, user, ...userRest } = response.data;
+            const normalizedUser = {
+                ...(user && typeof user === 'object' ? user : {}),
+                ...userRest,
+            };
+
+            setUser(normalizedUser);
             setAccessToken(accessToken);
 
             document.cookie = `refreshToken=${refreshToken}; path=/; secure; sameSite=Lax`;
-            document.cookie = `user=${user}; path=/; secure; sameSite=Lax`;
+            document.cookie = `user=${encodeURIComponent(JSON.stringify(normalizedUser))}; path=/; secure; sameSite=Lax`;
 
-            localStorage.setItem('login', Date.now().toString());
+            localStorage.removeItem('logout');
             localStorage.setItem('lastLoginMode', mode);
 
             // if (mode === 'fnb') {
@@ -36,7 +41,7 @@ const LoginForm = () => {
 
             // Tìm route đầu tiên mà user có quyền (thường là dashboard)
             const firstAllowedRoute = protectedRoutes.find(route =>
-                userRest.permissions?.includes(route.permission)
+                normalizedUser.permissions?.includes(route.permission)
             );
 
             if (firstAllowedRoute) {

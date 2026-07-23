@@ -9,7 +9,6 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/vi';
 import { useAuthStore } from '@/stores/authStore';
 import { useRouter } from "next/navigation";
-import { getMe } from '@/services/authService';
 
 const { Content } = Layout;
 const { useBreakpoint } = Grid;
@@ -38,24 +37,6 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
 
   useEffect(() => {
     const handleStorage = async (event: StorageEvent) => {
-      if (event.key === 'login') {
-        const stored = localStorage.getItem('auth-storage');
-        if (stored) {
-          try {
-            const parsed = JSON.parse(stored);
-            const token = parsed?.state?.accessToken;
-            if (token) {
-              useAuthStore.getState().setAccessToken(token);
-              const { data } = await getMe();
-              useAuthStore.getState().setUser(data);
-            }
-          } catch (error) {
-            console.error('Error parsing auth-storage or fetching me:', error);
-            router.push('/auth/login');
-          }
-        }
-      }
-
       if (event.key === 'logout') {
         useAuthStore.getState().clearUser();
         useAuthStore.getState().clearAccessToken();

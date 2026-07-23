@@ -142,7 +142,7 @@ export const menuConfig: IMenuItem[] = [
         icon: <BankOutlined />,
         label: "Quản lý lịch học",
         path: "/schedule",
-        permission: PermissionKey.BRANCH_VIEW,
+        permission: PermissionKey.SCHEDULE_VIEW,
     },
     {
         key: "6",

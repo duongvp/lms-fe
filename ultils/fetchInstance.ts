@@ -1,7 +1,20 @@
 import { useAuthStore } from "@/stores/authStore";
 
 let isRefreshing = false;
+let isHandlingAuthFailure = false;
 let refreshPromise: Promise<string> | null = null;
+
+const REFRESH_TOKEN_PATH = '/api/auth/refresh-token';
+const LOGIN_PATH = '/api/auth/login';
+
+const shouldTryRefreshToken = (url: string) =>
+    !url.includes(LOGIN_PATH) && !url.includes(REFRESH_TOKEN_PATH);
+
+const handleAuthFailure = (logout: () => void) => {
+    if (isHandlingAuthFailure) return;
+    isHandlingAuthFailure = true;
+    logout();
+};
 
 // Hàm hỗ trợ tạo request
 
@@ -17,10 +30,10 @@ export const fetchInstance = async (
     try {
         let res = await makeRequest(url, options, accessToken, controller);
 
-        if (res.status === 401) {
+        if (res.status === 401 && shouldTryRefreshToken(url)) {
             if (!isRefreshing) {
                 isRefreshing = true;
-                refreshPromise = fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_URL}/api/auth/refresh-token`, {
+                refreshPromise = fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_URL}${REFRESH_TOKEN_PATH}`, {
                     method: 'POST',
                     credentials: 'include',
                     signal: controller.signal,
@@ -32,14 +45,19 @@ export const fetchInstance = async (
                         setAccessToken(newAccessToken);
                         return newAccessToken;
                     })
-                    .catch(() => logout())
                     .finally(() => {
                         isRefreshing = false;
                     });
             }
 
-            const newToken = await refreshPromise;
-            res = await makeRequest(url, options, newToken, controller);
+            try {
+                const newToken = await refreshPromise;
+                if (!newToken) throw new Error('Unable to refresh access token');
+                res = await makeRequest(url, options, newToken, controller);
+            } catch (refreshError) {
+                handleAuthFailure(logout);
+                throw refreshError;
+            }
         }
 
         if (!res.ok) {

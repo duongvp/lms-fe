@@ -26,11 +26,14 @@ import { ActionType } from "@/enums/action";
 import {
     createRole,
     updateRole,
-    getModulesStructure,
+    getModules,
+    getModuleFields,
+    getRoleFieldPolicy,
+    updateRoleFieldPolicy,
     getPermissionsStructure,
-    type ModuleStructure,
     type PermissionStructure,
 } from "@/services/roleService";
+import type { ModuleStructure } from "@/types/fieldPolicy";
 
 const { Title } = Typography;
 
@@ -177,16 +180,26 @@ const RoleModal = () => {
         const fetchStructures = async () => {
             try {
                 const [modulesResponse, permissionsResponse] = await Promise.all([
-                    getModulesStructure(),
+                    getModules(),
                     getPermissionsStructure(),
                 ]);
 
-                // Modules
+                // Modules + ModuleField
                 let modulesArray: ModuleStructure[] = [];
                 if (Array.isArray(modulesResponse)) {
-                    modulesArray = modulesResponse;
+                    const moduleDetails = await Promise.all(
+                        modulesResponse.map(async (module) => getModuleFields(module.code))
+                    );
+                    modulesArray = moduleDetails
+                        .filter((module): module is ModuleStructure => Boolean(module))
+                        .map((module) => ({
+                            ...module,
+                            fields: [...module.fields].sort(
+                                (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+                            ),
+                        }));
                 } else {
-                    console.warn("Modules structure không đúng định dạng", modulesResponse);
+                    console.warn("Modules response không đúng định dạng", modulesResponse);
                 }
                 setModulesStructure(modulesArray);
 
@@ -315,9 +328,21 @@ const RoleModal = () => {
         setCheckedGroups(initialChecked);
         form.setFieldValue("permissions", initialChecked);
 
-        // Field policy: chuyển đổi từ BE sang FE
-        const fePolicy = convertFieldPolicyFromBE(modal.role.fieldPolicy, modulesStructure);
-        setFieldPolicy(fePolicy);
+        // Field policy: lấy từ API riêng để luôn đồng bộ với backend.
+        const loadFieldPolicy = async () => {
+            try {
+                const rolePolicyResponse = await getRoleFieldPolicy(Number(modal.role?.id));
+                const bePolicy = rolePolicyResponse?.fieldPolicy ?? modal.role?.fieldPolicy;
+                const fePolicy = convertFieldPolicyFromBE(bePolicy, modulesStructure);
+                setFieldPolicy(fePolicy);
+            } catch (error) {
+                console.error("Lỗi lấy fieldPolicy:", error);
+                const fePolicy = convertFieldPolicyFromBE(modal.role?.fieldPolicy, modulesStructure);
+                setFieldPolicy(fePolicy);
+            }
+        };
+
+        loadFieldPolicy();
     }, [modal.role, form, modal.open, permissionsStructure, modulesStructure]);
 
     // Submit form
@@ -331,15 +356,20 @@ const RoleModal = () => {
             const roleData = {
                 role_name: values.roleName,
                 description: values.description || "",
-                permissions,
-                fieldPolicy: fieldPolicyBE, // gửi định dạng BE
+                permissions: permissions.map((code) => ({ code })),
             };
 
             if (modal.type === ActionType.CREATE) {
-                await createRole(roleData);
+                await createRole({ ...roleData, fieldPolicy: fieldPolicyBE });
             } else if (modal.type === ActionType.UPDATE) {
-                const roleId = modal.role?.id || 0;
+                const roleId = Number(modal.role?.id || 0);
                 await updateRole(roleId, roleData);
+                try {
+                    await updateRoleFieldPolicy(roleId, fieldPolicyBE);
+                } catch (fieldPolicyError) {
+                    console.warn("Không thể cập nhật fieldPolicy qua endpoint riêng, fallback update role:", fieldPolicyError);
+                    await updateRole(roleId, { fieldPolicy: fieldPolicyBE });
+                }
             }
 
             showSuccessMessage(`${modal.title} thành công!`);

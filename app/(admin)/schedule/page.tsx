@@ -1,85 +1,169 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
+import type { SorterResult } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
-import { notification, Form, Input, Select, Button, Space, Card, Radio, Modal } from "antd";
+import { notification, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, Drawer, Grid } from "antd";
 import { EditOutlined, SaveOutlined, CloseOutlined, DeleteOutlined, CalendarOutlined } from "@ant-design/icons";
-import FilterProductDrawer from "./components/FilterProductDrawer";
-import ImportProductModal from "./components/Modal/ImportProductModal";
-import PrintBarcodeModal from "@/components/shared/PrintBarcodeModal";
 import ScheduleModal from "./components/Modal/ScheduleModal";
 import { useAuthStore } from "@/stores/authStore";
-import GenericExportButton from "@/components/shared/GenericExportButton";
 import { PermissionKey } from "@/types/permissions";
-import { exportProducts } from "@/services/productService";
 import { getLivestreams, updateLivestreamBulk } from "@/services/livestreamService";
-import dayjs from "dayjs";
+import dayjs, { Dayjs } from "dayjs";
 import BulkEditModal from "./components/Modal/BulkEditModal";
+import { getModuleFields } from "@/services/roleService";
+import type { ModuleField, ResolvedFieldPermission } from "@/types/fieldPolicy";
+import { canEditAnyField, resolveModuleFieldPermissions, sanitizeEditablePayload } from "@/helper/fieldPolicy";
 
+const SCHEDULE_MODULE_CODE = "calendar";
+const { RangePicker } = DatePicker;
 
 // Define Schedule Data Type
 interface ScheduleDataType {
     key: string;
-    class_code: string;
-    class_name: string;
-    date: string;
-    time: string;
-    room: string;
-    subject: string;
-    teacher: string;
-    system: string;
-    status: string;
+    id?: string;
+    code?: string;
+    subject?: string;
+    teacher?: string;
+    end_time?: string;
+    start_time?: string;
+    lesson_link?: string;
+    lesson_name?: string;
+    learn_number?: number;
+    lesson_status?: string;
+    system_type?: string;
+    class_name?: string;
+    room?: string;
+    [key: string]: any;
 }
 
-// Role configurations and field policies (matching permision.md requirements)
-const ROLES = [
-    { code: "admin", name: "Quản trị viên" },
-    { code: "teacher", name: "Giảng viên" },
-    { code: "tutor", name: "Trợ giảng" },
-    { code: "student", name: "Học viên" },
+interface ScheduleFilterValues {
+    keyword?: string;
+    code?: string;
+    teacher?: string;
+    lesson_status?: string | number;
+    date_range?: [Dayjs, Dayjs];
+}
+
+interface ScheduleSortState {
+    sort_by?: string;
+    sort_order?: "ascend" | "descend";
+}
+
+const DEFAULT_MODULE_FIELDS: ModuleField[] = [
+    { fieldCode: "code", fieldLabel: "Mã lớp", fieldType: "text", sortOrder: 1 },
+    { fieldCode: "lesson_name", fieldLabel: "Tên bài học", fieldType: "text", sortOrder: 2 },
+    { fieldCode: "learn_number", fieldLabel: "Buổi học", fieldType: "number", sortOrder: 3 },
+    { fieldCode: "subject", fieldLabel: "Môn học", fieldType: "text", sortOrder: 4 },
+    { fieldCode: "teacher", fieldLabel: "Giáo viên", fieldType: "text", sortOrder: 5 },
+    { fieldCode: "start_time", fieldLabel: "Bắt đầu", fieldType: "date", sortOrder: 6 },
+    { fieldCode: "end_time", fieldLabel: "Kết thúc", fieldType: "date", sortOrder: 7 },
+    { fieldCode: "lesson_link", fieldLabel: "Link học", fieldType: "text", sortOrder: 8 },
 ];
 
-const FIELD_POLICIES: Record<string, { visible_fields: string[]; editable_fields: string[] }> = {
-    admin: {
-        visible_fields: ["class_code", "class_name", "date", "time", "room", "subject", "teacher", "system", "status"],
-        editable_fields: ["class_code", "class_name", "date", "time", "room", "subject", "teacher", "system", "status"],
-    },
-    teacher: {
-        visible_fields: ["class_code", "class_name", "date", "time", "room", "subject", "teacher", "status"],
-        editable_fields: ["room", "subject", "teacher", "status"],
-    },
-    tutor: {
-        visible_fields: ["class_name", "date", "time", "room", "subject", "teacher"],
-        editable_fields: ["room", "teacher"],
-    },
-    student: {
-        visible_fields: ["class_name", "date", "time", "room", "subject"],
-        editable_fields: [],
-    },
-};
-
-const FIELD_LABELS: Record<string, string> = {
-    class_code: "Mã lớp",
-    class_name: "Tên lớp",
-    date: "Ngày học",
-    time: "Giờ học",
-    room: "Phòng học",
-    subject: "Môn học",
-    teacher: "Giáo viên",
-    system: "Hệ thống",
-    status: "Trạng thái",
-};
-
 const MOCK_SCHEDULES: ScheduleDataType[] = [];
+const SORTABLE_FIELDS = new Set([
+    "code",
+    "learn_number",
+    "subject",
+    "teacher",
+    "start_time",
+    "end_time",
+    "lesson_status",
+    "system_type",
+]);
+
+const cleanFilterValues = (values: ScheduleFilterValues): ScheduleFilterValues => {
+    const cleaned: ScheduleFilterValues = {};
+
+    Object.entries(values).forEach(([key, value]) => {
+        if (value === undefined || value === null || value === "") return;
+        if (Array.isArray(value) && value.length === 0) return;
+        (cleaned as any)[key] = typeof value === "string" ? value.trim() : value;
+    });
+
+    return cleaned;
+};
+
+const buildScheduleApiParams = (values: ScheduleFilterValues) => {
+    const cleaned = cleanFilterValues(values);
+    const { date_range, ...rest } = cleaned;
+
+    return {
+        ...rest,
+        start_time: date_range?.[0]?.startOf("day").toISOString(),
+        end_time: date_range?.[1]?.endOf("day").toISOString(),
+    };
+};
+
+const lessonStatusText = (status?: number | null) => {
+    if (status === 1) return "Nghỉ học";
+    if (status === 2) return "Đang diễn ra";
+    return "Chưa bắt đầu";
+};
+
+const ScheduleFilterSidebar = ({
+    value,
+    loading,
+    onSearch,
+    onReset,
+}: {
+    value: ScheduleFilterValues;
+    loading: boolean;
+    onSearch: (values: ScheduleFilterValues) => void;
+    onReset: () => void;
+}) => {
+    const [filterForm] = Form.useForm();
+
+    useEffect(() => {
+        filterForm.setFieldsValue(value);
+    }, [filterForm, value]);
+
+    const handleReset = () => {
+        filterForm.resetFields();
+        onReset();
+    };
+
+    return (
+        <div style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 16, background: "#fff" }}>
+            <Form form={filterForm} layout="vertical" onFinish={(values) => onSearch(cleanFilterValues(values))}>
+                <Form.Item name="code" label="Mã lớp">
+                    <Input allowClear placeholder="VD: TOPC01" />
+                </Form.Item>
+                <Form.Item name="teacher" label="Giáo viên">
+                    <Input allowClear placeholder="Tên giáo viên" />
+                </Form.Item>
+                <Form.Item name="lesson_status" label="Trạng thái buổi học">
+                    <Select
+                        allowClear
+                        placeholder="Tất cả trạng thái"
+                        options={[
+                            { value: 0, label: "Chưa bắt đầu" },
+                            { value: 2, label: "Đang diễn ra" },
+                            { value: 1, label: "Nghỉ học" },
+                        ]}
+                    />
+                </Form.Item>
+                <Form.Item name="date_range" label="Khoảng ngày">
+                    <RangePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
+                </Form.Item>
+                <Space style={{ width: "100%", justifyContent: "flex-end" }}>
+                    <Button onClick={handleReset}>Reset</Button>
+                    <Button type="primary" htmlType="submit" loading={loading}>Search</Button>
+                </Space>
+            </Form>
+        </div>
+    );
+};
 
 const Page = () => {
     const [data, setData] = useState<ScheduleDataType[]>(MOCK_SCHEDULES);
     const [filteredData, setFilteredData] = useState<ScheduleDataType[]>(MOCK_SCHEDULES);
     const [searchText, setSearchText] = useState("");
-    const [currentRole, setCurrentRole] = useState<string>("admin");
     const [editingKey, setEditingKey] = useState<string>("");
     const [loading, setLoading] = useState<boolean>(false);
+    const [moduleFields, setModuleFields] = useState<ModuleField[]>(DEFAULT_MODULE_FIELDS);
     const [form] = Form.useForm();
     const [api, contextHolder] = notification.useNotification();
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -107,27 +191,46 @@ const Page = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const [totalItems, setTotalItems] = useState(0);
+    const [filterValues, setFilterValues] = useState<ScheduleFilterValues>({});
+    const [sortState, setSortState] = useState<ScheduleSortState>({});
+    const screens = Grid.useBreakpoint();
+    const isDesktop = Boolean(screens.lg);
 
-    const fetchData = async (page = 1, limit = 10, search = "") => {
+    const fetchData = useCallback(async (
+        page = 1,
+        limit = 10,
+        filtersValue: ScheduleFilterValues = {},
+        sorter: ScheduleSortState = {}
+    ) => {
         try {
             setLoading(true);
-            const response: any = await getLivestreams({ page, limit, code: search });
+            const response: any = await getLivestreams({
+                page,
+                limit,
+                ...buildScheduleApiParams(filtersValue),
+                sort_by: sorter.sort_by,
+                sort_order: sorter.sort_by ? (sorter.sort_order === "descend" ? "desc" : "asc") : undefined,
+            });
             if (response && response.data) {
                 const mappedData: ScheduleDataType[] = response.data.data.map((item: any) => ({
                     key: item.id?.toString() || item.key,
-                    class_code: item.code,
+                    id: item.id?.toString(),
+                    code: item.code,
                     class_name: item.class_name || item.code,
-                    date: dayjs(item.start_time).format('YYYY-MM-DD'),
-                    time: `${dayjs(item.start_time).format('HH:mm')} - ${dayjs(item.end_time).format('HH:mm')}`,
-                    room: item.room || 'Phòng Online',
-                    subject: item.lesson_name || `Bài ${item.learn_number}`,
+                    start_time: item.start_time ? dayjs(item.start_time).format('YYYY-MM-DDTHH:mm') : "",
+                    end_time: item.end_time ? dayjs(item.end_time).format('YYYY-MM-DDTHH:mm') : "",
+                    room: item.room || item.channel_name || 'Phòng Online',
+                    subject: item.subject || item.lesson_name || `Bài ${item.learn_number}`,
+                    lesson_name: item.lesson_name || `Bài ${item.learn_number}`,
+                    learn_number: item.learn_number,
+                    lesson_link: item.lesson_link || item.link || "",
                     teacher: item.teacher,
-                    system: item.system_type,
-                    status: item.lesson_status === 1 ? 'Nghỉ học' : (item.lesson_status === 0 ? 'Chưa bắt đầu' : 'Đang diễn ra'),
+                    system_type: item.system_type,
+                    lesson_status: lessonStatusText(item.lesson_status),
                 }));
                 setData(mappedData);
                 setFilteredData(mappedData);
-                setTotalItems(response.total || 0);
+                setTotalItems(response.data.total || 0);
             } else {
                 setData(MOCK_SCHEDULES);
                 setFilteredData(MOCK_SCHEDULES);
@@ -139,40 +242,41 @@ const Page = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
-        fetchData(currentPage, pageSize, searchText);
-    }, [currentPage, pageSize]);
+        fetchData(currentPage, pageSize, filterValues, sortState);
+    }, [currentPage, pageSize, filterValues, sortState, fetchData]);
 
+    useEffect(() => {
+        const fetchModuleFields = async () => {
+            try {
+                const moduleStructure = await getModuleFields(SCHEDULE_MODULE_CODE);
+                if (moduleStructure?.fields?.length) {
+                    setModuleFields(
+                        [...moduleStructure.fields].sort(
+                            (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+                        )
+                    );
+                }
+            } catch (error) {
+                console.error("Không thể tải ModuleField calendar:", error);
+                api.warning({
+                    message: "Không thể tải cấu hình cột",
+                    description: "Đang dùng cấu hình lịch học mặc định.",
+                });
+            }
+        };
 
-    const [openImportModal, setOpenImportModal] = useState(false);
+        fetchModuleFields();
+    }, [api]);
+
     const [openFilterDrawer, setOpenFilterDrawer] = useState(false);
-    const [openPrintModal, setOpenPrintModal] = useState(false);
-    const { warehouseId } = useAuthStore((state) => state.user)
-    const [filters, setFilters] = useState<any>({ warehouse_id: warehouseId });
-    const [selectedProducts, setSelectedProducts] = useState<any[]>([]);
+    const { fieldPolicy } = useAuthStore((state) => state.user)
     const hasPermission = useAuthStore(state => state.hasPermission);
-    const [allSelectedRows, setAllSelectedRows] = useState<any[]>([]);
-
-
-    const handleFilterOrder = (values: any) => {
-        setFilters({ search: filters.search, ...values });
-    };
-
-    const handleImportClick = () => setOpenImportModal(true);
-
-
-    const handlePrintBtn = () => {
-        setSelectedProducts(allSelectedRows.map(row => ({
-            id: row.product_id,
-            code: row.product_code,
-            name: row.product_name,
-            quantity: row.stock || 1,
-            price: row.selling_price,
-        })));
-        setOpenPrintModal(true);
-    }
+    const canCreateSchedule = hasPermission(PermissionKey.SCHEDULE_CREATE);
+    const canEditSchedule = hasPermission(PermissionKey.SCHEDULE_EDIT);
+    const canDeleteSchedule = hasPermission(PermissionKey.SCHEDULE_DELETE);
 
 
     const isEditing = (record: ScheduleDataType) => record.key === editingKey;
@@ -180,13 +284,32 @@ const Page = () => {
     // Handle search filter locally
     const handleSearch = async (value: string) => {
         setSearchText(value);
+        setFilterValues((prev) => cleanFilterValues({ ...prev, keyword: value }));
         setCurrentPage(1);
-        fetchData(1, pageSize, value);
+    };
+
+    const handleScheduleFilter = (values: ScheduleFilterValues) => {
+        setFilterValues(cleanFilterValues({ ...values, keyword: searchText }));
+        setCurrentPage(1);
+        setOpenFilterDrawer(false);
+    };
+
+    const handleResetScheduleFilter = () => {
+        setFilterValues(cleanFilterValues({ keyword: searchText }));
+        setCurrentPage(1);
+        setOpenFilterDrawer(false);
     };
 
     const handleAddBtn = () => {
-        const activePolicy = FIELD_POLICIES[currentRole] || FIELD_POLICIES.admin;
-        if (activePolicy.editable_fields.length === 0) {
+        if (!canCreateSchedule) {
+            api.warning({
+                message: "Không có quyền",
+                description: "Vai trò hiện tại không có quyền thêm lịch học.",
+            });
+            return;
+        }
+
+        if (!canEditAnyField(moduleFields, fieldPolicy, SCHEDULE_MODULE_CODE)) {
             api.warning({
                 message: "Không có quyền",
                 description: "Vai trò hiện tại không có quyền chỉnh sửa/thêm dữ liệu.",
@@ -198,7 +321,7 @@ const Page = () => {
     };
 
     const handleModalSuccess = (values: any) => {
-        fetchData(currentPage, pageSize, searchText);
+        fetchData(currentPage, pageSize, filterValues, sortState);
         api.success({
             message: "Cập nhật thành công",
             description: "Đã cập nhật danh sách lịch học.",
@@ -239,9 +362,24 @@ const Page = () => {
             const index = newData.findIndex((item) => key === item.key);
             if (index > -1) {
                 const item = newData[index];
+                const sanitizedRow = sanitizeEditablePayload(
+                    row,
+                    moduleFields,
+                    fieldPolicy,
+                    SCHEDULE_MODULE_CODE
+                );
+
+                if (Object.keys(sanitizedRow).length === 0) {
+                    api.warning({
+                        message: "Không có quyền",
+                        description: "Không có trường nào trong dòng này được phép chỉnh sửa.",
+                    });
+                    return;
+                }
+
                 newData.splice(index, 1, {
                     ...item,
-                    ...row,
+                    ...sanitizedRow,
                 });
                 setData(newData);
                 setEditingKey("");
@@ -259,37 +397,30 @@ const Page = () => {
         }
     };
 
-    // Build dynamic columns based on field visibility and edit policies
-    const activePolicy = FIELD_POLICIES[currentRole] || FIELD_POLICIES.admin;
-    const visibleFields = activePolicy.visible_fields;
-    const editableFields = activePolicy.editable_fields;
+    const fieldPermissions: ResolvedFieldPermission[] = resolveModuleFieldPermissions(
+        moduleFields,
+        fieldPolicy,
+        SCHEDULE_MODULE_CODE
+    );
+    const visibleFieldPermissions = fieldPermissions.filter((item) => item.visible);
+    const editableFieldCodes = fieldPermissions
+        .filter((item) => item.editable)
+        .map((item) => item.field.fieldCode);
 
-    const columns: ColumnsType<ScheduleDataType> = visibleFields.map((fieldCode) => {
+    // Build dynamic columns based on ModuleField and fieldPolicy from current role.
+    const columns: ColumnsType<ScheduleDataType> = visibleFieldPermissions.map(({ field }) => {
+        const fieldCode = field.fieldCode;
         return {
-            title: FIELD_LABELS[fieldCode] || fieldCode,
+            title: field.fieldLabel || fieldCode,
             dataIndex: fieldCode,
             key: fieldCode,
+            sorter: SORTABLE_FIELDS.has(fieldCode),
+            sortOrder: sortState.sort_by === fieldCode ? sortState.sort_order : undefined,
             render: (text: any, record: ScheduleDataType) => {
                 const editing = isEditing(record);
-                const editable = editableFields.includes(fieldCode);
+                const editable = editableFieldCodes.includes(fieldCode);
 
                 if (editing && editable) {
-                    if (fieldCode === "room") {
-                        return (
-                            <Form.Item
-                                name={fieldCode}
-                                style={{ margin: 0 }}
-                                rules={[{ required: true, message: "Chọn phòng học!" }]}
-                            >
-                                <Select size="small" style={{ width: 130 }} options={[
-                                    { value: "Phòng 101", label: "Phòng 101" },
-                                    { value: "Phòng 102", label: "Phòng 102" },
-                                    { value: "Phòng 204", label: "Phòng 204" },
-                                    { value: "Phòng Lab A", label: "Phòng Lab A" },
-                                ]} />
-                            </Form.Item>
-                        );
-                    }
                     if (fieldCode === "teacher") {
                         return (
                             <Form.Item
@@ -306,7 +437,7 @@ const Page = () => {
                             </Form.Item>
                         );
                     }
-                    if (fieldCode === "status") {
+                    if (fieldCode === "lesson_status") {
                         return (
                             <Form.Item
                                 name={fieldCode}
@@ -321,14 +452,14 @@ const Page = () => {
                             </Form.Item>
                         );
                     }
-                    if (fieldCode === "date") {
+                    if (fieldCode === "start_time" || fieldCode === "end_time") {
                         return (
                             <Form.Item
                                 name={fieldCode}
                                 style={{ margin: 0 }}
-                                rules={[{ required: true, message: "Nhập ngày học!" }]}
+                                rules={[{ required: true, message: `Nhập ${field.fieldLabel}!` }]}
                             >
-                                <Input size="small" type="date" style={{ width: 140 }} />
+                                <Input size="small" type="datetime-local" style={{ width: 180 }} />
                             </Form.Item>
                         );
                     }
@@ -336,11 +467,15 @@ const Page = () => {
                         <Form.Item
                             name={fieldCode}
                             style={{ margin: 0 }}
-                            rules={[{ required: true, message: `Nhập ${FIELD_LABELS[fieldCode]}!` }]}
+                            rules={[{ required: true, message: `Nhập ${field.fieldLabel || fieldCode}!` }]}
                         >
                             <Input size="small" style={{ width: 150 }} />
                         </Form.Item>
                     );
+                }
+
+                if ((fieldCode === "start_time" || fieldCode === "end_time") && text) {
+                    return <span>{dayjs(text).format('YYYY-MM-DD HH:mm')}</span>;
                 }
 
                 // If not editing or not editable, display plain text
@@ -350,7 +485,7 @@ const Page = () => {
     });
 
     // Append Action columns if role has edit permissions
-    if (editableFields.length > 0) {
+    if ((canEditSchedule && editableFieldCodes.length > 0) || canDeleteSchedule) {
         columns.push({
             title: "Thao tác",
             key: "action",
@@ -378,34 +513,40 @@ const Page = () => {
                     </Space>
                 ) : (
                     <Space>
-                        <Button
-                            type="link"
-                            disabled={editingKey !== ""}
-                            onClick={() => handleReschedule(record)}
-                            icon={<CalendarOutlined />}
-                            size="small"
-                        >
-                            Dời lịch
-                        </Button>
-                        <Button
-                            type="link"
-                            disabled={editingKey !== ""}
-                            onClick={() => edit(record)}
-                            icon={<EditOutlined />}
-                            size="small"
-                        >
-                            Sửa nhanh
-                        </Button>
-                        <Button
-                            type="text"
-                            danger
-                            disabled={editingKey !== ""}
-                            onClick={() => handleDelete(record.key)}
-                            icon={<DeleteOutlined />}
-                            size="small"
-                        >
-                            Xóa
-                        </Button>
+                        {canEditSchedule && editableFieldCodes.length > 0 && (
+                            <>
+                                <Button
+                                    type="link"
+                                    disabled={editingKey !== ""}
+                                    onClick={() => handleReschedule(record)}
+                                    icon={<CalendarOutlined />}
+                                    size="small"
+                                >
+                                    Dời lịch
+                                </Button>
+                                <Button
+                                    type="link"
+                                    disabled={editingKey !== ""}
+                                    onClick={() => edit(record)}
+                                    icon={<EditOutlined />}
+                                    size="small"
+                                >
+                                    Sửa nhanh
+                                </Button>
+                            </>
+                        )}
+                        {canDeleteSchedule && (
+                            <Button
+                                type="text"
+                                danger
+                                disabled={editingKey !== ""}
+                                onClick={() => handleDelete(record.key)}
+                                icon={<DeleteOutlined />}
+                                size="small"
+                            >
+                                Xóa
+                            </Button>
+                        )}
                     </Space>
                 );
             },
@@ -416,105 +557,78 @@ const Page = () => {
         <>
             {contextHolder}
 
-            {/* Simulation Header and Control */}
-            <Card
-                title={<span style={{ fontWeight: 600, fontSize: 16 }}>Mô phỏng Phân quyền Cấp trường (Field-Level Permissions)</span>}
-                style={{ marginBottom: 16, borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}
-                styles={{ body: { padding: '12px 24px' } }}
-            >
-                <Space direction="vertical" size="small" style={{ width: '100%' }}>
-                    <div>
-                        <span style={{ fontWeight: 500, marginRight: 12 }}>Chọn vai trò thử nghiệm:</span>
-                        <Radio.Group
-                            value={currentRole}
-                            onChange={(e) => {
-                                setCurrentRole(e.target.value);
-                                setEditingKey(""); // Reset editing
-                            }}
-                            buttonStyle="solid"
-                        >
-                            {ROLES.map(role => (
-                                <Radio.Button key={role.code} value={role.code}>
-                                    {role.name}
-                                </Radio.Button>
-                            ))}
-                        </Radio.Group>
-                    </div>
-                    <div style={{ background: '#f5f5f5', padding: '10px 16px', borderRadius: 6, fontSize: 13, border: '1px solid #e8e8e8' }}>
-                        <div style={{ marginBottom: 6 }}>
-                            <strong style={{ color: '#1890ff' }}>Cột được phép xem:</strong>{" "}
-                            {visibleFields.map(f => FIELD_LABELS[f]).join(', ')}
-                        </div>
-                        <div>
-                            <strong style={{ color: '#52c41a' }}>Trường được phép chỉnh sửa:</strong>{" "}
-                            {editableFields.length > 0
-                                ? editableFields.map(f => FIELD_LABELS[f]).join(', ')
-                                : <span style={{ color: '#ff4d4f', fontStyle: 'italic' }}>Không có trường nào (Chỉ xem)</span>
-                            }
-                        </div>
-                    </div>
-                </Space>
-            </Card>
-
             <SearchAndActionsBar
                 onSearch={handleSearch}
                 placeholder="Tìm kiếm theo mã lớp, tên lớp, giáo viên, phòng học..."
-                handleAddBtn={!hasPermission(PermissionKey.PRODUCT_CREATE) ? handleAddBtn : undefined}
+                handleAddBtn={canCreateSchedule ? handleAddBtn : undefined}
                 handleFilterBtn={() => setOpenFilterDrawer(true)}
-                handleImportClick={!hasPermission(PermissionKey.PRODUCT_IMPORT) ? handleImportClick : undefined}
                 extraExportButton={
-                    !hasPermission(PermissionKey.PRODUCT_EXPORT) && (
-                        <>
-                            <GenericExportButton
-                                exportService={exportProducts}
-                                serviceParams={[[], warehouseId, filters]}
-                                fileNamePrefix="Danh_sach_san_pham"
-                            />
-                            <Button
-                                type="primary"
-                                icon={<EditOutlined />}
-                                onClick={() => setOpenBulkEditModal(true)}
-
-                            >
-                                Sửa hàng loạt
-                            </Button>
-                        </>
+                    canEditSchedule && (
+                        <Button
+                            type="primary"
+                            icon={<EditOutlined />}
+                            onClick={() => setOpenBulkEditModal(true)}
+                        >
+                            Sửa hàng loạt
+                        </Button>
                     )
                 }
             />
 
             <Form form={form} component={false}>
-                <CustomTable<ScheduleDataType>
-                    columns={columns}
-                    dataSource={filteredData}
-                    loading={loading}
-                    rowSelection={rowSelection}
-                    pagination={{
-                        current: currentPage,
-                        pageSize: pageSize,
-                        total: totalItems,
-                        showSizeChanger: true,
-                        position: ["bottomRight"],
-                        onChange: (page, size) => {
-                            setCurrentPage(page);
-                            setPageSize(size);
-                        }
-                    }}
-                    scroll={{ x: "max-content" }}
-                />
-                <FilterProductDrawer open={openFilterDrawer} onClose={() => { setOpenFilterDrawer(false) }} handleSearch={handleFilterOrder} />
-                <ImportProductModal
-                    open={openImportModal}
-                    onClose={() => setOpenImportModal(false)}
-                />
+                  <CustomTable<ScheduleDataType>
+                            columns={columns}
+                            dataSource={filteredData}
+                            loading={loading}
+                            rowSelection={rowSelection}
+                            pagination={{
+                                current: currentPage,
+                                pageSize: pageSize,
+                                total: totalItems,
+                                showSizeChanger: true,
+                                position: ["bottomRight"],
+                                onChange: (page, size) => {
+                                    setCurrentPage(page);
+                                    setPageSize(size);
+                                }
+                            }}
+                            onChange={(_, __, sorter, extra) => {
+                                if (extra.action !== "sort") return;
+                                const activeSorter = Array.isArray(sorter)
+                                    ? sorter[0]
+                                    : sorter as SorterResult<ScheduleDataType>;
+                                setSortState({
+                                    sort_by: activeSorter?.field ? String(activeSorter.field) : undefined,
+                                    sort_order: activeSorter?.order || undefined,
+                                });
+                                setCurrentPage(1);
+                            }}
+                            scroll={{ x: "max-content" }}
+                        />
+                <Drawer
+                    title="Bộ lọc lịch học"
+                    placement="right"
+                    open={openFilterDrawer}
+                    onClose={() => setOpenFilterDrawer(false)}
+                    width={360}
+                >
+                    <ScheduleFilterSidebar
+                        value={filterValues}
+                        loading={loading}
+                        onSearch={handleScheduleFilter}
+                        onReset={handleResetScheduleFilter}
+                    />
+                </Drawer>
                 <ScheduleModal
                     open={isModalOpen}
                     onClose={() => setIsModalOpen(false)}
                     onSuccess={handleModalSuccess}
                     isEdit={isEditMode}
                     initialData={selectedRecord}
+                    moduleFields={moduleFields}
+                    fieldPolicy={fieldPolicy}
+                    moduleCode={SCHEDULE_MODULE_CODE}
                 />
-                <PrintBarcodeModal open={openPrintModal} onClose={() => setOpenPrintModal(false)} initialData={selectedProducts} />
                 {/* Modal Sửa Hàng Loạt */}
                 <BulkEditModal
                     open={openBulkEditModal}
@@ -532,17 +646,17 @@ const Page = () => {
                                 let filteredData = [...data];
 
                                 if (modalPayload.scope.type === 'from_to_end') {
-                                    filteredData = filteredData.filter(item => item.learn_number >= modalPayload.scope.start_lesson);
+                                    filteredData = filteredData.filter(item => Number(item.learn_number ?? 0) >= modalPayload.scope.start_lesson);
                                 } else if (modalPayload.scope.type === 'range') {
                                     filteredData = filteredData.filter(item =>
-                                        item.learn_number >= modalPayload.scope.start_lesson &&
-                                        item.learn_number <= modalPayload.scope.end_lesson
+                                        Number(item.learn_number ?? 0) >= modalPayload.scope.start_lesson &&
+                                        Number(item.learn_number ?? 0) <= modalPayload.scope.end_lesson
                                     );
                                 } else if (modalPayload.scope.type === 'pattern') {
                                     filteredData = filteredData.filter(item =>
                                         modalPayload.scope.pattern_type === 'even'
-                                            ? item.learn_number % 2 === 0
-                                            : item.learn_number % 2 !== 0
+                                            ? Number(item.learn_number ?? 0) % 2 === 0
+                                            : Number(item.learn_number ?? 0) % 2 !== 0
                                     );
                                 }
                                 targetIds = filteredData.map(item => item.key);
@@ -589,7 +703,7 @@ const Page = () => {
 
                             // Reset state & Reload bảng
                             setSelectedRowKeys([]);
-                            fetchData(currentPage, pageSize, searchText);
+                            fetchData(currentPage, pageSize, filterValues, sortState);
 
                         } catch (error: any) {
                             console.error(error);

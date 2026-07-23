@@ -2,6 +2,7 @@ import { PermissionKey } from "@/types/permissions";
 
 export const protectedRoutes = [
     { path: '/dashboard', permission: PermissionKey.DASHBOARD_VIEW },
+    { path: '/schedule', permission: PermissionKey.SCHEDULE_VIEW },
     { path: '/products', permission: PermissionKey.PRODUCT_VIEW },
     { path: '/categories', permission: PermissionKey.CATEGORY_VIEW },
     { path: '/transactions/inventory-checks', permission: PermissionKey.STOCK_CHECK_VIEW },

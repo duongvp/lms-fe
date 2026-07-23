@@ -4,7 +4,6 @@ import { protectedRoutes } from './constants/protectedRoutes';
 
 export function middleware(req: NextRequest) {
     const { pathname } = req.nextUrl;
-    console.log('All Cookies:', req.cookies.getAll());
     // const refreshToken = req.cookies.get('refreshToken')?.value;
     // const userCookie = req.cookies.get('user')?.value;
 

@@ -1,18 +1,16 @@
 'use client';
 import { Modal, Input, Row, Col, Form, Button, Typography, Select, Radio, Checkbox, Card, TimePicker, DatePicker } from 'antd';
-import { CloseCircleOutlined, EyeFilled, SaveOutlined } from '@ant-design/icons';
+import { CloseCircleOutlined, EyeFilled } from '@ant-design/icons';
 import React, { useState } from 'react';
-import { normalizeSchedulePayload } from '@/helper/convertDate';
 import {
     createLivestream,
     createLivestreamBulk,
-    toBulkLivestreamPayload,
-    toLivestreamPayload,
     updateLivestream,
-    cancelLivestream,
-    toUpdateLivestreamPayload
+    rescheduleLivestream
 } from '@/services/livestreamService';
 import SchedulePreviewModal from './SchedulePreviewModal';
+import type { ModuleField } from '@/types/fieldPolicy';
+import { resolveFieldRule } from '@/helper/fieldPolicy';
 
 const { Text, Title } = Typography;
 
@@ -53,6 +51,9 @@ interface ScheduleModalProps {
     initialData?: any;
     title?: string;
     isEdit?: boolean;
+    moduleFields?: ModuleField[];
+    fieldPolicy?: any;
+    moduleCode?: string;
 }
 
 const DAYS_OPTIONS = [
@@ -72,7 +73,17 @@ const TEACHER_OPTIONS = [
     { value: "Phạm Thảo D", label: "Phạm Thảo D" },
 ];
 
-const ScheduleModal: React.FC<ScheduleModalProps> = ({ open, onClose, onSuccess, initialData, title, isEdit }) => {
+const ScheduleModal: React.FC<ScheduleModalProps> = ({
+    open,
+    onClose,
+    onSuccess,
+    initialData,
+    title,
+    isEdit,
+    moduleFields = [],
+    fieldPolicy,
+    moduleCode = 'calendar',
+}) => {
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
 
@@ -81,9 +92,17 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ open, onClose, onSuccess,
     const [bulkConfigMode, setBulkConfigMode] = useState<"common" | "separate">("common");
 
     // For Update
-    const [updateMode, setUpdateMode] = useState<"current" | "following" | "cancel">("following");
+    const [updateMode, setUpdateMode] = useState<"current" | "makeup" | "following" | "cancel">("following");
 
     const selectedDays = Form.useWatch('days_of_week', form) || [];
+
+    const isFieldEditable = (fieldCode: string) => {
+        if (!moduleFields.length) return true;
+        return resolveFieldRule(fieldPolicy, moduleCode, fieldCode).editable;
+    };
+
+    const requiredWhenEditable = (fieldCode: string, message: string) =>
+        isFieldEditable(fieldCode) ? [{ required: true, message }] : [];
 
     const handleClose = () => {
         form.resetFields();
@@ -109,7 +128,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ open, onClose, onSuccess,
             finalValues.update_mode = updateMode;
             if (updateMode === 'cancel') {
                 finalValues.lesson_status = 1;
-            } else if (updateMode === 'following') {
+            } else if (updateMode === 'makeup' || updateMode === 'following') {
                 finalValues.lesson_status = 1;
             }
         }
@@ -119,7 +138,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ open, onClose, onSuccess,
         setPreviewOpen(true);
     };
 
-    const handleConfirmPreview = async (finalPayload: any, payloadType: 'bulk' | 'single' | 'update_current' | 'update_following' | 'update_cancel') => {
+    const handleConfirmPreview = async (finalPayload: any, payloadType: 'bulk' | 'single' | 'update_current' | 'update_makeup' | 'update_following' | 'update_cancel') => {
         try {
             setLoading(true);
             if (payloadType === 'bulk') {
@@ -128,8 +147,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ open, onClose, onSuccess,
                 await createLivestream(finalPayload);
             } else {
                 const id = initialData?.id || initialData?.key;
-                if (payloadType === 'update_cancel') {
-                    await cancelLivestream(id);
+                if (payloadType === 'update_cancel' || payloadType === 'update_makeup' || payloadType === 'update_following') {
+                    await rescheduleLivestream(id, finalPayload);
                 } else {
                     await updateLivestream(id, finalPayload);
                 }
@@ -216,8 +235,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ open, onClose, onSuccess,
                             }}
                             buttonStyle="solid"
                         >
-                            {/* <Radio.Button value="current">Chỉ cập nhật buổi hiện tại</Radio.Button> */}
-                            <Radio.Button value="following">Nghỉ học & Dời lịch</Radio.Button>
+                            <Radio.Button value="makeup">Nghỉ học & Tạo lịch bù</Radio.Button>
+                            <Radio.Button value="following">Nghỉ học & Dời chuỗi</Radio.Button>
                             <Radio.Button value="cancel">Nghỉ học (Không dời)</Radio.Button>
                         </Radio.Group>
                     </div>
@@ -231,8 +250,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ open, onClose, onSuccess,
                             <FormSection title="Thông tin lớp học">
                                 <Row gutter={24}>
                                     <Col span={8}>
-                                        <Form.Item label="Mã lớp" name="class_code" rules={[{ required: true, message: 'Nhập mã lớp' }]}>
-                                            <Input placeholder="Ví dụ: CLASS-001" />
+                                        <Form.Item label="Mã khóa học" name="class_code" rules={requiredWhenEditable('code', 'Nhập mã khóa học')}>
+                                            <Input placeholder="Ví dụ: toan-6" disabled={!isFieldEditable('code')} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
@@ -241,8 +260,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ open, onClose, onSuccess,
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
-                                        <Form.Item label="Môn học / Mã bài" name="subject" rules={[{ required: true, message: 'Nhập môn học' }]}>
-                                            <Input placeholder="Ví dụ: React Hooks" />
+                                        <Form.Item label="Môn học / Mã bài" name="subject" rules={requiredWhenEditable('subject', 'Nhập môn học')}>
+                                            <Input placeholder="Ví dụ: React Hooks" disabled={!isFieldEditable('subject')} />
                                         </Form.Item>
                                     </Col>
                                 </Row>
@@ -251,18 +270,18 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ open, onClose, onSuccess,
                             <FormSection title="Chi tiết thời gian & địa điểm">
                                 <Row gutter={24}>
                                     <Col span={8}>
-                                        <Form.Item label="Ngày học" name="date" rules={[{ required: true, message: 'Nhập ngày học' }]}>
-                                            <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} placeholder="DD/MM/YYYY" />
+                                        <Form.Item label="Ngày học" name="date" rules={requiredWhenEditable('start_time', 'Nhập ngày học')}>
+                                            <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} placeholder="DD/MM/YYYY" disabled={!isFieldEditable('start_time')} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
-                                        <Form.Item label="Thời gian bắt đầu" name="start_time" rules={[{ required: true, message: 'Nhập giờ bắt đầu' }]}>
-                                            <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="HH:mm" />
+                                        <Form.Item label="Thời gian bắt đầu" name="start_time" rules={requiredWhenEditable('start_time', 'Nhập giờ bắt đầu')}>
+                                            <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="HH:mm" disabled={!isFieldEditable('start_time')} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
-                                        <Form.Item label="Thời gian kết thúc" name="end_time" rules={[{ required: true, message: 'Nhập giờ kết thúc' }]}>
-                                            <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="HH:mm" />
+                                        <Form.Item label="Thời gian kết thúc" name="end_time" rules={requiredWhenEditable('end_time', 'Nhập giờ kết thúc')}>
+                                            <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="HH:mm" disabled={!isFieldEditable('end_time')} />
                                         </Form.Item>
                                     </Col>
                                 </Row>
@@ -271,8 +290,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ open, onClose, onSuccess,
                             <FormSection title="Thông tin quản lý">
                                 <Row gutter={24}>
                                     <Col span={8}>
-                                        <Form.Item label="Giáo viên" name="teacher" rules={[{ required: true, message: 'Chọn giáo viên' }]}>
-                                            <Select options={TEACHER_OPTIONS} placeholder="Chọn giáo viên" />
+                                        <Form.Item label="Giáo viên" name="teacher" rules={requiredWhenEditable('teacher', 'Chọn giáo viên')}>
+                                            <Select options={TEACHER_OPTIONS} placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
@@ -351,8 +370,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ open, onClose, onSuccess,
                                 </Row>
                                 <Row gutter={24}>
                                     <Col span={8}>
-                                        <Form.Item label="Mã khóa học / Lớp" name="bulk_code" rules={[{ required: true, message: 'Nhập mã khóa học' }]}>
-                                            <Input placeholder="Ví dụ: toan-6" />
+                                        <Form.Item label="Mã khóa học / Lớp" name="bulk_code" rules={requiredWhenEditable('code', 'Nhập mã khóa học')}>
+                                            <Input placeholder="Ví dụ: toan-6" disabled={!isFieldEditable('code')} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
@@ -361,8 +380,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ open, onClose, onSuccess,
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
-                                        <Form.Item label="Bài học bắt đầu (Lesson Start)" name="bulk_learn_number" rules={[{ required: true, message: 'Nhập số bài bắt đầu' }]}>
-                                            <Input type="number" placeholder="Ví dụ: 1" />
+                                        <Form.Item label="Bài học bắt đầu (Lesson Start)" name="bulk_learn_number" rules={requiredWhenEditable('learn_number', 'Nhập số bài bắt đầu')}>
+                                            <Input type="number" placeholder="Ví dụ: 1" disabled={!isFieldEditable('learn_number')} />
                                         </Form.Item>
                                     </Col>
                                 </Row>
@@ -378,18 +397,18 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ open, onClose, onSuccess,
                                     <Card size="small" title="Cấu hình chung" style={{ background: '#fafafa', marginBottom: 16 }}>
                                         <Row gutter={24}>
                                             <Col span={8}>
-                                                <Form.Item label="Giờ bắt đầu" name="bulk_start_time" rules={[{ required: true, message: 'Nhập giờ bắt đầu' }]}>
-                                                    <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="HH:mm" />
+                                                <Form.Item label="Giờ bắt đầu" name="bulk_start_time" rules={requiredWhenEditable('start_time', 'Nhập giờ bắt đầu')}>
+                                                    <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="HH:mm" disabled={!isFieldEditable('start_time')} />
                                                 </Form.Item>
                                             </Col>
                                             <Col span={8}>
-                                                <Form.Item label="Giờ kết thúc" name="bulk_end_time" rules={[{ required: true, message: 'Nhập giờ kết thúc' }]}>
-                                                    <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="HH:mm" />
+                                                <Form.Item label="Giờ kết thúc" name="bulk_end_time" rules={requiredWhenEditable('end_time', 'Nhập giờ kết thúc')}>
+                                                    <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="HH:mm" disabled={!isFieldEditable('end_time')} />
                                                 </Form.Item>
                                             </Col>
                                             <Col span={8}>
-                                                <Form.Item label="Giáo viên" name="bulk_teacher" rules={[{ required: true, message: 'Chọn giáo viên' }]}>
-                                                    <Select options={TEACHER_OPTIONS} placeholder="Chọn giáo viên" />
+                                                <Form.Item label="Giáo viên" name="bulk_teacher" rules={requiredWhenEditable('teacher', 'Chọn giáo viên')}>
+                                                    <Select options={TEACHER_OPTIONS} placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
                                                 </Form.Item>
                                             </Col>
                                         </Row>
@@ -408,30 +427,32 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ open, onClose, onSuccess,
                                                             <Text strong>{dayLabel}</Text>
                                                         </Col>
                                                         <Col span={6}>
-                                                            <Form.Item name={['separate_config', dayValue, 'start_time']} rules={[{ required: true, message: 'Nhập giờ bắt đầu' }]} style={{ marginBottom: 8 }}>
+                                                            <Form.Item name={['separate_config', dayValue, 'start_time']} rules={requiredWhenEditable('start_time', 'Nhập giờ bắt đầu')} style={{ marginBottom: 8 }}>
                                                                 {/* <Input type="time" placeholder="Giờ bắt đầu" /> */}
                                                                 <DatePicker
                                                                     format="HH:mm"
                                                                     picker="time"
                                                                     placeholder="Giờ bắt đầu HH:mm"
                                                                     style={{ width: '100%' }}
+                                                                    disabled={!isFieldEditable('start_time')}
                                                                 />
                                                             </Form.Item>
                                                         </Col>
                                                         <Col span={6}>
-                                                            <Form.Item name={['separate_config', dayValue, 'end_time']} rules={[{ required: true, message: 'Nhập giờ kết thúc' }]} style={{ marginBottom: 8 }}>
+                                                            <Form.Item name={['separate_config', dayValue, 'end_time']} rules={requiredWhenEditable('end_time', 'Nhập giờ kết thúc')} style={{ marginBottom: 8 }}>
                                                                 {/* <Input type="time" placeholder="Giờ kết thúc" /> */}
                                                                 <DatePicker
                                                                     format="HH:mm"
                                                                     picker="time"
                                                                     placeholder="Giờ kết thúc HH:mm"
                                                                     style={{ width: '100%' }}
+                                                                    disabled={!isFieldEditable('end_time')}
                                                                 />
                                                             </Form.Item>
                                                         </Col>
                                                         <Col span={8}>
-                                                            <Form.Item name={['separate_config', dayValue, 'teacher']} rules={[{ required: true, message: 'Chọn giáo viên' }]} style={{ marginBottom: 8 }}>
-                                                                <Select options={TEACHER_OPTIONS} placeholder="Giáo viên" />
+                                                            <Form.Item name={['separate_config', dayValue, 'teacher']} rules={requiredWhenEditable('teacher', 'Chọn giáo viên')} style={{ marginBottom: 8 }}>
+                                                                <Select options={TEACHER_OPTIONS} placeholder="Giáo viên" disabled={!isFieldEditable('teacher')} />
                                                             </Form.Item>
                                                         </Col>
                                                     </Row>
@@ -447,14 +468,14 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ open, onClose, onSuccess,
                         </>
                     )}
 
-                    {/* Form fields for Update Following */}
-                    {isEdit && updateMode === 'following' && (
+                    {/* Form fields for Update Makeup / Following */}
+                    {isEdit && (updateMode === 'makeup' || updateMode === 'following') && (
                         <>
                             <FormSection title="Thông tin buổi học sẽ nghỉ">
                                 <Row gutter={24}>
                                     <Col span={12}>
-                                        <Form.Item label="Mã lớp">
-                                            <Input disabled value={initialData?.class_code || 'CLASS-001'} />
+                                        <Form.Item label="Mã khóa học">
+                                            <Input disabled value={initialData?.code || initialData?.class_code || '---'} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={12}>
@@ -465,31 +486,38 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ open, onClose, onSuccess,
                                 </Row>
                                 <div style={{ padding: '12px 16px', background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 6, marginBottom: 16 }}>
                                     <Text type="warning">
-                                        Lưu ý: Hành động này sẽ đánh dấu buổi học hiện tại là Nghỉ học, và dời toàn bộ đề cương xuống các buổi tiếp theo. Bạn cần điền thông tin để tạo thêm 1 buổi học bù ở cuối khóa.
+                                        {updateMode === 'following'
+                                            ? 'Lưu ý: Hành động này sẽ đánh dấu buổi học hiện tại là Nghỉ học, dời toàn bộ đề cương của khóa học xuống các buổi tiếp theo và tạo thêm 1 buổi mới ở cuối khóa.'
+                                            : 'Lưu ý: Hành động này sẽ đánh dấu buổi học hiện tại là Nghỉ học và tạo thêm một buổi học bù cho cùng bài học. Các buổi sau không bị thay đổi.'}
                                     </Text>
                                 </div>
                             </FormSection>
 
-                            <FormSection title="Thông tin buổi học bù (New Session)">
+                            <FormSection title={updateMode === 'following' ? 'Thông tin buổi mới ở cuối khóa' : 'Thông tin buổi học bù'}>
                                 <Row gutter={24}>
                                     <Col span={8}>
-                                        <Form.Item label="Ngày học bù" name={['new_session', 'date']} rules={[{ required: true, message: 'Nhập ngày học bù' }]}>
-                                            <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} placeholder="DD/MM/YYYY" />
+                                        <Form.Item label="Ngày học bù" name={['new_session', 'date']} rules={requiredWhenEditable('start_time', 'Nhập ngày học bù')}>
+                                            <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} placeholder="DD/MM/YYYY" disabled={!isFieldEditable('start_time')} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
-                                        <Form.Item label="Thời gian bắt đầu" name={['new_session', 'start_time']} rules={[{ required: true, message: 'Nhập giờ bắt đầu' }]}>
-                                            <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="HH:mm" />
+                                        <Form.Item label="Thời gian bắt đầu" name={['new_session', 'start_time']} rules={requiredWhenEditable('start_time', 'Nhập giờ bắt đầu')}>
+                                            <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="HH:mm" disabled={!isFieldEditable('start_time')} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
-                                        <Form.Item label="Thời gian kết thúc" name={['new_session', 'end_time']} rules={[{ required: true, message: 'Nhập giờ kết thúc' }]}>
-                                            <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="HH:mm" />
+                                        <Form.Item label="Thời gian kết thúc" name={['new_session', 'end_time']} rules={requiredWhenEditable('end_time', 'Nhập giờ kết thúc')}>
+                                            <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="HH:mm" disabled={!isFieldEditable('end_time')} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={12}>
-                                        <Form.Item label="Giáo viên dạy bù" name={['new_session', 'teacher']} rules={[{ required: true, message: 'Chọn giáo viên' }]}>
-                                            <Select options={TEACHER_OPTIONS} placeholder="Chọn giáo viên" />
+                                        <Form.Item label="Giáo viên dạy bù" name={['new_session', 'teacher']} rules={requiredWhenEditable('teacher', 'Chọn giáo viên')}>
+                                            <Select options={TEACHER_OPTIONS} placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
+                                        </Form.Item>
+                                    </Col>
+                                    <Col span={12}>
+                                        <Form.Item label="Phòng/Kênh học" name={['new_session', 'channel_name']}>
+                                            <Input placeholder="Ví dụ: Phòng Online" />
                                         </Form.Item>
                                     </Col>
                                 </Row>

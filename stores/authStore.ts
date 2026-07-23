@@ -9,6 +9,8 @@ interface AuthState {
         warehouseId: number;
         warehouseName: string;
         permissions: string[];
+        fieldPolicy?: any;
+        roles?: any[];
     };
     accessToken: string | null;
     setUser: (userData: any) => void;
@@ -27,6 +29,64 @@ const defaultUser = {
     permissions: []
 }
 
+const mergeFieldPolicies = (policies: any[]) => {
+    const validPolicies = policies.filter((policy) => policy?.modules);
+    if (validPolicies.length === 0) return undefined;
+
+    const allModuleCodes = Array.from(
+        new Set(validPolicies.flatMap((policy) => Object.keys(policy.modules || {})))
+    );
+    const mergedModules: Record<string, any> = {};
+
+    allModuleCodes.forEach((moduleCode) => {
+        const modulePolicies = validPolicies
+            .map((policy) => policy.modules?.[moduleCode]?.fields)
+            .filter(Boolean);
+
+        if (modulePolicies.length !== validPolicies.length) {
+            return;
+        }
+
+        const fieldCodes = Array.from(
+            new Set(modulePolicies.flatMap((fields) => Object.keys(fields)))
+        );
+        const fields: Record<string, { visible: boolean; editable: boolean }> = {};
+
+        fieldCodes.forEach((fieldCode) => {
+            fields[fieldCode] = modulePolicies.reduce(
+                (rule, moduleFields) => ({
+                    visible: rule.visible || Boolean(moduleFields[fieldCode]?.visible),
+                    editable: rule.editable || Boolean(moduleFields[fieldCode]?.editable),
+                }),
+                { visible: false, editable: false }
+            );
+        });
+
+        mergedModules[moduleCode] = { fields };
+    });
+
+    return { modules: mergedModules };
+};
+
+const extractFieldPolicy = (userData: any) => {
+    if (userData?.fieldPolicy) return userData.fieldPolicy;
+    if (userData?.role?.fieldPolicy) return userData.role.fieldPolicy;
+    if (Array.isArray(userData?.roles)) {
+        return mergeFieldPolicies(userData.roles.map((role: any) => role?.fieldPolicy));
+    }
+    return undefined;
+};
+
+const normalizeUserData = (userData: any) => ({
+    userId: Number(userData?.userId ?? userData?.id ?? defaultUser.userId),
+    username: userData?.username ?? userData?.user_name ?? '',
+    warehouseId: Number(userData?.warehouseId ?? userData?.warehouse_id ?? defaultUser.warehouseId),
+    warehouseName: userData?.warehouseName ?? userData?.warehouse_name ?? '',
+    permissions: Array.isArray(userData?.permissions) ? userData.permissions : [],
+    fieldPolicy: extractFieldPolicy(userData),
+    roles: Array.isArray(userData?.roles) ? userData.roles : [],
+});
+
 export const useAuthStore = create<AuthState>()(
     persist(
         (set, get) => ({
@@ -35,13 +95,7 @@ export const useAuthStore = create<AuthState>()(
 
             setUser: (userData) =>
                 set({
-                    user: {
-                        userId: userData.userId,
-                        username: userData.username,
-                        warehouseId: userData.warehouseId,
-                        warehouseName: userData.warehouseName,
-                        permissions: userData.permissions
-                    }
+                    user: normalizeUserData(userData)
                 }),
 
             clearUser: () => set({ user: defaultUser }),
@@ -70,8 +124,7 @@ export const useAuthStore = create<AuthState>()(
         {
             name: 'auth-storage', // key trong localStorage
             partialize: (state) => ({ user: state.user, accessToken: state.accessToken }), // chỉ lưu user
-            onRehydrateStorage: () => (state, error) => {
-                console.log('Rehydrating state:', state)
+            onRehydrateStorage: () => (_state, error) => {
                 if (error) {
                     console.error('Error during rehydration:', error)
                 }

@@ -11,6 +11,13 @@ export enum PermissionKey {
 
     DASHBOARD_VIEW = 'dashboard_view',
 
+    SCHEDULE_VIEW = 'calendar.view',
+    SCHEDULE_CREATE = 'calendar.create',
+    SCHEDULE_EDIT = 'calendar.update',
+    SCHEDULE_DELETE = 'calendar.delete',
+    SCHEDULE_IMPORT = 'calendar.import',
+    SCHEDULE_EXPORT = 'calendar.export',
+
     CATEGORY_VIEW = 'category_view',
     CATEGORY_CREATE = 'category_create',
     CATEGORY_EDIT = 'category_edit',

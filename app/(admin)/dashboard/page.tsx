@@ -125,7 +125,11 @@ const Page: React.FC = () => {
     const [revenueChartData, setRevenueChartData] = React.useState<RevenueData[]>([]);
 
     useEffect(() => {
-        if (warehouseId == -1) return
+        if (!warehouseId || warehouseId === -1) {
+            setLoading(false);
+            return;
+        }
+
         const fetchData = async () => {
             try {
                 setLoading(true);
@@ -144,7 +148,11 @@ const Page: React.FC = () => {
     }, [warehouseId]);
 
     useEffect(() => {
-        if (warehouseId == -1) return
+        if (!warehouseId || warehouseId === -1) {
+            setLoadingChart(false);
+            return;
+        }
+
         const fetchData = async () => {
             try {
                 setLoadingChart(true);

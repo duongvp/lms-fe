@@ -1,16 +1,16 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Modal, Table, Button, Typography, Checkbox, Select, Space, Alert, TimePicker, InputNumber } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Modal, Table, Button, Typography, Checkbox, Select, Space, Alert, TimePicker } from 'antd';
 import { CheckCircleOutlined, InfoCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
-import dayjs, { Dayjs } from 'dayjs';
-import { toBulkLivestreamPayload, toLivestreamPayload, toUpdateLivestreamPayload } from '@/services/livestreamService';
+import { Dayjs } from 'dayjs';
+import { toLivestreamPayload, toRescheduleLivestreamPayload, toUpdateLivestreamPayload } from '@/services/livestreamService';
 import { combineDateTime } from '@/helper/convertDate';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 interface SchedulePreviewModalProps {
     open: boolean;
     onClose: () => void;
-    onConfirm: (payload: any, type: 'bulk' | 'single' | 'update_current' | 'update_following' | 'update_cancel') => void;
+    onConfirm: (payload: any, type: 'bulk' | 'single' | 'update_current' | 'update_following' | 'update_makeup' | 'update_cancel') => void;
     formValues: any;
     isEdit: boolean;
     initialData?: any;
@@ -68,7 +68,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 setRequiredSessions(1);
             } else if (isEdit) {
                 // Update mode
-                if (formValues.update_mode === 'following') {
+                if (formValues.update_mode === 'following' || formValues.update_mode === 'makeup') {
                     setSessions([{
                         key: 'new_session',
                         index: 1,
@@ -90,6 +90,9 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                         isSkipped: false,
                         isGenerated: true
                     }]);
+                } else {
+                    setSessions([]);
+                    setRequiredSessions(0);
                 }
             }
         }
@@ -174,25 +177,26 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
 
     const handleConfirm = () => {
         let finalPayload: any;
-        let payloadType: 'bulk' | 'single' | 'update_current' | 'update_following' | 'update_cancel';
+        let payloadType: 'bulk' | 'single' | 'update_current' | 'update_following' | 'update_makeup' | 'update_cancel';
 
         if (isEdit) {
             if (formValues.update_mode === 'cancel') {
                 payloadType = 'update_cancel';
-                finalPayload = { lesson_status: 1 };
-            } else if (formValues.update_mode === 'following') {
-                payloadType = 'update_following';
+                finalPayload = toRescheduleLivestreamPayload({ update_mode: 'cancel' });
+            } else if (formValues.update_mode === 'following' || formValues.update_mode === 'makeup') {
+                payloadType = formValues.update_mode === 'following' ? 'update_following' : 'update_makeup';
                 const s = sessions[0];
                 finalPayload = {
                     ...formValues,
                     new_session: {
                         teacher: s.teacher,
+                        channel_name: formValues.new_session?.channel_name,
                         start_time: s.start_time,
                         end_time: s.end_time,
                         date: s.date
                     }
                 };
-                finalPayload = toUpdateLivestreamPayload(finalPayload);
+                finalPayload = toRescheduleLivestreamPayload(finalPayload);
             } else {
                 payloadType = 'update_current';
                 const s = sessions[0];
@@ -214,8 +218,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     system_type: formValues.bulk_system_type,
                     code: formValues.bulk_code,
                     teacher: s.teacher,
-                    learn_number: Number(formValues.bulk_learn_number ?? 1),
-                    lesson_count: idx,
+                    learn_number: Number(formValues.bulk_learn_number ?? 1) + idx,
                     start_time: combineDateTime(s.date, s.start_time)!,
                     end_time: combineDateTime(s.date, s.end_time)!,
                     lesson_status: 0,
@@ -306,15 +309,16 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
             title: 'Trạng thái',
             key: 'action',
             render: (_: any, record: PreviewSession) => {
-                if (isEdit && formValues.update_mode !== 'following' && formValues.update_mode !== 'current') {
+                if (isEdit && formValues.update_mode !== 'following' && formValues.update_mode !== 'makeup' && formValues.update_mode !== 'current') {
                     return <Text type="danger">Hủy/Nghỉ học</Text>;
                 }
                 return (
                     <Checkbox 
                         checked={!record.isSkipped} 
                         onChange={() => toggleSkip(record.key)}
+                        disabled={isEdit}
                     >
-                        {record.isSkipped ? <Text type="danger">Đã bỏ qua</Text> : <Text type="success">Sắp tạo</Text>}
+                        {record.isSkipped ? <Text type="danger">Đã bỏ qua</Text> : <Text type="success">{isEdit ? 'Bắt buộc' : 'Sắp tạo'}</Text>}
                     </Checkbox>
                 );
             }
@@ -343,8 +347,9 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
         >
             <div style={{ marginBottom: 16 }}>
                 <Text type="secondary">
-                    Vui lòng kiểm tra lại danh sách các buổi học sẽ được {isEdit ? 'cập nhật' : 'tạo mới'}. 
-                    Bạn có thể <strong>Sửa nhanh</strong> giờ học, giáo viên trực tiếp trên bảng hoặc <strong>Bỏ qua (Skip)</strong> những buổi không phù hợp.
+                    {isEdit
+                        ? <>Vui lòng kiểm tra lại thông tin buổi học sẽ được cập nhật. Bạn có thể <strong>Sửa nhanh</strong> giờ học, giáo viên trực tiếp trên bảng.</>
+                        : <>Vui lòng kiểm tra lại danh sách các buổi học sẽ được tạo mới. Bạn có thể <strong>Sửa nhanh</strong> giờ học, giáo viên trực tiếp trên bảng hoặc <strong>Bỏ qua (Skip)</strong> những buổi không phù hợp.</>}
                 </Text>
             </div>
 

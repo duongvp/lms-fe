@@ -69,35 +69,112 @@ model ModuleField {
 
 ---
 
+---
+
 ## 3. Quy chuẩn cấu trúc JSON của fieldPolicy
 Khi lưu thông tin phân quyền trường vào bảng Role, cấu trúc của object JSON lưu trữ trong trường fieldPolicy bắt buộc phải tuân theo format mảng (visible_fields và editable_fields) như sau:
 
 {
-  "schedule_summary": {
-    "visible_fields": ["date", "time", "class_name", "room"],
-    "editable_fields": []
-  },
-  "schedule_detail": {
-    "visible_fields": ["date", "time", "class_name", "room", "subject"],
-    "editable_fields": ["room", "subject"]
-  },
-  "student_list": {
-    "visible_fields": ["student_code", "full_name", "class_name"],
-    "editable_fields": ["full_name"]
+  "modules": {
+    "logs": {
+      "fields": {
+        "*": {
+          "visible": false,
+          "editable": false
+        }
+      }
+    },
+    "quiz": {
+      "fields": {
+        "quiz_name": {
+          "visible": true,
+          "editable": false
+        },
+        "quiz_type": {
+          "visible": true,
+          "editable": false
+        },
+        "ans_duration": {
+          "visible": true,
+          "editable": false
+        }
+      }
+    },
+    "users": {
+      "fields": {
+        "*": {
+          "visible": false,
+          "editable": false
+        }
+      }
+    },
+    "teacher": {
+      "fields": {
+        "*": {
+          "visible": false,
+          "editable": false
+        }
+      }
+    },
+    "calendar": {
+      "fields": {
+        "code": {
+          "visible": true,
+          "editable": false
+        },
+        "subject": {
+          "visible": true,
+          "editable": false
+        },
+        "teacher": {
+          "visible": true,
+          "editable": false
+        },
+        "end_time": {
+          "visible": true,
+          "editable": false
+        },
+        "start_time": {
+          "visible": true,
+          "editable": false
+        },
+        "lesson_link": {
+          "visible": true,
+          "editable": false
+        },
+        "lesson_name": {
+          "visible": true,
+          "editable": false
+        },
+        "learn_number": {
+          "visible": true,
+          "editable": false
+        }
+      }
+    }
   }
 }
 
 ## 4. Yêu cầu Cải tiến Giao diện (UI/UX)
-Dựa trên Form "Thêm/Sửa vai trò" hiện tại (giao diện phân quyền theo cụm hệ thống):
 
-Nút kích hoạt cấu hình trường:
+Hiện tại page Schedule đang khai báo danh sách columns cố định.
 
-Bên cạnh mỗi tên Module con (Ví dụ: bên phải chữ "Sản phẩm", "Hóa đơn", "Lịch học"), bổ sung thêm một icon Cài đặt (Gear icon) hoặc một text link nhỏ: [Cấu hình trường].
+Yêu cầu refactor để hỗ trợ Field-level Permission.
 
-Khu vực hiển thị Ma trận Checkbox (Field Matrix):
+### Luồng hoạt động
 
-Khi click vào [Cấu hình trường], hệ thống sẽ mở ra một Popover / Drawer bên cạnh, hoặc mở rộng một vùng Collapse ngay phía dưới module đó.
+1. FE gọi API lấy danh sách ModuleField của module `calendar`.
+2. FE lấy `fieldPolicy` của Role hiện tại.
+3. Với mỗi field:
+   - `visible = true`: hiển thị cột.
+   - `visible = false`: không render cột.
+4. Khi render form:
+   - `editable = true`: cho phép chỉnh sửa.
+   - `editable = false`: render readonly/disabled.
+5. Nếu module không tồn tại trong `fieldPolicy` thì sử dụng toàn bộ field mặc định.
 
-Tại đây, render danh sách các trường dữ liệu thuộc module đó (lấy dynamic từ dữ liệu bảng ModuleField).
+### Phạm vi
 
-Mỗi trường sẽ đi kèm với 2 Checkbox độc lập: Xem và Sửa.
+Chỉ triển khai trên page Schedule.
+
+Hiện tại page này đang khai báo cứng danh sách columns, cần refactor để render động dựa trên ModuleField và fieldPolicy.

@@ -9,7 +9,7 @@ export interface LivestreamPayload {
     code: string;
     teacher: string;
     learn_number: number;
-    lesson_count: number;
+    lesson_count?: number;
     start_time: string;
     end_time: string;
     lesson_status: number;
@@ -37,18 +37,23 @@ export const createLivestreamBulk = (payload: BulkLivestreamPayload) =>
 export const getLivestreams = (params: {
     page?: number;
     limit?: number;
+    keyword?: string;
     teacher?: string;
     code?: string;
+    subject?: string;
+    classroom?: string;
+    system_type?: string;
+    lesson_status?: string | number;
     start_time?: string;
     end_time?: string;
+    sort_by?: string;
+    sort_order?: string;
 }) => {
     const query = new URLSearchParams();
-    if (params.page) query.append('page', String(params.page));
-    if (params.limit) query.append('limit', String(params.limit));
-    if (params.teacher) query.append('teacher', params.teacher);
-    if (params.code) query.append('code', params.code);
-    if (params.start_time) query.append('start_time', params.start_time);
-    if (params.end_time) query.append('end_time', params.end_time);
+    Object.entries(params).forEach(([key, value]) => {
+        if (value === undefined || value === null || value === "") return;
+        query.append(key, String(value));
+    });
 
     return fetchInstance(`${API_BASE_URL}?${query.toString()}`, {
         method: "GET",
@@ -60,6 +65,14 @@ export const getLivestreams = (params: {
 
 export const updateLivestream = (id: string, payload: any) =>
     fetchInstance(`${API_BASE_URL}/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+    });
+
+export const rescheduleLivestream = (id: string, payload: any) =>
+    fetchInstance(`${API_BASE_URL}/${id}/reschedule`, {
         method: "PUT",
         body: JSON.stringify(payload),
         headers: { "Content-Type": "application/json" },
@@ -98,7 +111,9 @@ export const toLivestreamPayload = (values: any): LivestreamPayload => {
         code: payload.class_code,
         teacher: payload.teacher,
         learn_number: Number(payload.learn_number ?? 1),
-        lesson_count: Number(payload.lesson_count ?? 0),
+        ...(payload.lesson_count !== undefined && payload.lesson_count !== null && payload.lesson_count !== ''
+            ? { lesson_count: Number(payload.lesson_count) }
+            : {}),
         start_time: payload.start_time,
         end_time: payload.end_time,
         lesson_status: Number(payload.lesson_status ?? 0),
@@ -117,8 +132,7 @@ export const toBulkLivestreamPayload = (values: any): BulkLivestreamPayload => {
             system_type: values.bulk_system_type,
             code: values.bulk_code,
             teacher: config?.teacher ?? config?.bulk_teacher,
-            learn_number: Number(values.bulk_learn_number ?? 1),
-            lesson_count: index,
+            learn_number: Number(values.bulk_learn_number ?? 1) + index,
             start_time: combineDateTime(date, config?.start_time ?? config?.bulk_start_time)!,
             end_time: combineDateTime(date, config?.end_time ?? config?.bulk_end_time)!,
             lesson_status: 0,
@@ -154,6 +168,27 @@ export const toUpdateLivestreamPayload = (values: any): any => {
         teacher: payload.teacher,
         start_time: payload.start_time,
         end_time: payload.end_time,
+    };
+};
+
+/** Chuyển dữ liệu form dời lịch thành body của PUT /livestreams/:id/reschedule. */
+export const toRescheduleLivestreamPayload = (values: any): any => {
+    const payload = normalizeSchedulePayload(values);
+    const mode = payload.update_mode || payload.mode || "cancel";
+
+    if (mode === "cancel") {
+        return { mode: "cancel" };
+    }
+
+    return {
+        mode,
+        new_session: {
+            teacher: payload.new_session?.teacher,
+            channel_name: payload.new_session?.channel_name,
+            start_time: payload.new_session?.start_time,
+            end_time: payload.new_session?.end_time,
+        },
+        course_end_time: payload.course_end_time,
     };
 };
 
