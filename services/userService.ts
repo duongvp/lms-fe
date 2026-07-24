@@ -47,6 +47,14 @@ export const getUsers = async (): Promise<{ data: UserApiResponse[] }> => {
     return await fetchInstance(url);
 };
 
+export const getUsersFollowWarehouse = async (_warehouseId?: number): Promise<Array<UserApiResponse & { user_id: number }>> => {
+    const response = await getUsers();
+    return (response?.data || []).map((user) => ({
+        ...user,
+        user_id: user.id,
+    }));
+};
+
 // Lấy chi tiết 1 user
 export const getUserById = async (id: number): Promise<UserApiResponse> => {
     const url = `${API_BASE_URL}/${id}`;

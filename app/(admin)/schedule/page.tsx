@@ -46,10 +46,12 @@ interface ScheduleFilterValues {
     date_range?: [Dayjs, Dayjs];
 }
 
-interface ScheduleSortState {
-    sort_by?: string;
-    sort_order?: "ascend" | "descend";
+interface ScheduleSortItem {
+    field: string;
+    order: "ascend" | "descend";
 }
+
+type ScheduleSortState = ScheduleSortItem[];
 
 const DEFAULT_MODULE_FIELDS: ModuleField[] = [
     { fieldCode: "code", fieldLabel: "Mã lớp", fieldType: "text", sortOrder: 1 },
@@ -192,7 +194,7 @@ const Page = () => {
     const [pageSize, setPageSize] = useState(10);
     const [totalItems, setTotalItems] = useState(0);
     const [filterValues, setFilterValues] = useState<ScheduleFilterValues>({});
-    const [sortState, setSortState] = useState<ScheduleSortState>({});
+    const [sortState, setSortState] = useState<ScheduleSortState>([]);
     const screens = Grid.useBreakpoint();
     const isDesktop = Boolean(screens.lg);
 
@@ -200,7 +202,7 @@ const Page = () => {
         page = 1,
         limit = 10,
         filtersValue: ScheduleFilterValues = {},
-        sorter: ScheduleSortState = {}
+        sorter: ScheduleSortState = []
     ) => {
         try {
             setLoading(true);
@@ -208,8 +210,12 @@ const Page = () => {
                 page,
                 limit,
                 ...buildScheduleApiParams(filtersValue),
-                sort_by: sorter.sort_by,
-                sort_order: sorter.sort_by ? (sorter.sort_order === "descend" ? "desc" : "asc") : undefined,
+                sort_by: sorter.length
+                    ? sorter.map((item) => item.field).join(",")
+                    : undefined,
+                sort_order: sorter.length
+                    ? sorter.map((item) => item.order === "descend" ? "desc" : "asc").join(",")
+                    : undefined,
             });
             if (response && response.data) {
                 const mappedData: ScheduleDataType[] = response.data.data.map((item: any) => ({
@@ -408,14 +414,17 @@ const Page = () => {
         .map((item) => item.field.fieldCode);
 
     // Build dynamic columns based on ModuleField and fieldPolicy from current role.
-    const columns: ColumnsType<ScheduleDataType> = visibleFieldPermissions.map(({ field }) => {
+    const columns: ColumnsType<ScheduleDataType> = visibleFieldPermissions.map(({ field }, columnIndex) => {
         const fieldCode = field.fieldCode;
+        const activeSort = sortState.find((item) => item.field === fieldCode);
         return {
             title: field.fieldLabel || fieldCode,
             dataIndex: fieldCode,
             key: fieldCode,
-            sorter: SORTABLE_FIELDS.has(fieldCode),
-            sortOrder: sortState.sort_by === fieldCode ? sortState.sort_order : undefined,
+            sorter: SORTABLE_FIELDS.has(fieldCode)
+                ? { multiple: visibleFieldPermissions.length - columnIndex }
+                : false,
+            sortOrder: activeSort?.order,
             render: (text: any, record: ScheduleDataType) => {
                 const editing = isEditing(record);
                 const editable = editableFieldCodes.includes(fieldCode);
@@ -594,13 +603,17 @@ const Page = () => {
                             }}
                             onChange={(_, __, sorter, extra) => {
                                 if (extra.action !== "sort") return;
-                                const activeSorter = Array.isArray(sorter)
-                                    ? sorter[0]
-                                    : sorter as SorterResult<ScheduleDataType>;
-                                setSortState({
-                                    sort_by: activeSorter?.field ? String(activeSorter.field) : undefined,
-                                    sort_order: activeSorter?.order || undefined,
-                                });
+                                const sorterItems = (
+                                    Array.isArray(sorter) ? sorter : [sorter]
+                                ) as SorterResult<ScheduleDataType>[];
+                                setSortState(
+                                    sorterItems
+                                        .filter((item) => item.field && item.order)
+                                        .map((item) => ({
+                                            field: String(item.field),
+                                            order: item.order as "ascend" | "descend",
+                                        }))
+                                );
                                 setCurrentPage(1);
                             }}
                             scroll={{ x: "max-content" }}

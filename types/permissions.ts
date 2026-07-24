@@ -18,6 +18,13 @@ export enum PermissionKey {
     SCHEDULE_IMPORT = 'calendar.import',
     SCHEDULE_EXPORT = 'calendar.export',
 
+    LESSON_VIEW = 'lessons.view',
+    LESSON_CREATE = 'lessons.create',
+    LESSON_EDIT = 'lessons.update',
+    LESSON_DELETE = 'lessons.delete',
+    LESSON_IMPORT = 'lessons.import',
+    LESSON_EXPORT = 'lessons.export',
+
     CATEGORY_VIEW = 'category_view',
     CATEGORY_CREATE = 'category_create',
     CATEGORY_EDIT = 'category_edit',

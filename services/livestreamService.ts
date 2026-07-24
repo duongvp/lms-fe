@@ -9,6 +9,10 @@ export interface LivestreamPayload {
     code: string;
     teacher: string;
     learn_number: number;
+    lesson_id?: string | number;
+    grade?: number;
+    subject_name?: string;
+    lesson_name?: string;
     lesson_count?: number;
     start_time: string;
     end_time: string;
@@ -40,6 +44,7 @@ export const getLivestreams = (params: {
     keyword?: string;
     teacher?: string;
     code?: string;
+    code_exact?: string;
     subject?: string;
     classroom?: string;
     system_type?: string;
@@ -111,6 +116,10 @@ export const toLivestreamPayload = (values: any): LivestreamPayload => {
         code: payload.class_code,
         teacher: payload.teacher,
         learn_number: Number(payload.learn_number ?? 1),
+        lesson_id: payload.lesson_id,
+        grade: payload.grade,
+        subject_name: payload.subject_name,
+        lesson_name: payload.lesson_name,
         ...(payload.lesson_count !== undefined && payload.lesson_count !== null && payload.lesson_count !== ''
             ? { lesson_count: Number(payload.lesson_count) }
             : {}),
