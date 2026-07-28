@@ -20,8 +20,9 @@ import {
     InfoCircleOutlined,
     PlusOutlined,
 } from '@ant-design/icons';
-import { Dayjs } from 'dayjs';
+import dayjs, { Dayjs } from 'dayjs';
 import {
+    getLivestreams,
     toLivestreamPayload,
     toRescheduleLivestreamPayload,
     toUpdateLivestreamPayload,
@@ -65,6 +66,10 @@ interface PreviewSession {
     learn_number?: number;
     isSkipped: boolean;
     isGenerated: boolean;
+    isEditable?: boolean;
+    preview_action?: 'cancel' | 'shift' | 'create';
+    original_learn_number?: number;
+    original_lesson_name?: string;
 }
 
 const TEACHER_OPTIONS = [
@@ -80,6 +85,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
     onConfirm,
     formValues,
     isEdit,
+    initialData,
     loading,
     errorMessage,
 }) => {
@@ -98,6 +104,153 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
     const hasPermission = useAuthStore((state) => state.hasPermission);
     const canCreateLesson = hasPermission(PermissionKey.LESSON_CREATE);
     const isBulkCreate = !isEdit && formValues?.addMode === 'bulk';
+    const isFollowingPreview = isEdit && formValues?.update_mode === 'following';
+    const [loadingFollowingPreview, setLoadingFollowingPreview] = useState(false);
+    const [followingPreviewError, setFollowingPreviewError] = useState<string | null>(null);
+
+    const formatPreviewLesson = (learnNumber?: number, lessonName?: string) => {
+        if (!learnNumber && !lessonName) return '-';
+        return `${learnNumber ? `Bài ${learnNumber}` : 'Bài'}${lessonName ? `: ${lessonName}` : ''}`;
+    };
+
+    const toPreviewDate = (session: any, field: 'start_time' | 'end_time') => {
+        const value = session?.[field];
+        return value ? dayjs(value) : dayjs();
+    };
+
+    const buildNewSessionPreview = React.useCallback((
+        sourceSession: any,
+        index = 1
+    ): PreviewSession => ({
+        key: 'new_session',
+        index,
+        date: formValues.new_session?.date,
+        start_time: formValues.new_session?.start_time,
+        end_time: formValues.new_session?.end_time,
+        teacher: formValues.new_session?.teacher,
+        learn_number: Number(sourceSession?.learn_number),
+        lesson_name: sourceSession?.lesson_name || undefined,
+        isSkipped: false,
+        isGenerated: true,
+        isEditable: true,
+        preview_action: isFollowingPreview ? 'create' : undefined,
+    }), [formValues?.new_session, isFollowingPreview]);
+
+    const buildFollowingPreviewSessions = React.useCallback((
+        calendarRows: any[]
+    ): PreviewSession[] => {
+        const currentStart = initialData?.start_time
+            ? dayjs(initialData.start_time)
+            : null;
+        const currentId = initialData?.id;
+        const currentSession = calendarRows.find(
+            (row) => String(row.id) === String(currentId)
+        ) || initialData;
+
+        if (!currentSession) {
+            return [buildNewSessionPreview(initialData, 1)];
+        }
+
+        const followingRows = calendarRows
+            .filter((row) => {
+                if (String(row.id) === String(currentId)) return false;
+                if (!currentStart || !row.start_time) return false;
+                return dayjs(row.start_time).isAfter(currentStart)
+                    && Number(row.lesson_status ?? 0) !== 1;
+            })
+            .sort((a, b) => {
+                const timeDiff = dayjs(a.start_time).valueOf() - dayjs(b.start_time).valueOf();
+                return timeDiff || Number(a.id ?? 0) - Number(b.id ?? 0);
+            });
+
+        const syllabusSources = [currentSession, ...followingRows];
+        const previewRows: PreviewSession[] = [
+            {
+                key: `cancel_${currentSession.id ?? 'current'}`,
+                index: 1,
+                date: toPreviewDate(currentSession, 'start_time'),
+                start_time: toPreviewDate(currentSession, 'start_time'),
+                end_time: toPreviewDate(currentSession, 'end_time'),
+                teacher: currentSession.teacher,
+                original_learn_number: Number(currentSession.learn_number),
+                original_lesson_name: currentSession.lesson_name || undefined,
+                isSkipped: false,
+                isGenerated: false,
+                isEditable: false,
+                preview_action: 'cancel',
+            },
+        ];
+
+        followingRows.forEach((targetSession, index) => {
+            const sourceSession = syllabusSources[index];
+            previewRows.push({
+                key: `shift_${targetSession.id}`,
+                index: index + 2,
+                date: toPreviewDate(targetSession, 'start_time'),
+                start_time: toPreviewDate(targetSession, 'start_time'),
+                end_time: toPreviewDate(targetSession, 'end_time'),
+                teacher: targetSession.teacher,
+                learn_number: Number(sourceSession?.learn_number),
+                lesson_name: sourceSession?.lesson_name || undefined,
+                original_learn_number: Number(targetSession.learn_number),
+                original_lesson_name: targetSession.lesson_name || undefined,
+                isSkipped: false,
+                isGenerated: false,
+                isEditable: false,
+                preview_action: 'shift',
+            });
+        });
+
+        previewRows.push(buildNewSessionPreview(
+            syllabusSources[syllabusSources.length - 1],
+            previewRows.length + 1
+        ));
+
+        return previewRows;
+    }, [buildNewSessionPreview, initialData]);
+
+    const loadFollowingPreview = React.useCallback(async () => {
+        const code = initialData?.code || initialData?.class_code;
+        const currentStart = initialData?.start_time ? dayjs(initialData.start_time) : null;
+
+        if (!code || !currentStart) {
+            setFollowingPreviewError('Không đủ dữ liệu buổi học hiện tại để dựng xem trước dời chuỗi.');
+            setSessions(buildFollowingPreviewSessions([]));
+            return;
+        }
+
+        try {
+            setLoadingFollowingPreview(true);
+            setFollowingPreviewError(null);
+
+            let page = 1;
+            let total = 0;
+            const rows: any[] = [];
+
+            do {
+                const response: any = await getLivestreams({
+                    page,
+                    limit: 100,
+                    code_exact: code,
+                    system_type: initialData?.system_type,
+                    start_time: currentStart.subtract(1, 'second').toISOString(),
+                    sort_by: 'start_time,id',
+                    sort_order: 'asc,asc',
+                });
+                const pageRows = response?.data?.data ?? [];
+                total = Number(response?.data?.total ?? pageRows.length);
+                rows.push(...pageRows);
+                page += 1;
+            } while (rows.length < total && page <= 20);
+
+            setSessions(buildFollowingPreviewSessions(rows));
+        } catch (error: any) {
+            setFollowingPreviewError(error.message || 'Không thể tải danh sách lịch để xem trước dời chuỗi.');
+            setSessions(buildFollowingPreviewSessions([]));
+        } finally {
+            setLoadingFollowingPreview(false);
+        }
+    }, [buildFollowingPreviewSessions, initialData]);
 
     const renderNamePattern = (pattern: string, occurrence: number) =>
         pattern.replaceAll('{n}', String(occurrence));
@@ -212,18 +365,13 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
             return;
         }
 
-        if (isEdit && (formValues.update_mode === 'following' || formValues.update_mode === 'makeup')) {
-            setSessions([{
-                key: 'new_session',
-                index: 1,
-                date: formValues.new_session?.date,
-                start_time: formValues.new_session?.start_time,
-                end_time: formValues.new_session?.end_time,
-                teacher: formValues.new_session?.teacher,
-                isSkipped: false,
-                isGenerated: true,
-            }]);
+        if (isEdit && formValues.update_mode === 'following') {
+            void loadFollowingPreview();
+        } else if (isEdit && formValues.update_mode === 'makeup') {
+            setFollowingPreviewError(null);
+            setSessions([buildNewSessionPreview(initialData, 1)]);
         } else if (isEdit && formValues.update_mode === 'current') {
+            setFollowingPreviewError(null);
             setSessions([{
                 key: 'current',
                 index: 1,
@@ -233,12 +381,22 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 teacher: formValues.teacher,
                 isSkipped: false,
                 isGenerated: true,
+                isEditable: true,
             }]);
         } else {
+            setFollowingPreviewError(null);
             setSessions([]);
             setRequiredSessions(0);
         }
-    }, [formValues, isBulkCreate, isEdit, open]);
+    }, [
+        buildNewSessionPreview,
+        formValues,
+        initialData,
+        isBulkCreate,
+        isEdit,
+        loadFollowingPreview,
+        open,
+    ]);
 
     useEffect(() => {
         if (!lessons.length) return;
@@ -488,6 +646,11 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
             return;
         }
 
+        if (isFollowingPreview && loadingFollowingPreview) {
+            messageApi.warning('Đang tải lịch dời chuỗi, vui lòng chờ trong giây lát.');
+            return;
+        }
+
         if (isEdit) {
             if (formValues.update_mode === 'cancel') {
                 payloadType = 'update_cancel';
@@ -496,7 +659,9 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 payloadType = formValues.update_mode === 'following'
                     ? 'update_following'
                     : 'update_makeup';
-                const session = sessions[0];
+                const session = formValues.update_mode === 'following'
+                    ? sessions.find((item) => item.preview_action === 'create') || sessions[sessions.length - 1]
+                    : sessions[0];
                 finalPayload = toRescheduleLivestreamPayload({
                     ...formValues,
                     new_session: {
@@ -599,7 +764,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                         format="HH:mm"
                         value={record.start_time}
                         onChange={(value) => updateSessionField(record.key, 'start_time', value)}
-                        disabled={record.isSkipped}
+                        disabled={record.isSkipped || (isEdit && record.isEditable === false)}
                         size="small"
                         style={{ width: 88 }}
                         allowClear={false}
@@ -628,7 +793,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                                 ),
                             };
                         }}
-                        disabled={record.isSkipped}
+                        disabled={record.isSkipped || (isEdit && record.isEditable === false)}
                         size="small"
                         style={{ width: 88 }}
                         allowClear={false}
@@ -645,13 +810,46 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     value={value}
                     onChange={(nextValue) => updateSessionField(record.key, 'teacher', nextValue)}
                     options={TEACHER_OPTIONS}
-                    disabled={record.isSkipped}
+                    disabled={record.isSkipped || (isEdit && record.isEditable === false)}
                     size="small"
                     style={{ width: '100%' }}
                 />
             ),
         },
     ];
+
+    if (isFollowingPreview) {
+        columns.push(
+            {
+                title: 'Đề cương hiện tại',
+                key: 'original_lesson',
+                width: 300,
+                render: (_: any, record: PreviewSession) => (
+                    <Text type="secondary">
+                        {record.preview_action === 'create'
+                            ? 'Buổi mới ở cuối khóa'
+                            : formatPreviewLesson(record.original_learn_number, record.original_lesson_name)}
+                    </Text>
+                ),
+            },
+            {
+                title: 'Đề cương sau dời',
+                key: 'shifted_lesson',
+                width: 330,
+                render: (_: any, record: PreviewSession) => {
+                    if (record.preview_action === 'cancel') {
+                        return <Text type="danger">Nghỉ học, bỏ trống đề cương</Text>;
+                    }
+
+                    return (
+                        <Text strong={record.preview_action === 'create'}>
+                            {formatPreviewLesson(record.learn_number, record.lesson_name)}
+                        </Text>
+                    );
+                },
+            },
+        );
+    }
 
     if (!isEdit) {
         columns.push({
@@ -714,6 +912,16 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
         key: 'action',
         width: 135,
         render: (_: any, record: PreviewSession) => {
+            if (isFollowingPreview) {
+                if (record.preview_action === 'cancel') {
+                    return <Text type="danger">Nghỉ học</Text>;
+                }
+                if (record.preview_action === 'shift') {
+                    return <Text type="warning">Nhận bài trước</Text>;
+                }
+                return <Text type="success">Buổi mới</Text>;
+            }
+
             if (
                 isEdit &&
                 formValues.update_mode !== 'following' &&
@@ -758,6 +966,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                         type="primary"
                         onClick={handleConfirm}
                         loading={loading}
+                        disabled={loadingFollowingPreview}
                         icon={<CheckCircleOutlined />}
                     >
                         Xác nhận Lưu
@@ -857,6 +1066,20 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     />
                 )}
 
+                {isFollowingPreview && (
+                    <Alert
+                        type={followingPreviewError ? 'warning' : 'info'}
+                        showIcon
+                        message="Xem trước dời chuỗi"
+                        description={
+                            followingPreviewError
+                                ? followingPreviewError
+                                : 'Danh sách bên dưới hiển thị tuần tự lịch sau khi lưu: buổi hiện tại nghỉ học, các buổi sau nhận đề cương của buổi liền trước, và buổi mới ở cuối khóa nhận đề cương cuối cùng.'
+                        }
+                        style={{ marginBottom: 16 }}
+                    />
+                )}
+
                 {needMoreSessions && (
                     <Alert
                         message="Thiếu số buổi học yêu cầu"
@@ -880,15 +1103,31 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     columns={columns}
                     dataSource={sessions}
                     pagination={false}
-                    scroll={{ x: 1320, y: 400 }}
+                    loading={loadingFollowingPreview}
+                    scroll={{ x: isFollowingPreview ? 1720 : 1320, y: 400 }}
                     size="small"
-                    rowClassName={(record) => record.isSkipped ? 'skipped-row' : ''}
+                    rowClassName={(record) => {
+                        if (record.isSkipped) return 'skipped-row';
+                        if (record.preview_action === 'cancel') return 'cancel-preview-row';
+                        if (record.preview_action === 'create') return 'created-preview-row';
+                        if (record.preview_action === 'shift') return 'shift-preview-row';
+                        return '';
+                    }}
                 />
 
                 <style dangerouslySetInnerHTML={{ __html: `
                     .skipped-row {
                         background-color: #f5f5f5;
                         opacity: 0.7;
+                    }
+                    .cancel-preview-row {
+                        background-color: #fff1f0;
+                    }
+                    .shift-preview-row {
+                        background-color: #fffbe6;
+                    }
+                    .created-preview-row {
+                        background-color: #f6ffed;
                     }
                 ` }} />
             </Modal>
