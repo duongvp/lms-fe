@@ -91,7 +91,7 @@ export const useAuthStore = create<AuthState>()(
     persist(
         (set, get) => ({
             user: defaultUser,
-            accessToken: '',
+            accessToken: null,
 
             setUser: (userData) =>
                 set({
@@ -102,7 +102,7 @@ export const useAuthStore = create<AuthState>()(
 
             setAccessToken: (token) => set({ accessToken: token }),
 
-            clearAccessToken: () => set({ accessToken: '' }),
+            clearAccessToken: () => set({ accessToken: null }),
 
             hasPermission: (permission) => {
                 if (typeof window === 'undefined') return false;
@@ -123,7 +123,9 @@ export const useAuthStore = create<AuthState>()(
         }),
         {
             name: 'auth-storage', // key trong localStorage
-            partialize: (state) => ({ user: state.user, accessToken: state.accessToken }), // chỉ lưu user
+            // Access token chỉ giữ trong memory; reload sẽ dùng HttpOnly refresh
+            // cookie để lấy access token mới.
+            partialize: (state) => ({ user: state.user }),
             onRehydrateStorage: () => (_state, error) => {
                 if (error) {
                     console.error('Error during rehydration:', error)

@@ -8,6 +8,7 @@ import { deleteRole, getRoleById, RoleApiResponse } from '@/services/roleService
 import useRoleStore from '@/stores/roleStore';
 import { ActionType } from '@/enums/action';
 import { useAuthStore } from '@/stores/authStore';
+import { PermissionKey } from '@/types/permissions';
 
 const { Text } = Typography;
 
@@ -20,8 +21,12 @@ const RoleDetail: React.FC<RoleDetailProps> = ({ record }) => {
     const { setModal, setShouldReload } = useRoleStore();
     const [confirmOpen, setConfirmOpen] = React.useState(false);
     const [loading, setLoading] = React.useState(false);
-    const { user } = useAuthStore()
-    console.log("🚀 ~ user:", user)
+    const canUpdate = useAuthStore((state) =>
+        state.hasPermission(PermissionKey.ROLE_EDIT)
+    );
+    const canDelete = useAuthStore((state) =>
+        state.hasPermission(PermissionKey.ROLE_DELETE)
+    );
 
     const handleUpdate = async () => {
         const res = await getRoleById(record.id);
@@ -83,15 +88,17 @@ const RoleDetail: React.FC<RoleDetailProps> = ({ record }) => {
             <Row justify="end" align="middle" style={{ marginTop: 16 }}>
                 <Col>
                     <Space>
-                        <Button
-                            type="primary"
-                            icon={<UploadOutlined />}
-                            onClick={handleUpdate}
-                        >
-                            Cập nhật
-                        </Button>
+                        {canUpdate && (
+                            <Button
+                                type="primary"
+                                icon={<UploadOutlined />}
+                                onClick={handleUpdate}
+                            >
+                                Cập nhật
+                            </Button>
+                        )}
                         {
-                            record.id !== 1 && (
+                            canDelete && record.code !== 'admin' && (
                                 <Button
                                     type="primary"
                                     icon={<DeleteOutlined />}
@@ -118,4 +125,3 @@ const RoleDetail: React.FC<RoleDetailProps> = ({ record }) => {
 };
 
 export default RoleDetail;
-

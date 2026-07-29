@@ -4,12 +4,17 @@ import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import type { SorterResult } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
-import { notification, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, Drawer, Grid } from "antd";
+import { notification, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, Drawer, Grid, Tooltip } from "antd";
 import { EditOutlined, SaveOutlined, CloseOutlined, DeleteOutlined, CalendarOutlined } from "@ant-design/icons";
 import ScheduleModal from "./components/Modal/ScheduleModal";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
-import { getLivestreams, updateLivestreamBulk } from "@/services/livestreamService";
+import {
+    deleteLivestream,
+    getLivestreams,
+    updateLivestream,
+    updateLivestreamBulk,
+} from "@/services/livestreamService";
 import dayjs, { Dayjs } from "dayjs";
 import BulkEditModal from "./components/Modal/BulkEditModal";
 import { getModuleFields } from "@/services/roleService";
@@ -31,10 +36,11 @@ interface ScheduleDataType {
     lesson_link?: string;
     lesson_name?: string;
     learn_number?: number;
-    lesson_status?: string;
+    lesson_status?: string | number;
     system_type?: string;
     class_name?: string;
     room?: string;
+    can_modify?: boolean;
     [key: string]: any;
 }
 
@@ -103,6 +109,24 @@ const lessonStatusText = (status?: number | null) => {
     if (status === 1) return "Nghỉ học";
     if (status === 2) return "Đang diễn ra";
     return "Chưa bắt đầu";
+};
+
+const canModifySchedule = (record: ScheduleDataType) => {
+    if (
+        record.lesson_status === 1
+        || record.lesson_status === "1"
+        || record.lesson_status === "Nghỉ học"
+    ) {
+        return false;
+    }
+
+    if (record.start_time) {
+        const startTime = dayjs(record.start_time);
+        return startTime.isValid() && startTime.isAfter(dayjs());
+    }
+
+    // Fallback fail-closed khi Field-Level không cho trả start_time.
+    return record.can_modify === true;
 };
 
 const ScheduleFilterSidebar = ({
@@ -180,10 +204,23 @@ const Page = () => {
         onChange: (newSelectedRowKeys: React.Key[]) => {
             setSelectedRowKeys(newSelectedRowKeys);
         },
+        getCheckboxProps: (record: ScheduleDataType) => ({
+            disabled: !canModifySchedule(record),
+            title: canModifySchedule(record)
+                ? undefined
+                : "Buổi học đã bắt đầu, không thể chọn để cập nhật",
+        }),
     };
 
     // Hàm mở modal để dời lịch (Sửa)
     const handleReschedule = (record: ScheduleDataType) => {
+        if (!canModifySchedule(record)) {
+            api.warning({
+                message: "Không thể dời lịch",
+                description: "Chỉ được dời những buổi học chưa diễn ra.",
+            });
+            return;
+        }
         setSelectedRecord(record);
         setIsEditMode(true);
         setIsModalOpen(true);
@@ -233,6 +270,7 @@ const Page = () => {
                     teacher: item.teacher,
                     system_type: item.system_type,
                     lesson_status: lessonStatusText(item.lesson_status),
+                    can_modify: item.can_modify === true,
                 }));
                 setData(mappedData);
                 setFilteredData(mappedData);
@@ -335,6 +373,13 @@ const Page = () => {
     };
 
     const edit = (record: ScheduleDataType) => {
+        if (!canModifySchedule(record)) {
+            api.warning({
+                message: "Không thể sửa",
+                description: "Chỉ được sửa những buổi học chưa diễn ra.",
+            });
+            return;
+        }
         form.setFieldsValue({ ...record });
         setEditingKey(record.key);
     };
@@ -343,20 +388,39 @@ const Page = () => {
         setEditingKey("");
     };
 
-    const handleDelete = (key: string) => {
+    const handleDelete = (record: ScheduleDataType) => {
+        if (!canModifySchedule(record)) {
+            api.warning({
+                message: "Không thể xóa",
+                description: "Chỉ được xóa những buổi học chưa diễn ra.",
+            });
+            return;
+        }
+
         Modal.confirm({
             title: 'Xác nhận xóa',
             content: 'Bạn có chắc chắn muốn xóa lịch học này không?',
             okText: 'Xóa',
             okType: 'danger',
             cancelText: 'Hủy',
-            onOk: () => {
-                const newData = data.filter(item => item.key !== key);
-                setData(newData);
-                api.success({
-                    message: "Xóa thành công",
-                    description: "Đã xóa lịch học khỏi danh sách.",
-                });
+            onOk: async () => {
+                try {
+                    await deleteLivestream(record.key);
+                    api.success({
+                        message: "Xóa thành công",
+                        description: "Đã xóa lịch học khỏi danh sách.",
+                    });
+                    setSelectedRowKeys((keys) =>
+                        keys.filter((key) => String(key) !== String(record.key))
+                    );
+                    await fetchData(currentPage, pageSize, filterValues, sortState);
+                } catch (error: any) {
+                    api.error({
+                        message: "Xóa thất bại",
+                        description: error?.message || "Không thể xóa lịch học.",
+                    });
+                    throw error;
+                }
             }
         });
     };
@@ -364,10 +428,17 @@ const Page = () => {
     const save = async (key: string) => {
         try {
             const row = await form.validateFields();
-            const newData = [...data];
-            const index = newData.findIndex((item) => key === item.key);
+            const index = data.findIndex((item) => key === item.key);
             if (index > -1) {
-                const item = newData[index];
+                const item = data[index];
+                if (!canModifySchedule(item)) {
+                    api.warning({
+                        message: "Không thể sửa",
+                        description: "Buổi học đã bắt đầu nên không thể cập nhật.",
+                    });
+                    setEditingKey("");
+                    return;
+                }
                 const sanitizedRow = sanitizeEditablePayload(
                     row,
                     moduleFields,
@@ -383,16 +454,13 @@ const Page = () => {
                     return;
                 }
 
-                newData.splice(index, 1, {
-                    ...item,
-                    ...sanitizedRow,
-                });
-                setData(newData);
+                await updateLivestream(key, sanitizedRow);
                 setEditingKey("");
                 api.success({
                     message: "Cập nhật thành công",
                     description: "Đã lưu thay đổi nhanh của dòng.",
                 });
+                await fetchData(currentPage, pageSize, filterValues, sortState);
             }
         } catch (errInfo) {
             console.log("Validate Failed:", errInfo);
@@ -408,7 +476,11 @@ const Page = () => {
         fieldPolicy,
         SCHEDULE_MODULE_CODE
     );
-    const visibleFieldPermissions = fieldPermissions.filter((item) => item.visible);
+    const visibleFieldPermissions = fieldPermissions.filter(
+        (item) =>
+            item.field.fieldCode !== "id"
+            && (item.visible || item.editable)
+    );
     const editableFieldCodes = fieldPermissions
         .filter((item) => item.editable)
         .map((item) => item.field.fieldCode);
@@ -499,62 +571,68 @@ const Page = () => {
             title: "Thao tác",
             key: "action",
             fixed: "right",
-            width: 150,
+            width: 120,
             render: (_: any, record: ScheduleDataType) => {
                 const editing = isEditing(record);
+                const canModify = canModifySchedule(record);
                 return editing ? (
                     <Space>
-                        <Button
-                            type="primary"
-                            onClick={() => save(record.key)}
-                            icon={<SaveOutlined />}
-                            size="small"
-                        >
-                            Lưu
-                        </Button>
-                        <Button
-                            onClick={cancel}
-                            icon={<CloseOutlined />}
-                            size="small"
-                        >
-                            Hủy
-                        </Button>
+                        <Tooltip title="Lưu">
+                            <Button
+                                type="primary"
+                                aria-label="Lưu"
+                                onClick={() => save(record.key)}
+                                icon={<SaveOutlined />}
+                                size="small"
+                            />
+                        </Tooltip>
+                        <Tooltip title="Hủy">
+                            <Button
+                                aria-label="Hủy"
+                                onClick={cancel}
+                                icon={<CloseOutlined />}
+                                size="small"
+                            />
+                        </Tooltip>
                     </Space>
                 ) : (
                     <Space>
-                        {canEditSchedule && editableFieldCodes.length > 0 && (
+                        {canModify && canEditSchedule && editableFieldCodes.length > 0 && (
                             <>
-                                <Button
-                                    type="link"
-                                    disabled={editingKey !== ""}
-                                    onClick={() => handleReschedule(record)}
-                                    icon={<CalendarOutlined />}
-                                    size="small"
-                                >
-                                    Dời lịch
-                                </Button>
-                                <Button
-                                    type="link"
-                                    disabled={editingKey !== ""}
-                                    onClick={() => edit(record)}
-                                    icon={<EditOutlined />}
-                                    size="small"
-                                >
-                                    Sửa nhanh
-                                </Button>
+                                <Tooltip title="Dời lịch">
+                                    <Button
+                                        type="link"
+                                        aria-label="Dời lịch"
+                                        disabled={editingKey !== ""}
+                                        onClick={() => handleReschedule(record)}
+                                        icon={<CalendarOutlined />}
+                                        size="small"
+                                    />
+                                </Tooltip>
+                                <Tooltip title="Sửa nhanh">
+                                    <Button
+                                        type="link"
+                                        aria-label="Sửa nhanh"
+                                        disabled={editingKey !== ""}
+                                        onClick={() => edit(record)}
+                                        icon={<EditOutlined />}
+                                        size="small"
+                                    />
+                                </Tooltip>
                             </>
                         )}
-                        {canDeleteSchedule && (
-                            <Button
-                                type="text"
-                                danger
-                                disabled={editingKey !== ""}
-                                onClick={() => handleDelete(record.key)}
-                                icon={<DeleteOutlined />}
-                                size="small"
-                            >
-                                Xóa
-                            </Button>
+                        {canModify && canDeleteSchedule && (
+                            <Tooltip title="Xóa">
+                                <Button
+                                    type="text"
+                                    danger
+                                    aria-label="Xóa"
+                                    disabled={editingKey !== ""}
+                                    onClick={() => handleDelete(record)}
+                                    icon={<DeleteOutlined />}
+                                    size="small"
+                                />
+                            </Tooltip>
                         )}
                     </Space>
                 );
@@ -576,6 +654,7 @@ const Page = () => {
                         <Button
                             type="primary"
                             icon={<EditOutlined />}
+                            disabled={selectedRowKeys.length === 0}
                             onClick={() => setOpenBulkEditModal(true)}
                         >
                             Sửa hàng loạt
@@ -649,35 +728,36 @@ const Page = () => {
                     onClose={() => setOpenBulkEditModal(false)}
                     onSuccess={async (modalPayload) => {
                         try {
-                            // 1. Xác định mảng ID cần cập nhật dựa vào Rule của Modal
-                            let targetIds: (string | number)[] = [];
-
-                            if (modalPayload.scope.type === 'selected_rows') {
-                                targetIds = modalPayload.scope.selected_lessons;
-                            } else {
-                                // Lọc data dựa vào `learn_number`
-                                let filteredData = [...data];
-
-                                if (modalPayload.scope.type === 'from_to_end') {
-                                    filteredData = filteredData.filter(item => Number(item.learn_number ?? 0) >= modalPayload.scope.start_lesson);
-                                } else if (modalPayload.scope.type === 'range') {
-                                    filteredData = filteredData.filter(item =>
-                                        Number(item.learn_number ?? 0) >= modalPayload.scope.start_lesson &&
-                                        Number(item.learn_number ?? 0) <= modalPayload.scope.end_lesson
-                                    );
-                                } else if (modalPayload.scope.type === 'pattern') {
-                                    filteredData = filteredData.filter(item =>
-                                        modalPayload.scope.pattern_type === 'even'
-                                            ? Number(item.learn_number ?? 0) % 2 === 0
-                                            : Number(item.learn_number ?? 0) % 2 !== 0
-                                    );
-                                }
-                                targetIds = filteredData.map(item => item.key);
-                            }
+                            let targetIds: (string | number)[] =
+                                modalPayload.scope.selected_lessons || [];
 
                             if (targetIds.length === 0) {
                                 api.warning({ message: "Cảnh báo", description: "Không tìm thấy bài học nào phù hợp với điều kiện để cập nhật!" });
                                 return;
+                            }
+
+                            const modifiableIds = new Set(
+                                data
+                                    .filter(canModifySchedule)
+                                    .map((item) => String(item.key))
+                            );
+                            const requestedCount = targetIds.length;
+                            targetIds = targetIds.filter((id) =>
+                                modifiableIds.has(String(id))
+                            );
+
+                            if (targetIds.length === 0) {
+                                api.warning({
+                                    message: "Không thể cập nhật",
+                                    description: "Các buổi được chọn đều đã bắt đầu.",
+                                });
+                                return;
+                            }
+                            if (targetIds.length < requestedCount) {
+                                api.warning({
+                                    message: "Đã bỏ qua lịch cũ",
+                                    description: "Các buổi đã bắt đầu không được cập nhật.",
+                                });
                             }
 
                             // 2. Chuẩn bị payload chuẩn gửi cho Backend

@@ -19,17 +19,10 @@ const LoginForm = () => {
         const { mode, ...loginData } = values;
         try {
             const response = await loginUser(loginData);
-            const { accessToken, refreshToken, user, ...userRest } = response.data;
-            const normalizedUser = {
-                ...(user && typeof user === 'object' ? user : {}),
-                ...userRest,
-            };
+            const { accessToken, ...normalizedUser } = response.data;
 
             setUser(normalizedUser);
             setAccessToken(accessToken);
-
-            document.cookie = `refreshToken=${refreshToken}; path=/; secure; sameSite=Lax`;
-            document.cookie = `user=${encodeURIComponent(JSON.stringify(normalizedUser))}; path=/; secure; sameSite=Lax`;
 
             localStorage.removeItem('logout');
             localStorage.setItem('lastLoginMode', mode);

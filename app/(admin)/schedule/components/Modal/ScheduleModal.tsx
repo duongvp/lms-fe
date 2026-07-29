@@ -18,6 +18,7 @@ import { createLesson, getLessons, type LessonApiResponse } from '@/services/les
 import { formatLessonScheduleOption } from '@/helper/lesson';
 import { useAuthStore } from '@/stores/authStore';
 import { PermissionKey } from '@/types/permissions';
+import { getPackageCourses } from '@/services/packageCourseService';
 
 const { Text, Title } = Typography;
 
@@ -136,6 +137,13 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const [messageApi, contextHolder] = message.useMessage();
     const hasPermission = useAuthStore((state) => state.hasPermission);
     const canCreateLesson = hasPermission(PermissionKey.LESSON_CREATE);
+
+    React.useEffect(() => {
+        if (!open || isEdit) return;
+        // Làm nóng cache khi người dùng nhập thông tin lịch. Modal xác nhận sẽ
+        // nhận dữ liệu ngay mà không phải chờ Google Sheet ở bước tiếp theo.
+        void getPackageCourses().catch(() => undefined);
+    }, [isEdit, open]);
 
     React.useEffect(() => {
         let active = true;
@@ -483,6 +491,21 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                 onOk={() => form.submit()}
                 width={900}
                 centered
+                styles={{
+                    content: {
+                        maxHeight: 'calc(100vh - 32px)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                    },
+                    body: {
+                        flex: 1,
+                        minHeight: 0,
+                        maxHeight: 'calc(100vh - 200px)',
+                        overflowY: 'auto',
+                        overflowX: 'hidden',
+                        paddingRight: 8,
+                    },
+                }}
                 footer={[
                     <Button key="back" onClick={handleClose} icon={<CloseCircleOutlined />}>
                         Huỷ
@@ -529,6 +552,33 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                 )}
 
                 <Form layout="vertical" form={form} onFinish={handleFinish} initialValues={{ status: "Chưa bắt đầu" }}>
+
+                    {isEdit && (
+                        <FormSection title="Lý do thay đổi">
+                            <Form.Item
+                                label="Lý do"
+                                name="change_reason"
+                                rules={[
+                                    {
+                                        required: true,
+                                        whitespace: true,
+                                        message: "Vui lòng nhập lý do thay đổi lịch học",
+                                    },
+                                    {
+                                        max: 500,
+                                        message: "Lý do không được vượt quá 500 ký tự",
+                                    },
+                                ]}
+                            >
+                                <Input.TextArea
+                                    rows={3}
+                                    maxLength={500}
+                                    showCount
+                                    placeholder="Nhập lý do nghỉ học, tạo lịch bù hoặc dời chuỗi..."
+                                />
+                            </Form.Item>
+                        </FormSection>
+                    )}
 
                     {/* Form fields for Single Add and Current Update */}
                     {((!isEdit && addMode === 'single') || (isEdit && updateMode === 'current')) && (
@@ -689,8 +739,14 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
-                                        <Form.Item label="Hệ thống" name="system_type" rules={[{ required: true, message: 'Nhập hệ thống' }]}>
-                                            <Input placeholder="Ví dụ: topclass" />
+                                        <Form.Item label="Hệ thống" name="system_type" rules={[{ required: true, message: 'Chọn hệ thống' }]}>
+                                            <Select
+                                                options={[
+                                                    { value: 'topclass', label: 'topclass' },
+                                                    { value: 'topuni', label: 'topuni' },
+                                                ]}
+                                                placeholder="Chọn hệ thống"
+                                            />
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
@@ -769,9 +825,15 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
-                                        <Form.Item label="Hệ thống" name="bulk_system_type" rules={[{ required: true, message: 'Nhập hệ thống' }]}>
-                                            <Input placeholder="Ví dụ: topclass" />
-                                        </Form.Item>
+                                         <Form.Item label="Hệ thống" name="bulk_system_type" rules={[{ required: true, message: 'Chọn hệ thống' }]}>
+                                             <Select
+                                                 options={[
+                                                     { value: 'topclass', label: 'topclass' },
+                                                     { value: 'topuni', label: 'topuni' },
+                                                 ]}
+                                                 placeholder="Chọn hệ thống"
+                                             />
+                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
                                         <Form.Item label="Bài học bắt đầu" name="bulk_learn_number" rules={requiredWhenEditable('learn_number', 'Chọn bài học bắt đầu')}>
@@ -866,6 +928,11 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
 
                                 {bulkConfigMode === 'common' && (
                                     <Card size="small" title="Cấu hình chung" style={{ background: '#fafafa', marginBottom: 16 }}>
+                                        <div style={{ marginBottom: 12, padding: '4px 4px 0 4px' }}>
+                                            <Text type="secondary" style={{ fontSize: '12.5px', fontStyle: 'italic', display: 'block' }}>
+                                                * Cấu hình chung (Giờ bắt đầu, Giờ kết thúc, Giáo viên) sẽ được tự động áp dụng đồng loạt cho tất cả các ngày được chọn ở trên.
+                                            </Text>
+                                        </div>
                                         <Row gutter={24}>
                                             <Col span={8}>
                                                 <Form.Item label="Giờ bắt đầu" name="bulk_start_time" rules={requiredWhenEditable('start_time', 'Nhập giờ bắt đầu')}>

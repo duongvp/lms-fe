@@ -36,6 +36,11 @@ export const getMe = async () => {
     return await fetchInstance(url, options);
 }
 
+export const logoutUser = async () => {
+    const url = `${API_BASE_URL}/logout`;
+    return await fetchInstance(url, { method: 'POST' });
+}
+
 /**
  * Gửi yêu cầu quên mật khẩu (bước 1)
  * @param email Email đăng ký tài khoản

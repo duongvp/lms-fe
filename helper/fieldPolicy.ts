@@ -1,6 +1,7 @@
 import type { FieldPolicy, ModuleField, ResolvedFieldPermission } from "@/types/fieldPolicy";
 
-const DEFAULT_RULE = { visible: true, editable: true };
+// Đồng bộ với backend: khi chưa có policy/module thì mặc định không cấp quyền.
+const DEFAULT_RULE = { visible: false, editable: false };
 
 export const normalizeFieldPolicy = (policy: unknown): FieldPolicy => {
     if (!policy || typeof policy !== "object") return {};

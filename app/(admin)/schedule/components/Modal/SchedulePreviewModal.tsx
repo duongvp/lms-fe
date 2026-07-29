@@ -3,6 +3,7 @@ import {
     Alert,
     Button,
     Checkbox,
+    Collapse,
     Form,
     Input,
     message,
@@ -17,6 +18,7 @@ import {
 import {
     CheckCircleOutlined,
     CloseCircleOutlined,
+    DeleteOutlined,
     InfoCircleOutlined,
     PlusOutlined,
 } from '@ant-design/icons';
@@ -36,6 +38,10 @@ import { combineDateTime } from '@/helper/convertDate';
 import { useAuthStore } from '@/stores/authStore';
 import { PermissionKey } from '@/types/permissions';
 import { formatLessonScheduleOption } from '@/helper/lesson';
+import {
+    getPackageCourses,
+    type PackageCourseOption,
+} from '@/services/packageCourseService';
 
 const { Text } = Typography;
 
@@ -70,6 +76,12 @@ interface PreviewSession {
     preview_action?: 'cancel' | 'shift' | 'create';
     original_learn_number?: number;
     original_lesson_name?: string;
+    package_lesson_mappings?: PackageLessonMappingInput[];
+}
+
+interface PackageLessonMappingInput {
+    course_id?: string;
+    lesson_ids: string[];
 }
 
 const TEACHER_OPTIONS = [
@@ -107,6 +119,54 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
     const isFollowingPreview = isEdit && formValues?.update_mode === 'following';
     const [loadingFollowingPreview, setLoadingFollowingPreview] = useState(false);
     const [followingPreviewError, setFollowingPreviewError] = useState<string | null>(null);
+    const [packageCourses, setPackageCourses] = useState<PackageCourseOption[]>([]);
+    const [loadingPackageCourses, setLoadingPackageCourses] = useState(false);
+
+    const courseOptions = React.useMemo(() => Array.from(
+        packageCourses.reduce((groups, item) => {
+            const current = groups.get(item.course_id) ?? {
+                course_id: item.course_id,
+                course_name: item.course_name,
+                package_ids: [] as string[],
+            };
+            if (!current.package_ids.includes(item.package_id)) {
+                current.package_ids.push(item.package_id);
+            }
+            groups.set(item.course_id, current);
+            return groups;
+        }, new Map<string, {
+            course_id: string;
+            course_name?: string;
+            package_ids: string[];
+        }>()).values()
+    ).map((item) => ({
+        value: item.course_id,
+        label: `${item.course_id}${item.course_name ? ` - ${item.course_name}` : ''} (Gói ${item.package_ids.join(', ')})`,
+    })), [packageCourses]);
+
+    useEffect(() => {
+        if (!open || isEdit) return;
+        let active = true;
+        setLoadingPackageCourses(true);
+        getPackageCourses()
+            .then((response: any) => {
+                if (active) setPackageCourses(response?.data ?? []);
+            })
+            .catch((error: any) => {
+                if (active) {
+                    setPackageCourses([]);
+                    messageApi.error(
+                        error.message || 'Không thể đọc danh sách Course ID từ Google Sheet.'
+                    );
+                }
+            })
+            .finally(() => {
+                if (active) setLoadingPackageCourses(false);
+            });
+        return () => {
+            active = false;
+        };
+    }, [isEdit, messageApi, open]);
 
     const formatPreviewLesson = (learnNumber?: number, lessonName?: string) => {
         if (!learnNumber && !lessonName) return '-';
@@ -358,6 +418,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 master_lesson_name: formValues.master_lesson_name || formValues.lesson_name,
                 lesson_name: formValues.lesson_name,
                 learn_number: Number(formValues.learn_number),
+                package_lesson_mappings: [{ lesson_ids: [] }],
                 isSkipped: false,
                 isGenerated: true,
             }]);
@@ -488,6 +549,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     lesson_id: lesson ? String(lesson.id) : undefined,
                     master_lesson_name: lesson?.lesson_name,
                     lesson_name: lesson?.lesson_name,
+                    package_lesson_mappings: [{ lesson_ids: [] }],
                     isSkipped: false,
                     isGenerated: true,
                 });
@@ -523,6 +585,60 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
             (session) => session.key === key ? { ...session, [field]: value } : session
         ));
     };
+
+    const updateSessionMapping = (
+        sessionKey: string,
+        mappingIndex: number,
+        field: keyof PackageLessonMappingInput,
+        value: string | string[]
+    ) => {
+        setSessions((current) => current.map((session) => {
+            if (session.key !== sessionKey) return session;
+            const mappings = [...(session.package_lesson_mappings ?? [{ lesson_ids: [] }])];
+            mappings[mappingIndex] = {
+                ...mappings[mappingIndex],
+                [field]: value,
+            };
+            return { ...session, package_lesson_mappings: mappings };
+        }));
+    };
+
+    const addSessionMapping = (sessionKey: string) => {
+        setSessions((current) => current.map((session) => (
+            session.key === sessionKey
+                ? {
+                    ...session,
+                    package_lesson_mappings: [
+                        ...(session.package_lesson_mappings ?? []),
+                        { lesson_ids: [] },
+                    ],
+                }
+                : session
+        )));
+    };
+
+    const removeSessionMapping = (sessionKey: string, mappingIndex: number) => {
+        setSessions((current) => current.map((session) => {
+            if (session.key !== sessionKey) return session;
+            const mappings = (session.package_lesson_mappings ?? [])
+                .filter((_, index) => index !== mappingIndex);
+            return {
+                ...session,
+                package_lesson_mappings: mappings.length
+                    ? mappings
+                    : [{ lesson_ids: [] }],
+            };
+        }));
+    };
+
+    const normalizeSessionMappings = (session: PreviewSession) => (
+        (session.package_lesson_mappings ?? []).map((mapping) => ({
+            course_id: String(mapping.course_id ?? '').trim(),
+            lesson_ids: (mapping.lesson_ids ?? [])
+                .map((lessonId) => String(lessonId).trim())
+                .filter(Boolean),
+        }))
+    );
 
     const updateSessionLesson = (key: string, lessonId?: string) => {
         const lesson = lessons.find((item) => String(item.id) === String(lessonId));
@@ -651,10 +767,49 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
             return;
         }
 
+        if (!isEdit) {
+            if (loadingPackageCourses) {
+                messageApi.warning('Đang tải danh sách Course ID, vui lòng chờ trong giây lát.');
+                return;
+            }
+
+            const invalidMappingSession = sessions
+                .filter((session) => !session.isSkipped)
+                .find((session) => {
+                    const mappings = normalizeSessionMappings(session);
+                    return mappings.length === 0 || mappings.some(
+                        (mapping) => !mapping.course_id || mapping.lesson_ids.length === 0
+                    );
+                });
+            if (invalidMappingSession) {
+                messageApi.error(
+                    `Buổi ${invalidMappingSession.index}: Vui lòng chọn Course ID và nhập ít nhất một Lesson ID.`
+                );
+                return;
+            }
+
+            const duplicatedCourseSession = sessions
+                .filter((session) => !session.isSkipped)
+                .find((session) => {
+                    const courseIds = normalizeSessionMappings(session)
+                        .map((mapping) => mapping.course_id);
+                    return new Set(courseIds).size !== courseIds.length;
+                });
+            if (duplicatedCourseSession) {
+                messageApi.error(
+                    `Buổi ${duplicatedCourseSession.index}: Một Course ID chỉ nên xuất hiện một lần.`
+                );
+                return;
+            }
+        }
+
         if (isEdit) {
             if (formValues.update_mode === 'cancel') {
                 payloadType = 'update_cancel';
-                finalPayload = toRescheduleLivestreamPayload({ update_mode: 'cancel' });
+                finalPayload = toRescheduleLivestreamPayload({
+                    ...formValues,
+                    update_mode: 'cancel',
+                });
             } else if (formValues.update_mode === 'following' || formValues.update_mode === 'makeup') {
                 payloadType = formValues.update_mode === 'following'
                     ? 'update_following'
@@ -712,6 +867,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     start_time: combineDateTime(session.date, session.start_time)!,
                     end_time: combineDateTime(session.date, session.end_time)!,
                     lesson_status: 0,
+                    package_lesson_mappings: normalizeSessionMappings(session),
                 })),
             };
         } else {
@@ -723,6 +879,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 start_time: session.start_time,
                 end_time: session.end_time,
                 date: session.date,
+                package_lesson_mappings: normalizeSessionMappings(session),
             });
         }
 
@@ -966,12 +1123,25 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                         type="primary"
                         onClick={handleConfirm}
                         loading={loading}
-                        disabled={loadingFollowingPreview}
+                        disabled={loadingFollowingPreview || (!isEdit && loadingPackageCourses)}
                         icon={<CheckCircleOutlined />}
                     >
                         Xác nhận Lưu
                     </Button>,
                 ]}
+                styles={{
+                    content: {
+                        maxHeight: 'calc(100vh - 32px)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                    },
+                    body: {
+                        flex: 1,
+                        minHeight: 0,
+                        overflowY: 'auto',
+                        overflowX: 'hidden',
+                    },
+                }}
             >
                 <div style={{ marginBottom: 16 }}>
                     <Text type="secondary">
@@ -1114,6 +1284,138 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                         return '';
                     }}
                 />
+
+                {!isEdit && (
+                    <div style={{ marginTop: 16 }}>
+                        <Space direction="vertical" size={4} style={{ marginBottom: 12 }}>
+                            <Text strong>Mapping Package / Course / Lesson theo từng buổi</Text>
+                            <Text type="secondary">
+                                Chọn Course ID từ Google Sheet; Package ID được hệ thống tự xác định.
+                                Mỗi Course ID có thể nhập nhiều Lesson ID.
+                            </Text>
+                        </Space>
+
+                        {!loadingPackageCourses && courseOptions.length === 0 && (
+                            <Alert
+                                type="warning"
+                                showIcon
+                                message="Chưa tải được danh sách Course ID từ Google Sheet"
+                                style={{ marginBottom: 12 }}
+                            />
+                        )}
+
+                        <Collapse
+                            size="small"
+                            defaultActiveKey={sessions
+                                .filter((session) => !session.isSkipped)
+                                .slice(0, 1)
+                                .map((session) => session.key)}
+                            items={sessions
+                                .filter((session) => !session.isSkipped)
+                                .map((session) => {
+                                    const mappings = session.package_lesson_mappings
+                                        ?? [{ lesson_ids: [] }];
+                                    const completedMappings = normalizeSessionMappings(session)
+                                        .filter((mapping) => (
+                                            mapping.course_id && mapping.lesson_ids.length > 0
+                                        )).length;
+
+                                    return {
+                                        key: session.key,
+                                        label: (
+                                            <Space wrap>
+                                                <Text strong>Buổi {session.index}</Text>
+                                                <Text type="secondary">
+                                                    {session.date?.format('DD/MM/YYYY')}
+                                                </Text>
+                                                <Text type={completedMappings ? 'success' : 'warning'}>
+                                                    {completedMappings
+                                                        ? `${completedMappings} Course ID đã mapping`
+                                                        : 'Chưa mapping'}
+                                                </Text>
+                                            </Space>
+                                        ),
+                                        children: (
+                                            <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                                                {mappings.map((mapping, mappingIndex) => {
+                                                    const selectedByOtherRows = new Set(
+                                                        mappings
+                                                            .filter((_, index) => index !== mappingIndex)
+                                                            .map((item) => item.course_id)
+                                                            .filter(Boolean)
+                                                    );
+
+                                                    return (
+                                                        <div
+                                                            key={`${session.key}_${mappingIndex}`}
+                                                            style={{
+                                                                display: 'grid',
+                                                                gridTemplateColumns: 'minmax(260px, 1fr) minmax(260px, 1fr) 36px',
+                                                                gap: 12,
+                                                                alignItems: 'center',
+                                                            }}
+                                                        >
+                                                            <Select
+                                                                value={mapping.course_id}
+                                                                loading={loadingPackageCourses}
+                                                                options={courseOptions.map((option) => ({
+                                                                    ...option,
+                                                                    disabled: selectedByOtherRows.has(option.value),
+                                                                }))}
+                                                                showSearch
+                                                                optionFilterProp="label"
+                                                                placeholder={`Chọn Course ID ${mappingIndex + 1}`}
+                                                                popupMatchSelectWidth={600}
+                                                                onChange={(value) => updateSessionMapping(
+                                                                    session.key,
+                                                                    mappingIndex,
+                                                                    'course_id',
+                                                                    value
+                                                                )}
+                                                            />
+                                                            <Select
+                                                                mode="tags"
+                                                                value={mapping.lesson_ids}
+                                                                tokenSeparators={[',', ' ']}
+                                                                placeholder="Nhập Lesson ID rồi nhấn Enter"
+                                                                maxTagCount="responsive"
+                                                                onChange={(value) => updateSessionMapping(
+                                                                    session.key,
+                                                                    mappingIndex,
+                                                                    'lesson_ids',
+                                                                    value
+                                                                )}
+                                                            />
+                                                            <Tooltip title="Xóa Course ID">
+                                                                <Button
+                                                                    type="text"
+                                                                    danger
+                                                                    icon={<DeleteOutlined />}
+                                                                    disabled={mappings.length === 1}
+                                                                    onClick={() => removeSessionMapping(
+                                                                        session.key,
+                                                                        mappingIndex
+                                                                    )}
+                                                                />
+                                                            </Tooltip>
+                                                        </div>
+                                                    );
+                                                })}
+                                                <Button
+                                                    type="dashed"
+                                                    icon={<PlusOutlined />}
+                                                    onClick={() => addSessionMapping(session.key)}
+                                                    block
+                                                >
+                                                    Thêm Course ID cho buổi {session.index}
+                                                </Button>
+                                            </Space>
+                                        ),
+                                    };
+                                })}
+                        />
+                    </div>
+                )}
 
                 <style dangerouslySetInnerHTML={{ __html: `
                     .skipped-row {

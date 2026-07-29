@@ -10,6 +10,8 @@ import useRoleStore from "@/stores/roleStore";
 import RoleModal from "./components/RoleModal";
 import { ActionType } from "@/enums/action";
 import { notification } from "antd";
+import { useAuthStore } from "@/stores/authStore";
+import { PermissionKey } from "@/types/permissions";
 
 
 // Đây là kiểu dữ liệu cho Table (thêm key + description)
@@ -41,6 +43,9 @@ const Page = () => {
     const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
     const { setModal, shouldReload, setShouldReload } = useRoleStore();
     const [api, contextHolder] = notification.useNotification();
+    const canCreateRole = useAuthStore((state) =>
+        state.hasPermission(PermissionKey.ROLE_CREATE)
+    );
 
     const fetchRoles = async () => {
         try {
@@ -92,7 +97,9 @@ const Page = () => {
                 placeholder="Tên vai trò"
                 titleBtnAdd="Vai trò"
                 onSearch={async (value) => console.log(value)}
-                handleAddBtn={() => setModal({ open: true, type: ActionType.CREATE, role: null })}
+                handleAddBtn={canCreateRole
+                    ? () => setModal({ open: true, type: ActionType.CREATE, role: null })
+                    : undefined}
             />
             <CustomTable<DataType>
                 columns={columns}

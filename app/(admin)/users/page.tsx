@@ -10,7 +10,7 @@ import useUserStore from "@/stores/userStore";
 import DecriptionRow from "./components/DecriptionRow";
 import RoleModal from "../member-roles/components/RoleModal";
 import { ActionType } from "@/enums/action";
-import BranchModal from "../branches/components/BranchModal";
+import BranchModal from "./components/BranchModal";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
 import { notification } from "antd";

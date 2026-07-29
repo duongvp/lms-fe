@@ -1,5 +1,5 @@
 import { useAuthStore } from "@/stores/authStore";
-import { handleLogout } from "@/ultils/auth";
+import { logoutUser } from "@/services/authService";
 import { MenuOutlined } from "@ant-design/icons";
 import { Avatar, Button, Dropdown, Flex, Layout, Space, Menu, Grid } from "antd";
 import { MenuProps } from "antd/lib";
@@ -26,15 +26,17 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
   const { hasPermission: _hasPermission } = useAuthStore();
 
   const hasPermission = (permission: string | null) => {
-    // MOCK DATA: Tạm thời return true để hiển thị full menu
-    return true;
-    // if (permission === null) return true;
-    // return _hasPermission(permission);
+    if (permission === null) return true;
+    return _hasPermission(permission);
   };
 
-  const logout = () => {
-    handleLogout();
-    router.push('/auth/login');
+  const logout = async () => {
+    try {
+      await logoutUser();
+    } finally {
+      useAuthStore.getState().logout();
+      router.replace('/auth/login');
+    }
   };
 
   // Get active key based on current URL path

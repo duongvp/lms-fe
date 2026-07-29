@@ -3,22 +3,17 @@ import React, { ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Drawer, Menu, MenuProps, Grid } from "antd";
 import {
-    AppstoreOutlined,
     BankOutlined,
     BookOutlined,
-    CoffeeOutlined,
     DashboardOutlined,
-    FileDoneOutlined,
     LogoutOutlined,
-    MailOutlined,
-    SwapOutlined,
     UsergroupAddOutlined,
     UserOutlined,
 } from "@ant-design/icons";
 import Image from "next/image";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
-import { handleLogout } from "@/ultils/auth";
+import { logoutUser } from "@/services/authService";
 
 const { useBreakpoint } = Grid;
 
@@ -53,91 +48,6 @@ export const menuConfig: IMenuItem[] = [
         path: "/dashboard",
         permission: PermissionKey.DASHBOARD_VIEW,
     },
-    // {
-    //     key: "1",
-    //     icon: <AppstoreOutlined />,
-    //     label: "QL live",
-    //     permission: PermissionKey.PRODUCT_VIEW,
-    //     children: [
-    //         {
-    //             key: "11",
-    //             label: "Sản phẩm",
-    //             path: "/products",
-    //             permission: PermissionKey.PRODUCT_VIEW,
-    //         },
-    //         {
-    //             key: "12",
-    //             label: "Nhóm hàng",
-    //             path: "/categories",
-    //             permission: PermissionKey.CATEGORY_VIEW,
-    //         },
-    //         {
-    //             key: "14",
-    //             label: "Kiểm kho",
-    //             path: "/transactions/inventory-checks",
-    //             permission: PermissionKey.STOCK_CHECK_VIEW,
-    //         },
-    //     ],
-    // },
-    // {
-    //     key: "2",
-    //     icon: <SwapOutlined />,
-    //     label: "Giao dịch",
-    //     permission: PermissionKey.PRODUCT_VIEW,
-    //     children: [
-    //         {
-    //             key: "22",
-    //             label: "Hoá đơn",
-    //             path: "/transactions/invoices",
-    //             permission: PermissionKey.INVOICE_VIEW,
-    //         },
-    //         {
-    //             key: "23",
-    //             label: "Nhập hàng",
-    //             path: "/transactions/purchase-orders",
-    //             permission: PermissionKey.IMPORT_VIEW,
-    //         },
-    //         {
-    //             key: "24",
-    //             label: "Trả hàng",
-    //             path: "/transactions/returns",
-    //             permission: PermissionKey.RETURN_VIEW,
-    //         },
-    //         {
-    //             key: "25",
-    //             label: "Voucher",
-    //             path: "/vouchers",
-    //             permission: PermissionKey.VOUCHER_VIEW,
-    //         },
-    //     ],
-    // },
-    // {
-    //     key: "3",
-    //     icon: <CoffeeOutlined />,
-    //     label: "Thu ngân",
-    //     path: "/fnb",
-    //     permission: PermissionKey.INVOICE_VIEW,
-    // },
-    // {
-    //     key: "4",
-    //     icon: <MailOutlined />,
-    //     label: "Đối tác",
-    //     permission: PermissionKey.CUSTOMER_VIEW,
-    //     children: [
-    //         {
-    //             key: "31",
-    //             label: "Khách hàng",
-    //             path: "/partners/customers",
-    //             permission: PermissionKey.CUSTOMER_VIEW,
-    //         },
-    //         {
-    //             key: "32",
-    //             label: "Nhà cung cấp",
-    //             path: "/partners/suppliers",
-    //             permission: PermissionKey.SUPPLIER_VIEW,
-    //         },
-    //     ],
-    // },
     {
         key: "4",
         icon: <BookOutlined />,
@@ -164,14 +74,7 @@ export const menuConfig: IMenuItem[] = [
         icon: <UsergroupAddOutlined />,
         label: "Vai trò thành viên",
         path: "/member-roles",
-        permission: PermissionKey.USER_VIEW,
-    },
-    {
-        key: "8",
-        icon: <FileDoneOutlined />,
-        label: "Báo cáo",
-        path: "/reports",
-        permission: PermissionKey.REPORT_VIEW,
+        permission: PermissionKey.ROLE_VIEW,
     },
     {
         key: "9",
@@ -348,8 +251,10 @@ const SideMenu: React.FC<SideMenuProps> = ({ drawerOpen, onCloseDrawer }) => {
         const path = menuRoutes[key];
         if (path) {
             if (path === "/auth/login") {
-                handleLogout();
-                router.push("/auth/login");
+                void logoutUser().finally(() => {
+                    useAuthStore.getState().logout();
+                    router.replace("/auth/login");
+                });
                 return;
             }
             router.push(path);

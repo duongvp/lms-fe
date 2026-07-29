@@ -17,6 +17,10 @@ export interface LivestreamPayload {
     start_time: string;
     end_time: string;
     lesson_status: number;
+    package_lesson_mappings?: Array<{
+        course_id: string;
+        lesson_ids: string[];
+    }>;
 }
 
 export interface BulkLivestreamPayload {
@@ -92,6 +96,13 @@ export const cancelLivestream = (id: string) =>
         credentials: "include",
     });
 
+export const deleteLivestream = (id: string) =>
+    fetchInstance(`${API_BASE_URL}/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+    });
+
 const getDates = (start: Dayjs, end: Dayjs, days: number[]) => {
     const dates: Dayjs[] = [];
     let current = start.startOf("day");
@@ -126,6 +137,7 @@ export const toLivestreamPayload = (values: any): LivestreamPayload => {
         start_time: payload.start_time,
         end_time: payload.end_time,
         lesson_status: Number(payload.lesson_status ?? 0),
+        package_lesson_mappings: payload.package_lesson_mappings,
     };
 };
 
@@ -186,11 +198,15 @@ export const toRescheduleLivestreamPayload = (values: any): any => {
     const mode = payload.update_mode || payload.mode || "cancel";
 
     if (mode === "cancel") {
-        return { mode: "cancel" };
+        return {
+            mode: "cancel",
+            reason: String(payload.change_reason || payload.reason || "").trim(),
+        };
     }
 
     return {
         mode,
+        reason: String(payload.change_reason || payload.reason || "").trim(),
         new_session: {
             teacher: payload.new_session?.teacher,
             channel_name: payload.new_session?.channel_name,

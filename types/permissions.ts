@@ -1,8 +1,13 @@
 export enum PermissionKey {
-    USER_VIEW = 'user_view',
-    USER_CREATE = 'user_create',
-    USER_EDIT = 'user_edit',
-    USER_DELETE = 'user_delete',
+    USER_VIEW = 'users.view',
+    USER_CREATE = 'users.create',
+    USER_EDIT = 'users.update',
+    USER_DELETE = 'users.delete',
+
+    ROLE_VIEW = 'roles.view',
+    ROLE_CREATE = 'roles.create',
+    ROLE_EDIT = 'roles.update',
+    ROLE_DELETE = 'roles.delete',
 
     BRANCH_VIEW = 'branch_view',
     BRANCH_CREATE = 'branch_create',

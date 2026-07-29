@@ -9,6 +9,9 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/vi';
 import { useAuthStore } from '@/stores/authStore';
 import { useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
+import { getMe } from "@/services/authService";
+import { protectedRoutes } from "@/constants/protectedRoutes";
 
 const { Content } = Layout;
 const { useBreakpoint } = Grid;
@@ -24,7 +27,9 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
 }: AdminLayoutProps) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
   const screens = useBreakpoint();
 
   const toggleDrawer = () => {
@@ -53,7 +58,39 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     setIsClient(true);
   }, []);
 
-  if (!isClient) return <Spin size="large" fullscreen />;
+  useEffect(() => {
+    if (!isClient) return;
+    let active = true;
+
+    const verifySession = async () => {
+      try {
+        const response: any = await getMe();
+        if (!active) return;
+        const user = response?.data;
+        useAuthStore.getState().setUser(user);
+
+        const matched = protectedRoutes
+          .filter((route) => pathname.startsWith(route.path))
+          .sort((a, b) => b.path.length - a.path.length)[0];
+        if (matched && !user?.permissions?.includes(matched.permission)) {
+          router.replace('/403');
+          return;
+        }
+        setAuthReady(true);
+      } catch {
+        if (!active) return;
+        useAuthStore.getState().logout();
+        router.replace('/auth/login');
+      }
+    };
+
+    verifySession();
+    return () => {
+      active = false;
+    };
+  }, [isClient, pathname, router]);
+
+  if (!isClient || !authReady) return <Spin size="large" fullscreen />;
 
   const isMobile = screens && !screens.xl;
   const layoutPadding = isMobile ? 12 : 16;
