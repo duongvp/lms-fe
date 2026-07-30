@@ -20,7 +20,7 @@ import {
     Input,
 } from 'antd';
 import { EditOutlined, CloseCircleOutlined } from '@ant-design/icons';
-import dayjs from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
 
 const { Text, Title } = Typography;
 
@@ -65,6 +65,33 @@ const ROOM_OPTIONS = [
     { label: "Phòng Online - Zoom 01", value: "Zoom 01" },
 ];
 
+const getTimeMinutes = (time?: Dayjs | null) => {
+    if (!time) return undefined;
+    return time.hour() * 60 + time.minute();
+};
+
+const isEndAfterStart = (startTime?: Dayjs | null, endTime?: Dayjs | null) => {
+    const startMinutes = getTimeMinutes(startTime);
+    const endMinutes = getTimeMinutes(endTime);
+    if (startMinutes === undefined || endMinutes === undefined) return true;
+    return endMinutes > startMinutes;
+};
+
+const getEndDisabledTime = (startTime?: Dayjs | null) => {
+    if (!startTime) return {};
+
+    const startHour = startTime.hour();
+    const startMinute = startTime.minute();
+    return {
+        disabledHours: () => Array.from({ length: startHour }, (_, hour) => hour),
+        disabledMinutes: (selectedHour: number) => (
+            selectedHour === startHour
+                ? Array.from({ length: startMinute + 1 }, (_, minute) => minute)
+                : []
+        ),
+    };
+};
+
 interface BulkEditModalProps {
     open: boolean;
     onClose: () => void;
@@ -84,6 +111,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     // Form Watchers
     const configMode = Form.useWatch('config_mode', form) || 'common';
     const selectedLessons = Form.useWatch('selected_lessons', form) || selectedRowKeys;
+    const commonStartTime = Form.useWatch('common_start_time', form) as Dayjs | undefined;
 
     // Tự động set giá trị mặc định khi mở Modal
     useEffect(() => {
@@ -98,6 +126,37 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     const handleClose = () => {
         form.resetFields();
         onClose();
+    };
+
+    const validateEndTimeAfter = (startFieldName: string | (string | number)[]) => (
+        _: unknown,
+        endTime?: Dayjs | null
+    ) => {
+        if (!endTime) return Promise.resolve();
+
+        const startTime = form.getFieldValue(startFieldName) as Dayjs | undefined;
+        if (!startTime) {
+            return Promise.reject(new Error('Vui lòng nhập thời gian bắt đầu trước'));
+        }
+
+        return isEndAfterStart(startTime, endTime)
+            ? Promise.resolve()
+            : Promise.reject(new Error('Thời gian kết thúc phải sau thời gian bắt đầu'));
+    };
+
+    const revalidateOrClearEndTime = (
+        endFieldName: string | (string | number)[],
+        startTime?: Dayjs | null
+    ) => {
+        const endTime = form.getFieldValue(endFieldName) as Dayjs | undefined;
+        if (!endTime) return;
+
+        if (!startTime || !isEndAfterStart(startTime, endTime)) {
+            form.setFieldValue(endFieldName, undefined);
+            return;
+        }
+
+        void form.validateFields([endFieldName]);
     };
 
     const handleFinish = async (values: any) => {
@@ -282,7 +341,13 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                 style={{ marginBottom: 0 }}
                                                 rules={[{ required: enabled, message: 'Chọn giờ bắt đầu' }]}
                                             >
-                                                <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="Giờ bắt đầu" disabled={!enabled} />
+                                                <TimePicker
+                                                    format="HH:mm"
+                                                    style={{ width: '100%' }}
+                                                    placeholder="Giờ bắt đầu"
+                                                    disabled={!enabled}
+                                                    onChange={(value) => revalidateOrClearEndTime('common_end_time', value)}
+                                                />
                                             </Form.Item>
                                         );
                                     }}
@@ -296,9 +361,18 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                             <Form.Item
                                                 name="common_end_time"
                                                 style={{ marginBottom: 0 }}
-                                                rules={[{ required: enabled, message: 'Chọn giờ kết thúc' }]}
+                                                rules={[
+                                                    { required: enabled, message: 'Chọn giờ kết thúc' },
+                                                    { validator: validateEndTimeAfter('common_start_time') },
+                                                ]}
                                             >
-                                                <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="Giờ kết thúc" disabled={!enabled} />
+                                                <TimePicker
+                                                    format="HH:mm"
+                                                    style={{ width: '100%' }}
+                                                    placeholder="Nhập giờ bắt đầu trước"
+                                                    disabledTime={() => getEndDisabledTime(commonStartTime)}
+                                                    disabled={!enabled || !commonStartTime}
+                                                />
                                             </Form.Item>
                                         );
                                     }}
@@ -361,16 +435,35 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                 name={['separate_config', lessonKey, 'start_time']}
                                                 style={{ marginBottom: 0 }}
                                             >
-                                                <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="HH:mm" />
+                                                <TimePicker
+                                                    format="HH:mm"
+                                                    style={{ width: '100%' }}
+                                                    placeholder="HH:mm"
+                                                    onChange={(value) => revalidateOrClearEndTime(['separate_config', lessonKey, 'end_time'], value)}
+                                                />
                                             </Form.Item>
                                         </Col>
                                         <Col span={6}>
-                                            <Form.Item
-                                                label="Giờ kết thúc"
-                                                name={['separate_config', lessonKey, 'end_time']}
-                                                style={{ marginBottom: 0 }}
-                                            >
-                                                <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="HH:mm" />
+                                            <Form.Item noStyle dependencies={[['separate_config', lessonKey, 'start_time']]}>
+                                                {({ getFieldValue }) => {
+                                                    const separateStartTime = getFieldValue(['separate_config', lessonKey, 'start_time']) as Dayjs | undefined;
+                                                    return (
+                                                        <Form.Item
+                                                            label="Giờ kết thúc"
+                                                            name={['separate_config', lessonKey, 'end_time']}
+                                                            style={{ marginBottom: 0 }}
+                                                            rules={[{ validator: validateEndTimeAfter(['separate_config', lessonKey, 'start_time']) }]}
+                                                        >
+                                                            <TimePicker
+                                                                format="HH:mm"
+                                                                style={{ width: '100%' }}
+                                                                placeholder="Nhập giờ bắt đầu trước"
+                                                                disabledTime={() => getEndDisabledTime(separateStartTime)}
+                                                                disabled={!separateStartTime}
+                                                            />
+                                                        </Form.Item>
+                                                    );
+                                                }}
                                             </Form.Item>
                                         </Col>
                                         <Col span={6}>

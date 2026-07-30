@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Modal, notification } from "antd";
+import { Button, Modal, notification } from "antd";
+import { DownOutlined, InfoCircleOutlined, UpOutlined } from "@ant-design/icons";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
 import {
@@ -27,7 +28,6 @@ import {
 } from "@/services/lessonService";
 import LessonFormModal, { FORM_FIELDS } from "./components/Modal/LessonFormModal";
 import LessonActions from "./components/LessonActions";
-import LessonDetailDrawer from "./components/LessonDetailDrawer";
 import LessonFilterDrawer from "./components/LessonFilterDrawer";
 import LessonImportModal from "./components/LessonImportModal";
 import LessonTable from "./components/LessonTable";
@@ -70,7 +70,8 @@ const Page = () => {
     const [savingReorder, setSavingReorder] = useState(false);
     const [importing, setImporting] = useState(false);
     const [importErrors, setImportErrors] = useState<LessonImportError[]>([]);
-    const [dragRowKey, setDragRowKey] = useState<string | null>(null);
+    const [dragRowKey, setDragRowKey] = useState<React.Key | null>(null);
+    const [showPageInfo, setShowPageInfo] = useState(true);
     const [api, contextHolder] = notification.useNotification();
     const hasPermission = useAuthStore((state) => state.hasPermission);
     const { fieldPolicy } = useAuthStore((state) => state.user);
@@ -285,7 +286,7 @@ const Page = () => {
         fetchData(currentPage, pageSize, filterValues, sortState);
     };
 
-    const handleDropRow = (targetKey: string) => {
+    const handleDropRow = (targetKey: React.Key) => {
         if (!dragRowKey || dragRowKey === targetKey) return;
 
         setData((prev) => {
@@ -418,6 +419,52 @@ const Page = () => {
     return (
         <>
             {contextHolder}
+            <div
+                style={{
+                    border: "1px solid #d6e4ff",
+                    background: "#f6fbff",
+                    borderRadius: 8,
+                    padding: showPageInfo ? "10px 12px" : "8px 12px",
+                    marginBottom: 10,
+                }}
+            >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                        <InfoCircleOutlined style={{ color: "#1677ff", fontSize: 16 }} />
+                        <span style={{ fontWeight: 600 }}>Quản lý nội dung bài học</span>
+                    </div>
+                    <Button
+                        type="text"
+                        size="small"
+                        icon={showPageInfo ? <UpOutlined /> : <DownOutlined />}
+                        onClick={() => setShowPageInfo((value) => !value)}
+                    >
+                        {showPageInfo ? "Ẩn thông tin" : "Hiện thông tin"}
+                    </Button>
+                </div>
+                <div
+                    style={{
+                        display: "grid",
+                        gridTemplateRows: showPageInfo ? "1fr" : "0fr",
+                        transition: "grid-template-rows 0.3s ease-in-out",
+                        overflow: "hidden",
+                    }}
+                >
+                    <div style={{ minHeight: 0 }}>
+                        <div 
+                            style={{ 
+                                marginTop: 6, 
+                                paddingLeft: 24, 
+                                color: "rgba(0, 0, 0, 0.72)", 
+                                lineHeight: 1.55 
+                            }}
+                        >
+                            Tạo và chỉnh sửa danh mục bài học theo khối, môn học, thứ tự bài. Dùng bộ lọc để tìm nhanh,
+                            import/export dữ liệu khi cần cập nhật hàng loạt, và mở từng dòng để xem thông tin chi tiết.
+                        </div>
+                    </div>
+                </div>
+            </div>
             <LessonActions
                 canCreate={canCreate}
                 canEdit={canEdit}
@@ -437,6 +484,7 @@ const Page = () => {
                 onCancelReorder={handleCancelReorder}
                 onSaveReorder={handleSaveReorder}
                 onReorderStrategyChange={setReorderStrategy}
+                onReload={handleResetFilter}
             />
 
             <LessonTable
@@ -449,9 +497,11 @@ const Page = () => {
                 visibleFieldPermissions={visibleFieldPermissions}
                 selectedRowKeys={selectedRowKeys}
                 reorderMode={reorderMode}
-                dragRowKey={dragRowKey}
+                dragRowKey={dragRowKey as React.Key}
                 canEdit={canEdit}
                 canDelete={canDelete}
+                visibleFormFieldCodes={[...visibleFormFieldCodes, "updated_at"]}
+                tableScrollY={showPageInfo ? "calc(100vh - 330px)" : "calc(100vh - 260px)"}
                 onSelectionChange={setSelectedRowKeys}
                 onPageChange={(page, size) => {
                     setCurrentPage(page);
@@ -463,10 +513,6 @@ const Page = () => {
                 }}
                 onDragStart={setDragRowKey}
                 onDrop={handleDropRow}
-                onView={(record) => {
-                    setSelectedRecord(record);
-                    setOpenDetailDrawer(true);
-                }}
                 onEdit={(record) => {
                     setSelectedRecord(record);
                     setOpenFormModal(true);
@@ -501,12 +547,6 @@ const Page = () => {
                 onClose={() => setOpenImportModal(false)}
                 onSubmit={handleImport}
                 onDownloadTemplate={handleDownloadTemplate}
-            />
-            <LessonDetailDrawer
-                open={openDetailDrawer}
-                record={selectedRecord}
-                visibleFieldCodes={[...visibleFormFieldCodes, "updated_at"]}
-                onClose={() => setOpenDetailDrawer(false)}
             />
         </>
     );

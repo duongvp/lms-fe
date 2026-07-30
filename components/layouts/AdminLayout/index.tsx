@@ -31,6 +31,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
   const router = useRouter();
   const pathname = usePathname();
   const screens = useBreakpoint();
+  const user = useAuthStore((state) => state.user);
 
   const toggleDrawer = () => {
     setDrawerOpen(!drawerOpen);
@@ -41,17 +42,31 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
   };
 
   useEffect(() => {
+    const redirectToLogin = () => {
+      if (window.location.pathname !== '/auth/login') {
+        router.replace('/auth/login');
+      }
+    };
+
     const handleStorage = async (event: StorageEvent) => {
       if (event.key === 'logout') {
         useAuthStore.getState().clearUser();
         useAuthStore.getState().clearAccessToken();
         localStorage.removeItem('auth-storage');
-        router.push('/auth/login');
+        redirectToLogin();
       }
     };
 
+    const handleAuthLogout = () => {
+      redirectToLogin();
+    };
+
     window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    window.addEventListener('auth:logout', handleAuthLogout);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('auth:logout', handleAuthLogout);
+    };
   }, [router]);
 
   useEffect(() => {
@@ -68,19 +83,15 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
         if (!active) return;
         const user = response?.data;
         useAuthStore.getState().setUser(user);
-
-        const matched = protectedRoutes
-          .filter((route) => pathname.startsWith(route.path))
-          .sort((a, b) => b.path.length - a.path.length)[0];
-        if (matched && !user?.permissions?.includes(matched.permission)) {
-          router.replace('/403');
+        setAuthReady(true);
+      } catch (error: any) {
+        if (!active) return;
+        if (error?.status === 401 || error?.status === 403) {
+          useAuthStore.getState().logout();
+          router.replace('/auth/login');
           return;
         }
         setAuthReady(true);
-      } catch {
-        if (!active) return;
-        useAuthStore.getState().logout();
-        router.replace('/auth/login');
       }
     };
 
@@ -88,7 +99,23 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     return () => {
       active = false;
     };
-  }, [isClient, pathname, router]);
+  }, [isClient, router]);
+
+  useEffect(() => {
+    if (!authReady) return;
+
+    const matched = protectedRoutes
+      .filter((route) => pathname.startsWith(route.path))
+      .sort((a, b) => b.path.length - a.path.length)[0];
+
+    if (
+      matched
+      && !user?.permissions?.includes('*')
+      && !user?.permissions?.includes(matched.permission)
+    ) {
+      router.replace('/403');
+    }
+  }, [authReady, pathname, router, user?.permissions]);
 
   if (!isClient || !authReady) return <Spin size="large" fullscreen />;
 

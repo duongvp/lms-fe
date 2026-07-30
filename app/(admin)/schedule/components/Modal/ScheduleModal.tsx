@@ -96,6 +96,33 @@ const getScheduleSubmitError = (error: any) => {
         || 'Không thể lưu lịch học. Vui lòng kiểm tra lại dữ liệu.';
 };
 
+const getTimeMinutes = (time?: Dayjs | null) => {
+    if (!time) return undefined;
+    return time.hour() * 60 + time.minute();
+};
+
+const isEndAfterStart = (startTime?: Dayjs | null, endTime?: Dayjs | null) => {
+    const startMinutes = getTimeMinutes(startTime);
+    const endMinutes = getTimeMinutes(endTime);
+    if (startMinutes === undefined || endMinutes === undefined) return true;
+    return endMinutes > startMinutes;
+};
+
+const getEndDisabledTime = (startTime?: Dayjs | null) => {
+    if (!startTime) return {};
+
+    const startHour = startTime.hour();
+    const startMinute = startTime.minute();
+    return {
+        disabledHours: () => Array.from({ length: startHour }, (_, hour) => hour),
+        disabledMinutes: (selectedHour: number) => (
+            selectedHour === startHour
+                ? Array.from({ length: startMinute + 1 }, (_, minute) => minute)
+                : []
+        ),
+    };
+};
+
 const ScheduleModal: React.FC<ScheduleModalProps> = ({
     open,
     onClose,
@@ -126,6 +153,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const selectedBulkSubject = Form.useWatch('bulk_subject_name', form);
     const selectedBulkCourseCode = Form.useWatch('bulk_code', form);
     const newSessionStartTime = Form.useWatch(['new_session', 'start_time'], form) as Dayjs | undefined;
+    const singleStartTime = Form.useWatch('start_time', form) as Dayjs | undefined;
+    const bulkStartTime = Form.useWatch('bulk_start_time', form) as Dayjs | undefined;
     const [lessonOptions, setLessonOptions] = useState<LessonApiResponse[]>([]);
     const [loadingLessons, setLoadingLessons] = useState(false);
     const [bulkLessonOptions, setBulkLessonOptions] = useState<LessonApiResponse[]>([]);
@@ -290,28 +319,40 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
 
     const validateNewSessionEndTime = (_: unknown, endTime?: Dayjs | null) => {
         const startTime = form.getFieldValue(['new_session', 'start_time']) as Dayjs | undefined;
-        if (!startTime || !endTime) return Promise.resolve();
-
-        const startMinutes = startTime.hour() * 60 + startTime.minute();
-        const endMinutes = endTime.hour() * 60 + endTime.minute();
-        return endMinutes > startMinutes
+        return isEndAfterStart(startTime, endTime)
             ? Promise.resolve()
             : Promise.reject(new Error('Thời gian kết thúc phải sau thời gian bắt đầu'));
     };
 
-    const getNewSessionEndDisabledTime = () => {
-        if (!newSessionStartTime) return {};
+    const validateEndTimeAfter = (startFieldName: string | (string | number)[], message = 'Thời gian kết thúc phải sau thời gian bắt đầu') => (
+        _: unknown,
+        endTime?: Dayjs | null
+    ) => {
+        if (!endTime || !isFieldEditable('end_time')) return Promise.resolve();
 
-        const startHour = newSessionStartTime.hour();
-        const startMinute = newSessionStartTime.minute();
-        return {
-            disabledHours: () => Array.from({ length: startHour }, (_, hour) => hour),
-            disabledMinutes: (selectedHour: number) => (
-                selectedHour === startHour
-                    ? Array.from({ length: startMinute + 1 }, (_, minute) => minute)
-                    : []
-            ),
-        };
+        const startTime = form.getFieldValue(startFieldName) as Dayjs | undefined;
+        if (!startTime) {
+            return Promise.reject(new Error('Vui lòng nhập thời gian bắt đầu trước'));
+        }
+
+        return isEndAfterStart(startTime, endTime)
+            ? Promise.resolve()
+            : Promise.reject(new Error(message));
+    };
+
+    const revalidateOrClearEndTime = (
+        endFieldName: string | (string | number)[],
+        startTime?: Dayjs | null
+    ) => {
+        const endTime = form.getFieldValue(endFieldName) as Dayjs | undefined;
+        if (!endTime) return;
+
+        if (!startTime || !isEndAfterStart(startTime, endTime)) {
+            form.setFieldValue(endFieldName, undefined);
+            return;
+        }
+
+        void form.validateFields([endFieldName]);
     };
 
     const handleClose = () => {
@@ -551,7 +592,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                     </div>
                 )}
 
-                <Form layout="vertical" form={form} onFinish={handleFinish} initialValues={{ status: "Chưa bắt đầu" }}>
+                <Form layout="vertical" form={form} onFinish={handleFinish}>
 
                     {isEdit && (
                         <FormSection title="Lý do thay đổi">
@@ -711,7 +752,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                 <Form.Item name="master_lesson_name" hidden><Input /></Form.Item>
                             </FormSection>
 
-                            <FormSection title="Chi tiết thời gian & địa điểm">
+                            <FormSection title="Chi tiết thời gian">
                                 <Row gutter={24}>
                                     <Col span={8}>
                                         <Form.Item label="Ngày học" name="date" rules={requiredWhenEditable('start_time', 'Nhập ngày học')}>
@@ -720,12 +761,31 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                     </Col>
                                     <Col span={8}>
                                         <Form.Item label="Thời gian bắt đầu" name="start_time" rules={requiredWhenEditable('start_time', 'Nhập giờ bắt đầu')}>
-                                            <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="HH:mm" disabled={!isFieldEditable('start_time')} />
+                                            <TimePicker
+                                                format="HH:mm"
+                                                style={{ width: '100%' }}
+                                                placeholder="HH:mm"
+                                                disabled={!isFieldEditable('start_time')}
+                                                onChange={(value) => revalidateOrClearEndTime('end_time', value)}
+                                            />
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
-                                        <Form.Item label="Thời gian kết thúc" name="end_time" rules={requiredWhenEditable('end_time', 'Nhập giờ kết thúc')}>
-                                            <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="HH:mm" disabled={!isFieldEditable('end_time')} />
+                                        <Form.Item
+                                            label="Thời gian kết thúc"
+                                            name="end_time"
+                                            rules={[
+                                                ...requiredWhenEditable('end_time', 'Nhập giờ kết thúc'),
+                                                { validator: validateEndTimeAfter('start_time') },
+                                            ]}
+                                        >
+                                            <TimePicker
+                                                format="HH:mm"
+                                                style={{ width: '100%' }}
+                                                placeholder="Nhập giờ bắt đầu trước"
+                                                disabledTime={() => getEndDisabledTime(singleStartTime)}
+                                                disabled={!isFieldEditable('end_time') || !singleStartTime}
+                                            />
                                         </Form.Item>
                                     </Col>
                                 </Row>
@@ -733,12 +793,12 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
 
                             <FormSection title="Thông tin quản lý">
                                 <Row gutter={24}>
-                                    <Col span={8}>
+                                    <Col span={12}>
                                         <Form.Item label="Giáo viên" name="teacher" rules={requiredWhenEditable('teacher', 'Chọn giáo viên')}>
                                             <Select options={TEACHER_OPTIONS} placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
                                         </Form.Item>
                                     </Col>
-                                    <Col span={8}>
+                                    <Col span={12}>
                                         <Form.Item label="Hệ thống" name="system_type" rules={[{ required: true, message: 'Chọn hệ thống' }]}>
                                             <Select
                                                 options={[
@@ -747,15 +807,6 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                 ]}
                                                 placeholder="Chọn hệ thống"
                                             />
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={8}>
-                                        <Form.Item label="Trạng thái" name="status" rules={[{ required: true, message: 'Chọn trạng thái' }]}>
-                                            <Select options={[
-                                                { value: "Chưa bắt đầu", label: "Chưa bắt đầu" },
-                                                { value: "Đang diễn ra", label: "Đang diễn ra" },
-                                                { value: "Đã kết thúc", label: "Đã kết thúc" },
-                                            ]} placeholder="Chọn trạng thái" />
                                         </Form.Item>
                                     </Col>
                                 </Row>
@@ -936,12 +987,31 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                         <Row gutter={24}>
                                             <Col span={8}>
                                                 <Form.Item label="Giờ bắt đầu" name="bulk_start_time" rules={requiredWhenEditable('start_time', 'Nhập giờ bắt đầu')}>
-                                                    <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="HH:mm" disabled={!isFieldEditable('start_time')} />
+                                                    <TimePicker
+                                                        format="HH:mm"
+                                                        style={{ width: '100%' }}
+                                                        placeholder="HH:mm"
+                                                        disabled={!isFieldEditable('start_time')}
+                                                        onChange={(value) => revalidateOrClearEndTime('bulk_end_time', value)}
+                                                    />
                                                 </Form.Item>
                                             </Col>
                                             <Col span={8}>
-                                                <Form.Item label="Giờ kết thúc" name="bulk_end_time" rules={requiredWhenEditable('end_time', 'Nhập giờ kết thúc')}>
-                                                    <TimePicker format="HH:mm" style={{ width: '100%' }} placeholder="HH:mm" disabled={!isFieldEditable('end_time')} />
+                                                <Form.Item
+                                                    label="Giờ kết thúc"
+                                                    name="bulk_end_time"
+                                                    rules={[
+                                                        ...requiredWhenEditable('end_time', 'Nhập giờ kết thúc'),
+                                                        { validator: validateEndTimeAfter('bulk_start_time') },
+                                                    ]}
+                                                >
+                                                    <TimePicker
+                                                        format="HH:mm"
+                                                        style={{ width: '100%' }}
+                                                        placeholder="Nhập giờ bắt đầu trước"
+                                                        disabledTime={() => getEndDisabledTime(bulkStartTime)}
+                                                        disabled={!isFieldEditable('end_time') || !bulkStartTime}
+                                                    />
                                                 </Form.Item>
                                             </Col>
                                             <Col span={8}>
@@ -966,26 +1036,38 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                         </Col>
                                                         <Col span={6}>
                                                             <Form.Item name={['separate_config', dayValue, 'start_time']} rules={requiredWhenEditable('start_time', 'Nhập giờ bắt đầu')} style={{ marginBottom: 8 }}>
-                                                                {/* <Input type="time" placeholder="Giờ bắt đầu" /> */}
-                                                                <DatePicker
+                                                                <TimePicker
                                                                     format="HH:mm"
-                                                                    picker="time"
                                                                     placeholder="Giờ bắt đầu HH:mm"
                                                                     style={{ width: '100%' }}
                                                                     disabled={!isFieldEditable('start_time')}
+                                                                    onChange={(value) => revalidateOrClearEndTime(['separate_config', dayValue, 'end_time'], value)}
                                                                 />
                                                             </Form.Item>
                                                         </Col>
                                                         <Col span={6}>
-                                                            <Form.Item name={['separate_config', dayValue, 'end_time']} rules={requiredWhenEditable('end_time', 'Nhập giờ kết thúc')} style={{ marginBottom: 8 }}>
-                                                                {/* <Input type="time" placeholder="Giờ kết thúc" /> */}
-                                                                <DatePicker
-                                                                    format="HH:mm"
-                                                                    picker="time"
-                                                                    placeholder="Giờ kết thúc HH:mm"
-                                                                    style={{ width: '100%' }}
-                                                                    disabled={!isFieldEditable('end_time')}
-                                                                />
+                                                            <Form.Item noStyle dependencies={[['separate_config', dayValue, 'start_time']]}>
+                                                                {({ getFieldValue }) => {
+                                                                    const separateStartTime = getFieldValue(['separate_config', dayValue, 'start_time']) as Dayjs | undefined;
+                                                                    return (
+                                                                        <Form.Item
+                                                                            name={['separate_config', dayValue, 'end_time']}
+                                                                            rules={[
+                                                                                ...requiredWhenEditable('end_time', 'Nhập giờ kết thúc'),
+                                                                                { validator: validateEndTimeAfter(['separate_config', dayValue, 'start_time']) },
+                                                                            ]}
+                                                                            style={{ marginBottom: 8 }}
+                                                                        >
+                                                                            <TimePicker
+                                                                                format="HH:mm"
+                                                                                placeholder="Nhập giờ bắt đầu trước"
+                                                                                style={{ width: '100%' }}
+                                                                                disabledTime={() => getEndDisabledTime(separateStartTime)}
+                                                                                disabled={!isFieldEditable('end_time') || !separateStartTime}
+                                                                            />
+                                                                        </Form.Item>
+                                                                    );
+                                                                }}
                                                             </Form.Item>
                                                         </Col>
                                                         <Col span={8}>
@@ -1066,11 +1148,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                 style={{ width: '100%' }}
                                                 placeholder="HH:mm"
                                                 disabled={!isFieldEditable('start_time')}
-                                                onChange={() => {
-                                                    if (form.getFieldValue(['new_session', 'end_time'])) {
-                                                        void form.validateFields([['new_session', 'end_time']]);
-                                                    }
-                                                }}
+                                                onChange={(value) => revalidateOrClearEndTime(['new_session', 'end_time'], value)}
                                             />
                                         </Form.Item>
                                     </Col>
@@ -1086,9 +1164,9 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             <TimePicker
                                                 format="HH:mm"
                                                 style={{ width: '100%' }}
-                                                placeholder="HH:mm"
-                                                disabledTime={getNewSessionEndDisabledTime}
-                                                disabled={!isFieldEditable('end_time')}
+                                                placeholder="Nhập giờ bắt đầu trước"
+                                                disabledTime={() => getEndDisabledTime(newSessionStartTime)}
+                                                disabled={!isFieldEditable('end_time') || !newSessionStartTime}
                                             />
                                         </Form.Item>
                                     </Col>

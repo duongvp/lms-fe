@@ -36,6 +36,21 @@ const LessonFilterDrawer = ({
             open={open}
             onClose={onClose}
             width={360}
+            footer={
+                <Space style={{ width: "100%", justifyContent: "flex-end" }}>
+                    <Button
+                        onClick={() => {
+                            filterForm.resetFields();
+                            onReset();
+                        }}
+                    >
+                        Xóa lọc
+                    </Button>
+                    <Button type="primary" onClick={() => filterForm.submit()} loading={loading}>
+                        Tìm kiếm
+                    </Button>
+                </Space>
+            }
         >
             <Form
                 form={filterForm}
@@ -57,19 +72,6 @@ const LessonFilterDrawer = ({
                 <Form.Item name="learn_number" label="Số thứ tự bài">
                     <InputNumber min={1} style={{ width: "100%" }} placeholder="VD: 1" />
                 </Form.Item>
-                <Space style={{ width: "100%", justifyContent: "flex-end" }}>
-                    <Button
-                        onClick={() => {
-                            filterForm.resetFields();
-                            onReset();
-                        }}
-                    >
-                        Xóa lọc
-                    </Button>
-                    <Button type="primary" htmlType="submit" loading={loading}>
-                        Tìm kiếm
-                    </Button>
-                </Space>
             </Form>
         </Drawer>
     );

@@ -1,11 +1,19 @@
 import { useAuthStore } from "@/stores/authStore";
 
-let isRefreshing = false;
 let isHandlingAuthFailure = false;
 let refreshPromise: Promise<string> | null = null;
 
 const REFRESH_TOKEN_PATH = '/api/auth/refresh-token';
 const LOGIN_PATH = '/api/auth/login';
+const REQUEST_TIMEOUT_MS = 10000;
+const REFRESH_TIMEOUT_MS = 15000;
+
+class AuthSessionExpiredError extends Error {
+    constructor(message = 'Session expired. Please login again.') {
+        super(message);
+        this.name = 'AuthSessionExpiredError';
+    }
+}
 
 const shouldTryRefreshToken = (url: string) =>
     !url.includes(LOGIN_PATH) && !url.includes(REFRESH_TOKEN_PATH);
@@ -16,6 +24,50 @@ const handleAuthFailure = (logout: () => void) => {
     logout();
 };
 
+const isAuthSessionExpiredError = (error: unknown) =>
+    error instanceof AuthSessionExpiredError;
+
+const refreshAccessToken = (setAccessToken: (token: string | null) => void) => {
+    if (!refreshPromise) {
+        const refreshController = new AbortController();
+        const refreshTimeoutId = setTimeout(() => refreshController.abort(), REFRESH_TIMEOUT_MS);
+
+        refreshPromise = fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_URL}${REFRESH_TOKEN_PATH}`, {
+            method: 'POST',
+            credentials: 'include',
+            signal: refreshController.signal,
+        })
+            .then(async (res) => {
+                if (res.status === 401 || res.status === 403) {
+                    throw new AuthSessionExpiredError();
+                }
+                if (!res.ok) {
+                    const error = new Error(`Unable to refresh access token: ${res.status}`);
+                    (error as any).status = res.status;
+                    throw error;
+                }
+                const { data } = await res.json();
+                const { accessToken: newAccessToken } = data;
+                if (!newAccessToken) throw new Error('Unable to refresh access token');
+                setAccessToken(newAccessToken);
+                isHandlingAuthFailure = false;
+                return newAccessToken;
+            })
+            .catch((error) => {
+                if (error?.name === 'AbortError') {
+                    throw new Error('Refresh token request timeout');
+                }
+                throw error;
+            })
+            .finally(() => {
+                clearTimeout(refreshTimeoutId);
+                refreshPromise = null;
+            });
+    }
+
+    return refreshPromise;
+};
+
 // Hàm hỗ trợ tạo request
 
 export const fetchInstance = async (
@@ -24,44 +76,33 @@ export const fetchInstance = async (
     responseType: 'json' | 'blob' = 'json'
 ) => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     const { accessToken, setAccessToken, logout } = useAuthStore.getState();
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const method = options.method || 'GET';
+    let requestFailed = false;
 
     try {
         let res = await makeRequest(url, options, accessToken, controller);
 
         if (res.status === 401 && shouldTryRefreshToken(url)) {
-            if (!isRefreshing) {
-                isRefreshing = true;
-                refreshPromise = fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_URL}${REFRESH_TOKEN_PATH}`, {
-                    method: 'POST',
-                    credentials: 'include',
-                    signal: controller.signal,
-                })
-                    .then(async (res) => {
-                        if (!res.ok) throw new Error('Session expired. Please login again.');
-                        const { data } = await res.json();
-                        const { accessToken: newAccessToken } = data;
-                        setAccessToken(newAccessToken);
-                        return newAccessToken;
-                    })
-                    .finally(() => {
-                        isRefreshing = false;
-                    });
-            }
-
             try {
-                const newToken = await refreshPromise;
-                if (!newToken) throw new Error('Unable to refresh access token');
+                const newToken = await refreshAccessToken(setAccessToken);
                 res = await makeRequest(url, options, newToken, controller);
             } catch (refreshError) {
-                handleAuthFailure(logout);
+                if (isAuthSessionExpiredError(refreshError)) {
+                    handleAuthFailure(logout);
+                }
                 throw refreshError;
             }
         }
 
         if (!res.ok) {
             await handleErrorResponse(res);
+        }
+
+        if (url.includes(LOGIN_PATH)) {
+            isHandlingAuthFailure = false;
         }
 
         //  xử lý trả kết quả tùy theo kiểu mong muốn
@@ -71,11 +112,44 @@ export const fetchInstance = async (
 
         return await res.json();
     } catch (error) {
+        requestFailed = true;
+        logSlowRequest(url, method, startedAt, error);
         handleFetchError(error);
         throw error;
     } finally {
+        if (!requestFailed) {
+            logSlowRequest(url, method, startedAt);
+        }
         clearTimeout(timeoutId);
     }
+};
+
+const logSlowRequest = (
+    url: string,
+    method: string,
+    startedAt: number,
+    error?: unknown
+) => {
+    if (process.env.NODE_ENV === 'production' || typeof window === 'undefined') return;
+
+    const durationMs = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt);
+    if (!error && durationMs < 1000) return;
+
+    const parsedUrl = (() => {
+        try {
+            const parsed = new URL(url);
+            return `${parsed.pathname}${parsed.search}`;
+        } catch {
+            return url;
+        }
+    })();
+
+    const message = `[API ${error ? 'error' : 'slow'}] ${method} ${parsedUrl} ${durationMs}ms`;
+    if (error) {
+        console.warn(message, error);
+        return;
+    }
+    console.warn(message);
 };
 
 

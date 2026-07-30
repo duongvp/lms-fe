@@ -85,6 +85,7 @@ const UserModal = () => {
 
     useEffect(() => {
         if (modal.open) {
+            fetchRoles();
             // Set giá trị ban đầu cho form
             const initialValues: any = {
                 username: modal.user?.username,
@@ -101,15 +102,13 @@ const UserModal = () => {
     }, [modal.open, modal.user, form]);
 
     useEffect(() => {
-        fetchRoles();
-    }, []);
-
-    useEffect(() => {
         if (shouldReloadRole) {
-            fetchRoles(true);
+            if (modal.open) {
+                fetchRoles(true);
+            }
             setShouldReloadRole(false);
         }
-    }, [shouldReloadRole]);
+    }, [shouldReloadRole, modal.open]);
 
     return (
         <>

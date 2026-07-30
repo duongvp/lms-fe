@@ -249,7 +249,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 date: toPreviewDate(targetSession, 'start_time'),
                 start_time: toPreviewDate(targetSession, 'start_time'),
                 end_time: toPreviewDate(targetSession, 'end_time'),
-                teacher: targetSession.teacher,
+                teacher: sourceSession?.teacher ?? targetSession.teacher,
                 learn_number: Number(sourceSession?.learn_number),
                 lesson_name: sourceSession?.lesson_name || undefined,
                 original_learn_number: Number(targetSession.learn_number),
@@ -1112,6 +1112,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                         <span>Xác nhận thông tin Lịch học</span>
                     </Space>
                 }
+                centered
                 width={1280}
                 onCancel={onClose}
                 footer={[

@@ -115,10 +115,6 @@ export const useAuthStore = create<AuthState>()(
             logout: () => {
                 set({ user: defaultUser, accessToken: null });
                 handleLogout();
-                // 👉 Redirect về login (chỉ gọi ở client)
-                if (typeof window !== 'undefined' && window.location.pathname !== '/auth/login') {
-                    window.location.href = '/auth/login';
-                }
             },
         }),
         {

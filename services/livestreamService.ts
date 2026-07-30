@@ -41,6 +41,34 @@ export const createLivestream = (payload: LivestreamPayload) =>
 export const createLivestreamBulk = (payload: BulkLivestreamPayload) =>
     request(`${API_BASE_URL}/bulk`, payload);
 
+export const exportLivestreams = (
+    format: "csv" | "xlsx",
+    ids?: Array<string | number>
+) => {
+    const query = new URLSearchParams({ format });
+    if (ids?.length) query.set("ids", ids.join(","));
+    return fetchInstance(`${API_BASE_URL}/export?${query.toString()}`, {
+        method: "GET",
+        credentials: "include",
+    }, "blob");
+};
+
+export const downloadLivestreamImportTemplate = (format: "csv" | "xlsx") =>
+    fetchInstance(`${API_BASE_URL}/template?format=${format}`, {
+        method: "GET",
+        credentials: "include",
+    }, "blob");
+
+export const importLivestreamsFile = (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return fetchInstance(`${API_BASE_URL}/import`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+    });
+};
+
 // Hàm mới: lấy danh sách lịch
 export const getLivestreams = (params: {
     page?: number;

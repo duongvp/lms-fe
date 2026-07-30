@@ -229,3 +229,50 @@ body {
 .summary-row:hover td {
   background-color: #f0f0f0 !important;
 }
+
+/* Custom scrollbar behavior for Antd Table to hide scrollbar track when not overflowing */
+.ant-table-body {
+  overflow-y: auto !important;
+}
+
+/* Custom Webkit Scrollbar for better UI */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.25) transparent;
+}
+
+::-webkit-scrollbar,
+.ant-table-content::-webkit-scrollbar,
+.ant-table-body::-webkit-scrollbar,
+.ant-table-header::-webkit-scrollbar {
+  width: 6px !important;
+  height: 6px !important;
+}
+
+::-webkit-scrollbar-track,
+.ant-table-content::-webkit-scrollbar-track,
+.ant-table-body::-webkit-scrollbar-track,
+.ant-table-header::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+::-webkit-scrollbar-thumb,
+.ant-table-content::-webkit-scrollbar-thumb,
+.ant-table-body::-webkit-scrollbar-thumb,
+.ant-table-header::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.25) !important;
+  border-radius: 10px !important;
+}
+
+::-webkit-scrollbar-thumb:hover,
+.ant-table-content::-webkit-scrollbar-thumb:hover,
+.ant-table-body::-webkit-scrollbar-thumb:hover,
+.ant-table-header::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.45) !important;
+}
+
+::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}

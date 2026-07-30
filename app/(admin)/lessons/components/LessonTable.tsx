@@ -1,7 +1,7 @@
 "use client";
 
 import dayjs from "dayjs";
-import { Button, Grid, Space } from "antd";
+import { Button, Grid, Space, Tooltip } from "antd";
 import {
     DeleteOutlined,
     DragOutlined,
@@ -15,6 +15,7 @@ import type { SorterResult } from "antd/es/table/interface";
 import { FIELD_LABELS } from "./Modal/LessonFormModal";
 import { SORTABLE_FIELDS } from "../lesson.constants";
 import type { LessonDataType, LessonSortState } from "../lesson.types";
+import LessonDetailRow from "./LessonDetailRow";
 
 interface LessonTableProps {
     data: LessonDataType[];
@@ -26,15 +27,16 @@ interface LessonTableProps {
     visibleFieldPermissions: ResolvedFieldPermission[];
     selectedRowKeys: React.Key[];
     reorderMode: boolean;
-    dragRowKey: string | null;
+    dragRowKey: React.Key;
     canEdit: boolean;
     canDelete: boolean;
-    onSelectionChange: (keys: React.Key[]) => void;
+    visibleFormFieldCodes: string[];
+    tableScrollY?: string;
+    onSelectionChange: (selectedRowKeys: React.Key[]) => void;
     onPageChange: (page: number, pageSize: number) => void;
-    onSortChange: (sortState: LessonSortState) => void;
-    onDragStart: (key: string) => void;
-    onDrop: (key: string) => void;
-    onView: (record: LessonDataType) => void;
+    onSortChange: (sorter: LessonSortState) => void;
+    onDragStart: (key: React.Key) => void;
+    onDrop: (key: React.Key) => void;
     onEdit: (record: LessonDataType) => void;
     onDelete: (record: LessonDataType) => void;
 }
@@ -52,12 +54,13 @@ const LessonTable = ({
     dragRowKey,
     canEdit,
     canDelete,
+    visibleFormFieldCodes,
+    tableScrollY,
     onSelectionChange,
     onPageChange,
     onSortChange,
     onDragStart,
     onDrop,
-    onView,
     onEdit,
     onDelete,
 }: LessonTableProps) => {
@@ -92,21 +95,18 @@ const LessonTable = ({
             title: "Thao tác",
             key: "action",
             fixed: screens.lg ? "right" : undefined,
-            width: 190,
+            width: 120,
             render: (_: unknown, record: LessonDataType) => (
                 <Space>
-                    <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => onView(record)}>
-                        Xem
-                    </Button>
                     {canEdit && (
-                        <Button type="link" size="small" icon={<EditOutlined />} onClick={() => onEdit(record)}>
-                            Sửa
-                        </Button>
+                        <Tooltip title="Sửa">
+                            <Button type="link" size="small" icon={<EditOutlined />} onClick={(e) => { e.stopPropagation(); onEdit(record); }} />
+                        </Tooltip>
                     )}
                     {canDelete && (
-                        <Button type="text" danger size="small" icon={<DeleteOutlined />} onClick={() => onDelete(record)}>
-                            Xóa
-                        </Button>
+                        <Tooltip title="Xóa">
+                            <Button type="text" danger size="small" icon={<DeleteOutlined />} onClick={(e) => { e.stopPropagation(); onDelete(record); }} />
+                        </Tooltip>
                     )}
                 </Space>
             ),
@@ -121,6 +121,7 @@ const LessonTable = ({
             rowSelection={reorderMode ? undefined : {
                 selectedRowKeys,
                 onChange: onSelectionChange,
+                columnWidth: 32,
             }}
             onRow={(record) => ({
                 draggable: reorderMode,
@@ -136,8 +137,15 @@ const LessonTable = ({
                             ? "rgba(22, 119, 255, 0.06)"
                             : undefined,
                     }
-                    : undefined,
+                    : { cursor: "pointer" },
             })}
+            expandable={reorderMode ? undefined : {
+                expandedRowRender: (record) => (
+                    <LessonDetailRow record={record} visibleFieldCodes={visibleFormFieldCodes} />
+                ),
+                expandRowByClick: true,
+                columnWidth: 32,
+            }}
             pagination={reorderMode ? false : {
                 current: currentPage,
                 pageSize,
@@ -157,7 +165,7 @@ const LessonTable = ({
                     sort_order: activeSorter?.order || undefined,
                 });
             }}
-            scroll={{ x: "max-content" }}
+            scroll={{ x: "max-content", y: data?.length > 5 ? tableScrollY ?? "calc(100vh - 330px)" : undefined }}
         />
     );
 };

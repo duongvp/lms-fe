@@ -4,25 +4,41 @@ import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import type { SorterResult } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
-import { notification, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, Drawer, Grid, Tooltip } from "antd";
-import { EditOutlined, SaveOutlined, CloseOutlined, DeleteOutlined, CalendarOutlined } from "@ant-design/icons";
+import { notification, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, Drawer, Grid, Tooltip, Descriptions, Tabs, Dropdown } from "antd";
+import type { TabsProps } from "antd";
+import { EditOutlined, SaveOutlined, CloseOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined } from "@ant-design/icons";
 import ScheduleModal from "./components/Modal/ScheduleModal";
+import BulkEditModal from "./components/Modal/BulkEditModal";
+import ScheduleImportModal, { type ScheduleImportError } from "./components/Modal/ScheduleImportModal";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
 import {
     deleteLivestream,
+    downloadLivestreamImportTemplate,
+    exportLivestreams,
     getLivestreams,
+    importLivestreamsFile,
     updateLivestream,
     updateLivestreamBulk,
 } from "@/services/livestreamService";
 import dayjs, { Dayjs } from "dayjs";
-import BulkEditModal from "./components/Modal/BulkEditModal";
 import { getModuleFields } from "@/services/roleService";
 import type { ModuleField, ResolvedFieldPermission } from "@/types/fieldPolicy";
 import { canEditAnyField, resolveModuleFieldPermissions, sanitizeEditablePayload } from "@/helper/fieldPolicy";
 
 const SCHEDULE_MODULE_CODE = "calendar";
 const { RangePicker } = DatePicker;
+
+const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+};
 
 // Define Schedule Data Type
 interface ScheduleDataType {
@@ -129,16 +145,67 @@ const canModifySchedule = (record: ScheduleDataType) => {
     return record.can_modify === true;
 };
 
-const ScheduleFilterSidebar = ({
+const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
+    const rows = [
+        { label: "Mã lớp", value: record.code || "-" },
+        { label: "Tên lớp", value: record.class_name || "-" },
+        { label: "Bài học", value: record.lesson_name || "-" },
+        { label: "Buổi học", value: record.learn_number ?? "-" },
+        { label: "Môn học", value: record.subject || "-" },
+        { label: "Giáo viên", value: record.teacher || "-" },
+        {
+            label: "Bắt đầu",
+            value: record.start_time ? dayjs(record.start_time).format("DD/MM/YYYY HH:mm") : "-",
+        },
+        {
+            label: "Kết thúc",
+            value: record.end_time ? dayjs(record.end_time).format("DD/MM/YYYY HH:mm") : "-",
+        },
+        { label: "Phòng/Kênh học", value: record.room || "-" },
+        { label: "Hệ thống", value: record.system_type || "-" },
+        { label: "Trạng thái", value: record.lesson_status || "-" },
+        { label: "Link học", value: record.lesson_link || "-" },
+    ];
+
+    const items: TabsProps["items"] = [
+        {
+            key: "info",
+            label: "Thông tin chi tiết",
+            children: (
+                <div style={{ padding: "8px 24px 24px", backgroundColor: "#fafafa" }}>
+                    <Descriptions
+                        bordered
+                        size="small"
+                        column={{ xxl: 3, xl: 3, lg: 2, md: 2, sm: 1, xs: 1 }}
+                    >
+                        {rows.map((item) => (
+                            <Descriptions.Item key={item.label} label={item.label}>
+                                {item.value}
+                            </Descriptions.Item>
+                        ))}
+                    </Descriptions>
+                </div>
+            ),
+        },
+    ];
+
+    return <Tabs defaultActiveKey="info" items={items} />;
+};
+
+const ScheduleFilterDrawer = ({
+    open,
     value,
     loading,
     onSearch,
     onReset,
+    onClose,
 }: {
+    open: boolean;
     value: ScheduleFilterValues;
     loading: boolean;
     onSearch: (values: ScheduleFilterValues) => void;
     onReset: () => void;
+    onClose: () => void;
 }) => {
     const [filterForm] = Form.useForm();
 
@@ -152,34 +219,46 @@ const ScheduleFilterSidebar = ({
     };
 
     return (
-        <div style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 16, background: "#fff" }}>
-            <Form form={filterForm} layout="vertical" onFinish={(values) => onSearch(cleanFilterValues(values))}>
-                <Form.Item name="code" label="Mã lớp">
-                    <Input allowClear placeholder="VD: TOPC01" />
-                </Form.Item>
-                <Form.Item name="teacher" label="Giáo viên">
-                    <Input allowClear placeholder="Tên giáo viên" />
-                </Form.Item>
-                <Form.Item name="lesson_status" label="Trạng thái buổi học">
-                    <Select
-                        allowClear
-                        placeholder="Tất cả trạng thái"
-                        options={[
-                            { value: 0, label: "Chưa bắt đầu" },
-                            { value: 2, label: "Đang diễn ra" },
-                            { value: 1, label: "Nghỉ học" },
-                        ]}
-                    />
-                </Form.Item>
-                <Form.Item name="date_range" label="Khoảng ngày">
-                    <RangePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
-                </Form.Item>
+        <Drawer
+            title="Bộ lọc lịch học"
+            placement="right"
+            open={open}
+            onClose={onClose}
+            width={360}
+            footer={
                 <Space style={{ width: "100%", justifyContent: "flex-end" }}>
                     <Button onClick={handleReset}>Reset</Button>
-                    <Button type="primary" htmlType="submit" loading={loading}>Search</Button>
+                    <Button type="primary" onClick={() => filterForm.submit()} loading={loading}>
+                        Search
+                    </Button>
                 </Space>
-            </Form>
-        </div>
+            }
+        >
+            <div style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 16, background: "#fff" }}>
+                <Form form={filterForm} layout="vertical" onFinish={(values) => onSearch(cleanFilterValues(values))}>
+                    <Form.Item name="code" label="Mã lớp">
+                        <Input allowClear placeholder="VD: TOPC01" />
+                    </Form.Item>
+                    <Form.Item name="teacher" label="Giáo viên">
+                        <Input allowClear placeholder="Tên giáo viên" />
+                    </Form.Item>
+                    <Form.Item name="lesson_status" label="Trạng thái buổi học">
+                        <Select
+                            allowClear
+                            placeholder="Tất cả trạng thái"
+                            options={[
+                                { value: 0, label: "Chưa bắt đầu" },
+                                { value: 2, label: "Đang diễn ra" },
+                                { value: 1, label: "Nghỉ học" },
+                            ]}
+                        />
+                    </Form.Item>
+                    <Form.Item name="date_range" label="Khoảng ngày">
+                        <RangePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
+                    </Form.Item>
+                </Form>
+            </div>
+        </Drawer>
     );
 };
 
@@ -194,9 +273,14 @@ const Page = () => {
     const [api, contextHolder] = notification.useNotification();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [openBulkEditModal, setOpenBulkEditModal] = useState(false);
+    const [openImportModal, setOpenImportModal] = useState(false);
+    const [importing, setImporting] = useState(false);
+    const [importErrors, setImportErrors] = useState<ScheduleImportError[]>([]);
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+    const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
     const [selectedRecord, setSelectedRecord] = useState<ScheduleDataType | null>(null);
     const [isEditMode, setIsEditMode] = useState(false);
+    const [showPageInfo, setShowPageInfo] = useState(true);
 
     // Cấu hình Checkbox cho Bảng (Antd Row Selection)
     const rowSelection = {
@@ -210,6 +294,7 @@ const Page = () => {
                 ? undefined
                 : "Buổi học đã bắt đầu, không thể chọn để cập nhật",
         }),
+        columnWidth: 32,
     };
 
     // Hàm mở modal để dời lịch (Sửa)
@@ -321,9 +406,20 @@ const Page = () => {
     const canCreateSchedule = hasPermission(PermissionKey.SCHEDULE_CREATE);
     const canEditSchedule = hasPermission(PermissionKey.SCHEDULE_EDIT);
     const canDeleteSchedule = hasPermission(PermissionKey.SCHEDULE_DELETE);
+    const canImportSchedule = hasPermission(PermissionKey.SCHEDULE_IMPORT);
+    const canExportSchedule = hasPermission(PermissionKey.SCHEDULE_EXPORT);
 
 
     const isEditing = (record: ScheduleDataType) => record.key === editingKey;
+
+    const handleRowClick = (record: ScheduleDataType) => {
+        if (editingKey) return;
+        setExpandedRowKeys((prevKeys) =>
+            prevKeys.includes(record.key)
+                ? prevKeys.filter((key) => key !== record.key)
+                : [...prevKeys, record.key]
+        );
+    };
 
     // Handle search filter locally
     const handleSearch = async (value: string) => {
@@ -362,6 +458,60 @@ const Page = () => {
         }
         setIsModalOpen(true);
         setIsEditMode(false)
+    };
+
+    const handleExportSchedule = async (format: "csv" | "xlsx") => {
+        try {
+            const selectedIds = selectedRowKeys.length
+                ? selectedRowKeys.map(String)
+                : undefined;
+            const blob = await exportLivestreams(format, selectedIds);
+            downloadBlob(
+                blob,
+                `calendar-${selectedIds?.length ? "selected" : "all"}.${format}`
+            );
+        } catch (error: any) {
+            api.error({
+                message: "Export thất bại",
+                description: error.message || "Không thể xuất lịch học.",
+            });
+        }
+    };
+
+    const handleDownloadImportTemplate = async (format: "csv" | "xlsx") => {
+        try {
+            const blob = await downloadLivestreamImportTemplate(format);
+            downloadBlob(blob, `calendar-import-template.${format}`);
+        } catch (error: any) {
+            api.error({
+                message: "Tải file mẫu thất bại",
+                description: error.message || "Không thể tải file mẫu.",
+            });
+        }
+    };
+
+    const handleImportSchedule = async (file: File) => {
+        try {
+            setImporting(true);
+            setImportErrors([]);
+            const response: any = await importLivestreamsFile(file);
+            api.success({
+                message: "Import thành công",
+                description: `Đã tạo ${response?.data?.count ?? 0} lịch học.`,
+            });
+            setOpenImportModal(false);
+            setSelectedRowKeys([]);
+            fetchData(currentPage, pageSize, filterValues, sortState);
+        } catch (error: any) {
+            const errors = error?.detail?.errors;
+            if (Array.isArray(errors)) setImportErrors(errors);
+            api.error({
+                message: "Import thất bại",
+                description: error.message || "File import có dữ liệu không hợp lệ.",
+            });
+        } finally {
+            setImporting(false);
+        }
     };
 
     const handleModalSuccess = (values: any) => {
@@ -493,6 +643,13 @@ const Page = () => {
             title: field.fieldLabel || fieldCode,
             dataIndex: fieldCode,
             key: fieldCode,
+            width:
+                fieldCode === "lesson_name" ? 250
+                    : fieldCode === "lesson_link" ? 200
+                        : fieldCode === "learn_number" ? 120
+                            : fieldCode === "class_code" ? 120
+                                : fieldCode === "subject" ? 120
+                                    : 150,
             sorter: SORTABLE_FIELDS.has(fieldCode)
                 ? { multiple: visibleFieldPermissions.length - columnIndex }
                 : false,
@@ -604,7 +761,10 @@ const Page = () => {
                                         type="link"
                                         aria-label="Dời lịch"
                                         disabled={editingKey !== ""}
-                                        onClick={() => handleReschedule(record)}
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            handleReschedule(record);
+                                        }}
                                         icon={<CalendarOutlined />}
                                         size="small"
                                     />
@@ -614,7 +774,10 @@ const Page = () => {
                                         type="link"
                                         aria-label="Sửa nhanh"
                                         disabled={editingKey !== ""}
-                                        onClick={() => edit(record)}
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            edit(record);
+                                        }}
                                         icon={<EditOutlined />}
                                         size="small"
                                     />
@@ -628,7 +791,10 @@ const Page = () => {
                                     danger
                                     aria-label="Xóa"
                                     disabled={editingKey !== ""}
-                                    onClick={() => handleDelete(record)}
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleDelete(record);
+                                    }}
                                     icon={<DeleteOutlined />}
                                     size="small"
                                 />
@@ -643,74 +809,147 @@ const Page = () => {
     return (
         <>
             {contextHolder}
+            <div
+                style={{
+                    border: "1px solid #d6e4ff",
+                    background: "#f6fbff",
+                    borderRadius: 8,
+                    padding: showPageInfo ? "10px 12px" : "8px 12px",
+                    marginBottom: 10,
+                }}
+            >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                        <InfoCircleOutlined style={{ color: "#1677ff", fontSize: 16 }} />
+                        <span style={{ fontWeight: 600 }}>Quản lý lịch học</span>
+                    </div>
+                    <Button
+                        type="text"
+                        size="small"
+                        icon={showPageInfo ? <UpOutlined /> : <DownOutlined />}
+                        onClick={() => setShowPageInfo((value) => !value)}
+                    >
+                        {showPageInfo ? "Ẩn thông tin" : "Hiện thông tin"}
+                    </Button>
+                </div>
+                <div
+                    style={{
+                        display: "grid",
+                        gridTemplateRows: showPageInfo ? "1fr" : "0fr",
+                        transition: "grid-template-rows 0.3s ease-in-out",
+                        overflow: "hidden",
+                    }}
+                >
+                    <div style={{ minHeight: 0 }}>
+                        <div 
+                            style={{ 
+                                marginTop: 6, 
+                                paddingLeft: 24, 
+                                color: "rgba(0, 0, 0, 0.72)", 
+                                lineHeight: 1.55 
+                            }}
+                        >
+                          Theo dõi các buổi học theo lớp, giáo viên và khung giờ. Bạn có thể thêm lịch,
+                          dời lịch, nghỉ học, sửa nhanh từng dòng hoặc sửa hàng loạt những buổi chưa diễn ra.
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <SearchAndActionsBar
                 onSearch={handleSearch}
                 placeholder="Tìm kiếm theo mã lớp, tên lớp, giáo viên, phòng học..."
                 handleAddBtn={canCreateSchedule ? handleAddBtn : undefined}
+                handleImportClick={canImportSchedule ? () => {
+                    setImportErrors([]);
+                    setOpenImportModal(true);
+                } : undefined}
                 handleFilterBtn={() => setOpenFilterDrawer(true)}
                 extraExportButton={
-                    canEditSchedule && (
-                        <Button
-                            type="primary"
-                            icon={<EditOutlined />}
-                            disabled={selectedRowKeys.length === 0}
-                            onClick={() => setOpenBulkEditModal(true)}
-                        >
-                            Sửa hàng loạt
-                        </Button>
-                    )
+                    <>
+                        {canExportSchedule && (
+                            <Dropdown
+                                trigger={["click"]}
+                                menu={{
+                                    items: [
+                                        { key: "xlsx", label: "Xuất Excel (.xlsx)" },
+                                        { key: "csv", label: "Xuất CSV (.csv)" },
+                                    ],
+                                    onClick: ({ key }) => handleExportSchedule(key as "csv" | "xlsx"),
+                                }}
+                            >
+                                <Button icon={<DownloadOutlined />}>
+                                    Export{selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}
+                                </Button>
+                            </Dropdown>
+                        )}
+                        <Button icon={<ReloadOutlined />} onClick={handleResetScheduleFilter} />
+                        {canEditSchedule && (
+                            <Button
+                                type="primary"
+                                icon={<EditOutlined />}
+                                onClick={() => setOpenBulkEditModal(true)}
+                            >
+                                Sửa hàng loạt
+                            </Button>
+                        )}
+                    </>
                 }
             />
 
             <Form form={form} component={false}>
-                  <CustomTable<ScheduleDataType>
-                            columns={columns}
-                            dataSource={filteredData}
-                            loading={loading}
-                            rowSelection={rowSelection}
-                            pagination={{
-                                current: currentPage,
-                                pageSize: pageSize,
-                                total: totalItems,
-                                showSizeChanger: true,
-                                position: ["bottomRight"],
-                                onChange: (page, size) => {
-                                    setCurrentPage(page);
-                                    setPageSize(size);
-                                }
-                            }}
-                            onChange={(_, __, sorter, extra) => {
-                                if (extra.action !== "sort") return;
-                                const sorterItems = (
-                                    Array.isArray(sorter) ? sorter : [sorter]
-                                ) as SorterResult<ScheduleDataType>[];
-                                setSortState(
-                                    sorterItems
-                                        .filter((item) => item.field && item.order)
-                                        .map((item) => ({
-                                            field: String(item.field),
-                                            order: item.order as "ascend" | "descend",
-                                        }))
-                                );
-                                setCurrentPage(1);
-                            }}
-                            scroll={{ x: "max-content" }}
-                        />
-                <Drawer
-                    title="Bộ lọc lịch học"
-                    placement="right"
+                <CustomTable<ScheduleDataType>
+                    columns={columns}
+                    dataSource={filteredData}
+                    loading={loading}
+                    rowSelection={rowSelection}
+                    pagination={{
+                        current: currentPage,
+                        pageSize: pageSize,
+                        total: totalItems,
+                        showSizeChanger: true,
+                        position: ["bottomRight"],
+                        onChange: (page, size) => {
+                            setCurrentPage(page);
+                            setPageSize(size);
+                        }
+                    }}
+                    onChange={(_, __, sorter, extra) => {
+                        if (extra.action !== "sort") return;
+                        const sorterItems = (
+                            Array.isArray(sorter) ? sorter : [sorter]
+                        ) as SorterResult<ScheduleDataType>[];
+                        setSortState(
+                            sorterItems
+                                .filter((item) => item.field && item.order)
+                                .map((item) => ({
+                                    field: String(item.field),
+                                    order: item.order as "ascend" | "descend",
+                                }))
+                        );
+                        setCurrentPage(1);
+                    }}
+                    expandable={{
+                        expandedRowRender: (record) => <ScheduleDetailRow record={record} />,
+                        expandedRowKeys,
+                        onExpandedRowsChange: (keys) => setExpandedRowKeys([...keys]),
+                        expandRowByClick: true,
+                        columnWidth: 32,
+                    }}
+                    onRow={(record) => ({
+                        onClick: () => handleRowClick(record),
+                        style: { cursor: editingKey ? "default" : "pointer" },
+                    })}
+                    scroll={{ x: "max-content", y: filteredData?.length > 5 ? showPageInfo ? "calc(100vh - 330px)" : "calc(100vh - 260px)" : undefined }}
+                />
+                <ScheduleFilterDrawer
                     open={openFilterDrawer}
                     onClose={() => setOpenFilterDrawer(false)}
-                    width={360}
-                >
-                    <ScheduleFilterSidebar
-                        value={filterValues}
-                        loading={loading}
-                        onSearch={handleScheduleFilter}
-                        onReset={handleResetScheduleFilter}
-                    />
-                </Drawer>
+                    value={filterValues}
+                    loading={loading}
+                    onSearch={handleScheduleFilter}
+                    onReset={handleResetScheduleFilter}
+                />
                 <ScheduleModal
                     open={isModalOpen}
                     onClose={() => setIsModalOpen(false)}
@@ -720,6 +959,14 @@ const Page = () => {
                     moduleFields={moduleFields}
                     fieldPolicy={fieldPolicy}
                     moduleCode={SCHEDULE_MODULE_CODE}
+                />
+                <ScheduleImportModal
+                    open={openImportModal}
+                    loading={importing}
+                    errors={importErrors}
+                    onClose={() => setOpenImportModal(false)}
+                    onSubmit={handleImportSchedule}
+                    onDownloadTemplate={handleDownloadImportTemplate}
                 />
                 {/* Modal Sửa Hàng Loạt */}
                 <BulkEditModal
