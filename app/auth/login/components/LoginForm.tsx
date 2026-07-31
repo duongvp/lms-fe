@@ -27,15 +27,12 @@ const LoginForm = () => {
             localStorage.removeItem('logout');
             localStorage.setItem('lastLoginMode', mode);
 
-            // if (mode === 'fnb') {
-            //     router.push('/fnb');
-            //     return;
-            // }
-
             // Tìm route đầu tiên mà user có quyền (thường là dashboard)
             const firstAllowedRoute = protectedRoutes.find(route =>
                 normalizedUser.permissions?.includes(route.permission)
             );
+
+            console.log("🚀 ~ onFinish ~ firstAllowedRoute:", firstAllowedRoute);
 
             if (firstAllowedRoute) {
                 router.push(firstAllowedRoute.path);
