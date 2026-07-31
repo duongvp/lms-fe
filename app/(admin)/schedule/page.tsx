@@ -25,6 +25,7 @@ import dayjs, { Dayjs } from "dayjs";
 import { getModuleFields } from "@/services/roleService";
 import type { ModuleField, ResolvedFieldPermission } from "@/types/fieldPolicy";
 import { canEditAnyField, resolveModuleFieldPermissions, sanitizeEditablePayload } from "@/helper/fieldPolicy";
+import { getTeachingStaffOptions } from "@/services/teacherProfileService";
 
 const SCHEDULE_MODULE_CODE = "calendar";
 const { RangePicker } = DatePicker;
@@ -47,6 +48,7 @@ interface ScheduleDataType {
     code?: string;
     subject?: string;
     teacher?: string;
+    assistant_teacher?: string;
     end_time?: string;
     start_time?: string;
     lesson_link?: string;
@@ -81,9 +83,10 @@ const DEFAULT_MODULE_FIELDS: ModuleField[] = [
     { fieldCode: "learn_number", fieldLabel: "Buổi học", fieldType: "number", sortOrder: 3 },
     { fieldCode: "subject", fieldLabel: "Môn học", fieldType: "text", sortOrder: 4 },
     { fieldCode: "teacher", fieldLabel: "Giáo viên", fieldType: "text", sortOrder: 5 },
-    { fieldCode: "start_time", fieldLabel: "Bắt đầu", fieldType: "date", sortOrder: 6 },
-    { fieldCode: "end_time", fieldLabel: "Kết thúc", fieldType: "date", sortOrder: 7 },
-    { fieldCode: "lesson_link", fieldLabel: "Link học", fieldType: "text", sortOrder: 8 },
+    { fieldCode: "assistant_teacher", fieldLabel: "Trợ giảng", fieldType: "select", sortOrder: 6 },
+    { fieldCode: "start_time", fieldLabel: "Bắt đầu", fieldType: "date", sortOrder: 7 },
+    { fieldCode: "end_time", fieldLabel: "Kết thúc", fieldType: "date", sortOrder: 8 },
+    { fieldCode: "lesson_link", fieldLabel: "Link học", fieldType: "text", sortOrder: 9 },
 ];
 
 const MOCK_SCHEDULES: ScheduleDataType[] = [];
@@ -281,6 +284,8 @@ const Page = () => {
     const [selectedRecord, setSelectedRecord] = useState<ScheduleDataType | null>(null);
     const [isEditMode, setIsEditMode] = useState(false);
     const [showPageInfo, setShowPageInfo] = useState(true);
+    const [teacherOptions, setTeacherOptions] = useState<Array<{ value: string; label: string }>>([]);
+    const [assistantOptions, setAssistantOptions] = useState<Array<{ value: string; label: string }>>([]);
 
     // Cấu hình Checkbox cho Bảng (Antd Row Selection)
     const rowSelection = {
@@ -353,6 +358,7 @@ const Page = () => {
                     learn_number: item.learn_number,
                     lesson_link: item.lesson_link || item.link || "",
                     teacher: item.teacher,
+                    assistant_teacher: item.assistant_teacher,
                     system_type: item.system_type,
                     lesson_status: lessonStatusText(item.lesson_status),
                     can_modify: item.can_modify === true,
@@ -376,6 +382,21 @@ const Page = () => {
     useEffect(() => {
         fetchData(currentPage, pageSize, filterValues, sortState);
     }, [currentPage, pageSize, filterValues, sortState, fetchData]);
+
+    useEffect(() => {
+        Promise.all([
+            getTeachingStaffOptions(1),
+            getTeachingStaffOptions(2),
+        ])
+            .then(([teachers, assistants]) => {
+                setTeacherOptions(teachers);
+                setAssistantOptions(assistants);
+            })
+            .catch(() => {
+                setTeacherOptions([]);
+                setAssistantOptions([]);
+            });
+    }, []);
 
     useEffect(() => {
         const fetchModuleFields = async () => {
@@ -408,6 +429,7 @@ const Page = () => {
     const canDeleteSchedule = hasPermission(PermissionKey.SCHEDULE_DELETE);
     const canImportSchedule = hasPermission(PermissionKey.SCHEDULE_IMPORT);
     const canExportSchedule = hasPermission(PermissionKey.SCHEDULE_EXPORT);
+    const canEditTeachingAssignment = hasPermission(PermissionKey.CALENDAR_TEACHER_EDIT);
 
 
     const isEditing = (record: ScheduleDataType) => record.key === editingKey;
@@ -495,9 +517,14 @@ const Page = () => {
             setImporting(true);
             setImportErrors([]);
             const response: any = await importLivestreamsFile(file);
+            const summary = response?.data?.summary;
             api.success({
                 message: "Import thành công",
-                description: `Đã tạo ${response?.data?.count ?? 0} lịch học.`,
+                description: `Đã tạo ${response?.data?.count ?? 0} lịch học${
+                    summary?.hmoRequests !== undefined
+                        ? `, kiểm tra ${summary.hmoRequests} cặp Package/Course qua HMO`
+                        : ""
+                }.`,
             });
             setOpenImportModal(false);
             setSelectedRowKeys([]);
@@ -530,7 +557,13 @@ const Page = () => {
             });
             return;
         }
-        form.setFieldsValue({ ...record });
+        form.setFieldsValue({
+            ...record,
+            assistant_teacher: String(record.assistant_teacher || '')
+                .split(',')
+                .map((username) => username.trim())
+                .filter(Boolean),
+        });
         setEditingKey(record.key);
     };
 
@@ -632,7 +665,13 @@ const Page = () => {
             && (item.visible || item.editable)
     );
     const editableFieldCodes = fieldPermissions
-        .filter((item) => item.editable)
+        .filter((item) => (
+            item.editable
+            && (
+                !["teacher", "assistant_teacher"].includes(item.field.fieldCode)
+                || canEditTeachingAssignment
+            )
+        ))
         .map((item) => item.field.fieldCode);
 
     // Build dynamic columns based on ModuleField and fieldPolicy from current role.
@@ -666,12 +705,21 @@ const Page = () => {
                                 style={{ margin: 0 }}
                                 rules={[{ required: true, message: "Chọn giáo viên!" }]}
                             >
-                                <Select size="small" style={{ width: 140 }} options={[
-                                    { value: "Nguyễn Văn A", label: "Nguyễn Văn A" },
-                                    { value: "Trần Thị B", label: "Trần Thị B" },
-                                    { value: "Lê Hoàng C", label: "Lê Hoàng C" },
-                                    { value: "Phạm Thảo D", label: "Phạm Thảo D" },
-                                ]} />
+                                <Select size="small" showSearch optionFilterProp="label" style={{ width: 180 }} options={teacherOptions} />
+                            </Form.Item>
+                        );
+                    }
+                    if (fieldCode === "assistant_teacher") {
+                        return (
+                            <Form.Item name={fieldCode} style={{ margin: 0 }}>
+                                <Select
+                                    mode="multiple"
+                                    size="small"
+                                    showSearch
+                                    optionFilterProp="label"
+                                    style={{ width: 220 }}
+                                    options={assistantOptions}
+                                />
                             </Form.Item>
                         );
                     }
@@ -714,6 +762,16 @@ const Page = () => {
 
                 if ((fieldCode === "start_time" || fieldCode === "end_time") && text) {
                     return <span>{dayjs(text).format('YYYY-MM-DD HH:mm')}</span>;
+                }
+
+                if (fieldCode === "assistant_teacher") {
+                    const labels = String(text || '')
+                        .split(',')
+                        .map((username) => assistantOptions.find(
+                            (option) => option.value === username.trim()
+                        )?.label || username.trim())
+                        .filter(Boolean);
+                    return <span>{labels.join(', ') || '-'}</span>;
                 }
 
                 // If not editing or not editable, display plain text
@@ -1013,6 +1071,7 @@ const Page = () => {
                             if (modalPayload.config_mode === 'common') {
                                 update_data = {
                                     teacher: modalPayload.common_config.teacher,
+                                    assistant_teacher: modalPayload.common_config.assistant_teacher,
                                     room: modalPayload.common_config.room,
                                     start_time: modalPayload.common_config.start_time,
                                     end_time: modalPayload.common_config.end_time,
@@ -1023,6 +1082,7 @@ const Page = () => {
                                     return {
                                         id: id,
                                         teacher: config.teacher,
+                                        assistant_teacher: config.assistant_teacher,
                                         room: config.room,
                                         start_time: config.start_time,
                                         end_time: config.end_time,

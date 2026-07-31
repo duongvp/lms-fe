@@ -30,6 +30,19 @@ export enum PermissionKey {
     LESSON_IMPORT = 'lessons.import',
     LESSON_EXPORT = 'lessons.export',
 
+    TEACHER_PROFILE_VIEW = 'teacher_profile.view',
+    TEACHER_PROFILE_CREATE = 'teacher_profile.create',
+    TEACHER_PROFILE_EDIT = 'teacher_profile.update',
+    TEACHER_PROFILE_DELETE = 'teacher_profile.delete',
+    TEACHER_PROFILE_STATUS = 'teacher_profile.status',
+    TEACHER_PROFILE_IMPORT = 'teacher_profile.import',
+    TEACHER_PROFILE_EXPORT = 'teacher_profile.export',
+
+    CALENDAR_TEACHER_VIEW = 'calendar.teacher.view',
+    CALENDAR_TEACHER_ASSIGN = 'calendar.teacher.assign',
+    CALENDAR_TEACHER_EDIT = 'calendar.teacher.update',
+    CALENDAR_TEACHER_REMOVE = 'calendar.teacher.remove',
+
     CATEGORY_VIEW = 'category_view',
     CATEGORY_CREATE = 'category_create',
     CATEGORY_EDIT = 'category_edit',

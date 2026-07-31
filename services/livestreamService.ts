@@ -8,6 +8,7 @@ export interface LivestreamPayload {
     system_type: string;
     code: string;
     teacher: string;
+    assistant_teacher?: string;
     learn_number: number;
     lesson_id?: string | number;
     grade?: number;
@@ -22,6 +23,14 @@ export interface LivestreamPayload {
         lesson_ids: string[];
     }>;
 }
+
+const serializeAssistantTeachers = (value: unknown) => {
+    const values = Array.isArray(value) ? value : String(value ?? '').split(',');
+    const normalized = Array.from(new Set(
+        values.map((item) => String(item).trim()).filter(Boolean)
+    ));
+    return normalized.length ? normalized.join(',') : undefined;
+};
 
 export interface BulkLivestreamPayload {
     calendars: LivestreamPayload[];
@@ -66,7 +75,7 @@ export const importLivestreamsFile = (file: File) => {
         method: "POST",
         body: formData,
         credentials: "include",
-    });
+    }, "json", 120_000);
 };
 
 // Hàm mới: lấy danh sách lịch
@@ -154,6 +163,7 @@ export const toLivestreamPayload = (values: any): LivestreamPayload => {
         system_type: payload.system_type,
         code: payload.class_code,
         teacher: payload.teacher,
+        assistant_teacher: serializeAssistantTeachers(payload.assistant_teacher),
         learn_number: Number(payload.learn_number ?? 1),
         lesson_id: payload.lesson_id,
         grade: payload.grade,
@@ -181,6 +191,9 @@ export const toBulkLivestreamPayload = (values: any): BulkLivestreamPayload => {
             system_type: values.bulk_system_type,
             code: values.bulk_code,
             teacher: config?.teacher ?? config?.bulk_teacher,
+            assistant_teacher: serializeAssistantTeachers(
+                config?.assistant_teacher ?? config?.bulk_assistant_teacher
+            ),
             learn_number: Number(values.bulk_learn_number ?? 1) + index,
             start_time: combineDateTime(date, config?.start_time ?? config?.bulk_start_time)!,
             end_time: combineDateTime(date, config?.end_time ?? config?.bulk_end_time)!,
@@ -205,6 +218,9 @@ export const toUpdateLivestreamPayload = (values: any): any => {
             lesson_status: 1,
             new_session: {
                 teacher: payload.new_session.teacher,
+                assistant_teacher: serializeAssistantTeachers(
+                    payload.new_session.assistant_teacher
+                ),
                 start_time: payload.new_session.start_time,
                 end_time: payload.new_session.end_time,
             }
@@ -215,6 +231,7 @@ export const toUpdateLivestreamPayload = (values: any): any => {
     return {
         update_mode: 'current',
         teacher: payload.teacher,
+        assistant_teacher: serializeAssistantTeachers(payload.assistant_teacher),
         start_time: payload.start_time,
         end_time: payload.end_time,
     };
@@ -237,6 +254,9 @@ export const toRescheduleLivestreamPayload = (values: any): any => {
         reason: String(payload.change_reason || payload.reason || "").trim(),
         new_session: {
             teacher: payload.new_session?.teacher,
+            assistant_teacher: serializeAssistantTeachers(
+                payload.new_session?.assistant_teacher
+            ),
             channel_name: payload.new_session?.channel_name,
             start_time: payload.new_session?.start_time,
             end_time: payload.new_session?.end_time,
@@ -281,6 +301,7 @@ export const toBulkUpdatePayload = (
                 start_time: values.common_start_time ? values.common_start_time.format("HH:mm") : undefined,
                 end_time: values.common_end_time ? values.common_end_time.format("HH:mm") : undefined,
                 teacher: values.common_teacher,
+                assistant_teacher: serializeAssistantTeachers(values.common_assistant_teacher),
                 room: values.common_room,
             }
         };
@@ -295,6 +316,7 @@ export const toBulkUpdatePayload = (
                 start_time: lessonConfig.start_time ? lessonConfig.start_time.format("HH:mm") : undefined,
                 end_time: lessonConfig.end_time ? lessonConfig.end_time.format("HH:mm") : undefined,
                 teacher: lessonConfig.teacher,
+                assistant_teacher: serializeAssistantTeachers(lessonConfig.assistant_teacher),
                 room: lessonConfig.room,
             };
         });

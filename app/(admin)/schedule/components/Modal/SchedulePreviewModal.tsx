@@ -42,6 +42,7 @@ import {
     getPackageCourses,
     type PackageCourseOption,
 } from '@/services/packageCourseService';
+import { getTeachingStaffOptions } from '@/services/teacherProfileService';
 
 const { Text } = Typography;
 
@@ -66,6 +67,7 @@ interface PreviewSession {
     start_time: Dayjs;
     end_time: Dayjs;
     teacher: string;
+    assistant_teacher?: string[];
     lesson_id?: string;
     master_lesson_name?: string;
     lesson_name?: string;
@@ -84,12 +86,9 @@ interface PackageLessonMappingInput {
     lesson_ids: string[];
 }
 
-const TEACHER_OPTIONS = [
-    { value: 'Nguyễn Văn A', label: 'Nguyễn Văn A' },
-    { value: 'Trần Thị B', label: 'Trần Thị B' },
-    { value: 'Lê Hoàng C', label: 'Lê Hoàng C' },
-    { value: 'Phạm Thảo D', label: 'Phạm Thảo D' },
-];
+const parseAssistantTeachers = (value: unknown): string[] => (
+    Array.isArray(value) ? value : String(value ?? '').split(',')
+).map((item) => String(item).trim()).filter(Boolean);
 
 const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
     open,
@@ -121,6 +120,33 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
     const [followingPreviewError, setFollowingPreviewError] = useState<string | null>(null);
     const [packageCourses, setPackageCourses] = useState<PackageCourseOption[]>([]);
     const [loadingPackageCourses, setLoadingPackageCourses] = useState(false);
+    const [loadingStaff, setLoadingStaff] = useState(false);
+    const [teacherOptions, setTeacherOptions] = useState<Array<{ value: string; label: string }>>([]);
+    const [assistantOptions, setAssistantOptions] = useState<Array<{ value: string; label: string }>>([]);
+
+    useEffect(() => {
+        if (!open) return;
+        let active = true;
+        setLoadingStaff(true);
+        Promise.all([
+            getTeachingStaffOptions(1),
+            getTeachingStaffOptions(2),
+        ])
+            .then(([teachers, assistants]) => {
+                if (!active) return;
+                setTeacherOptions(teachers);
+                setAssistantOptions(assistants);
+            })
+            .catch((error: any) => {
+                if (active) messageApi.error(error.message || 'Không thể tải danh sách nhân sự.');
+            })
+            .finally(() => {
+                if (active) setLoadingStaff(false);
+            });
+        return () => {
+            active = false;
+        };
+    }, [messageApi, open]);
 
     const courseOptions = React.useMemo(() => Array.from(
         packageCourses.reduce((groups, item) => {
@@ -188,6 +214,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
         start_time: formValues.new_session?.start_time,
         end_time: formValues.new_session?.end_time,
         teacher: formValues.new_session?.teacher,
+        assistant_teacher: parseAssistantTeachers(formValues.new_session?.assistant_teacher),
         learn_number: Number(sourceSession?.learn_number),
         lesson_name: sourceSession?.lesson_name || undefined,
         isSkipped: false,
@@ -232,6 +259,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 start_time: toPreviewDate(currentSession, 'start_time'),
                 end_time: toPreviewDate(currentSession, 'end_time'),
                 teacher: currentSession.teacher,
+                assistant_teacher: parseAssistantTeachers(currentSession.assistant_teacher),
                 original_learn_number: Number(currentSession.learn_number),
                 original_lesson_name: currentSession.lesson_name || undefined,
                 isSkipped: false,
@@ -250,6 +278,9 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 start_time: toPreviewDate(targetSession, 'start_time'),
                 end_time: toPreviewDate(targetSession, 'end_time'),
                 teacher: sourceSession?.teacher ?? targetSession.teacher,
+                assistant_teacher: parseAssistantTeachers(
+                    sourceSession?.assistant_teacher ?? targetSession.assistant_teacher
+                ),
                 learn_number: Number(sourceSession?.learn_number),
                 lesson_name: sourceSession?.lesson_name || undefined,
                 original_learn_number: Number(targetSession.learn_number),
@@ -414,6 +445,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 start_time: formValues.start_time,
                 end_time: formValues.end_time,
                 teacher: formValues.teacher,
+                assistant_teacher: parseAssistantTeachers(formValues.assistant_teacher),
                 lesson_id: String(formValues.lesson_id),
                 master_lesson_name: formValues.master_lesson_name || formValues.lesson_name,
                 lesson_name: formValues.lesson_name,
@@ -440,6 +472,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 start_time: formValues.start_time,
                 end_time: formValues.end_time,
                 teacher: formValues.teacher,
+                assistant_teacher: parseAssistantTeachers(formValues.assistant_teacher),
                 isSkipped: false,
                 isGenerated: true,
                 isEditable: true,
@@ -496,12 +529,16 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 start_time: config?.start_time || commonFormValues.bulk_start_time,
                 end_time: config?.end_time || commonFormValues.bulk_end_time,
                 teacher: config?.teacher || commonFormValues.bulk_teacher,
+                assistant_teacher: parseAssistantTeachers(
+                    config?.assistant_teacher || commonFormValues.bulk_assistant_teacher
+                ),
             };
         }
         return {
             start_time: commonFormValues.bulk_start_time,
             end_time: commonFormValues.bulk_end_time,
             teacher: commonFormValues.bulk_teacher,
+            assistant_teacher: parseAssistantTeachers(commonFormValues.bulk_assistant_teacher),
         };
     };
 
@@ -545,6 +582,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     start_time: config.start_time,
                     end_time: config.end_time,
                     teacher: config.teacher,
+                    assistant_teacher: config.assistant_teacher,
                     learn_number: learnNumber,
                     lesson_id: lesson ? String(lesson.id) : undefined,
                     master_lesson_name: lesson?.lesson_name,
@@ -821,6 +859,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     ...formValues,
                     new_session: {
                         teacher: session.teacher,
+                        assistant_teacher: session.assistant_teacher,
                         channel_name: formValues.new_session?.channel_name,
                         start_time: session.start_time,
                         end_time: session.end_time,
@@ -833,6 +872,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 finalPayload = toUpdateLivestreamPayload({
                     ...formValues,
                     teacher: session.teacher,
+                    assistant_teacher: session.assistant_teacher,
                     start_time: session.start_time,
                     end_time: session.end_time,
                     date: session.date,
@@ -859,6 +899,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     system_type: formValues.bulk_system_type,
                     code: formValues.bulk_code,
                     teacher: session.teacher,
+                    assistant_teacher: session.assistant_teacher?.join(','),
                     lesson_id: session.lesson_id,
                     grade: Number(formValues.bulk_grade),
                     subject_name: formValues.bulk_subject_name,
@@ -876,6 +917,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
             finalPayload = toLivestreamPayload({
                 ...formValues,
                 teacher: session.teacher,
+                assistant_teacher: session.assistant_teacher,
                 start_time: session.start_time,
                 end_time: session.end_time,
                 date: session.date,
@@ -966,9 +1008,28 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 <Select
                     value={value}
                     onChange={(nextValue) => updateSessionField(record.key, 'teacher', nextValue)}
-                    options={TEACHER_OPTIONS}
+                    options={teacherOptions}
+                    loading={loadingStaff}
                     disabled={record.isSkipped || (isEdit && record.isEditable === false)}
                     size="small"
+                    style={{ width: '100%' }}
+                />
+            ),
+        },
+        {
+            title: 'Trợ giảng',
+            dataIndex: 'assistant_teacher',
+            width: 220,
+            render: (value: string[] | undefined, record: PreviewSession) => (
+                <Select
+                    mode="multiple"
+                    value={value ?? []}
+                    onChange={(nextValue) => updateSessionField(record.key, 'assistant_teacher', nextValue)}
+                    options={assistantOptions}
+                    loading={loadingStaff}
+                    disabled={record.isSkipped || (isEdit && record.isEditable === false)}
+                    size="small"
+                    maxTagCount="responsive"
                     style={{ width: '100%' }}
                 />
             ),

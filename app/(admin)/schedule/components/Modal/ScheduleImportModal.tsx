@@ -22,7 +22,12 @@ import type { UploadFile } from "antd/es/upload/interface";
 export interface ScheduleImportError {
     row: number;
     field: string;
+    errorCode?: string;
     message: string;
+    packageId?: string;
+    courseId?: string;
+    lessonId?: string;
+    duplicateWithRow?: number;
 }
 
 interface ScheduleImportModalProps {
@@ -100,11 +105,13 @@ const ScheduleImportModal = ({
                 message="Mỗi dòng tương ứng một lịch học"
                 description={
                     <>
-                        Mapping nhập theo dạng{" "}
-                        <Typography.Text code>
-                            course_id:lesson_id1|lesson_id2;course_id2:lesson_id3
-                        </Typography.Text>.
-                        Để trống Lesson Count để hệ thống tự tính. Toàn bộ file được tạo trong một giao dịch.
+                        Dùng format Sheet vận hành với các cột{" "}
+                        <Typography.Text code>ID course</Typography.Text>,{" "}
+                        <Typography.Text code>ID Bài giảng</Typography.Text> và{" "}
+                        <Typography.Text code>ID package</Typography.Text>.
+                        Nhiều ID trong một ô được phân cách bằng dấu phẩy.
+                        Hệ thống kiểm tra toàn bộ file với HMO trước khi tạo lịch;
+                        nếu có một dòng lỗi thì không dòng nào được import.
                     </>
                 }
                 style={{ marginBottom: 16 }}
@@ -120,7 +127,7 @@ const ScheduleImportModal = ({
             >
                 <p className="ant-upload-drag-icon"><InboxOutlined /></p>
                 <p className="ant-upload-text">Kéo file vào đây hoặc bấm để chọn file</p>
-                <p className="ant-upload-hint">Hỗ trợ .xlsx và .csv, tối đa 5 MB/500 lịch</p>
+                <p className="ant-upload-hint">Hỗ trợ .xlsx và .csv, tối đa 10 MB/1.000 lịch</p>
             </Upload.Dragger>
 
             {errors.length > 0 && (
@@ -139,7 +146,24 @@ const ScheduleImportModal = ({
                         scroll={{ y: 240 }}
                         columns={[
                             { title: "Dòng", dataIndex: "row", width: 80 },
-                            { title: "Trường", dataIndex: "field", width: 140 },
+                            {
+                                title: "Mã lỗi",
+                                dataIndex: "errorCode",
+                                width: 220,
+                                render: (value: string) => value
+                                    ? <Typography.Text code>{value}</Typography.Text>
+                                    : "-",
+                            },
+                            {
+                                title: "Package / Course / Lesson",
+                                key: "context",
+                                width: 250,
+                                render: (_, record) => [
+                                    record.packageId && `P: ${record.packageId}`,
+                                    record.courseId && `C: ${record.courseId}`,
+                                    record.lessonId && `L: ${record.lessonId}`,
+                                ].filter(Boolean).join(" / ") || record.field || "-",
+                            },
                             {
                                 title: "Nội dung lỗi",
                                 dataIndex: "message",

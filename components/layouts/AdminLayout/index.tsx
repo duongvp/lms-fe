@@ -102,7 +102,10 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
   }, [isClient, router]);
 
   useEffect(() => {
-    if (!authReady) return;
+    // Logout clears the user before navigation completes. Do not interpret that
+    // short unauthenticated state as a permission failure, otherwise the /403
+    // redirect races with the intended /auth/login redirect.
+    if (!authReady || user.userId < 0) return;
 
     const matched = protectedRoutes
       .filter((route) => pathname.startsWith(route.path))
@@ -115,7 +118,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     ) {
       router.replace('/403');
     }
-  }, [authReady, pathname, router, user?.permissions]);
+  }, [authReady, pathname, router, user.userId, user.permissions]);
 
   if (!isClient || !authReady) return <Spin size="large" fullscreen />;
 

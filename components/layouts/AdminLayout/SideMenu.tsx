@@ -9,6 +9,7 @@ import {
     LogoutOutlined,
     UsergroupAddOutlined,
     UserOutlined,
+    TeamOutlined,
 } from "@ant-design/icons";
 import Image from "next/image";
 import { useAuthStore } from "@/stores/authStore";
@@ -64,13 +65,20 @@ export const menuConfig: IMenuItem[] = [
     },
     {
         key: "6",
+        icon: <TeamOutlined />,
+        label: "Giáo viên & Trợ giảng",
+        path: "/teacher-profiles",
+        permission: PermissionKey.TEACHER_PROFILE_VIEW,
+    },
+    {
+        key: "7",
         icon: <UserOutlined />,
         label: "Quản trị viên",
         path: "/users",
         permission: PermissionKey.USER_VIEW,
     },
     {
-        key: "7",
+        key: "8",
         icon: <UsergroupAddOutlined />,
         label: "Vai trò thành viên",
         path: "/member-roles",

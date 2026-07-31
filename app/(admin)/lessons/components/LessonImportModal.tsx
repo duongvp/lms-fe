@@ -99,7 +99,7 @@ const LessonImportModal = ({
                     type="info"
                     showIcon
                     message="Quy tắc import"
-                    description="Nếu để trống số thứ tự, hệ thống tự sinh bài tiếp theo. Nếu nhập thủ công, số bài phải liên tục trong từng Khối + Môn học."
+                    description="Các cột trong file tương ứng với form Tạo bài học. Mỗi tài liệu gồm Tiêu đề, Loại và Đường dẫn; có thể thêm Tài liệu 4, 5... theo cùng cấu trúc. Nếu để trống số thứ tự, hệ thống tự sinh bài tiếp theo."
                     style={{ marginBottom: 16 }}
                 />
 

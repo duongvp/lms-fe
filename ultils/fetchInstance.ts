@@ -73,10 +73,11 @@ const refreshAccessToken = (setAccessToken: (token: string | null) => void) => {
 export const fetchInstance = async (
     url: string,
     options: RequestInit = {},
-    responseType: 'json' | 'blob' = 'json'
+    responseType: 'json' | 'blob' = 'json',
+    timeoutMs = REQUEST_TIMEOUT_MS
 ) => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const { accessToken, setAccessToken, logout } = useAuthStore.getState();
     const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const method = options.method || 'GET';

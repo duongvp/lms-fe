@@ -19,6 +19,7 @@ import { formatLessonScheduleOption } from '@/helper/lesson';
 import { useAuthStore } from '@/stores/authStore';
 import { PermissionKey } from '@/types/permissions';
 import { getPackageCourses } from '@/services/packageCourseService';
+import { getTeachingStaffOptions } from '@/services/teacherProfileService';
 
 const { Text, Title } = Typography;
 
@@ -72,13 +73,6 @@ const DAYS_OPTIONS = [
     { label: 'Thứ 6', value: 6 },
     { label: 'Thứ 7', value: 7 },
     { label: 'Chủ Nhật', value: 1 },
-];
-
-const TEACHER_OPTIONS = [
-    { value: "Nguyễn Văn A", label: "Nguyễn Văn A" },
-    { value: "Trần Thị B", label: "Trần Thị B" },
-    { value: "Lê Hoàng C", label: "Lê Hoàng C" },
-    { value: "Phạm Thảo D", label: "Phạm Thảo D" },
 ];
 
 const getScheduleSubmitError = (error: any) => {
@@ -136,6 +130,9 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
 }) => {
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
+    const [loadingStaff, setLoadingStaff] = useState(false);
+    const [teacherOptions, setTeacherOptions] = useState<Array<{ value: string; label: string }>>([]);
+    const [assistantOptions, setAssistantOptions] = useState<Array<{ value: string; label: string }>>([]);
 
     // For Add
     const [addMode, setAddMode] = useState<"single" | "bulk">("single");
@@ -166,6 +163,38 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const [messageApi, contextHolder] = message.useMessage();
     const hasPermission = useAuthStore((state) => state.hasPermission);
     const canCreateLesson = hasPermission(PermissionKey.LESSON_CREATE);
+    const canAssignTeachingStaff = hasPermission(
+        isEdit
+            ? PermissionKey.CALENDAR_TEACHER_EDIT
+            : PermissionKey.CALENDAR_TEACHER_ASSIGN
+    );
+
+    React.useEffect(() => {
+        if (!open) return;
+        let active = true;
+        setLoadingStaff(true);
+        Promise.all([
+            getTeachingStaffOptions(1),
+            getTeachingStaffOptions(2),
+        ])
+            .then(([teachers, assistants]) => {
+                if (!active) return;
+                setTeacherOptions(teachers);
+                setAssistantOptions(assistants);
+            })
+            .catch((error: any) => {
+                if (!active) return;
+                setTeacherOptions([]);
+                setAssistantOptions([]);
+                messageApi.error(error.message || 'Không thể tải danh sách giáo viên và trợ giảng.');
+            })
+            .finally(() => {
+                if (active) setLoadingStaff(false);
+            });
+        return () => {
+            active = false;
+        };
+    }, [messageApi, open]);
 
     React.useEffect(() => {
         if (!open || isEdit) return;
@@ -293,6 +322,12 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         : bulkLessonOptions[0];
 
     const isFieldEditable = (fieldCode: string) => {
+        if (
+            (fieldCode === 'teacher' || fieldCode === 'assistant_teacher')
+            && !canAssignTeachingStaff
+        ) {
+            return false;
+        }
         if (!moduleFields.length) return true;
         return resolveFieldRule(fieldPolicy, moduleCode, fieldCode).editable;
     };
@@ -463,6 +498,18 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             if (isEdit) {
                 form.setFieldsValue({
                     ...initialData,
+                    assistant_teacher: String(initialData?.assistant_teacher || '')
+                        .split(',')
+                        .map((username) => username.trim())
+                        .filter(Boolean),
+                    new_session: {
+                        ...(initialData?.new_session || {}),
+                        teacher: initialData?.teacher,
+                        assistant_teacher: String(initialData?.assistant_teacher || '')
+                            .split(',')
+                            .map((username) => username.trim())
+                            .filter(Boolean),
+                    },
                     update_mode: 'following',
                 });
                 setUpdateMode("following");
@@ -626,14 +673,9 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                         <>
                             <FormSection title="Thông tin lớp học">
                                 <Row gutter={24}>
-                                    <Col span={12}>
+                                    <Col span={24}>
                                         <Form.Item label="Mã khóa học" name="class_code" rules={requiredWhenEditable('code', 'Nhập mã khóa học')}>
                                             <Input placeholder="Ví dụ: toan-6" disabled={!isFieldEditable('code')} />
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={12}>
-                                        <Form.Item label="Tên lớp" name="class_name" rules={[{ required: true, message: 'Nhập tên lớp' }]}>
-                                            <Input placeholder="Ví dụ: Lớp ReactJS Basic" />
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
@@ -793,12 +835,25 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
 
                             <FormSection title="Thông tin quản lý">
                                 <Row gutter={24}>
-                                    <Col span={12}>
+                                    <Col span={8}>
                                         <Form.Item label="Giáo viên" name="teacher" rules={requiredWhenEditable('teacher', 'Chọn giáo viên')}>
-                                            <Select options={TEACHER_OPTIONS} placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
+                                            <Select options={teacherOptions} loading={loadingStaff} showSearch optionFilterProp="label" placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
                                         </Form.Item>
                                     </Col>
-                                    <Col span={12}>
+                                    <Col span={8}>
+                                        <Form.Item label="Trợ giảng" name="assistant_teacher">
+                                            <Select
+                                                mode="multiple"
+                                                options={assistantOptions}
+                                                loading={loadingStaff}
+                                                showSearch
+                                                optionFilterProp="label"
+                                                placeholder="Chọn một hoặc nhiều trợ giảng"
+                                                disabled={!isFieldEditable('assistant_teacher')}
+                                            />
+                                        </Form.Item>
+                                    </Col>
+                                    <Col span={8}>
                                         <Form.Item label="Hệ thống" name="system_type" rules={[{ required: true, message: 'Chọn hệ thống' }]}>
                                             <Select
                                                 options={[
@@ -821,7 +876,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                 <Row gutter={24}>
                                     <Col span={12}>
                                         <Form.Item label="Ngày bắt đầu" name="bulk_start_date" rules={[{ required: true, message: 'Chọn ngày bắt đầu' }]}>
-                                            <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} placeholder="DD/MM/YYYY" />
+                                            <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} placeholder="DD/MM/YYYY" minDate={dayjs()} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={12}>
@@ -870,12 +925,12 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                 </Col> */}
                                 </Row>
                                 <Row gutter={24}>
-                                    <Col span={8}>
+                                    <Col span={12}>
                                         <Form.Item label="Mã khóa học / Lớp" name="bulk_code" rules={requiredWhenEditable('code', 'Nhập mã khóa học')}>
                                             <Input placeholder="Ví dụ: toan-6" disabled={!isFieldEditable('code')} />
                                         </Form.Item>
                                     </Col>
-                                    <Col span={8}>
+                                    <Col span={12}>
                                          <Form.Item label="Hệ thống" name="bulk_system_type" rules={[{ required: true, message: 'Chọn hệ thống' }]}>
                                              <Select
                                                  options={[
@@ -885,6 +940,27 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                  placeholder="Chọn hệ thống"
                                              />
                                          </Form.Item>
+                                    </Col>
+                                    <Col span={8}>
+                                        <Form.Item label="Khối" name="bulk_grade" rules={[{ required: true, message: 'Chọn khối' }]}>
+                                            <Select
+                                                options={GRADE_OPTIONS}
+                                                placeholder="Chọn khối"
+                                                onChange={() => form.setFieldValue('bulk_learn_number', undefined)}
+                                            />
+                                        </Form.Item>
+                                    </Col>
+                                    <Col span={8}>
+                                        <Form.Item label="Môn học" name="bulk_subject_name" rules={requiredWhenEditable('subject', 'Chọn môn học')}>
+                                            <Select
+                                                options={SUBJECT_OPTIONS}
+                                                placeholder="Chọn môn học"
+                                                showSearch
+                                                optionFilterProp="label"
+                                                disabled={!isFieldEditable('subject')}
+                                                onChange={() => form.setFieldValue('bulk_learn_number', undefined)}
+                                            />
+                                        </Form.Item>
                                     </Col>
                                     <Col span={8}>
                                         <Form.Item label="Bài học bắt đầu" name="bulk_learn_number" rules={requiredWhenEditable('learn_number', 'Chọn bài học bắt đầu')}>
@@ -914,27 +990,6 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                         ? 'Chưa có bài học'
                                                         : undefined
                                                 }
-                                            />
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={8}>
-                                        <Form.Item label="Khối" name="bulk_grade" rules={[{ required: true, message: 'Chọn khối' }]}>
-                                            <Select
-                                                options={GRADE_OPTIONS}
-                                                placeholder="Chọn khối"
-                                                onChange={() => form.setFieldValue('bulk_learn_number', undefined)}
-                                            />
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={8}>
-                                        <Form.Item label="Môn học" name="bulk_subject_name" rules={requiredWhenEditable('subject', 'Chọn môn học')}>
-                                            <Select
-                                                options={SUBJECT_OPTIONS}
-                                                placeholder="Chọn môn học"
-                                                showSearch
-                                                optionFilterProp="label"
-                                                disabled={!isFieldEditable('subject')}
-                                                onChange={() => form.setFieldValue('bulk_learn_number', undefined)}
                                             />
                                         </Form.Item>
                                     </Col>
@@ -985,7 +1040,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             </Text>
                                         </div>
                                         <Row gutter={24}>
-                                            <Col span={8}>
+                                            <Col span={12}>
                                                 <Form.Item label="Giờ bắt đầu" name="bulk_start_time" rules={requiredWhenEditable('start_time', 'Nhập giờ bắt đầu')}>
                                                     <TimePicker
                                                         format="HH:mm"
@@ -996,7 +1051,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                     />
                                                 </Form.Item>
                                             </Col>
-                                            <Col span={8}>
+                                            <Col span={12}>
                                                 <Form.Item
                                                     label="Giờ kết thúc"
                                                     name="bulk_end_time"
@@ -1014,9 +1069,14 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                     />
                                                 </Form.Item>
                                             </Col>
-                                            <Col span={8}>
+                                            <Col span={12}>
                                                 <Form.Item label="Giáo viên" name="bulk_teacher" rules={requiredWhenEditable('teacher', 'Chọn giáo viên')}>
-                                                    <Select options={TEACHER_OPTIONS} placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
+                                                    <Select options={teacherOptions} loading={loadingStaff} showSearch optionFilterProp="label" placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
+                                                </Form.Item>
+                                            </Col>
+                                            <Col span={12}>
+                                                <Form.Item label="Trợ giảng" name="bulk_assistant_teacher">
+                                                    <Select mode="multiple" options={assistantOptions} loading={loadingStaff} showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" disabled={!isFieldEditable('assistant_teacher')} />
                                                 </Form.Item>
                                             </Col>
                                         </Row>
@@ -1070,9 +1130,14 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                                 }}
                                                             </Form.Item>
                                                         </Col>
-                                                        <Col span={8}>
+                                                        <Col span={4}>
                                                             <Form.Item name={['separate_config', dayValue, 'teacher']} rules={requiredWhenEditable('teacher', 'Chọn giáo viên')} style={{ marginBottom: 8 }}>
-                                                                <Select options={TEACHER_OPTIONS} placeholder="Giáo viên" disabled={!isFieldEditable('teacher')} />
+                                                                <Select options={teacherOptions} loading={loadingStaff} showSearch optionFilterProp="label" placeholder="Giáo viên" disabled={!isFieldEditable('teacher')} />
+                                                            </Form.Item>
+                                                        </Col>
+                                                        <Col span={4}>
+                                                            <Form.Item name={['separate_config', dayValue, 'assistant_teacher']} style={{ marginBottom: 8 }}>
+                                                                <Select mode="multiple" options={assistantOptions} loading={loadingStaff} showSearch optionFilterProp="label" placeholder="Trợ giảng" disabled={!isFieldEditable('assistant_teacher')} />
                                                             </Form.Item>
                                                         </Col>
                                                     </Row>
@@ -1172,7 +1237,12 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                     </Col>
                                     <Col span={12}>
                                         <Form.Item label="Giáo viên dạy bù" name={['new_session', 'teacher']} rules={requiredWhenEditable('teacher', 'Chọn giáo viên')}>
-                                            <Select options={TEACHER_OPTIONS} placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
+                                            <Select options={teacherOptions} loading={loadingStaff} showSearch optionFilterProp="label" placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
+                                        </Form.Item>
+                                    </Col>
+                                    <Col span={12}>
+                                        <Form.Item label="Trợ giảng" name={['new_session', 'assistant_teacher']}>
+                                            <Select mode="multiple" options={assistantOptions} loading={loadingStaff} showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" disabled={!isFieldEditable('assistant_teacher')} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={12}>
