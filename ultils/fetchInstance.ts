@@ -9,6 +9,8 @@ const REQUEST_TIMEOUT_MS = 10000;
 const REFRESH_TIMEOUT_MS = 15000;
 
 class AuthSessionExpiredError extends Error {
+    status = 401;
+
     constructor(message = 'Session expired. Please login again.') {
         super(message);
         this.name = 'AuthSessionExpiredError';
@@ -68,6 +70,20 @@ const refreshAccessToken = (setAccessToken: (token: string | null) => void) => {
     return refreshPromise;
 };
 
+export const restoreAccessToken = async () => {
+    const { accessToken, setAccessToken, logout } = useAuthStore.getState();
+    if (accessToken) return accessToken;
+
+    try {
+        return await refreshAccessToken(setAccessToken);
+    } catch (error) {
+        if (isAuthSessionExpiredError(error)) {
+            handleAuthFailure(logout);
+        }
+        throw error;
+    }
+};
+
 // Hàm hỗ trợ tạo request
 
 export const fetchInstance = async (
@@ -76,20 +92,18 @@ export const fetchInstance = async (
     responseType: 'json' | 'blob' = 'json',
     timeoutMs = REQUEST_TIMEOUT_MS
 ) => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const { accessToken, setAccessToken, logout } = useAuthStore.getState();
     const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const method = options.method || 'GET';
     let requestFailed = false;
 
     try {
-        let res = await makeRequest(url, options, accessToken, controller);
+        let res = await makeRequest(url, options, accessToken, timeoutMs);
 
         if (res.status === 401 && shouldTryRefreshToken(url)) {
             try {
                 const newToken = await refreshAccessToken(setAccessToken);
-                res = await makeRequest(url, options, newToken, controller);
+                res = await makeRequest(url, options, newToken, timeoutMs);
             } catch (refreshError) {
                 if (isAuthSessionExpiredError(refreshError)) {
                     handleAuthFailure(logout);
@@ -121,7 +135,6 @@ export const fetchInstance = async (
         if (!requestFailed) {
             logSlowRequest(url, method, startedAt);
         }
-        clearTimeout(timeoutId);
     }
 };
 
@@ -158,8 +171,10 @@ const makeRequest = async (
     url: string,
     options: RequestInit,
     token: string | null,
-    controller: AbortController
+    timeoutMs: number
 ) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const isFormData = options.body instanceof FormData;
     const mergedHeaders = {
         ...(token && { Authorization: `Bearer ${token}` }),
@@ -168,12 +183,16 @@ const makeRequest = async (
         ...(!isFormData && { 'Content-Type': 'application/json' }) // ✅ chỉ set nếu không phải FormData
     };
 
-    return await fetch(url, {
-        ...options,
-        headers: mergedHeaders,
-        signal: controller.signal,
-        credentials: 'include'
-    });
+    try {
+        return await fetch(url, {
+            ...options,
+            headers: mergedHeaders,
+            signal: controller.signal,
+            credentials: 'include'
+        });
+    } finally {
+        clearTimeout(timeoutId);
+    }
 };
 
 // Xử lý lỗi từ response

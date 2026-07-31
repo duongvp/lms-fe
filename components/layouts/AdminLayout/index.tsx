@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
 import { getMe } from "@/services/authService";
 import { protectedRoutes } from "@/constants/protectedRoutes";
+import { restoreAccessToken } from "@/ultils/fetchInstance";
 
 const { Content } = Layout;
 const { useBreakpoint } = Grid;
@@ -79,6 +80,18 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
 
     const verifySession = async () => {
       try {
+        const currentAuth = useAuthStore.getState();
+
+        // The login response already contains a valid access token and the
+        // current permissions, so there is no need to call /me again.
+        if (currentAuth.accessToken && currentAuth.user.userId >= 0) {
+          setAuthReady(true);
+          return;
+        }
+
+        // Access tokens intentionally live only in memory. After a page reload,
+        // restore one from the HttpOnly refresh cookie before calling /me.
+        await restoreAccessToken();
         const response: any = await getMe();
         if (!active) return;
         const user = response?.data;
