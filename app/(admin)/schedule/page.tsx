@@ -100,6 +100,12 @@ const SORTABLE_FIELDS = new Set([
     "lesson_status",
     "system_type",
 ]);
+const REQUIRED_QUICK_EDIT_FIELDS = new Set([
+    "code",
+    "learn_number",
+    "start_time",
+    "end_time",
+]);
 
 const cleanFilterValues = (values: ScheduleFilterValues): ScheduleFilterValues => {
     const cleaned: ScheduleFilterValues = {};
@@ -346,6 +352,10 @@ const Page = () => {
             });
             if (response && response.data) {
                 const mappedData: ScheduleDataType[] = response.data.data.map((item: any) => ({
+                    // Preserve dynamic calendar fields returned by ModuleField
+                    // (lesson_document, evg_stream, ...), then normalize fields
+                    // that need a table-specific representation.
+                    ...item,
                     key: item.id?.toString() || item.key,
                     id: item.id?.toString(),
                     code: item.code,
@@ -360,7 +370,7 @@ const Page = () => {
                     teacher: item.teacher,
                     assistant_teacher: item.assistant_teacher,
                     system_type: item.system_type,
-                    lesson_status: lessonStatusText(item.lesson_status),
+                    lesson_status: item.lesson_status ?? 0,
                     can_modify: item.can_modify === true,
                 }));
                 setData(mappedData);
@@ -557,6 +567,7 @@ const Page = () => {
             });
             return;
         }
+        form.resetFields();
         form.setFieldsValue({
             ...record,
             assistant_teacher: String(record.assistant_teacher || '')
@@ -610,7 +621,7 @@ const Page = () => {
 
     const save = async (key: string) => {
         try {
-            const row = await form.validateFields();
+            const row = await form.validateFields(editableFieldCodes);
             const index = data.findIndex((item) => key === item.key);
             if (index > -1) {
                 const item = data[index];
@@ -629,6 +640,10 @@ const Page = () => {
                     SCHEDULE_MODULE_CODE
                 );
 
+                if (sanitizedRow.learn_number !== undefined) {
+                    sanitizedRow.learn_number = Number(sanitizedRow.learn_number);
+                }
+
                 if (Object.keys(sanitizedRow).length === 0) {
                     api.warning({
                         message: "Không có quyền",
@@ -645,11 +660,17 @@ const Page = () => {
                 });
                 await fetchData(currentPage, pageSize, filterValues, sortState);
             }
-        } catch (errInfo) {
+        } catch (errInfo: any) {
             console.log("Validate Failed:", errInfo);
+            const isValidationError = Array.isArray(errInfo?.errorFields);
             api.error({
-                message: "Lỗi kiểm tra dữ liệu",
-                description: "Vui lòng kiểm tra lại các trường thông tin.",
+                message: isValidationError ? "Lỗi kiểm tra dữ liệu" : "Cập nhật thất bại",
+                description: isValidationError
+                    ? errInfo.errorFields
+                        .map((field: any) => field.errors?.[0])
+                        .filter(Boolean)
+                        .join("; ") || "Vui lòng kiểm tra lại các trường thông tin."
+                    : errInfo?.message || "Không thể lưu thay đổi nhanh.",
             });
         }
     };
@@ -666,7 +687,8 @@ const Page = () => {
     );
     const editableFieldCodes = fieldPermissions
         .filter((item) => (
-            item.editable
+            item.field.fieldCode !== "id"
+            && item.editable
             && (
                 !["teacher", "assistant_teacher"].includes(item.field.fieldCode)
                 || canEditTeachingAssignment
@@ -703,7 +725,6 @@ const Page = () => {
                             <Form.Item
                                 name={fieldCode}
                                 style={{ margin: 0 }}
-                                rules={[{ required: true, message: "Chọn giáo viên!" }]}
                             >
                                 <Select size="small" showSearch optionFilterProp="label" style={{ width: 180 }} options={teacherOptions} />
                             </Form.Item>
@@ -731,9 +752,9 @@ const Page = () => {
                                 rules={[{ required: true, message: "Chọn trạng thái!" }]}
                             >
                                 <Select size="small" style={{ width: 130 }} options={[
-                                    { value: "Chưa bắt đầu", label: "Chưa bắt đầu" },
-                                    { value: "Đang diễn ra", label: "Đang diễn ra" },
-                                    { value: "Đã kết thúc", label: "Đã kết thúc" },
+                                    { value: 0, label: "Chưa bắt đầu" },
+                                    { value: 1, label: "Nghỉ học" },
+                                    { value: 2, label: "Đang diễn ra" },
                                 ]} />
                             </Form.Item>
                         );
@@ -753,9 +774,15 @@ const Page = () => {
                         <Form.Item
                             name={fieldCode}
                             style={{ margin: 0 }}
-                            rules={[{ required: true, message: `Nhập ${field.fieldLabel || fieldCode}!` }]}
+                            rules={REQUIRED_QUICK_EDIT_FIELDS.has(fieldCode)
+                                ? [{ required: true, message: `Nhập ${field.fieldLabel || fieldCode}!` }]
+                                : undefined}
                         >
-                            <Input size="small" style={{ width: 150 }} />
+                            <Input
+                                size="small"
+                                type={field.fieldType === "number" ? "number" : "text"}
+                                style={{ width: 150 }}
+                            />
                         </Form.Item>
                     );
                 }
@@ -772,6 +799,10 @@ const Page = () => {
                         )?.label || username.trim())
                         .filter(Boolean);
                     return <span>{labels.join(', ') || '-'}</span>;
+                }
+
+                if (fieldCode === "lesson_status") {
+                    return <span>{lessonStatusText(Number(text))}</span>;
                 }
 
                 // If not editing or not editable, display plain text
