@@ -121,7 +121,9 @@ export const getTeachingStaffOptions = async (teacherType: TeacherType) => {
     } while (profiles.length < total && page <= 20);
 
     return profiles.map((profile) => ({
-        value: profile.username,
+        // calendar.teacher stores the teacher's display name. Keep username in
+        // the label so administrators can still distinguish accounts.
+        value: profile.display_name?.trim() || profile.username,
         label: profile.display_name
             ? `${profile.display_name} (${profile.username})`
             : profile.username,
