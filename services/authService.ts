@@ -2,7 +2,9 @@
 
 import { fetchInstance } from "@/ultils/fetchInstance";
 import { UserApiResponse } from "./userService";
-const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/api/auth`;
+// Auth goes through Next.js so the HttpOnly refresh cookie belongs to the
+// frontend origin and is visible to both middleware and browser requests.
+const API_BASE_URL = '/api/auth';
 
 export const registerUser = async (payload: UserApiResponse) => {
     const url = `${API_BASE_URL}/register`;

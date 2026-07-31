@@ -32,7 +32,7 @@ const refreshAccessToken = (setAccessToken: (token: string | null) => void) => {
         const refreshController = new AbortController();
         const refreshTimeoutId = setTimeout(() => refreshController.abort(), REFRESH_TIMEOUT_MS);
 
-        refreshPromise = fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_URL}${REFRESH_TOKEN_PATH}`, {
+        refreshPromise = fetch(REFRESH_TOKEN_PATH, {
             method: 'POST',
             credentials: 'include',
             signal: refreshController.signal,

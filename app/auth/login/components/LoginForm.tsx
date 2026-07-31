@@ -29,15 +29,16 @@ const LoginForm = () => {
 
             // Tìm route đầu tiên mà user có quyền (thường là dashboard)
             const firstAllowedRoute = protectedRoutes.find(route =>
-                normalizedUser.permissions?.includes(route.permission)
+                normalizedUser.permissions?.includes('*')
+                || normalizedUser.permissions?.includes(route.permission)
             );
 
             console.log("🚀 ~ onFinish ~ firstAllowedRoute:", firstAllowedRoute);
 
             if (firstAllowedRoute) {
-                router.push(firstAllowedRoute.path);
+                router.replace(firstAllowedRoute.path);
             } else {
-                router.push('/dashboard'); // fallback
+                router.replace('/403');
             }
         } catch (error) {
             console.log("🚀 ~ onFinish ~ error:", error)
