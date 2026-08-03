@@ -31,18 +31,18 @@ import {
 } from '@/services/livestreamService';
 import {
     createLesson,
-    getLessons,
     type LessonApiResponse,
+    type LessonListParams,
 } from '@/services/lessonService';
 import { combineDateTime } from '@/helper/convertDate';
 import { useAuthStore } from '@/stores/authStore';
 import { PermissionKey } from '@/types/permissions';
 import { formatLessonScheduleOption } from '@/helper/lesson';
 import {
-    getPackageCourses,
     type PackageCourseOption,
 } from '@/services/packageCourseService';
-import { getTeachingStaffOptions } from '@/services/teacherProfileService';
+import { useLessonsQuery, useLmsCache, usePackageCoursesQuery } from '@/hooks/useLmsQueries';
+import TeachingStaffSelect from '@/components/shared/TeachingStaffSelect';
 
 const { Text } = Typography;
 
@@ -103,7 +103,6 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
     const [sessions, setSessions] = useState<PreviewSession[]>([]);
     const [requiredSessions, setRequiredSessions] = useState(0);
     const [lessons, setLessons] = useState<LessonApiResponse[]>([]);
-    const [loadingLessons, setLoadingLessons] = useState(false);
     const [quickLessonOpen, setQuickLessonOpen] = useState(false);
     const [quickLessonTarget, setQuickLessonTarget] = useState<string | null>(null);
     const [creatingLesson, setCreatingLesson] = useState(false);
@@ -118,35 +117,23 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
     const isFollowingPreview = isEdit && formValues?.update_mode === 'following';
     const [loadingFollowingPreview, setLoadingFollowingPreview] = useState(false);
     const [followingPreviewError, setFollowingPreviewError] = useState<string | null>(null);
-    const [packageCourses, setPackageCourses] = useState<PackageCourseOption[]>([]);
-    const [loadingPackageCourses, setLoadingPackageCourses] = useState(false);
-    const [loadingStaff, setLoadingStaff] = useState(false);
-    const [teacherOptions, setTeacherOptions] = useState<Array<{ value: string; label: string }>>([]);
-    const [assistantOptions, setAssistantOptions] = useState<Array<{ value: string; label: string }>>([]);
-
-    useEffect(() => {
-        if (!open) return;
-        let active = true;
-        setLoadingStaff(true);
-        Promise.all([
-            getTeachingStaffOptions(1),
-            getTeachingStaffOptions(2),
-        ])
-            .then(([teachers, assistants]) => {
-                if (!active) return;
-                setTeacherOptions(teachers);
-                setAssistantOptions(assistants);
-            })
-            .catch((error: any) => {
-                if (active) messageApi.error(error.message || 'Không thể tải danh sách nhân sự.');
-            })
-            .finally(() => {
-                if (active) setLoadingStaff(false);
-            });
-        return () => {
-            active = false;
-        };
-    }, [messageApi, open]);
+    const packageCoursesQuery = usePackageCoursesQuery();
+    const packageCourses: PackageCourseOption[] = packageCoursesQuery.data?.data ?? [];
+    const loadingPackageCourses = packageCoursesQuery.isLoading || packageCoursesQuery.isValidating;
+    const { refreshLessons } = useLmsCache();
+    const previewLessonParams: LessonListParams | null = (
+        open && isBulkCreate && formValues?.bulk_grade && formValues?.bulk_subject_name
+    ) ? {
+        page: 1,
+        limit: 100,
+        grade: formValues.bulk_grade,
+        subject: formValues.bulk_subject_name,
+        course_code: formValues.bulk_code,
+        sort_by: 'learn_number',
+        sort_order: 'asc',
+    } : null;
+    const lessonsQuery = useLessonsQuery(previewLessonParams);
+    const loadingLessons = lessonsQuery.isLoading || lessonsQuery.isValidating;
 
     const courseOptions = React.useMemo(() => Array.from(
         packageCourses.reduce((groups, item) => {
@@ -169,30 +156,6 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
         value: item.course_id,
         label: `${item.course_id}${item.course_name ? ` - ${item.course_name}` : ''} (Gói ${item.package_ids.join(', ')})`,
     })), [packageCourses]);
-
-    useEffect(() => {
-        if (!open || isEdit) return;
-        let active = true;
-        setLoadingPackageCourses(true);
-        getPackageCourses()
-            .then((response: any) => {
-                if (active) setPackageCourses(response?.data ?? []);
-            })
-            .catch((error: any) => {
-                if (active) {
-                    setPackageCourses([]);
-                    messageApi.error(
-                        error.message || 'Không thể đọc danh sách Course ID từ Google Sheet.'
-                    );
-                }
-            })
-            .finally(() => {
-                if (active) setLoadingPackageCourses(false);
-            });
-        return () => {
-            active = false;
-        };
-    }, [isEdit, messageApi, open]);
 
     const formatPreviewLesson = (learnNumber?: number, lessonName?: string) => {
         if (!learnNumber && !lessonName) return '-';
@@ -382,44 +345,9 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
         });
     }, [lessonNamePrefix, lessonNameSuffix, lessons]);
 
-    const loadLessons = React.useCallback(async () => {
-        if (!isBulkCreate || !formValues?.bulk_grade || !formValues?.bulk_subject_name) {
-            setLessons([]);
-            return [];
-        }
-
-        try {
-            setLoadingLessons(true);
-            const response: any = await getLessons({
-                page: 1,
-                limit: 100,
-                grade: formValues.bulk_grade,
-                subject: formValues.bulk_subject_name,
-                course_code: formValues.bulk_code,
-                sort_by: 'learn_number',
-                sort_order: 'asc',
-            });
-            const rows = response?.data?.data ?? [];
-            setLessons(rows);
-            return rows as LessonApiResponse[];
-        } catch (error: any) {
-            setLessons([]);
-            messageApi.error(error.message || 'Không thể tải danh sách bài học.');
-            return [];
-        } finally {
-            setLoadingLessons(false);
-        }
-    }, [
-        formValues?.bulk_grade,
-        formValues?.bulk_subject_name,
-        formValues?.bulk_code,
-        isBulkCreate,
-        messageApi,
-    ]);
-
     useEffect(() => {
-        if (open && isBulkCreate) loadLessons();
-    }, [isBulkCreate, loadLessons, open]);
+        setLessons(lessonsQuery.data?.data?.data ?? []);
+    }, [lessonsQuery.data]);
 
     useEffect(() => {
         if (!open || !formValues) return;
@@ -770,6 +698,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
             }
 
             messageApi.success(`Đã tạo Bài ${created.learn_number}: ${created.lesson_name}`);
+            await refreshLessons();
             setQuickLessonOpen(false);
             setQuickLessonTarget(null);
         } catch (error: any) {
@@ -1005,11 +934,10 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
             dataIndex: 'teacher',
             width: 170,
             render: (value: string, record: PreviewSession) => (
-                <Select
+                <TeachingStaffSelect
+                    teacherType={1}
                     value={value}
                     onChange={(nextValue) => updateSessionField(record.key, 'teacher', nextValue)}
-                    options={teacherOptions}
-                    loading={loadingStaff}
                     disabled={record.isSkipped || (isEdit && record.isEditable === false)}
                     size="small"
                     style={{ width: '100%' }}
@@ -1021,12 +949,11 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
             dataIndex: 'assistant_teacher',
             width: 220,
             render: (value: string[] | undefined, record: PreviewSession) => (
-                <Select
+                <TeachingStaffSelect
+                    teacherType={2}
                     mode="multiple"
                     value={value ?? []}
                     onChange={(nextValue) => updateSessionField(record.key, 'assistant_teacher', nextValue)}
-                    options={assistantOptions}
-                    loading={loadingStaff}
                     disabled={record.isSkipped || (isEdit && record.isEditable === false)}
                     size="small"
                     maxTagCount="responsive"

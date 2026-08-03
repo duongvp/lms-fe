@@ -120,12 +120,12 @@ export const getTeachingStaffOptions = async (teacherType: TeacherType) => {
         page += 1;
     } while (profiles.length < total && page <= 20);
 
-    return profiles.map((profile) => ({
-        // calendar.teacher stores the teacher's display name. Keep username in
-        // the label so administrators can still distinguish accounts.
-        value: profile.display_name?.trim() || profile.username,
-        label: profile.display_name
-            ? `${profile.display_name} (${profile.username})`
-            : profile.username,
-    }));
+    return profiles.map((profile) => {
+        if (teacherType === 2) {
+            return { value: profile.username, label: profile.username };
+        }
+
+        const displayName = profile.display_name?.trim() || profile.username;
+        return { value: displayName, label: displayName };
+    });
 };

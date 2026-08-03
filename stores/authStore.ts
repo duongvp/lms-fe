@@ -1,6 +1,7 @@
 import { handleLogout } from '@/ultils/auth';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { mutate } from 'swr';
 
 interface AuthState {
     user: {
@@ -114,6 +115,7 @@ export const useAuthStore = create<AuthState>()(
 
             logout: () => {
                 set({ user: defaultUser, accessToken: null });
+                void mutate(() => true, undefined, { revalidate: false });
                 handleLogout();
             },
         }),

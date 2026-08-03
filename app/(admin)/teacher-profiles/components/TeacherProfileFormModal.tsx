@@ -20,6 +20,7 @@ interface TeacherProfileFormModalProps {
     >[0];
     onSubmit: () => Promise<void>;
     onClose: () => void;
+    fixedTeacherType?: 1 | 2;
 }
 
 const TeacherProfileFormModal = ({
@@ -29,6 +30,7 @@ const TeacherProfileFormModal = ({
     form,
     onSubmit,
     onClose,
+    fixedTeacherType,
 }: TeacherProfileFormModalProps) => {
     return (
         <Modal
@@ -54,6 +56,7 @@ const TeacherProfileFormModal = ({
                     label="Mã nhân sự"
                     name="username"
                     rules={[
+                        ...(fixedTeacherType === 1 ? [{ required: true, whitespace: true, message: 'Nhập họ và tên giáo viên' }] : []),
                         {
                             required: !editing,
                             whitespace: true,
@@ -105,6 +108,7 @@ const TeacherProfileFormModal = ({
                     ]}
                 >
                     <Select
+                        disabled={fixedTeacherType !== undefined}
                         options={[
                             {
                                 value: 1,

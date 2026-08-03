@@ -21,7 +21,7 @@ import {
 } from 'antd';
 import { EditOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
-import { getTeachingStaffOptions } from '@/services/teacherProfileService';
+import TeachingStaffSelect from '@/components/shared/TeachingStaffSelect';
 
 const { Text, Title } = Typography;
 
@@ -101,8 +101,6 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
 }) => {
     const [form] = Form.useForm();
     const [loading, setLoading] = React.useState(false);
-    const [teacherOptions, setTeacherOptions] = React.useState<Array<{ value: string; label: string }>>([]);
-    const [assistantOptions, setAssistantOptions] = React.useState<Array<{ value: string; label: string }>>([]);
 
     // Form Watchers
     const configMode = Form.useWatch('config_mode', form) || 'common';
@@ -118,19 +116,6 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             });
         }
     }, [open, selectedRowKeys, form]);
-
-    useEffect(() => {
-        if (!open) return;
-        Promise.all([getTeachingStaffOptions(1), getTeachingStaffOptions(2)])
-            .then(([teachers, assistants]) => {
-                setTeacherOptions(teachers);
-                setAssistantOptions(assistants);
-            })
-            .catch(() => {
-                setTeacherOptions([]);
-                setAssistantOptions([]);
-            });
-    }, [open]);
 
     const handleClose = () => {
         form.resetFields();
@@ -323,9 +308,9 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                 style={{ marginBottom: 0 }}
                                                 rules={[{ required: enabled, message: 'Vui lòng chọn giáo viên mới' }]}
                                             >
-                                                <Select
+                                                <TeachingStaffSelect
+                                                    teacherType={1}
                                                     placeholder="Chọn giáo viên mới"
-                                                    options={teacherOptions}
                                                     disabled={!enabled}
                                                 />
                                             </Form.Item>
@@ -347,12 +332,12 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                 <Form.Item noStyle dependencies={['enable_assistant']}>
                                     {({ getFieldValue }) => (
                                         <Form.Item name="common_assistant_teacher" style={{ marginBottom: 0 }}>
-                                            <Select
+                                            <TeachingStaffSelect
+                                                teacherType={2}
                                                 mode="multiple"
                                                 showSearch
                                                 optionFilterProp="label"
                                                 placeholder="Chọn trợ giảng (có thể để trống để gỡ)"
-                                                options={assistantOptions}
                                                 disabled={!getFieldValue('enable_assistant')}
                                             />
                                         </Form.Item>
@@ -511,7 +496,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                 name={['separate_config', lessonKey, 'teacher']}
                                                 style={{ marginBottom: 0 }}
                                             >
-                                                <Select showSearch optionFilterProp="label" options={teacherOptions} placeholder="Chọn giáo viên" />
+                                                <TeachingStaffSelect teacherType={1} showSearch optionFilterProp="label" placeholder="Chọn giáo viên" />
                                             </Form.Item>
                                         </Col>
                                         <Col span={6}>
@@ -529,7 +514,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                         name={['separate_config', lessonKey, 'assistant_teacher']}
                                         style={{ marginTop: 12, marginBottom: 0 }}
                                     >
-                                        <Select mode="multiple" showSearch optionFilterProp="label" options={assistantOptions} placeholder="Chọn trợ giảng" />
+                                        <TeachingStaffSelect teacherType={2} mode="multiple" showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" />
                                     </Form.Item>
                                 </Card>
                             ))

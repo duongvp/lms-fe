@@ -2,7 +2,8 @@
 
 import { useEffect } from "react";
 import { Button, Drawer, Form, InputNumber, Select, Space } from "antd";
-import { GRADE_OPTIONS, SUBJECT_OPTIONS } from "@/constants/subjects";
+import { GRADE_OPTIONS } from "@/constants/subjects";
+import { useLessonSubjectOptions } from "@/hooks/useLessonSubjectOptions";
 import type { LessonFilterValues } from "../lesson.types";
 import { cleanFilterValues } from "../lesson.utils";
 
@@ -24,6 +25,7 @@ const LessonFilterDrawer = ({
     onReset,
 }: LessonFilterDrawerProps) => {
     const [filterForm] = Form.useForm();
+    const subjectOptions = useLessonSubjectOptions();
 
     useEffect(() => {
         filterForm.setFieldsValue(value);
@@ -63,7 +65,7 @@ const LessonFilterDrawer = ({
                 <Form.Item name="subject" label="Môn học">
                     <Select
                         allowClear
-                        options={SUBJECT_OPTIONS}
+                        options={subjectOptions}
                         placeholder="Chọn môn học"
                         showSearch
                         optionFilterProp="label"

@@ -6,20 +6,20 @@ import dayjs, { type Dayjs } from 'dayjs';
 import {
     createLivestream,
     createLivestreamBulk,
-    getLivestreams,
     updateLivestream,
     rescheduleLivestream
 } from '@/services/livestreamService';
 import SchedulePreviewModal from './SchedulePreviewModal';
 import type { ModuleField } from '@/types/fieldPolicy';
 import { resolveFieldRule } from '@/helper/fieldPolicy';
-import { GRADE_OPTIONS, SUBJECT_OPTIONS } from '@/constants/subjects';
-import { createLesson, getLessons, type LessonApiResponse } from '@/services/lessonService';
+import { GRADE_OPTIONS } from '@/constants/subjects';
+import { useLessonSubjectOptions } from '@/hooks/useLessonSubjectOptions';
+import { createLesson, type LessonApiResponse, type LessonListParams } from '@/services/lessonService';
 import { formatLessonScheduleOption } from '@/helper/lesson';
 import { useAuthStore } from '@/stores/authStore';
 import { PermissionKey } from '@/types/permissions';
-import { getPackageCourses } from '@/services/packageCourseService';
-import { getTeachingStaffOptions } from '@/services/teacherProfileService';
+import { useLessonsQuery, useLmsCache, usePackageCoursesQuery, useSchedulesQuery } from '@/hooks/useLmsQueries';
+import TeachingStaffSelect from '@/components/shared/TeachingStaffSelect';
 
 const { Text, Title } = Typography;
 
@@ -117,6 +117,27 @@ const getEndDisabledTime = (startTime?: Dayjs | null) => {
     };
 };
 
+const inferCourseCadenceDays = (rows: any[]) => {
+    const dates = Array.from(new Set(
+        rows
+            .map((row) => dayjs(row.start_time))
+            .filter((date) => date.isValid())
+            .map((date) => date.startOf('day').valueOf())
+    )).sort((left, right) => left - right);
+    if (dates.length < 2) return undefined;
+
+    const intervals = dates.slice(1)
+        .map((date, index) => dayjs(date).diff(dayjs(dates[index]), 'day'))
+        .filter((days) => days > 0);
+    if (!intervals.length) return undefined;
+
+    const frequencies = new Map<number, number>();
+    intervals.forEach((days) => frequencies.set(days, (frequencies.get(days) ?? 0) + 1));
+    return intervals.reduce((best, days) => (
+        (frequencies.get(days) ?? 0) >= (frequencies.get(best) ?? 0) ? days : best
+    ), intervals[0]);
+};
+
 const ScheduleModal: React.FC<ScheduleModalProps> = ({
     open,
     onClose,
@@ -129,10 +150,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     moduleCode = 'calendar',
 }) => {
     const [form] = Form.useForm();
+    const subjectOptions = useLessonSubjectOptions();
     const [loading, setLoading] = useState(false);
-    const [loadingStaff, setLoadingStaff] = useState(false);
-    const [teacherOptions, setTeacherOptions] = useState<Array<{ value: string; label: string }>>([]);
-    const [assistantOptions, setAssistantOptions] = useState<Array<{ value: string; label: string }>>([]);
 
     // For Add
     const [addMode, setAddMode] = useState<"single" | "bulk">("single");
@@ -150,15 +169,16 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const selectedBulkSubject = Form.useWatch('bulk_subject_name', form);
     const selectedBulkCourseCode = Form.useWatch('bulk_code', form);
     const newSessionStartTime = Form.useWatch(['new_session', 'start_time'], form) as Dayjs | undefined;
+    const newSessionDate = Form.useWatch(['new_session', 'date'], form) as Dayjs | undefined;
     const singleStartTime = Form.useWatch('start_time', form) as Dayjs | undefined;
     const bulkStartTime = Form.useWatch('bulk_start_time', form) as Dayjs | undefined;
     const [lessonOptions, setLessonOptions] = useState<LessonApiResponse[]>([]);
-    const [loadingLessons, setLoadingLessons] = useState(false);
     const [bulkLessonOptions, setBulkLessonOptions] = useState<LessonApiResponse[]>([]);
-    const [loadingBulkLessons, setLoadingBulkLessons] = useState(false);
     const [quickLessonOpen, setQuickLessonOpen] = useState(false);
     const [creatingLesson, setCreatingLesson] = useState(false);
     const [courseEndDate, setCourseEndDate] = useState<Dayjs | null>(null);
+    const [courseLastStartTime, setCourseLastStartTime] = useState<Dayjs | null>(null);
+    const [courseCadenceDays, setCourseCadenceDays] = useState<number | undefined>();
     const [quickLessonForm] = Form.useForm();
     const [messageApi, contextHolder] = message.useMessage();
     const hasPermission = useAuthStore((state) => state.hasPermission);
@@ -168,148 +188,66 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             ? PermissionKey.CALENDAR_TEACHER_EDIT
             : PermissionKey.CALENDAR_TEACHER_ASSIGN
     );
+    usePackageCoursesQuery();
+    const singleLessonParams: LessonListParams | null = (
+        open && !isEdit && addMode === 'single' && selectedGrade && selectedSubject
+    ) ? {
+        page: 1,
+        limit: 100,
+        grade: selectedGrade,
+        subject: selectedSubject,
+        course_code: selectedCourseCode?.trim() || undefined,
+        sort_by: 'learn_number',
+        sort_order: 'asc',
+    } : null;
+    const bulkLessonParams: LessonListParams | null = (
+        open && !isEdit && addMode === 'bulk' && selectedBulkGrade && selectedBulkSubject
+    ) ? {
+        page: 1,
+        limit: 100,
+        grade: selectedBulkGrade,
+        subject: selectedBulkSubject,
+        course_code: selectedBulkCourseCode?.trim() || undefined,
+        sort_by: 'learn_number',
+        sort_order: 'asc',
+    } : null;
+    const singleLessonsQuery = useLessonsQuery(singleLessonParams);
+    const bulkLessonsQuery = useLessonsQuery(bulkLessonParams);
+    const courseCode = initialData?.code || initialData?.class_code;
+    const courseEndQuery = useSchedulesQuery(
+        open && isEdit && courseCode ? {
+            page: 1,
+            limit: 100,
+            code_exact: courseCode,
+            system_type: initialData?.system_type,
+            sort_by: 'start_time',
+            sort_order: 'desc',
+        } : null
+    );
+    const loadingLessons = singleLessonsQuery.isLoading || singleLessonsQuery.isValidating;
+    const loadingBulkLessons = bulkLessonsQuery.isLoading || bulkLessonsQuery.isValidating;
+    const { refreshLessons } = useLmsCache();
 
     React.useEffect(() => {
-        if (!open) return;
-        let active = true;
-        setLoadingStaff(true);
-        Promise.all([
-            getTeachingStaffOptions(1),
-            getTeachingStaffOptions(2),
-        ])
-            .then(([teachers, assistants]) => {
-                if (!active) return;
-                setTeacherOptions(teachers);
-                setAssistantOptions(assistants);
-            })
-            .catch((error: any) => {
-                if (!active) return;
-                setTeacherOptions([]);
-                setAssistantOptions([]);
-                messageApi.error(error.message || 'Không thể tải danh sách giáo viên và trợ giảng.');
-            })
-            .finally(() => {
-                if (active) setLoadingStaff(false);
-            });
-        return () => {
-            active = false;
-        };
-    }, [messageApi, open]);
+        setLessonOptions(singleLessonsQuery.data?.data?.data ?? []);
+    }, [singleLessonsQuery.data]);
 
     React.useEffect(() => {
-        if (!open || isEdit) return;
-        // Làm nóng cache khi người dùng nhập thông tin lịch. Modal xác nhận sẽ
-        // nhận dữ liệu ngay mà không phải chờ Google Sheet ở bước tiếp theo.
-        void getPackageCourses().catch(() => undefined);
-    }, [isEdit, open]);
-
-    React.useEffect(() => {
-        let active = true;
-
-        if (!open || isEdit || addMode !== 'single' || !selectedGrade || !selectedSubject) {
-            setLessonOptions([]);
-            return () => {
-                active = false;
-            };
-        }
-
-        const timer = window.setTimeout(() => {
-            setLoadingLessons(true);
-            getLessons({
-                page: 1,
-                limit: 100,
-                grade: selectedGrade,
-                subject: selectedSubject,
-                course_code: selectedCourseCode?.trim() || undefined,
-                sort_by: 'learn_number',
-                sort_order: 'asc',
-            })
-                .then((response: any) => {
-                    if (active) setLessonOptions(response?.data?.data ?? []);
-                })
-                .catch(() => {
-                    if (active) setLessonOptions([]);
-                })
-                .finally(() => {
-                    if (active) setLoadingLessons(false);
-                });
-        }, 300);
-
-        return () => {
-            active = false;
-            window.clearTimeout(timer);
-        };
-    }, [addMode, isEdit, open, selectedCourseCode, selectedGrade, selectedSubject]);
-
-    React.useEffect(() => {
-        let active = true;
-
-        if (
-            !open ||
-            isEdit ||
-            addMode !== 'bulk' ||
-            !selectedBulkGrade ||
-            !selectedBulkSubject
-        ) {
-            setBulkLessonOptions([]);
-            return () => {
-                active = false;
-            };
-        }
-
-        const timer = window.setTimeout(() => {
-            setLoadingBulkLessons(true);
-            getLessons({
-                page: 1,
-                limit: 100,
-                grade: selectedBulkGrade,
-                subject: selectedBulkSubject,
-                course_code: selectedBulkCourseCode?.trim() || undefined,
-                sort_by: 'learn_number',
-                sort_order: 'asc',
-            })
-                .then((response: any) => {
-                    if (!active) return;
-
-                    const rows: LessonApiResponse[] = response?.data?.data ?? [];
-                    setBulkLessonOptions(rows);
-
-                    const scheduledLessons = rows.filter(
-                        (lesson) => Number(lesson.scheduled_count ?? 0) > 0
-                    );
-                    const latestScheduledLesson = scheduledLessons.at(-1);
-                    const suggestedLesson = latestScheduledLesson
-                        ? rows.find(
-                            (lesson) => lesson.learn_number > latestScheduledLesson.learn_number
-                        )
-                        : rows[0];
-
-                    form.setFieldValue(
-                        'bulk_learn_number',
-                        suggestedLesson?.learn_number ?? latestScheduledLesson?.learn_number
-                    );
-                })
-                .catch(() => {
-                    if (active) setBulkLessonOptions([]);
-                })
-                .finally(() => {
-                    if (active) setLoadingBulkLessons(false);
-                });
-        }, 300);
-
-        return () => {
-            active = false;
-            window.clearTimeout(timer);
-        };
-    }, [
-        addMode,
-        form,
-        isEdit,
-        open,
-        selectedBulkCourseCode,
-        selectedBulkGrade,
-        selectedBulkSubject,
-    ]);
+        const rows: LessonApiResponse[] = bulkLessonsQuery.data?.data?.data ?? [];
+        setBulkLessonOptions(rows);
+        if (!rows.length) return;
+        const scheduledLessons = rows.filter(
+            (lesson) => Number(lesson.scheduled_count ?? 0) > 0
+        );
+        const latestScheduledLesson = scheduledLessons.at(-1);
+        const suggestedLesson = latestScheduledLesson
+            ? rows.find((lesson) => lesson.learn_number > latestScheduledLesson.learn_number)
+            : rows[0];
+        form.setFieldValue(
+            'bulk_learn_number',
+            suggestedLesson?.learn_number ?? latestScheduledLesson?.learn_number
+        );
+    }, [bulkLessonsQuery.data, form]);
 
     const scheduledBulkLessons = bulkLessonOptions.filter(
         (lesson) => Number(lesson.scheduled_count ?? 0) > 0
@@ -357,6 +295,44 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         return isEndAfterStart(startTime, endTime)
             ? Promise.resolve()
             : Promise.reject(new Error('Thời gian kết thúc phải sau thời gian bắt đầu'));
+    };
+
+    const validateNewSessionStartTime = (_: unknown, startTime?: Dayjs | null) => {
+        if (
+            updateMode !== 'following'
+            || !newSessionDate
+            || !startTime
+            || !courseLastStartTime
+            || !newSessionDate.isSame(courseLastStartTime, 'day')
+        ) return Promise.resolve();
+
+        const selectedMinutes = startTime.hour() * 60 + startTime.minute();
+        const lastStartMinutes = courseLastStartTime.hour() * 60 + courseLastStartTime.minute();
+        return selectedMinutes > lastStartMinutes
+            ? Promise.resolve()
+            : Promise.reject(new Error(
+                `Giờ bắt đầu phải sau ${courseLastStartTime.format('HH:mm')} của buổi cuối khóa`
+            ));
+    };
+
+    const getNewSessionStartDisabledTime = () => {
+        if (
+            updateMode !== 'following'
+            || !newSessionDate
+            || !courseLastStartTime
+            || !newSessionDate.isSame(courseLastStartTime, 'day')
+        ) return {};
+
+        const lastHour = courseLastStartTime.hour();
+        const lastMinute = courseLastStartTime.minute();
+        return {
+            disabledHours: () => Array.from({ length: lastHour }, (_, hour) => hour),
+            disabledMinutes: (selectedHour: number) => (
+                selectedHour === lastHour
+                    ? Array.from({ length: lastMinute + 1 }, (_, minute) => minute)
+                    : []
+            ),
+        };
     };
 
     const validateEndTimeAfter = (startFieldName: string | (string | number)[], message = 'Thời gian kết thúc phải sau thời gian bắt đầu') => (
@@ -423,6 +399,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                 lesson_name: created.lesson_name,
             });
             messageApi.success(`Đã tạo Bài ${created.learn_number}: ${created.lesson_name}`);
+            await refreshLessons();
             setQuickLessonOpen(false);
         } catch (error: any) {
             messageApi.error(error.message || 'Không thể tạo nhanh bài học.');
@@ -522,43 +499,26 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     }, [open, initialData, form, isEdit]);
 
     React.useEffect(() => {
-        let active = true;
-        const code = initialData?.code || initialData?.class_code;
+        const rows: any[] = courseEndQuery.data?.data?.data ?? [];
+        const starts = rows
+            .map((row) => dayjs(row.start_time))
+            .filter((date) => date.isValid())
+            .sort((left, right) => left.valueOf() - right.valueOf());
+        const lastStart = starts.at(-1) ?? null;
+        const cadenceDays = inferCourseCadenceDays(rows);
+        setCourseEndDate(lastStart?.startOf('day') ?? null);
+        setCourseLastStartTime(lastStart);
+        setCourseCadenceDays(cadenceDays);
 
-        if (!open || !isEdit || !code) {
-            setCourseEndDate(null);
-            return () => {
-                active = false;
-            };
+        if (
+            updateMode === 'following'
+            && lastStart
+            && cadenceDays
+            && !form.getFieldValue(['new_session', 'date'])
+        ) {
+            form.setFieldValue(['new_session', 'date'], lastStart.add(cadenceDays, 'day'));
         }
-
-        getLivestreams({
-            page: 1,
-            limit: 1,
-            code_exact: code,
-            system_type: initialData?.system_type,
-            sort_by: 'end_time',
-            sort_order: 'desc',
-        })
-            .then((response: any) => {
-                if (!active) return;
-                const lastSession = response?.data?.data?.[0];
-                setCourseEndDate(lastSession?.end_time ? dayjs(lastSession.end_time) : null);
-            })
-            .catch(() => {
-                if (active) setCourseEndDate(null);
-            });
-
-        return () => {
-            active = false;
-        };
-    }, [
-        initialData?.class_code,
-        initialData?.code,
-        initialData?.system_type,
-        isEdit,
-        open,
-    ]);
+    }, [courseEndQuery.data, form, updateMode]);
 
     return (
         <>
@@ -627,8 +587,15 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                         <Radio.Group
                             value={updateMode}
                             onChange={(e) => {
-                                setUpdateMode(e.target.value);
-                                form.setFieldValue('update_mode', e.target.value);
+                                const nextMode = e.target.value as typeof updateMode;
+                                setUpdateMode(nextMode);
+                                form.setFieldValue('update_mode', nextMode);
+                                if (nextMode === 'following' && courseLastStartTime && courseCadenceDays) {
+                                    form.setFieldValue(
+                                        ['new_session', 'date'],
+                                        courseLastStartTime.add(courseCadenceDays, 'day')
+                                    );
+                                }
                             }}
                             buttonStyle="solid"
                         >
@@ -695,7 +662,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                     <Col span={8}>
                                         <Form.Item label="Môn học" name="subject_name" rules={requiredWhenEditable('subject', 'Chọn môn học')}>
                                             <Select
-                                                options={SUBJECT_OPTIONS}
+                                                options={subjectOptions}
                                                 placeholder="Chọn môn học"
                                                 showSearch
                                                 optionFilterProp="label"
@@ -837,15 +804,14 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                 <Row gutter={24}>
                                     <Col span={8}>
                                         <Form.Item label="Giáo viên" name="teacher" rules={requiredWhenEditable('teacher', 'Chọn giáo viên')}>
-                                            <Select options={teacherOptions} loading={loadingStaff} showSearch optionFilterProp="label" placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
+                                            <TeachingStaffSelect teacherType={1} showSearch optionFilterProp="label" placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
                                         <Form.Item label="Trợ giảng" name="assistant_teacher">
-                                            <Select
+                                            <TeachingStaffSelect
+                                                teacherType={2}
                                                 mode="multiple"
-                                                options={assistantOptions}
-                                                loading={loadingStaff}
                                                 showSearch
                                                 optionFilterProp="label"
                                                 placeholder="Chọn một hoặc nhiều trợ giảng"
@@ -953,7 +919,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                     <Col span={8}>
                                         <Form.Item label="Môn học" name="bulk_subject_name" rules={requiredWhenEditable('subject', 'Chọn môn học')}>
                                             <Select
-                                                options={SUBJECT_OPTIONS}
+                                                options={subjectOptions}
                                                 placeholder="Chọn môn học"
                                                 showSearch
                                                 optionFilterProp="label"
@@ -1071,12 +1037,12 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             </Col>
                                             <Col span={12}>
                                                 <Form.Item label="Giáo viên" name="bulk_teacher" rules={requiredWhenEditable('teacher', 'Chọn giáo viên')}>
-                                                    <Select options={teacherOptions} loading={loadingStaff} showSearch optionFilterProp="label" placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
+                                                    <TeachingStaffSelect teacherType={1} showSearch optionFilterProp="label" placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
                                                 </Form.Item>
                                             </Col>
                                             <Col span={12}>
                                                 <Form.Item label="Trợ giảng" name="bulk_assistant_teacher">
-                                                    <Select mode="multiple" options={assistantOptions} loading={loadingStaff} showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" disabled={!isFieldEditable('assistant_teacher')} />
+                                                    <TeachingStaffSelect teacherType={2} mode="multiple" showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" disabled={!isFieldEditable('assistant_teacher')} />
                                                 </Form.Item>
                                             </Col>
                                         </Row>
@@ -1132,12 +1098,12 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                         </Col>
                                                         <Col span={4}>
                                                             <Form.Item name={['separate_config', dayValue, 'teacher']} rules={requiredWhenEditable('teacher', 'Chọn giáo viên')} style={{ marginBottom: 8 }}>
-                                                                <Select options={teacherOptions} loading={loadingStaff} showSearch optionFilterProp="label" placeholder="Giáo viên" disabled={!isFieldEditable('teacher')} />
+                                                                <TeachingStaffSelect teacherType={1} showSearch optionFilterProp="label" placeholder="Giáo viên" disabled={!isFieldEditable('teacher')} />
                                                             </Form.Item>
                                                         </Col>
                                                         <Col span={4}>
                                                             <Form.Item name={['separate_config', dayValue, 'assistant_teacher']} style={{ marginBottom: 8 }}>
-                                                                <Select mode="multiple" options={assistantOptions} loading={loadingStaff} showSearch optionFilterProp="label" placeholder="Trợ giảng" disabled={!isFieldEditable('assistant_teacher')} />
+                                                                <TeachingStaffSelect teacherType={2} mode="multiple" showSearch optionFilterProp="label" placeholder="Trợ giảng" disabled={!isFieldEditable('assistant_teacher')} />
                                                             </Form.Item>
                                                         </Col>
                                                     </Row>
@@ -1192,7 +1158,9 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                 { validator: validateNewSessionDate },
                                             ]}
                                             extra={newSessionMinDate
-                                                ? `Ngày sớm nhất: ${newSessionMinDate.format('DD/MM/YYYY')}`
+                                                ? `${courseCadenceDays && updateMode === 'following'
+                                                    ? `Đề xuất theo nhịp ${courseCadenceDays} ngày/lần. `
+                                                    : ''}Ngày sớm nhất: ${newSessionMinDate.format('DD/MM/YYYY')}`
                                                 : updateMode === 'following'
                                                     ? 'Đang xác định ngày kết thúc khóa...'
                                                     : undefined}
@@ -1203,16 +1171,29 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                 placeholder="DD/MM/YYYY"
                                                 minDate={newSessionMinDate}
                                                 disabled={!isFieldEditable('start_time')}
+                                                onChange={() => {
+                                                    void form
+                                                        .validateFields([['new_session', 'start_time']])
+                                                        .catch(() => undefined);
+                                                }}
                                             />
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
-                                        <Form.Item label="Thời gian bắt đầu" name={['new_session', 'start_time']} rules={requiredWhenEditable('start_time', 'Nhập giờ bắt đầu')}>
+                                        <Form.Item
+                                            label="Thời gian bắt đầu"
+                                            name={['new_session', 'start_time']}
+                                            rules={[
+                                                ...requiredWhenEditable('start_time', 'Nhập giờ bắt đầu'),
+                                                { validator: validateNewSessionStartTime },
+                                            ]}
+                                        >
                                             <TimePicker
                                                 format="HH:mm"
                                                 style={{ width: '100%' }}
                                                 placeholder="HH:mm"
                                                 disabled={!isFieldEditable('start_time')}
+                                                disabledTime={getNewSessionStartDisabledTime}
                                                 onChange={(value) => revalidateOrClearEndTime(['new_session', 'end_time'], value)}
                                             />
                                         </Form.Item>
@@ -1237,19 +1218,19 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                     </Col>
                                     <Col span={12}>
                                         <Form.Item label="Giáo viên dạy bù" name={['new_session', 'teacher']} rules={requiredWhenEditable('teacher', 'Chọn giáo viên')}>
-                                            <Select options={teacherOptions} loading={loadingStaff} showSearch optionFilterProp="label" placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
+                                            <TeachingStaffSelect teacherType={1} showSearch optionFilterProp="label" placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={12}>
                                         <Form.Item label="Trợ giảng" name={['new_session', 'assistant_teacher']}>
-                                            <Select mode="multiple" options={assistantOptions} loading={loadingStaff} showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" disabled={!isFieldEditable('assistant_teacher')} />
+                                            <TeachingStaffSelect teacherType={2} mode="multiple" showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" disabled={!isFieldEditable('assistant_teacher')} />
                                         </Form.Item>
                                     </Col>
-                                    <Col span={12}>
+                                    {/* <Col span={12}>
                                         <Form.Item label="Phòng/Kênh học" name={['new_session', 'channel_name']}>
                                             <Input placeholder="Ví dụ: Phòng Online" />
                                         </Form.Item>
-                                    </Col>
+                                    </Col> */}
                                 </Row>
                             </FormSection>
                         </>

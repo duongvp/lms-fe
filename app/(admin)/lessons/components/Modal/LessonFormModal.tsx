@@ -21,7 +21,8 @@ import {
 } from "@ant-design/icons";
 import type { ModuleField } from "@/types/fieldPolicy";
 import type { LessonApiResponse, LessonPayload } from "@/services/lessonService";
-import { GRADE_OPTIONS, SUBJECT_OPTIONS } from "@/constants/subjects";
+import { GRADE_OPTIONS } from "@/constants/subjects";
+import { useLessonSubjectOptions } from "@/hooks/useLessonSubjectOptions";
 
 const { Text, Title } = Typography;
 
@@ -153,7 +154,9 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
     onClose,
     onSubmit,
 }) => {
+    const subjectOptions = useLessonSubjectOptions();
     const [form] = Form.useForm();
+    console.log("subjectOptions:", subjectOptions);
 
     useEffect(() => {
         if (!open) return;
@@ -215,7 +218,7 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
                                 <Form.Item name="subject_name" label="Môn học" rules={[{ required: true, message: "Chọn môn học" }]}>
                                     <Select
                                         disabled={!canEdit("subject_name")}
-                                        options={SUBJECT_OPTIONS}
+                                        options={subjectOptions}
                                         placeholder="Chọn môn học"
                                         showSearch
                                         optionFilterProp="label"

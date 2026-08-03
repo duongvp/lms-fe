@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import AppSWRProvider from "@/providers/AppSWRProvider";
 
 export const metadata: Metadata = {
     title: "Học trực tuyến - livestream",
@@ -24,7 +25,7 @@ export default function RootLayout({
         <html lang="en">
             <head />
             <body>
-                {children}
+                <AppSWRProvider>{children}</AppSWRProvider>
             </body>
         </html>
     );

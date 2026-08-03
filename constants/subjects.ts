@@ -7,7 +7,7 @@ export const SUBJECT_OPTIONS = [
     { value: "Toán", label: "Toán", subjectCode: "TOAN" },
     { value: "Ngữ văn", label: "Ngữ văn", subjectCode: "VAN" },
     { value: "Tiếng Anh", label: "Tiếng Anh", subjectCode: "ANH" },
-    { value: "Vật lý", label: "Vật lý", subjectCode: "LY" },
+    { value: "Vật lí", label: "Vật lí", subjectCode: "LY" },
     { value: "Hóa học", label: "Hóa học", subjectCode: "HOA" },
     { value: "Sinh học", label: "Sinh học", subjectCode: "SINH" },
     { value: "Lịch sử", label: "Lịch sử", subjectCode: "SU" },

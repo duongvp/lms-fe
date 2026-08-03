@@ -79,7 +79,7 @@ export const importLivestreamsFile = (file: File) => {
 };
 
 // Hàm mới: lấy danh sách lịch
-export const getLivestreams = (params: {
+export interface LivestreamListParams {
     page?: number;
     limit?: number;
     keyword?: string;
@@ -94,7 +94,9 @@ export const getLivestreams = (params: {
     end_time?: string;
     sort_by?: string;
     sort_order?: string;
-}) => {
+}
+
+export const getLivestreams = (params: LivestreamListParams) => {
     const query = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
         if (value === undefined || value === null || value === "") return;

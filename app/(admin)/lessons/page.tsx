@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button, Modal, notification } from "antd";
 import { DownOutlined, InfoCircleOutlined, UpOutlined } from "@ant-design/icons";
 import { useAuthStore } from "@/stores/authStore";
@@ -11,13 +11,11 @@ import {
     sanitizeEditablePayload,
 } from "@/helper/fieldPolicy";
 import type { ModuleField } from "@/types/fieldPolicy";
-import { getModuleFields } from "@/services/roleService";
 import {
     createLesson,
     deleteLesson,
     downloadLessonTemplate,
     exportLessons,
-    getLessons,
     importLessonsFile,
     type LessonApiResponse,
     type LessonExportParams,
@@ -26,6 +24,7 @@ import {
     reorderLessons,
     updateLesson,
 } from "@/services/lessonService";
+import { useLessonsQuery, useLmsCache, useModuleFieldsQuery } from "@/hooks/useLmsQueries";
 import LessonFormModal, { FORM_FIELDS } from "./components/Modal/LessonFormModal";
 import LessonActions from "./components/LessonActions";
 import LessonFilterDrawer from "./components/LessonFilterDrawer";
@@ -50,7 +49,6 @@ import { cleanFilterValues, downloadBlob } from "./lesson.utils";
 
 const Page = () => {
     const [data, setData] = useState<LessonDataType[]>([]);
-    const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
@@ -100,67 +98,47 @@ const Page = () => {
         .filter((item) => item.editable)
         .map((item) => item.field.fieldCode);
 
-    const fetchData = useCallback(async (
-        page = 1,
-        limit = 10,
-        filters: LessonFilterValues = {},
-        sorter: LessonSortState = {}
-    ) => {
-        try {
-            setLoading(true);
-            const params: LessonListParams = {
-                page,
-                limit,
-                ...filters,
-                sort_by: sorter.sort_by,
-                sort_order: sorter.sort_by
-                    ? (sorter.sort_order === "descend" ? "desc" : "asc")
-                    : undefined,
-            };
-            const response: any = await getLessons(params);
-            const list = response?.data?.data ?? [];
-            setData(list.map((item: LessonApiResponse) => ({
-                ...item,
-                key: String(item.id),
-            })));
-            setTotalItems(response?.data?.total ?? 0);
-        } catch (error: any) {
-            console.error("Failed to fetch lessons:", error);
-            api.error({
-                message: "Lỗi khi tải dữ liệu",
-                description: error.message || "Không thể tải danh sách bài học.",
-            });
-        } finally {
-            setLoading(false);
+    const lessonParams = useMemo<LessonListParams>(() => ({
+        page: currentPage,
+        limit: pageSize,
+        ...filterValues,
+        sort_by: sortState.sort_by,
+        sort_order: sortState.sort_by
+            ? (sortState.sort_order === "descend" ? "desc" : "asc")
+            : undefined,
+    }), [currentPage, pageSize, filterValues, sortState]);
+    const lessonsQuery = useLessonsQuery(lessonParams);
+    const moduleFieldsQuery = useModuleFieldsQuery(LESSON_MODULE_CODE);
+    const { refreshLessons } = useLmsCache();
+    const loading = lessonsQuery.isLoading || lessonsQuery.isValidating;
+
+    useEffect(() => {
+        const response: any = lessonsQuery.data;
+        if (!response?.data) return;
+        const list = response.data.data ?? [];
+        setData(list.map((item: LessonApiResponse) => ({
+            ...item,
+            key: String(item.id),
+        })));
+        setTotalItems(response.data.total ?? 0);
+    }, [lessonsQuery.data]);
+
+    useEffect(() => {
+        if (!lessonsQuery.error) return;
+        api.error({
+            message: "Lỗi khi tải dữ liệu",
+            description: lessonsQuery.error.message || "Không thể tải danh sách bài học.",
+        });
+    }, [api, lessonsQuery.error]);
+
+    useEffect(() => {
+        const fields = moduleFieldsQuery.data?.fields;
+        if (fields?.length) {
+            setModuleFields([...fields].sort(
+                (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+            ));
         }
-    }, [api]);
-
-    useEffect(() => {
-        fetchData(currentPage, pageSize, filterValues, sortState);
-    }, [currentPage, pageSize, filterValues, sortState, fetchData]);
-
-    useEffect(() => {
-        const fetchModuleFields = async () => {
-            try {
-                const moduleStructure = await getModuleFields(LESSON_MODULE_CODE);
-                if (moduleStructure?.fields?.length) {
-                    setModuleFields(
-                        [...moduleStructure.fields].sort(
-                            (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
-                        )
-                    );
-                }
-            } catch (error) {
-                console.error("Không thể tải ModuleField lessons:", error);
-                api.warning({
-                    message: "Không thể tải cấu hình cột",
-                    description: "Đang dùng cấu hình bài học mặc định.",
-                });
-            }
-        };
-
-        fetchModuleFields();
-    }, [api]);
+    }, [moduleFieldsQuery.data]);
 
     const handleSearch = async (value: string) => {
         setSearchText(value);
@@ -226,7 +204,7 @@ const Page = () => {
 
             setOpenFormModal(false);
             setSelectedRecord(null);
-            fetchData(currentPage, pageSize, filterValues, sortState);
+            await refreshLessons();
         } catch (error: any) {
             api.error({
                 message: "Lưu thất bại",
@@ -251,7 +229,7 @@ const Page = () => {
                         message: "Xóa thành công",
                         description: "Bài học đã được chuyển về trạng thái không hoạt động.",
                     });
-                    fetchData(currentPage, pageSize, filterValues, sortState);
+                    await refreshLessons();
                 } catch (error: any) {
                     api.error({
                         message: "Xóa thất bại",
@@ -283,7 +261,7 @@ const Page = () => {
     const handleCancelReorder = () => {
         setReorderMode(false);
         setDragRowKey(null);
-        fetchData(currentPage, pageSize, filterValues, sortState);
+        void refreshLessons();
     };
 
     const handleDropRow = (targetKey: React.Key) => {
@@ -326,10 +304,7 @@ const Page = () => {
             });
             api.success({ message: "Đã lưu thứ tự bài học" });
             setReorderMode(false);
-            fetchData(1, pageSize, filterValues, {
-                sort_by: "learn_number",
-                sort_order: "ascend",
-            });
+            await refreshLessons();
         } catch (error: any) {
             api.error({
                 message: "Lưu thứ tự thất bại",
@@ -401,7 +376,7 @@ const Page = () => {
                 description: `Đã xử lý ${response?.data?.total ?? 0} dòng: tạo mới ${response?.data?.created ?? 0}, cập nhật ${response?.data?.updated ?? 0}, bỏ qua ${response?.data?.skipped ?? 0}.`,
             });
             setOpenImportModal(false);
-            fetchData(currentPage, pageSize, filterValues, sortState);
+            await refreshLessons();
         } catch (error: any) {
             const errors = error?.detail?.errors ?? [];
             if (Array.isArray(errors) && errors.length) {
@@ -484,7 +459,10 @@ const Page = () => {
                 onCancelReorder={handleCancelReorder}
                 onSaveReorder={handleSaveReorder}
                 onReorderStrategyChange={setReorderStrategy}
-                onReload={handleResetFilter}
+                onReload={() => {
+                    handleResetFilter();
+                    void refreshLessons();
+                }}
             />
 
             <LessonTable

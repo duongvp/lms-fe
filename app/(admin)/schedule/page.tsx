@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import type { SorterResult } from "antd/es/table/interface";
@@ -16,16 +16,16 @@ import {
     deleteLivestream,
     downloadLivestreamImportTemplate,
     exportLivestreams,
-    getLivestreams,
     importLivestreamsFile,
     updateLivestream,
     updateLivestreamBulk,
 } from "@/services/livestreamService";
 import dayjs, { Dayjs } from "dayjs";
-import { getModuleFields } from "@/services/roleService";
 import type { ModuleField, ResolvedFieldPermission } from "@/types/fieldPolicy";
 import { canEditAnyField, resolveModuleFieldPermissions, sanitizeEditablePayload } from "@/helper/fieldPolicy";
-import { getTeachingStaffOptions } from "@/services/teacherProfileService";
+import { useLmsCache, useModuleFieldsQuery, useSchedulesQuery, useTeachingStaffQuery } from "@/hooks/useLmsQueries";
+import type { LivestreamListParams } from "@/services/livestreamService";
+import TeachingStaffSelect from "@/components/shared/TeachingStaffSelect";
 
 const SCHEDULE_MODULE_CODE = "calendar";
 const { RangePicker } = DatePicker;
@@ -276,7 +276,6 @@ const Page = () => {
     const [filteredData, setFilteredData] = useState<ScheduleDataType[]>(MOCK_SCHEDULES);
     const [searchText, setSearchText] = useState("");
     const [editingKey, setEditingKey] = useState<string>("");
-    const [loading, setLoading] = useState<boolean>(false);
     const [moduleFields, setModuleFields] = useState<ModuleField[]>(DEFAULT_MODULE_FIELDS);
     const [form] = Form.useForm();
     const [api, contextHolder] = notification.useNotification();
@@ -290,8 +289,6 @@ const Page = () => {
     const [selectedRecord, setSelectedRecord] = useState<ScheduleDataType | null>(null);
     const [isEditMode, setIsEditMode] = useState(false);
     const [showPageInfo, setShowPageInfo] = useState(true);
-    const [teacherOptions, setTeacherOptions] = useState<Array<{ value: string; label: string }>>([]);
-    const [assistantOptions, setAssistantOptions] = useState<Array<{ value: string; label: string }>>([]);
 
     // Cấu hình Checkbox cho Bảng (Antd Row Selection)
     const rowSelection = {
@@ -331,105 +328,59 @@ const Page = () => {
     const screens = Grid.useBreakpoint();
     const isDesktop = Boolean(screens.lg);
 
-    const fetchData = useCallback(async (
-        page = 1,
-        limit = 10,
-        filtersValue: ScheduleFilterValues = {},
-        sorter: ScheduleSortState = []
-    ) => {
-        try {
-            setLoading(true);
-            const response: any = await getLivestreams({
-                page,
-                limit,
-                ...buildScheduleApiParams(filtersValue),
-                sort_by: sorter.length
-                    ? sorter.map((item) => item.field).join(",")
-                    : undefined,
-                sort_order: sorter.length
-                    ? sorter.map((item) => item.order === "descend" ? "desc" : "asc").join(",")
-                    : undefined,
-            });
-            if (response && response.data) {
-                const mappedData: ScheduleDataType[] = response.data.data.map((item: any) => ({
-                    // Preserve dynamic calendar fields returned by ModuleField
-                    // (lesson_document, evg_stream, ...), then normalize fields
-                    // that need a table-specific representation.
-                    ...item,
-                    key: item.id?.toString() || item.key,
-                    id: item.id?.toString(),
-                    code: item.code,
-                    class_name: item.class_name || item.code,
-                    start_time: item.start_time ? dayjs(item.start_time).format('YYYY-MM-DDTHH:mm') : "",
-                    end_time: item.end_time ? dayjs(item.end_time).format('YYYY-MM-DDTHH:mm') : "",
-                    room: item.room || item.channel_name || 'Phòng Online',
-                    subject: item.subject || item.lesson_name || `Bài ${item.learn_number}`,
-                    lesson_name: item.lesson_name || `Bài ${item.learn_number}`,
-                    learn_number: item.learn_number,
-                    lesson_link: item.lesson_link || item.link || "",
-                    teacher: item.teacher,
-                    assistant_teacher: item.assistant_teacher,
-                    system_type: item.system_type,
-                    lesson_status: item.lesson_status ?? 0,
-                    can_modify: item.can_modify === true,
-                }));
-                setData(mappedData);
-                setFilteredData(mappedData);
-                setTotalItems(response.data.total || 0);
-            } else {
-                setData(MOCK_SCHEDULES);
-                setFilteredData(MOCK_SCHEDULES);
-            }
-        } catch (error) {
-            console.error("Failed to fetch schedules:", error);
-            setData(MOCK_SCHEDULES);
-            setFilteredData(MOCK_SCHEDULES);
-        } finally {
-            setLoading(false);
+    const scheduleParams = useMemo<LivestreamListParams>(() => ({
+        page: currentPage,
+        limit: pageSize,
+        ...buildScheduleApiParams(filterValues),
+        sort_by: sortState.length
+            ? sortState.map((item) => item.field).join(",")
+            : undefined,
+        sort_order: sortState.length
+            ? sortState.map((item) => item.order === "descend" ? "desc" : "asc").join(",")
+            : undefined,
+    }), [currentPage, pageSize, filterValues, sortState]);
+    const schedulesQuery = useSchedulesQuery(scheduleParams);
+    const moduleFieldsQuery = useModuleFieldsQuery(SCHEDULE_MODULE_CODE);
+    const assistantsQuery = useTeachingStaffQuery(2);
+    const { refreshSchedules } = useLmsCache();
+    const loading = schedulesQuery.isLoading || schedulesQuery.isValidating;
+    const assistantOptions = assistantsQuery.data ?? [];
+
+    useEffect(() => {
+        const response: any = schedulesQuery.data;
+        if (!response?.data) return;
+        const mappedData: ScheduleDataType[] = (response.data.data ?? []).map((item: any) => ({
+            ...item,
+            key: item.id?.toString() || item.key,
+            id: item.id?.toString(),
+            code: item.code,
+            class_name: item.class_name || item.code,
+            start_time: item.start_time ? dayjs(item.start_time).format('YYYY-MM-DDTHH:mm') : "",
+            end_time: item.end_time ? dayjs(item.end_time).format('YYYY-MM-DDTHH:mm') : "",
+            room: item.room || item.channel_name || 'Phòng Online',
+            subject: item.subject || item.lesson_name || `Bài ${item.learn_number}`,
+            lesson_name: item.lesson_name || `Bài ${item.learn_number}`,
+            learn_number: item.learn_number,
+            lesson_link: item.lesson_link || item.link || "",
+            teacher: item.teacher,
+            assistant_teacher: item.assistant_teacher,
+            system_type: item.system_type,
+            lesson_status: item.lesson_status ?? 0,
+            can_modify: item.can_modify === true,
+        }));
+        setData(mappedData);
+        setFilteredData(mappedData);
+        setTotalItems(response.data.total || 0);
+    }, [schedulesQuery.data]);
+
+    useEffect(() => {
+        const fields = moduleFieldsQuery.data?.fields;
+        if (fields?.length) {
+            setModuleFields([...fields].sort(
+                (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+            ));
         }
-    }, []);
-
-    useEffect(() => {
-        fetchData(currentPage, pageSize, filterValues, sortState);
-    }, [currentPage, pageSize, filterValues, sortState, fetchData]);
-
-    useEffect(() => {
-        Promise.all([
-            getTeachingStaffOptions(1),
-            getTeachingStaffOptions(2),
-        ])
-            .then(([teachers, assistants]) => {
-                setTeacherOptions(teachers);
-                setAssistantOptions(assistants);
-            })
-            .catch(() => {
-                setTeacherOptions([]);
-                setAssistantOptions([]);
-            });
-    }, []);
-
-    useEffect(() => {
-        const fetchModuleFields = async () => {
-            try {
-                const moduleStructure = await getModuleFields(SCHEDULE_MODULE_CODE);
-                if (moduleStructure?.fields?.length) {
-                    setModuleFields(
-                        [...moduleStructure.fields].sort(
-                            (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
-                        )
-                    );
-                }
-            } catch (error) {
-                console.error("Không thể tải ModuleField calendar:", error);
-                api.warning({
-                    message: "Không thể tải cấu hình cột",
-                    description: "Đang dùng cấu hình lịch học mặc định.",
-                });
-            }
-        };
-
-        fetchModuleFields();
-    }, [api]);
+    }, [moduleFieldsQuery.data]);
 
     const [openFilterDrawer, setOpenFilterDrawer] = useState(false);
     const { fieldPolicy } = useAuthStore((state) => state.user)
@@ -538,7 +489,7 @@ const Page = () => {
             });
             setOpenImportModal(false);
             setSelectedRowKeys([]);
-            fetchData(currentPage, pageSize, filterValues, sortState);
+            await refreshSchedules();
         } catch (error: any) {
             const errors = error?.detail?.errors;
             if (Array.isArray(errors)) setImportErrors(errors);
@@ -551,8 +502,8 @@ const Page = () => {
         }
     };
 
-    const handleModalSuccess = (values: any) => {
-        fetchData(currentPage, pageSize, filterValues, sortState);
+    const handleModalSuccess = (_values: any) => {
+        void refreshSchedules();
         api.success({
             message: "Cập nhật thành công",
             description: "Đã cập nhật danh sách lịch học.",
@@ -607,7 +558,7 @@ const Page = () => {
                     setSelectedRowKeys((keys) =>
                         keys.filter((key) => String(key) !== String(record.key))
                     );
-                    await fetchData(currentPage, pageSize, filterValues, sortState);
+                    await refreshSchedules();
                 } catch (error: any) {
                     api.error({
                         message: "Xóa thất bại",
@@ -658,7 +609,7 @@ const Page = () => {
                     message: "Cập nhật thành công",
                     description: "Đã lưu thay đổi nhanh của dòng.",
                 });
-                await fetchData(currentPage, pageSize, filterValues, sortState);
+                await refreshSchedules();
             }
         } catch (errInfo: any) {
             console.log("Validate Failed:", errInfo);
@@ -726,20 +677,20 @@ const Page = () => {
                                 name={fieldCode}
                                 style={{ margin: 0 }}
                             >
-                                <Select size="small" showSearch optionFilterProp="label" style={{ width: 180 }} options={teacherOptions} />
+                                <TeachingStaffSelect teacherType={1} size="small" showSearch optionFilterProp="label" style={{ width: 180 }} />
                             </Form.Item>
                         );
                     }
                     if (fieldCode === "assistant_teacher") {
                         return (
                             <Form.Item name={fieldCode} style={{ margin: 0 }}>
-                                <Select
+                                <TeachingStaffSelect
+                                    teacherType={2}
                                     mode="multiple"
                                     size="small"
                                     showSearch
                                     optionFilterProp="label"
                                     style={{ width: 220 }}
-                                    options={assistantOptions}
                                 />
                             </Form.Item>
                         );
@@ -972,7 +923,13 @@ const Page = () => {
                                 </Button>
                             </Dropdown>
                         )}
-                        <Button icon={<ReloadOutlined />} onClick={handleResetScheduleFilter} />
+                        <Button
+                            icon={<ReloadOutlined />}
+                            onClick={() => {
+                                handleResetScheduleFilter();
+                                void refreshSchedules();
+                            }}
+                        />
                         {canEditSchedule && (
                             <Button
                                 type="primary"
@@ -1134,7 +1091,7 @@ const Page = () => {
 
                             // Reset state & Reload bảng
                             setSelectedRowKeys([]);
-                            fetchData(currentPage, pageSize, filterValues, sortState);
+                            await refreshSchedules();
 
                         } catch (error: any) {
                             console.error(error);

@@ -36,6 +36,11 @@ export interface LessonListParams {
     sort_order?: string;
 }
 
+export interface LessonSubjectOption {
+    subject_name: string;
+    subject_code: string;
+}
+
 export interface LessonExportParams extends LessonListParams {
     format: "csv" | "xlsx";
     ids?: Array<string | number>;
@@ -87,6 +92,14 @@ export const getLessons = (params: LessonListParams) =>
         method: "GET",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
+    });
+
+export const getLessonSubjects = () =>
+    fetchInstance(`${API_BASE_URL}/options/subjects`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        cache: "no-store",
     });
 
 export const getLessonById = (id: string | number) =>
