@@ -1,10 +1,10 @@
 "use client";
 
-import dayjs from "dayjs";
 import { Descriptions, Space, Tabs, Typography } from "antd";
 import type { TabsProps } from 'antd';
 import { FORM_FIELDS } from "./Modal/LessonFormModal";
 import type { LessonDataType } from "../lesson.types";
+import { formatLessonDateTime } from "../lesson.utils";
 
 interface LessonDetailRowProps {
     record: LessonDataType;
@@ -64,7 +64,7 @@ const LessonDetailRow = ({
     if (visibleFieldCodes.includes("updated_at")) {
         dataRow.push({
             label: "Ngày cập nhật",
-            value: record.updated_at ? dayjs(record.updated_at).format("DD/MM/YYYY HH:mm") : "-",
+            value: formatLessonDateTime(record.updated_at),
         });
     }
 

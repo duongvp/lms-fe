@@ -30,6 +30,18 @@ export interface TeacherProfileListParams {
     status?: TeacherProfileStatus;
 }
 
+export const formatTeachingStaffLabel = (
+    displayName?: string | null,
+    username?: string | null
+) => {
+    const normalizedUsername = String(username || '').trim();
+    const normalizedDisplayName = String(displayName || '').trim();
+    if (!normalizedDisplayName || normalizedDisplayName === normalizedUsername) {
+        return normalizedUsername;
+    }
+    return `${normalizedDisplayName} (${normalizedUsername})`;
+};
+
 export const getTeacherProfiles = (params: TeacherProfileListParams = {}) => {
     const query = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -121,11 +133,12 @@ export const getTeachingStaffOptions = async (teacherType: TeacherType) => {
     } while (profiles.length < total && page <= 20);
 
     return profiles.map((profile) => {
+        const label = formatTeachingStaffLabel(profile.display_name, profile.username);
         if (teacherType === 2) {
-            return { value: profile.username, label: profile.username };
+            return { value: profile.username, label };
         }
 
         const displayName = profile.display_name?.trim() || profile.username;
-        return { value: displayName, label: displayName };
+        return { value: displayName, label };
     });
 };

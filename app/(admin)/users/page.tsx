@@ -54,6 +54,10 @@ const columns: ColumnsType<DataType> = [
 const Page = () => {
     const [data, setData] = useState<DataType[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
+    const [totalItems, setTotalItems] = useState(0);
+    const [searchText, setSearchText] = useState("");
     const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
     const { shouldReload, setModal, setShouldReload } = useUserStore();
     const hasPermission = useAuthStore(state => state.hasPermission);
@@ -61,11 +65,16 @@ const Page = () => {
 
     const fetchUsers = async () => {
         try {
-            const apiData = await getUsers();
-            console.log("apiData", apiData)
+            setLoading(true);
+            const apiData = await getUsers({
+                page: currentPage,
+                limit: pageSize,
+                keyword: searchText || undefined,
+            });
+            const responseData = apiData?.data;
 
             // map lại dữ liệu cho Table
-            const tableData: DataType[] = apiData?.data.map((item) => ({
+            const tableData: DataType[] = (responseData?.data || []).map((item) => ({
                 ...item,
                 key: item.id,
                 description: (
@@ -74,8 +83,9 @@ const Page = () => {
             }));
 
             setData(tableData);
+            setTotalItems(responseData?.total || 0);
+            setExpandedRowKeys([]);
         } catch (error) {
-            console.log("error", error)
             console.error("Lỗi fetch API:", error);
             api.error({
                 message: "Lỗi khi tải dữ liệu",
@@ -98,12 +108,12 @@ const Page = () => {
     };
 
     useEffect(() => {
-        fetchUsers();
-    }, []);
+        void fetchUsers();
+    }, [currentPage, pageSize, searchText]);
 
     useEffect(() => {
         if (shouldReload) {
-            fetchUsers();
+            void fetchUsers();
             setShouldReload(false); // reset lại
         }
     }, [shouldReload]);
@@ -114,14 +124,27 @@ const Page = () => {
             <SearchAndActionsBar
                 placeholder="Tên đăng nhập, người dùng"
                 titleBtnAdd="Người dùng"
-                onSearch={async (value) => console.log(value)}
+                onSearch={async (value) => {
+                    setSearchText(value.trim());
+                    setCurrentPage(1);
+                }}
                 handleAddBtn={hasPermission(PermissionKey.USER_CREATE) ? handleAddBtn : undefined}
             />
             <CustomTable<DataType>
                 columns={columns}
                 dataSource={data}
                 loading={loading}
-                pagination={{ position: ["bottomRight"] }}
+                pagination={{
+                    position: ["bottomRight"],
+                    current: currentPage,
+                    pageSize,
+                    total: totalItems,
+                    showSizeChanger: true,
+                    onChange: (page, size) => {
+                        setCurrentPage(page);
+                        setPageSize(size);
+                    },
+                }}
                 scroll={{ x: "max-content" }}
                 expandable={{
                     expandedRowRender: (record) => record.description,

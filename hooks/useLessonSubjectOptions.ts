@@ -2,7 +2,12 @@
 
 import useSWR from "swr";
 import { SUBJECT_OPTIONS } from "@/constants/subjects";
-import { getLessonSubjects, type LessonSubjectOption } from "@/services/lessonService";
+import {
+    getLessonPrograms,
+    getLessonSubjects,
+    type LessonProgramOption,
+    type LessonSubjectOption,
+} from "@/services/lessonService";
 import { useAuthStore } from "@/stores/authStore";
 import { swrKeys } from "@/lib/swrKeys";
 
@@ -51,4 +56,21 @@ export const useLessonSubjectOptions = () => {
                 : [];
 
     return mergeSubjectOptions(subjects);
+};
+
+export const useLessonProgramOptions = () => {
+    const userId = useAuthStore((state) => state.user.userId);
+    const { data } = useSWR(
+        swrKeys.lessonPrograms(userId),
+        getLessonPrograms,
+        { dedupingInterval: 5 * 60_000 }
+    );
+    const responseData = data?.data;
+    const programs: LessonProgramOption[] = Array.isArray(responseData)
+        ? responseData
+        : Array.isArray(responseData?.data)
+            ? responseData.data
+            : [];
+
+    return programs;
 };

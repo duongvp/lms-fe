@@ -6,7 +6,6 @@ import { UploadOutlined } from '@ant-design/icons';
 import { UserApiResponse } from '@/services/userService';
 import useUserStore from '@/stores/userStore';
 import { ActionType } from '@/enums/action';
-import BtnDeActiveDetete from '@/components/shared/BtnDeActiveDetete';
 import { useAuthStore } from '@/stores/authStore';
 import { PermissionKey } from '@/types/permissions';
 
@@ -17,9 +16,9 @@ interface UserDetailProps {
 }
 
 const UserDetail: React.FC<UserDetailProps> = ({ record }) => {
-    const { setModal, setShouldReload } = useUserStore();
+    const { setModal } = useUserStore();
     const hasPermission = useAuthStore(state => state.hasPermission);
-    const { userId } = useAuthStore(state => state.user)
+    const isAdminAccount = record.roles?.some((role) => role.role_code === 'admin');
 
     const handleUpdate = () => {
         setModal({
@@ -59,7 +58,7 @@ const UserDetail: React.FC<UserDetailProps> = ({ record }) => {
                 <Col>
                     <Space>
                         {
-                            !hasPermission(PermissionKey.USER_EDIT) && (
+                            hasPermission(PermissionKey.USER_EDIT) && !isAdminAccount && (
                                 <Button
                                     type="primary"
                                     icon={<UploadOutlined />}
@@ -90,4 +89,3 @@ const UserDetail: React.FC<UserDetailProps> = ({ record }) => {
 };
 
 export default UserDetail;
-

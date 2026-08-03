@@ -8,8 +8,7 @@ import useUserStore from "@/stores/userStore";
 import useRoleStore from "@/stores/roleStore";
 import { ActionType } from "@/enums/action";
 import { getRoles } from "@/services/roleService";
-import { updateUser } from "@/services/userService";
-import { registerUser } from "@/services/authService";
+import { createUser, updateUser } from "@/services/userService";
 import { useAuthStore } from "@/stores/authStore";
 
 const formItemLayout = {
@@ -47,7 +46,7 @@ const UserModal = () => {
             };
 
             if (modal.type === ActionType.CREATE) {
-                // await registerUser(payload);
+                await createUser(payload);
             } else if (modal.type === ActionType.UPDATE) {
                 await updateUser(modal.user?.id || 0, payload);
                 // Cập nhật store nếu là user hiện tại
@@ -57,7 +56,11 @@ const UserModal = () => {
             }
             onCloseModal();
             setShouldReload(true);
-            showSuccessMessage(`${modal.title} thành công!`);
+            showSuccessMessage(
+                modal.type === ActionType.CREATE
+                    ? "Tạo tài khoản thành công. Mật khẩu mặc định: 1"
+                    : `${modal.title} thành công!`
+            );
         } catch (error: any) {
             console.error("Lỗi submit:", error);
             showErrorMessage(error.message);
@@ -85,6 +88,7 @@ const UserModal = () => {
 
     useEffect(() => {
         if (modal.open) {
+            form.resetFields();
             fetchRoles();
             // Set giá trị ban đầu cho form
             const initialValues: any = {

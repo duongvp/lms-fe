@@ -4,7 +4,7 @@ import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import type { SorterResult } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
-import { notification, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, Drawer, Grid, Tooltip, Descriptions, Tabs, Dropdown } from "antd";
+import { notification, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, Drawer, Grid, Tooltip, Descriptions, Tabs, Dropdown, Typography } from "antd";
 import type { TabsProps } from "antd";
 import { EditOutlined, SaveOutlined, CloseOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined } from "@ant-design/icons";
 import ScheduleModal from "./components/Modal/ScheduleModal";
@@ -29,6 +29,74 @@ import TeachingStaffSelect from "@/components/shared/TeachingStaffSelect";
 
 const SCHEDULE_MODULE_CODE = "calendar";
 const { RangePicker } = DatePicker;
+
+type ScheduleDocument = {
+    url: string;
+    label: string;
+};
+
+const parseScheduleDocuments = (value: unknown): ScheduleDocument[] => {
+    if (value === undefined || value === null || value === "") return [];
+
+    let documents: unknown = value;
+    if (typeof value === "string") {
+        const text = value.trim();
+        if (!text) return [];
+        try {
+            documents = JSON.parse(text);
+        } catch {
+            documents = [text];
+        }
+    }
+
+    const rows = Array.isArray(documents) ? documents : [documents];
+    return rows.map((document, index) => {
+        if (document && typeof document === "object") {
+            const item = document as Record<string, unknown>;
+            const url = String(item.url || item.link || item.href || "").trim();
+            const label = String(
+                item.label || item.title || item.name || `Tài liệu ${index + 1}`
+            ).trim();
+            return { url, label };
+        }
+
+        const text = String(document || "").trim();
+        return {
+            url: /^https?:\/\//i.test(text) ? text : "",
+            label: /^https?:\/\//i.test(text) ? `Tài liệu ${index + 1}` : text,
+        };
+    }).filter((document) => document.url || document.label);
+};
+
+const renderScheduleDocuments = (value: unknown) => {
+    const documents = parseScheduleDocuments(value);
+    if (!documents.length) return <span>-</span>;
+
+    return (
+        <Space direction="vertical" size={2} style={{ maxWidth: 260 }}>
+            {documents.map((document, index) => (
+                document.url ? (
+                    <Tooltip key={`${document.url}-${index}`} title={document.url}>
+                        <Typography.Link
+                            href={document.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            ellipsis
+                            style={{ maxWidth: 250 }}
+                            onClick={(event) => event.stopPropagation()}
+                        >
+                            {document.label || `Tài liệu ${index + 1}`}
+                        </Typography.Link>
+                    </Tooltip>
+                ) : (
+                    <Typography.Text key={`${document.label}-${index}`} ellipsis style={{ maxWidth: 250 }}>
+                        {document.label}
+                    </Typography.Text>
+                )
+            ))}
+        </Space>
+    );
+};
 
 const downloadBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
@@ -174,6 +242,7 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
         { label: "Hệ thống", value: record.system_type || "-" },
         { label: "Trạng thái", value: record.lesson_status || "-" },
         { label: "Link học", value: record.lesson_link || "-" },
+        { label: "Tài liệu", value: renderScheduleDocuments(record.lesson_document) },
     ];
 
     const items: TabsProps["items"] = [
@@ -394,15 +463,6 @@ const Page = () => {
 
 
     const isEditing = (record: ScheduleDataType) => record.key === editingKey;
-
-    const handleRowClick = (record: ScheduleDataType) => {
-        if (editingKey) return;
-        setExpandedRowKeys((prevKeys) =>
-            prevKeys.includes(record.key)
-                ? prevKeys.filter((key) => key !== record.key)
-                : [...prevKeys, record.key]
-        );
-    };
 
     // Handle search filter locally
     const handleSearch = async (value: string) => {
@@ -657,6 +717,7 @@ const Page = () => {
             key: fieldCode,
             width:
                 fieldCode === "lesson_name" ? 250
+                    : fieldCode === "lesson_document" ? 280
                     : fieldCode === "lesson_link" ? 200
                         : fieldCode === "learn_number" ? 120
                             : fieldCode === "class_code" ? 120
@@ -752,6 +813,8 @@ const Page = () => {
                     return <span>{labels.join(', ') || '-'}</span>;
                 }
 
+                if (fieldCode === "lesson_document") return renderScheduleDocuments(text);
+
                 if (fieldCode === "lesson_status") {
                     return <span>{lessonStatusText(Number(text))}</span>;
                 }
@@ -778,7 +841,10 @@ const Page = () => {
                             <Button
                                 type="primary"
                                 aria-label="Lưu"
-                                onClick={() => save(record.key)}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    void save(record.key);
+                                }}
                                 icon={<SaveOutlined />}
                                 size="small"
                             />
@@ -786,7 +852,10 @@ const Page = () => {
                         <Tooltip title="Hủy">
                             <Button
                                 aria-label="Hủy"
-                                onClick={cancel}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    cancel();
+                                }}
                                 icon={<CloseOutlined />}
                                 size="small"
                             />
@@ -982,8 +1051,7 @@ const Page = () => {
                         expandRowByClick: true,
                         columnWidth: 32,
                     }}
-                    onRow={(record) => ({
-                        onClick: () => handleRowClick(record),
+                    onRow={() => ({
                         style: { cursor: editingKey ? "default" : "pointer" },
                     })}
                     scroll={{ x: "max-content", y: filteredData?.length > 5 ? showPageInfo ? "calc(100vh - 330px)" : "calc(100vh - 260px)" : undefined }}

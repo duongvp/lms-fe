@@ -37,7 +37,7 @@ import {
 import { combineDateTime } from '@/helper/convertDate';
 import { useAuthStore } from '@/stores/authStore';
 import { PermissionKey } from '@/types/permissions';
-import { formatLessonScheduleOption } from '@/helper/lesson';
+import { buildLessonSubjectCode, formatLessonScheduleOption, getSuggestedSchoolYear } from '@/helper/lesson';
 import {
     type PackageCourseOption,
 } from '@/services/packageCourseService';
@@ -122,12 +122,16 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
     const loadingPackageCourses = packageCoursesQuery.isLoading || packageCoursesQuery.isValidating;
     const { refreshLessons } = useLmsCache();
     const previewLessonParams: LessonListParams | null = (
-        open && isBulkCreate && formValues?.bulk_grade && formValues?.bulk_subject_name
+        open
+        && isBulkCreate
+        && formValues?.bulk_grade
+        && formValues?.bulk_subject_name
+        && formValues?.bulk_subject_code
     ) ? {
         page: 1,
         limit: 100,
         grade: formValues.bulk_grade,
-        subject: formValues.bulk_subject_name,
+        subject_code: formValues.bulk_subject_code,
         course_code: formValues.bulk_code,
         sort_by: 'learn_number',
         sort_order: 'asc',
@@ -658,14 +662,29 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
     const handleOpenQuickLesson = (sessionKey: string) => {
         setQuickLessonTarget(sessionKey);
         quickLessonForm.resetFields();
+        quickLessonForm.setFieldValue(
+            'subject_code',
+            formValues.bulk_subject_code || buildLessonSubjectCode(
+                    formValues.bulk_subject_name,
+                    Number(formValues.bulk_grade),
+                    getSuggestedSchoolYear(dayjs(formValues.bulk_start_date))
+                )
+        );
         setQuickLessonOpen(true);
     };
 
-    const handleCreateQuickLesson = async ({ lesson_name }: { lesson_name: string }) => {
+    const handleCreateQuickLesson = async ({
+        lesson_name,
+        subject_code,
+    }: {
+        lesson_name: string;
+        subject_code: string;
+    }) => {
         try {
             setCreatingLesson(true);
             const response: any = await createLesson({
                 grade: Number(formValues.bulk_grade),
+                subject_code,
                 subject_name: formValues.bulk_subject_name,
                 lesson_name,
             });
@@ -932,7 +951,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
         {
             title: 'Giáo viên',
             dataIndex: 'teacher',
-            width: 170,
+            width: 250,
             render: (value: string, record: PreviewSession) => (
                 <TeachingStaffSelect
                     teacherType={1}
@@ -940,6 +959,10 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     onChange={(nextValue) => updateSessionField(record.key, 'teacher', nextValue)}
                     disabled={record.isSkipped || (isEdit && record.isEditable === false)}
                     size="small"
+                    showSearch
+                    optionFilterProp="label"
+                    popupMatchSelectWidth={320}
+                    placeholder="Chọn giáo viên"
                     style={{ width: '100%' }}
                 />
             ),
@@ -1450,6 +1473,16 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     layout="vertical"
                     onFinish={handleCreateQuickLesson}
                 >
+                    <Form.Item
+                        name="subject_code"
+                        label="Mã môn học"
+                        rules={[
+                            { required: true, whitespace: true, message: 'Nhập mã môn học' },
+                            { max: 100, message: 'Mã môn học không được vượt quá 100 ký tự' },
+                        ]}
+                    >
+                        <Input placeholder="VD: nguvan-6-2027" maxLength={100} />
+                    </Form.Item>
                     <Form.Item
                         name="lesson_name"
                         label="Tên bài học"

@@ -134,7 +134,11 @@ const Page = () => {
     useEffect(() => {
         const fields = moduleFieldsQuery.data?.fields;
         if (fields?.length) {
-            setModuleFields([...fields].sort(
+            const mergedFields = new Map(
+                DEFAULT_MODULE_FIELDS.map((field) => [field.fieldCode, field])
+            );
+            fields.forEach((field) => mergedFields.set(field.fieldCode, field));
+            setModuleFields(Array.from(mergedFields.values()).sort(
                 (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
             ));
         }
@@ -241,10 +245,10 @@ const Page = () => {
     };
 
     const handleEnableReorder = () => {
-        if (!filterValues.grade || !filterValues.subject) {
+        if (!filterValues.grade || !filterValues.subject_code) {
             api.warning({
-                message: "Cần chọn Khối và Môn học",
-                description: "Sắp xếp thứ tự bài học chỉ áp dụng trong một nhóm Khối + Môn học.",
+                message: "Cần chọn Khối và Mã môn học",
+                description: "Sắp xếp thứ tự chỉ áp dụng trong đúng một chương trình môn học.",
             });
             setOpenFilterDrawer(true);
             return;
@@ -285,7 +289,7 @@ const Page = () => {
     };
 
     const handleSaveReorder = async () => {
-        if (!filterValues.grade || !filterValues.subject) return;
+        if (!filterValues.grade || !filterValues.subject_code) return;
         if (totalItems > data.length) {
             api.warning({
                 message: "Danh sách chưa đầy đủ",
@@ -298,7 +302,7 @@ const Page = () => {
             setSavingReorder(true);
             await reorderLessons({
                 grade: Number(filterValues.grade),
-                subject_name: String(filterValues.subject),
+                subject_code: String(filterValues.subject_code),
                 mode: reorderStrategy,
                 ordered_ids: data.map((item) => item.id),
             });

@@ -7,6 +7,7 @@ export interface LessonDataType extends LessonApiResponse {
 export interface LessonFilterValues {
     keyword?: string;
     grade?: number;
+    subject_code?: string;
     subject?: string;
     learn_number?: number;
 }

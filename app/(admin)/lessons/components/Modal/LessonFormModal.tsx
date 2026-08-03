@@ -6,6 +6,7 @@ import {
     Col,
     Form,
     Input,
+    InputNumber,
     Modal,
     Row,
     Select,
@@ -23,6 +24,7 @@ import type { ModuleField } from "@/types/fieldPolicy";
 import type { LessonApiResponse, LessonPayload } from "@/services/lessonService";
 import { GRADE_OPTIONS } from "@/constants/subjects";
 import { useLessonSubjectOptions } from "@/hooks/useLessonSubjectOptions";
+import { buildLessonSubjectCode, getSuggestedSchoolYear } from "@/helper/lesson";
 
 const { Text, Title } = Typography;
 
@@ -33,8 +35,9 @@ interface LessonDataType extends LessonApiResponse {
 export const FORM_FIELDS: ModuleField[] = [
     { fieldCode: "grade", fieldLabel: "Khối", fieldType: "select", sortOrder: 1 },
     { fieldCode: "subject_name", fieldLabel: "Môn học", fieldType: "select", sortOrder: 2 },
-    { fieldCode: "learn_number", fieldLabel: "Số thứ tự bài", fieldType: "number", sortOrder: 3 },
-    { fieldCode: "lesson_name", fieldLabel: "Tên bài học", fieldType: "text", sortOrder: 4 },
+    { fieldCode: "subject_code", fieldLabel: "Mã môn học", fieldType: "text", sortOrder: 3 },
+    { fieldCode: "learn_number", fieldLabel: "Số thứ tự bài", fieldType: "number", sortOrder: 4 },
+    { fieldCode: "lesson_name", fieldLabel: "Tên bài học", fieldType: "text", sortOrder: 5 },
     { fieldCode: "lesson_document", fieldLabel: "Tài liệu bài học", fieldType: "textarea", sortOrder: 5 },
     { fieldCode: "evg_banner", fieldLabel: "Banner", fieldType: "text", sortOrder: 6 },
     { fieldCode: "evg_stream", fieldLabel: "EVG Stream", fieldType: "text", sortOrder: 7 },
@@ -53,6 +56,11 @@ export const FIELD_LABELS = Object.fromEntries(
 const emptyToNull = (value?: string | null) => {
     const trimmed = typeof value === "string" ? value.trim() : "";
     return trimmed || null;
+};
+
+const getSchoolYearFromSubjectCode = (subjectCode?: string) => {
+    const match = String(subjectCode || "").match(/-(\d{4})$/);
+    return match ? Number(match[1]) : undefined;
 };
 
 type LessonDocumentValue = {
@@ -94,6 +102,7 @@ const serializeLessonDocuments = (documents?: LessonDocumentValue[]) => {
 
 const toLessonPayload = (values: any): LessonPayload => ({
     grade: Number(values.grade),
+    subject_code: String(values.subject_code).trim(),
     subject_name: String(values.subject_name).trim(),
     lesson_name: String(values.lesson_name).trim(),
     lesson_document: serializeLessonDocuments(values.lesson_documents),
@@ -156,17 +165,18 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
 }) => {
     const subjectOptions = useLessonSubjectOptions();
     const [form] = Form.useForm();
-    console.log("subjectOptions:", subjectOptions);
 
     useEffect(() => {
         if (!open) return;
         if (record) {
             form.setFieldsValue({
                 ...record,
+                school_year: getSchoolYearFromSubjectCode(record.subject_code),
                 lesson_documents: parseLessonDocuments(record.lesson_document),
             });
         } else {
             form.resetFields();
+            form.setFieldValue("school_year", getSuggestedSchoolYear());
         }
     }, [form, open, record]);
 
@@ -198,11 +208,28 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
                 </Button>,
             ]}
         >
-            <Form form={form} layout="vertical" onFinish={(values) => onSubmit(toLessonPayload(values))}>
+            <Form
+                form={form}
+                layout="vertical"
+                onValuesChange={(changedValues, allValues) => {
+                    if (
+                        !Object.hasOwn(changedValues, "grade")
+                        && !Object.hasOwn(changedValues, "subject_name")
+                        && !Object.hasOwn(changedValues, "school_year")
+                    ) return;
+                    const generatedCode = buildLessonSubjectCode(
+                        allValues.subject_name,
+                        Number(allValues.grade),
+                        Number(allValues.school_year)
+                    );
+                    if (generatedCode) form.setFieldValue("subject_code", generatedCode);
+                }}
+                onFinish={(values) => onSubmit(toLessonPayload(values))}
+            >
                 <FormSection title="Thông tin cơ bản">
                     <Row gutter={12}>
                         {canView("grade") && (
-                            <Col xs={24} md={record && canView("learn_number") ? 8 : 12}>
+                            <Col xs={24} md={8}>
                                 <Form.Item name="grade" label="Khối" rules={[{ required: true, message: "Chọn khối" }]}>
                                     <Select
                                         disabled={!canEdit("grade")}
@@ -214,7 +241,7 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
                         )}
 
                         {canView("subject_name") && (
-                            <Col xs={24} md={record && canView("learn_number") ? 8 : 12}>
+                            <Col xs={24} md={8}>
                                 <Form.Item name="subject_name" label="Môn học" rules={[{ required: true, message: "Chọn môn học" }]}>
                                     <Select
                                         disabled={!canEdit("subject_name")}
@@ -227,8 +254,29 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
                             </Col>
                         )}
 
+                        {canView("subject_code") && (
+                            <>
+                                <Col xs={24} md={8}>
+                                    <Form.Item
+                                        name="school_year"
+                                        label="Năm học"
+                                        rules={[{ required: true, message: "Nhập năm học" }]}
+                                    >
+                                        <InputNumber
+                                            min={2000}
+                                            max={2200}
+                                            precision={0}
+                                            style={{ width: "100%" }}
+                                            placeholder="2027"
+                                            disabled={!canEdit("subject_code")}
+                                        />
+                                    </Form.Item>
+                                </Col>
+                            </>
+                        )}
+
                         {record && canView("learn_number") && (
-                            <Col xs={24} md={8}>
+                            <Col xs={24} md={4}>
                                 <Form.Item name="learn_number" label="Số thứ tự bài">
                                     <Input disabled />
                                 </Form.Item>
@@ -236,8 +284,21 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
                         )}
                     </Row>
                     <Row gutter={12}>
+                          <Col xs={12}>
+                                                            <Form.Item
+                                                                name="subject_code"
+                                                                label="Mã môn học"
+                                                                rules={[{ required: true, whitespace: true, message: "Nhập mã môn học" }]}
+                                                            >
+                                                                <Input
+                                                                    maxLength={100}
+                                                                    placeholder="nguvan-6-2027"
+                                                                    disabled={!canEdit("subject_code")}
+                                                                />
+                                                            </Form.Item>
+                                                        </Col>
                         {canView("lesson_name") && (
-                            <Col xs={24}>
+                            <Col xs={12}>
                                 <Form.Item name="lesson_name" label="Tên bài học" rules={[{ required: true, message: "Nhập tên bài học" }]}>
                                     <Input
                                         maxLength={400}
@@ -349,7 +410,7 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
                                             </Col>
                                         )}
                                         {canView("lesson_baitap") && (
-                                            <Col xs={24} md={12}>
+                                            <Col xs={24}>
                                                 <Form.Item name="lesson_baitap" label="Bài tập">
                                                     <Input.TextArea rows={4} showCount maxLength={500} disabled={!canEdit("lesson_baitap")} />
                                                 </Form.Item>

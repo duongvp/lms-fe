@@ -1,6 +1,5 @@
 "use client";
 
-import dayjs from "dayjs";
 import { Button, Grid, Space, Tooltip } from "antd";
 import {
     DeleteOutlined,
@@ -16,6 +15,7 @@ import { FIELD_LABELS } from "./Modal/LessonFormModal";
 import { SORTABLE_FIELDS } from "../lesson.constants";
 import type { LessonDataType, LessonSortState } from "../lesson.types";
 import LessonDetailRow from "./LessonDetailRow";
+import { formatLessonDateTime } from "../lesson.utils";
 
 interface LessonTableProps {
     data: LessonDataType[];
@@ -75,7 +75,7 @@ const LessonTable = ({
         ellipsis: field.fieldCode === "lesson_name",
         render: (value: unknown) => {
             if (field.fieldCode === "updated_at") {
-                return value ? dayjs(value as string).format("DD/MM/YYYY HH:mm") : "-";
+                return formatLessonDateTime(value as string | undefined);
             }
             return value == null || value === "" ? "-" : String(value);
         },

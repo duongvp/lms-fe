@@ -2,7 +2,7 @@
 
 import { fetchInstance } from "@/ultils/fetchInstance";
 
-const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/api/users`;
+const API_BASE_URL = `${process.env.NEXT_PUBLIC_LMS_API || process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://localhost:5000"}/api/users`;
 
 // ---------- Interface ----------
 export interface RoleInfo {
@@ -39,17 +39,44 @@ export interface UpdateUserPayload {
     roleIds?: number[];
 }
 
+export interface CreateUserPayload {
+    username: string;
+    name: string;
+    email?: string;
+    phone?: string;
+    roleIds: number[];
+}
+
 // ---------- API functions ----------
 
 // Lấy danh sách users
-export const getUsers = async (): Promise<{ data: UserApiResponse[] }> => {
-    const url = API_BASE_URL;
+export interface UserListParams {
+    page?: number;
+    limit?: number;
+    keyword?: string;
+}
+
+export interface UserListData {
+    data: UserApiResponse[];
+    total: number;
+    page: number;
+    limit: number;
+}
+
+export const getUsers = async (params: UserListParams = {}): Promise<{ data: UserListData }> => {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== "") {
+            query.set(key, String(value));
+        }
+    });
+    const url = `${API_BASE_URL}${query.size ? `?${query.toString()}` : ""}`;
     return await fetchInstance(url);
 };
 
 export const getUsersFollowWarehouse = async (_warehouseId?: number): Promise<Array<UserApiResponse & { user_id: number }>> => {
-    const response = await getUsers();
-    return (response?.data || []).map((user) => ({
+    const response = await getUsers({ page: 1, limit: 100 });
+    return (response?.data?.data || []).map((user) => ({
         ...user,
         user_id: user.id,
     }));
@@ -60,6 +87,13 @@ export const getUserById = async (id: number): Promise<UserApiResponse> => {
     const url = `${API_BASE_URL}/${id}`;
     return await fetchInstance(url);
 };
+
+export const createUser = async (payload: CreateUserPayload) =>
+    fetchInstance(API_BASE_URL, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        headers: { 'Content-Type': 'application/json' },
+    });
 
 // Cập nhật user
 export const updateUser = async (id: number, payload: UpdateUserPayload) => {

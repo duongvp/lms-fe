@@ -30,6 +30,7 @@ export interface LessonListParams {
     keyword?: string;
     course_code?: string;
     grade?: number | string;
+    subject_code?: string;
     subject?: string;
     learn_number?: number | string;
     sort_by?: string;
@@ -41,6 +42,10 @@ export interface LessonSubjectOption {
     subject_code: string;
 }
 
+export interface LessonProgramOption extends LessonSubjectOption {
+    grade: number;
+}
+
 export interface LessonExportParams extends LessonListParams {
     format: "csv" | "xlsx";
     ids?: Array<string | number>;
@@ -48,6 +53,7 @@ export interface LessonExportParams extends LessonListParams {
 
 export interface LessonPayload {
     grade: number;
+    subject_code: string;
     subject_name: string;
     learn_number?: number;
     lesson_name: string;
@@ -69,7 +75,7 @@ export interface LessonBulkUpdatePayload {
 
 export interface LessonReorderPayload {
     grade: number;
-    subject_name: string;
+    subject_code: string;
     mode?: "insert" | "swap";
     ordered_ids: Array<string | number>;
 }
@@ -96,6 +102,14 @@ export const getLessons = (params: LessonListParams) =>
 
 export const getLessonSubjects = () =>
     fetchInstance(`${API_BASE_URL}/options/subjects`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        cache: "no-store",
+    });
+
+export const getLessonPrograms = () =>
+    fetchInstance(`${API_BASE_URL}/options/programs`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

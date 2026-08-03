@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { Button, Drawer, Form, InputNumber, Select, Space } from "antd";
+import { Button, Drawer, Form, Input, InputNumber, Select, Space } from "antd";
 import { GRADE_OPTIONS } from "@/constants/subjects";
 import { useLessonSubjectOptions } from "@/hooks/useLessonSubjectOptions";
 import type { LessonFilterValues } from "../lesson.types";
@@ -70,6 +70,9 @@ const LessonFilterDrawer = ({
                         showSearch
                         optionFilterProp="label"
                     />
+                </Form.Item>
+                <Form.Item name="subject_code" label="Mã môn học">
+                    <Input allowClear placeholder="VD: nguvan-6-2027" />
                 </Form.Item>
                 <Form.Item name="learn_number" label="Số thứ tự bài">
                     <InputNumber min={1} style={{ width: "100%" }} placeholder="VD: 1" />

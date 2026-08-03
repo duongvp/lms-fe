@@ -11,6 +11,8 @@ export const swrKeys = {
         [SWR_NAMESPACES.lessons, "list", userId, params] as const,
     lessonSubjects: (userId: number) =>
         [SWR_NAMESPACES.lessons, "subjects", userId] as const,
+    lessonPrograms: (userId: number) =>
+        [SWR_NAMESPACES.lessons, "programs", userId] as const,
     scheduleList: (userId: number, params: object) =>
         [SWR_NAMESPACES.schedules, "list", userId, params] as const,
     moduleFields: (userId: number, moduleCode: string) =>

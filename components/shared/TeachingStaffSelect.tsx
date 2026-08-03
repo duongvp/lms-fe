@@ -2,10 +2,11 @@
 
 import { PlusOutlined } from "@ant-design/icons";
 import { Button, Form, message, Select, Space, Tooltip, type SelectProps } from "antd";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import TeacherProfileFormModal from "@/app/(admin)/teacher-profiles/components/TeacherProfileFormModal";
 import {
     createTeacherProfile,
+    formatTeachingStaffLabel,
     type TeacherProfilePayload,
     type TeacherType,
 } from "@/services/teacherProfileService";
@@ -24,6 +25,18 @@ const TeachingStaffSelect = ({ teacherType, disabled, loading, onChange, ...prop
     const [messageApi, contextHolder] = message.useMessage();
     const staffQuery = useTeachingStaffQuery(teacherType);
     const canCreate = useAuthStore((state) => state.hasPermission(PermissionKey.TEACHER_PROFILE_CREATE));
+    const options = useMemo(() => {
+        const availableOptions = [...(staffQuery.data ?? [])];
+        const selectedValues = (Array.isArray(props.value) ? props.value : [props.value])
+            .map((value) => String(value ?? "").trim())
+            .filter(Boolean);
+        selectedValues.forEach((value) => {
+            if (!availableOptions.some((option) => option.value === value)) {
+                availableOptions.unshift({ value, label: value });
+            }
+        });
+        return availableOptions;
+    }, [props.value, staffQuery.data]);
 
     const openCreate = () => {
         form.resetFields();
@@ -46,10 +59,11 @@ const TeachingStaffSelect = ({ teacherType, disabled, loading, onChange, ...prop
             const value = teacherType === 1
                 ? String(values.display_name || values.username).trim()
                 : String(values.username).trim();
+            const label = formatTeachingStaffLabel(values.display_name, values.username);
             const nextValue = props.mode === "multiple"
                 ? Array.from(new Set([...(Array.isArray(props.value) ? props.value : []), value]))
                 : value;
-            onChange?.(nextValue as never, { value, label: value } as never);
+            onChange?.(nextValue as never, { value, label } as never);
             setModalOpen(false);
             messageApi.success(teacherType === 1 ? "Đã thêm giáo viên" : "Đã thêm trợ giảng");
         } catch (error: any) {
@@ -69,7 +83,7 @@ const TeachingStaffSelect = ({ teacherType, disabled, loading, onChange, ...prop
                     disabled={disabled}
                     loading={Boolean(loading || staffQuery.isLoading || staffQuery.isValidating)}
                     onChange={onChange}
-                    options={staffQuery.data ?? []}
+                    options={options}
                     style={{ width: canCreate && !disabled ? "calc(100% - 32px)" : "100%", ...props.style }}
                 />
                 {canCreate && !disabled && (
