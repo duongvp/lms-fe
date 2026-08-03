@@ -16,27 +16,64 @@ import { PermissionKey } from "@/types/permissions";
 
 type TeachingStaffSelectProps = Omit<SelectProps, "options"> & {
     teacherType: TeacherType;
+    allowQuickCreate?: boolean;
+    teacherValueMode?: "username" | "displayName";
 };
 
-const TeachingStaffSelect = ({ teacherType, disabled, loading, onChange, ...props }: TeachingStaffSelectProps) => {
+const normalizeSearchText = (value: unknown) => String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLocaleLowerCase("vi-VN")
+    .trim();
+
+const TeachingStaffSelect = ({
+    teacherType,
+    allowQuickCreate = true,
+    teacherValueMode = "username",
+    disabled,
+    loading,
+    onChange,
+    ...props
+}: TeachingStaffSelectProps) => {
     const [form] = Form.useForm<TeacherProfilePayload>();
     const [modalOpen, setModalOpen] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [searchText, setSearchText] = useState("");
     const [messageApi, contextHolder] = message.useMessage();
     const staffQuery = useTeachingStaffQuery(teacherType);
     const canCreate = useAuthStore((state) => state.hasPermission(PermissionKey.TEACHER_PROFILE_CREATE));
     const options = useMemo(() => {
-        const availableOptions = [...(staffQuery.data ?? [])];
+        const availableOptions = (staffQuery.data ?? []).map((option) => ({
+            ...option,
+            value: teacherType === 1 && teacherValueMode === "displayName"
+                ? option.displayName
+                : option.username,
+        }));
         const selectedValues = (Array.isArray(props.value) ? props.value : [props.value])
             .map((value) => String(value ?? "").trim())
             .filter(Boolean);
         selectedValues.forEach((value) => {
             if (!availableOptions.some((option) => option.value === value)) {
-                availableOptions.unshift({ value, label: value });
+                availableOptions.unshift({
+                    value,
+                    label: value,
+                    username: value,
+                    displayName: value,
+                });
             }
         });
         return availableOptions;
-    }, [props.value, staffQuery.data]);
+    }, [props.value, staffQuery.data, teacherType, teacherValueMode]);
+    const filteredOptions = useMemo(() => {
+        const normalizedSearch = normalizeSearchText(searchText);
+        if (!normalizedSearch) return options;
+        return options.filter((option) => normalizeSearchText(
+            `${String(option.label ?? "")} ${String(option.value ?? "")}`
+        ).includes(normalizedSearch));
+    }, [options, searchText]);
+    const showQuickCreate = allowQuickCreate && canCreate && !disabled;
 
     const openCreate = () => {
         form.resetFields();
@@ -56,7 +93,7 @@ const TeachingStaffSelect = ({ teacherType, disabled, loading, onChange, ...prop
             await createTeacherProfile({ ...values, teacher_type: teacherType, status: 1 });
             await staffQuery.mutate();
 
-            const value = teacherType === 1
+            const value = teacherType === 1 && teacherValueMode === "displayName"
                 ? String(values.display_name || values.username).trim()
                 : String(values.username).trim();
             const label = formatTeachingStaffLabel(values.display_name, values.username);
@@ -80,13 +117,22 @@ const TeachingStaffSelect = ({ teacherType, disabled, loading, onChange, ...prop
             <Space.Compact style={{ width: "100%" }}>
                 <Select
                     {...props}
+                    showSearch
+                    filterOption={false}
+                    onSearch={setSearchText}
+                    onDropdownVisibleChange={(open: boolean) => {
+                        if (!open) setSearchText("");
+                    }}
                     disabled={disabled}
                     loading={Boolean(loading || staffQuery.isLoading || staffQuery.isValidating)}
-                    onChange={onChange}
-                    options={options}
-                    style={{ width: canCreate && !disabled ? "calc(100% - 32px)" : "100%", ...props.style }}
+                    onChange={(value, option) => {
+                        setSearchText("");
+                        onChange?.(value, option);
+                    }}
+                    options={filteredOptions}
+                    style={{ width: showQuickCreate ? "calc(100% - 32px)" : "100%", ...props.style }}
                 />
-                {canCreate && !disabled && (
+                {showQuickCreate && (
                     <Tooltip title={teacherType === 1 ? "Thêm nhanh giáo viên" : "Thêm nhanh trợ giảng"}>
                         <Button aria-label="Thêm nhanh nhân sự" icon={<PlusOutlined />} onClick={openCreate} />
                     </Tooltip>

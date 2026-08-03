@@ -286,7 +286,6 @@ const ScheduleFilterDrawer = ({
     onClose: () => void;
 }) => {
     const [filterForm] = Form.useForm();
-
     useEffect(() => {
         filterForm.setFieldsValue(value);
     }, [filterForm, value]);
@@ -318,7 +317,13 @@ const ScheduleFilterDrawer = ({
                         <Input allowClear placeholder="VD: TOPC01" />
                     </Form.Item>
                     <Form.Item name="teacher" label="Giáo viên">
-                        <Input allowClear placeholder="Tên giáo viên" />
+                        <TeachingStaffSelect
+                            teacherType={1}
+                            allowQuickCreate={false}
+                            allowClear
+                            showSearch
+                            placeholder="Chọn giáo viên"
+                        />
                     </Form.Item>
                     <Form.Item name="lesson_status" label="Trạng thái buổi học">
                         <Select

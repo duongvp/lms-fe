@@ -848,7 +848,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     code: formValues.bulk_code,
                     teacher: session.teacher,
                     assistant_teacher: session.assistant_teacher?.join(','),
-                    lesson_id: session.lesson_id,
+                    session_id: session.lesson_id,
                     grade: Number(formValues.bulk_grade),
                     subject_name: formValues.bulk_subject_name,
                     learn_number: Number(session.learn_number),
@@ -979,6 +979,8 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     onChange={(nextValue) => updateSessionField(record.key, 'assistant_teacher', nextValue)}
                     disabled={record.isSkipped || (isEdit && record.isEditable === false)}
                     size="small"
+                    showSearch
+                    optionFilterProp="label"
                     maxTagCount="responsive"
                     style={{ width: '100%' }}
                 />

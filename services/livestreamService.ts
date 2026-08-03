@@ -10,7 +10,7 @@ export interface LivestreamPayload {
     teacher: string;
     assistant_teacher?: string;
     learn_number: number;
-    lesson_id?: string | number;
+    session_id?: string | number;
     grade?: number;
     subject_name?: string;
     lesson_name?: string;
@@ -96,18 +96,42 @@ export interface LivestreamListParams {
     sort_order?: string;
 }
 
-export const getLivestreams = (params: LivestreamListParams) => {
+const asCalendarWallTime = (value: unknown) => {
+    if (typeof value !== "string") return value;
+    // MySQL calendar timestamps are business wall-clock values. Prisma serializes
+    // them with `Z`, but converting that `Z` in the browser would add UTC+7 again.
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)
+        ? value.slice(0, 19)
+        : value;
+};
+
+export const getLivestreams = async (params: LivestreamListParams) => {
     const query = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
         if (value === undefined || value === null || value === "") return;
         query.append(key, String(value));
     });
 
-    return fetchInstance(`${API_BASE_URL}?${query.toString()}`, {
+    const response: any = await fetchInstance(`${API_BASE_URL}?${query.toString()}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
     });
+
+    const rows = response?.data?.data;
+    if (!Array.isArray(rows)) return response;
+
+    return {
+        ...response,
+        data: {
+            ...response.data,
+            data: rows.map((row: any) => ({
+                ...row,
+                start_time: asCalendarWallTime(row.start_time),
+                end_time: asCalendarWallTime(row.end_time),
+            })),
+        },
+    };
 };
 
 
@@ -167,7 +191,7 @@ export const toLivestreamPayload = (values: any): LivestreamPayload => {
         teacher: payload.teacher,
         assistant_teacher: serializeAssistantTeachers(payload.assistant_teacher),
         learn_number: Number(payload.learn_number ?? 1),
-        lesson_id: payload.lesson_id,
+        session_id: payload.session_id ?? payload.lesson_id,
         grade: payload.grade,
         subject_name: payload.subject_name,
         lesson_name: payload.lesson_name,

@@ -134,11 +134,11 @@ export const getTeachingStaffOptions = async (teacherType: TeacherType) => {
 
     return profiles.map((profile) => {
         const label = formatTeachingStaffLabel(profile.display_name, profile.username);
-        if (teacherType === 2) {
-            return { value: profile.username, label };
-        }
-
-        const displayName = profile.display_name?.trim() || profile.username;
-        return { value: displayName, label };
+        return {
+            value: profile.username,
+            label,
+            username: profile.username,
+            displayName: profile.display_name?.trim() || profile.username,
+        };
     });
 };

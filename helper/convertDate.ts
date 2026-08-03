@@ -6,8 +6,9 @@ import dayjs, { Dayjs } from "dayjs";
  *  date = 2026-08-13
  *  time = 08:00
  *
- * =>
- * 2026-08-13T08:00:00.000Z
+ * Calendar trong database lưu giờ nghiệp vụ Việt Nam theo dạng wall-clock.
+ * Ký hiệu Z ở payload chỉ để backend/Prisma không dịch giờ thêm lần nữa.
+ * Chọn 08:00 thì database phải giữ nguyên 08:00.
  */
 export const combineDateTime = (
     date?: Dayjs | null,
@@ -20,7 +21,7 @@ export const combineDateTime = (
         .minute(time.minute())
         .second(0)
         .millisecond(0)
-        .toISOString();
+        .format("YYYY-MM-DDTHH:mm:ss.SSS[Z]");
 };
 
 /**

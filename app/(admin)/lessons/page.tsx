@@ -231,7 +231,7 @@ const Page = () => {
                     await deleteLesson(record.id);
                     api.success({
                         message: "Xóa thành công",
-                        description: "Bài học đã được chuyển về trạng thái không hoạt động.",
+                        description: "Bài học chưa được gán lịch đã được xóa khỏi hệ thống.",
                     });
                     await refreshLessons();
                 } catch (error: any) {
