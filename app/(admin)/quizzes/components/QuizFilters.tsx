@@ -1,13 +1,12 @@
 "use client";
 
-import { Col, Divider, Row, Select, Typography } from "antd";
+import { Button, Col, Row, Select } from "antd";
+import { ClearOutlined } from "@ant-design/icons";
 import type { QuizClassOption, QuizLessonOption } from "@/services/quizService";
 import { QUIZ_TYPE_OPTIONS, STATUS_OPTIONS } from "../quiz.constants";
 import type { QuizClassSelectOption, QuizFilterValues } from "../quiz.types";
 import { buildLessonSelectOptions } from "../quiz.utils";
 import styles from "../quiz.module.css";
-
-const { Text } = Typography;
 
 interface QuizFiltersProps {
     filters: QuizFilterValues;
@@ -33,10 +32,13 @@ const QuizFilters = ({
     const lessonNameByNumber = new Map(
         lessons.map((item) => [Number(item.learn_number), item.lesson_name])
     );
+    const hasActiveFilters = Object.values(filters).some(
+        (value) => value !== undefined && value !== null && value !== ""
+    );
 
     return <div className={styles.filters}>
         <Row gutter={[12, 12]}>
-            <Col xs={24} sm={12} xl={7}>
+            <Col xs={24} sm={12} xl={6}>
                 <Select
                     options={classOptions}
                     value={filters.code}
@@ -54,7 +56,7 @@ const QuizFilters = ({
                     disabled={reorderMode}
                 />
             </Col>
-            <Col xs={24} sm={12} xl={7}>
+            <Col xs={24} sm={12} xl={6}>
                 <Select
                     value={filters.learn_number === undefined ? undefined : Number(filters.learn_number)}
                     onChange={(value) => onFiltersChange({ ...filters, learn_number: value })}
@@ -68,7 +70,7 @@ const QuizFilters = ({
                     disabled={!filters.code || reorderMode}
                 />
             </Col>
-            <Col xs={12} sm={6} xl={5}>
+            <Col xs={12} sm={6} xl={4}>
                 <Select
                     value={filters.quiz_type}
                     onChange={(value) => onFiltersChange({ ...filters, quiz_type: value })}
@@ -79,7 +81,7 @@ const QuizFilters = ({
                     disabled={reorderMode}
                 />
             </Col>
-            <Col xs={12} sm={6} xl={5}>
+            <Col xs={12} sm={6} xl={4}>
                 <Select
                     value={filters.quiz_status}
                     onChange={(value) => onFiltersChange({ ...filters, quiz_status: value })}
@@ -89,6 +91,16 @@ const QuizFilters = ({
                     allowClear
                     disabled={reorderMode}
                 />
+            </Col>
+            <Col xs={24} sm={12} xl={4}>
+                <Button
+                    icon={<ClearOutlined />}
+                    onClick={() => onFiltersChange({})}
+                    disabled={!hasActiveFilters || reorderMode}
+                    style={{ width: "100%" }}
+                >
+                    Xóa bộ lọc
+                </Button>
             </Col>
         </Row>
     </div>;
