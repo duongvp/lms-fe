@@ -396,7 +396,7 @@ const Page = () => {
     };
 
     return (
-        <>
+        <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, overflow: "hidden" }}>
             {contextHolder}
             <div
                 style={{
@@ -483,7 +483,6 @@ const Page = () => {
                 canEdit={canEdit}
                 canDelete={canDelete}
                 visibleFormFieldCodes={[...visibleFormFieldCodes, "updated_at"]}
-                tableScrollY={showPageInfo ? "calc(100vh - 330px)" : "calc(100vh - 260px)"}
                 onSelectionChange={setSelectedRowKeys}
                 onPageChange={(page, size) => {
                     setCurrentPage(page);
@@ -530,7 +529,7 @@ const Page = () => {
                 onSubmit={handleImport}
                 onDownloadTemplate={handleDownloadTemplate}
             />
-        </>
+        </div>
     );
 };
 

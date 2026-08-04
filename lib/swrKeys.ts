@@ -1,5 +1,6 @@
 export const SWR_NAMESPACES = {
     lessons: "lessons",
+    quizzes: "quizzes",
     schedules: "schedules",
     moduleFields: "module-fields",
     teachingStaff: "teaching-staff",
@@ -13,6 +14,14 @@ export const swrKeys = {
         [SWR_NAMESPACES.lessons, "subjects", userId] as const,
     lessonPrograms: (userId: number) =>
         [SWR_NAMESPACES.lessons, "programs", userId] as const,
+    quizList: (userId: number, params: object) =>
+        [SWR_NAMESPACES.quizzes, "list", userId, params] as const,
+    quizClasses: (userId: number) =>
+        [SWR_NAMESPACES.quizzes, "classes", userId] as const,
+    quizLessons: (userId: number, code: string) =>
+        [SWR_NAMESPACES.quizzes, "lessons", userId, code] as const,
+    quizIndexSuggestion: (userId: number, params: object) =>
+        [SWR_NAMESPACES.quizzes, "index-suggestion", userId, params] as const,
     scheduleList: (userId: number, params: object) =>
         [SWR_NAMESPACES.schedules, "list", userId, params] as const,
     moduleFields: (userId: number, moduleCode: string) =>

@@ -30,6 +30,14 @@ export enum PermissionKey {
     LESSON_IMPORT = 'lessons.import',
     LESSON_EXPORT = 'lessons.export',
 
+    QUIZ_VIEW = 'quiz.view',
+    QUIZ_CREATE = 'quiz.create',
+    QUIZ_EDIT = 'quiz.update',
+    QUIZ_DELETE = 'quiz.delete',
+    QUIZ_IMPORT = 'quiz.import',
+    QUIZ_EXPORT = 'quiz.export',
+    QUIZ_GRADE = 'quiz.grade',
+
     TEACHER_PROFILE_VIEW = 'teacher_profile.view',
     TEACHER_PROFILE_CREATE = 'teacher_profile.create',
     TEACHER_PROFILE_EDIT = 'teacher_profile.update',

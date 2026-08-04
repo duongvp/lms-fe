@@ -7,6 +7,7 @@ import React from 'react';
 interface SearchAndActionsBarProps {
     showSearch?: boolean;
     titleBtnAdd?: string;
+    titleBtnImport?: string;
     onSearch: (value: string) => Promise<any>;
     handleAddBtn?: React.MouseEventHandler<HTMLElement>;
     handleFilterBtn?: React.MouseEventHandler<HTMLElement>;
@@ -22,6 +23,7 @@ export default function SearchAndActionsBar({
     showSearch = true,
     onSearch,
     titleBtnAdd = "Thêm mới",
+    titleBtnImport = "Import",
     handleAddBtn,
     placeholder = 'Tìm kiếm...',
     extraButtons,
@@ -89,7 +91,7 @@ export default function SearchAndActionsBar({
                                 icon={<UploadOutlined />}
                                 onClick={handleImportClick}
                             >
-                                Import
+                                {titleBtnImport}
                             </Button>
                         )}
 

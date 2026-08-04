@@ -10,6 +10,7 @@ import {
     UsergroupAddOutlined,
     UserOutlined,
     TeamOutlined,
+    QuestionCircleOutlined,
 } from "@ant-design/icons";
 import Image from "next/image";
 import { useAuthStore } from "@/stores/authStore";
@@ -55,6 +56,13 @@ export const menuConfig: IMenuItem[] = [
         label: "Quản lý nội dung",
         path: "/lessons",
         permission: PermissionKey.LESSON_VIEW,
+    },
+    {
+        key: "quiz",
+        icon: <QuestionCircleOutlined />,
+        label: "Quản lý câu hỏi",
+        path: "/quizzes",
+        permission: PermissionKey.QUIZ_VIEW,
     },
     {
         key: "5",

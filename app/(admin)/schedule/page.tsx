@@ -26,6 +26,7 @@ import { canEditAnyField, resolveModuleFieldPermissions, sanitizeEditablePayload
 import { useLmsCache, useModuleFieldsQuery, useSchedulesQuery, useTeachingStaffQuery } from "@/hooks/useLmsQueries";
 import type { LivestreamListParams } from "@/services/livestreamService";
 import TeachingStaffSelect from "@/components/shared/TeachingStaffSelect";
+import { useTableViewport } from "@/hooks/useTableViewport";
 
 const SCHEDULE_MODULE_CODE = "calendar";
 const { RangePicker } = DatePicker;
@@ -346,6 +347,7 @@ const ScheduleFilterDrawer = ({
 };
 
 const Page = () => {
+    const { containerRef: tableContainerRef, scrollY: tableScrollY } = useTableViewport();
     const [data, setData] = useState<ScheduleDataType[]>(MOCK_SCHEDULES);
     const [filteredData, setFilteredData] = useState<ScheduleDataType[]>(MOCK_SCHEDULES);
     const [searchText, setSearchText] = useState("");
@@ -921,7 +923,7 @@ const Page = () => {
     }
 
     return (
-        <>
+        <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, overflow: "hidden" }}>
             {contextHolder}
             <div
                 style={{
@@ -1017,7 +1019,12 @@ const Page = () => {
                 }
             />
 
-            <Form form={form} component={false}>
+            <Form
+                form={form}
+                component={false}
+                style={{ flex: "1 1 0", minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}
+            >
+                <div ref={tableContainerRef} style={{ flex: "1 1 0", minHeight: 0, overflow: "hidden" }}>
                 <CustomTable<ScheduleDataType>
                     columns={columns}
                     dataSource={filteredData}
@@ -1059,8 +1066,9 @@ const Page = () => {
                     onRow={() => ({
                         style: { cursor: editingKey ? "default" : "pointer" },
                     })}
-                    scroll={{ x: "max-content", y: filteredData?.length > 5 ? showPageInfo ? "calc(100vh - 330px)" : "calc(100vh - 260px)" : undefined }}
+                    scroll={{ x: "max-content", y: filteredData?.length > 5 ? tableScrollY : undefined }}
                 />
+                </div>
                 <ScheduleFilterDrawer
                     open={openFilterDrawer}
                     onClose={() => setOpenFilterDrawer(false)}
@@ -1173,7 +1181,7 @@ const Page = () => {
                     }}
                 />
             </Form>
-        </>
+        </div>
     );
 };
 

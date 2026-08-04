@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+import type { DragEvent } from "react";
 import { Button, Grid, Space, Tooltip } from "antd";
 import {
     DeleteOutlined,
@@ -16,6 +18,7 @@ import { SORTABLE_FIELDS } from "../lesson.constants";
 import type { LessonDataType, LessonSortState } from "../lesson.types";
 import LessonDetailRow from "./LessonDetailRow";
 import { formatLessonDateTime } from "../lesson.utils";
+import { useTableViewport } from "@/hooks/useTableViewport";
 
 interface LessonTableProps {
     data: LessonDataType[];
@@ -31,7 +34,6 @@ interface LessonTableProps {
     canEdit: boolean;
     canDelete: boolean;
     visibleFormFieldCodes: string[];
-    tableScrollY?: string;
     onSelectionChange: (selectedRowKeys: React.Key[]) => void;
     onPageChange: (page: number, pageSize: number) => void;
     onSortChange: (sorter: LessonSortState) => void;
@@ -55,7 +57,6 @@ const LessonTable = ({
     canEdit,
     canDelete,
     visibleFormFieldCodes,
-    tableScrollY,
     onSelectionChange,
     onPageChange,
     onSortChange,
@@ -65,6 +66,59 @@ const LessonTable = ({
     onDelete,
 }: LessonTableProps) => {
     const screens = Grid.useBreakpoint();
+    const { containerRef, scrollY } = useTableViewport(reorderMode ? 64 : 112);
+    const dragPointerYRef = useRef<number | null>(null);
+    const autoScrollFrameRef = useRef<number | null>(null);
+
+    const stopAutoScroll = () => {
+        dragPointerYRef.current = null;
+        if (autoScrollFrameRef.current !== null) {
+            cancelAnimationFrame(autoScrollFrameRef.current);
+            autoScrollFrameRef.current = null;
+        }
+    };
+
+    const runAutoScroll = () => {
+        autoScrollFrameRef.current = null;
+        const pointerY = dragPointerYRef.current;
+        const scrollContainer = containerRef.current?.querySelector<HTMLElement>(".ant-table-body");
+        if (pointerY === null || !scrollContainer) return;
+
+        const bounds = scrollContainer.getBoundingClientRect();
+        const edgeSize = Math.min(80, Math.max(48, bounds.height * 0.2));
+        let direction = 0;
+        let distanceInsideEdge = 0;
+
+        if (pointerY < bounds.top + edgeSize) {
+            direction = -1;
+            distanceInsideEdge = bounds.top + edgeSize - pointerY;
+        } else if (pointerY > bounds.bottom - edgeSize) {
+            direction = 1;
+            distanceInsideEdge = pointerY - (bounds.bottom - edgeSize);
+        }
+
+        if (direction === 0) return;
+
+        const speed = Math.ceil(4 + Math.min(1, distanceInsideEdge / edgeSize) * 16);
+        scrollContainer.scrollTop += direction * speed;
+        autoScrollFrameRef.current = requestAnimationFrame(runAutoScroll);
+    };
+
+    const handleRowDragOver = (event: DragEvent<HTMLElement>) => {
+        if (!reorderMode) return;
+        event.preventDefault();
+        dragPointerYRef.current = event.clientY;
+        if (autoScrollFrameRef.current === null) {
+            autoScrollFrameRef.current = requestAnimationFrame(runAutoScroll);
+        }
+    };
+
+    useEffect(() => () => {
+        if (autoScrollFrameRef.current !== null) {
+            cancelAnimationFrame(autoScrollFrameRef.current);
+        }
+    }, []);
+
     const columns: ColumnsType<LessonDataType> = visibleFieldPermissions.map(({ field }) => ({
         title: field.fieldLabel || FIELD_LABELS[field.fieldCode] || field.fieldCode,
         dataIndex: field.fieldCode,
@@ -114,6 +168,12 @@ const LessonTable = ({
     }
 
     return (
+        <div
+            ref={containerRef}
+            style={{ flex: "1 1 0", minHeight: 0, overflow: "hidden" }}
+            onDragOver={handleRowDragOver}
+            onDragEnd={stopAutoScroll}
+        >
         <CustomTable<LessonDataType>
             columns={columns}
             dataSource={data}
@@ -125,11 +185,16 @@ const LessonTable = ({
             }}
             onRow={(record) => ({
                 draggable: reorderMode,
-                onDragStart: () => onDragStart(record.key),
-                onDragOver: (event) => {
-                    if (reorderMode) event.preventDefault();
+                onDragStart: (event) => {
+                    event.dataTransfer.effectAllowed = "move";
+                    onDragStart(record.key);
                 },
-                onDrop: () => onDrop(record.key),
+                onDragOver: handleRowDragOver,
+                onDragEnd: stopAutoScroll,
+                onDrop: () => {
+                    stopAutoScroll();
+                    onDrop(record.key);
+                },
                 style: reorderMode
                     ? {
                         cursor: "grab",
@@ -165,8 +230,9 @@ const LessonTable = ({
                     sort_order: activeSorter?.order || undefined,
                 });
             }}
-            scroll={{ x: "max-content", y: data?.length > 5 ? tableScrollY ?? "calc(100vh - 330px)" : undefined }}
+            scroll={{ x: "max-content", y: scrollY }}
         />
+        </div>
     );
 };
 
