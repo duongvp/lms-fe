@@ -35,6 +35,7 @@ const TeachingStaffSelect = ({
     disabled,
     loading,
     onChange,
+    style,
     ...props
 }: TeachingStaffSelectProps) => {
     const [form] = Form.useForm<TeacherProfilePayload>();
@@ -114,7 +115,7 @@ const TeachingStaffSelect = ({
     return (
         <>
             {contextHolder}
-            <Space.Compact style={{ width: "100%" }}>
+            <Space.Compact style={{ width: "100%", ...style }}>
                 <Select
                     {...props}
                     showSearch
@@ -130,11 +131,16 @@ const TeachingStaffSelect = ({
                         onChange?.(value, option);
                     }}
                     options={filteredOptions}
-                    style={{ width: showQuickCreate ? "calc(100% - 32px)" : "100%", ...props.style }}
+                    style={{ width: showQuickCreate ? "calc(100% - 32px)" : "100%" }}
                 />
                 {showQuickCreate && (
                     <Tooltip title={teacherType === 1 ? "Thêm nhanh giáo viên" : "Thêm nhanh trợ giảng"}>
-                        <Button aria-label="Thêm nhanh nhân sự" icon={<PlusOutlined />} onClick={openCreate} />
+                        <Button
+                            aria-label="Thêm nhanh nhân sự"
+                            icon={<PlusOutlined />}
+                            size={props.size}
+                            onClick={openCreate}
+                        />
                     </Tooltip>
                 )}
             </Space.Compact>

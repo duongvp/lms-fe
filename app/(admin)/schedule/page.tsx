@@ -170,10 +170,13 @@ const SORTABLE_FIELDS = new Set([
     "system_type",
 ]);
 const REQUIRED_QUICK_EDIT_FIELDS = new Set([
-    "code",
-    "learn_number",
     "start_time",
     "end_time",
+]);
+const QUICK_EDIT_LOCKED_FIELDS = new Set([
+    "code",
+    "learn_number",
+    "subject",
 ]);
 
 const cleanFilterValues = (values: ScheduleFilterValues): ScheduleFilterValues => {
@@ -352,6 +355,7 @@ const Page = () => {
     const [filteredData, setFilteredData] = useState<ScheduleDataType[]>(MOCK_SCHEDULES);
     const [searchText, setSearchText] = useState("");
     const [editingKey, setEditingKey] = useState<string>("");
+    const [savingKey, setSavingKey] = useState<string>("");
     const [moduleFields, setModuleFields] = useState<ModuleField[]>(DEFAULT_MODULE_FIELDS);
     const [form] = Form.useForm();
     const [api, contextHolder] = notification.useNotification();
@@ -588,6 +592,8 @@ const Page = () => {
         form.resetFields();
         form.setFieldsValue({
             ...record,
+            start_time: record.start_time ? dayjs(record.start_time) : null,
+            end_time: record.end_time ? dayjs(record.end_time) : null,
             assistant_teacher: String(record.assistant_teacher || '')
                 .split(',')
                 .map((username) => username.trim())
@@ -597,6 +603,7 @@ const Page = () => {
     };
 
     const cancel = () => {
+        if (savingKey) return;
         setEditingKey("");
     };
 
@@ -638,6 +645,8 @@ const Page = () => {
     };
 
     const save = async (key: string) => {
+        if (savingKey) return;
+        setSavingKey(key);
         try {
             const row = await form.validateFields(editableFieldCodes);
             const index = data.findIndex((item) => key === item.key);
@@ -657,6 +666,22 @@ const Page = () => {
                     fieldPolicy,
                     SCHEDULE_MODULE_CODE
                 );
+
+                QUICK_EDIT_LOCKED_FIELDS.forEach((fieldCode) => {
+                    delete sanitizedRow[fieldCode];
+                });
+
+                ["start_time", "end_time"].forEach((fieldCode) => {
+                    const value = sanitizedRow[fieldCode];
+                    if (dayjs.isDayjs(value)) {
+                        // Calendar lưu giờ Việt Nam dạng wall-clock. Gắn Z dạng literal
+                        // để backend/Prisma giữ nguyên giờ người dùng đã chọn.
+                        sanitizedRow[fieldCode] = value
+                            .second(0)
+                            .millisecond(0)
+                            .format("YYYY-MM-DDTHH:mm:ss.SSS[Z]");
+                    }
+                });
 
                 if (sanitizedRow.learn_number !== undefined) {
                     sanitizedRow.learn_number = Number(sanitizedRow.learn_number);
@@ -690,6 +715,8 @@ const Page = () => {
                         .join("; ") || "Vui lòng kiểm tra lại các trường thông tin."
                     : errInfo?.message || "Không thể lưu thay đổi nhanh.",
             });
+        } finally {
+            setSavingKey("");
         }
     };
 
@@ -707,6 +734,7 @@ const Page = () => {
         .filter((item) => (
             item.field.fieldCode !== "id"
             && item.editable
+            && !QUICK_EDIT_LOCKED_FIELDS.has(item.field.fieldCode)
             && (
                 !["teacher", "assistant_teacher"].includes(item.field.fieldCode)
                 || canEditTeachingAssignment
@@ -726,10 +754,13 @@ const Page = () => {
                 fieldCode === "lesson_name" ? 250
                     : fieldCode === "lesson_document" ? 280
                     : fieldCode === "lesson_link" ? 200
-                        : fieldCode === "learn_number" ? 120
-                            : fieldCode === "class_code" ? 120
-                                : fieldCode === "subject" ? 120
-                                    : 150,
+                        : fieldCode === "teacher" ? 220
+                            : fieldCode === "assistant_teacher" ? 260
+                                : ["start_time", "end_time"].includes(fieldCode) ? 190
+                                    : fieldCode === "learn_number" ? 120
+                                        : fieldCode === "class_code" ? 120
+                                            : fieldCode === "subject" ? 120
+                                                : 150,
             sorter: SORTABLE_FIELDS.has(fieldCode)
                 ? { multiple: visibleFieldPermissions.length - columnIndex }
                 : false,
@@ -745,7 +776,13 @@ const Page = () => {
                                 name={fieldCode}
                                 style={{ margin: 0 }}
                             >
-                                <TeachingStaffSelect teacherType={1} size="small" showSearch optionFilterProp="label" style={{ width: 180 }} />
+                                <TeachingStaffSelect
+                                    teacherType={1}
+                                    size="small"
+                                    showSearch
+                                    optionFilterProp="label"
+                                    style={{ width: "100%" }}
+                                />
                             </Form.Item>
                         );
                     }
@@ -758,7 +795,7 @@ const Page = () => {
                                     size="small"
                                     showSearch
                                     optionFilterProp="label"
-                                    style={{ width: 220 }}
+                                    style={{ width: "100%" }}
                                 />
                             </Form.Item>
                         );
@@ -783,9 +820,27 @@ const Page = () => {
                             <Form.Item
                                 name={fieldCode}
                                 style={{ margin: 0 }}
-                                rules={[{ required: true, message: `Nhập ${field.fieldLabel}!` }]}
+                                dependencies={fieldCode === "end_time" ? ["start_time"] : undefined}
+                                rules={[
+                                    { required: true, message: `Nhập ${field.fieldLabel}!` },
+                                    ...(fieldCode === "end_time" ? [{
+                                        validator: (_rule: unknown, value: Dayjs | null) => {
+                                            const startTime = form.getFieldValue("start_time") as Dayjs | null;
+                                            if (!value || !startTime || value.isAfter(startTime)) {
+                                                return Promise.resolve();
+                                            }
+                                            return Promise.reject(new Error("Thời gian kết thúc phải sau thời gian bắt đầu"));
+                                        },
+                                    }] : []),
+                                ]}
                             >
-                                <Input size="small" type="datetime-local" style={{ width: 180 }} />
+                                <DatePicker
+                                    size="small"
+                                    showTime={{ format: "HH:mm" }}
+                                    format="DD/MM/YYYY HH:mm"
+                                    placeholder="DD/MM/YYYY HH:mm"
+                                    style={{ width: "100%" }}
+                                />
                             </Form.Item>
                         );
                     }
@@ -848,6 +903,7 @@ const Page = () => {
                             <Button
                                 type="primary"
                                 aria-label="Lưu"
+                                loading={savingKey === record.key}
                                 onClick={(event) => {
                                     event.stopPropagation();
                                     void save(record.key);
@@ -859,6 +915,7 @@ const Page = () => {
                         <Tooltip title="Hủy">
                             <Button
                                 aria-label="Hủy"
+                                disabled={savingKey === record.key}
                                 onClick={(event) => {
                                     event.stopPropagation();
                                     cancel();
@@ -940,7 +997,7 @@ const Page = () => {
                         <span style={{ fontWeight: 600 }}>Quản lý lịch học</span>
                     </div>
                     <Button
-                        type="text"
+                        type="link"
                         size="small"
                         icon={showPageInfo ? <UpOutlined /> : <DownOutlined />}
                         onClick={() => setShowPageInfo((value) => !value)}

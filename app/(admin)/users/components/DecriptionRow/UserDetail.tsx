@@ -1,13 +1,14 @@
 'use client';
 import React from 'react';
 import { Row, Col, Typography, Space, Button } from 'antd';
-import { UploadOutlined } from '@ant-design/icons';
-// import { deleteUser, toggleUserStatus, UserApiResponse } from '@/services/userService';
-import { UserApiResponse } from '@/services/userService';
+import { DeleteOutlined, UploadOutlined } from '@ant-design/icons';
+import { deleteUser, UserApiResponse } from '@/services/userService';
 import useUserStore from '@/stores/userStore';
 import { ActionType } from '@/enums/action';
 import { useAuthStore } from '@/stores/authStore';
 import { PermissionKey } from '@/types/permissions';
+import ConfirmModal from '@/components/templates/ConfirmModal';
+import { showErrorMessage, showSuccessMessage } from '@/ultils/message';
 
 const { Text } = Typography;
 
@@ -16,9 +17,12 @@ interface UserDetailProps {
 }
 
 const UserDetail: React.FC<UserDetailProps> = ({ record }) => {
-    const { setModal } = useUserStore();
+    const { setModal, setShouldReload } = useUserStore();
     const hasPermission = useAuthStore(state => state.hasPermission);
+    const currentUserId = useAuthStore(state => state.user.userId);
     const isAdminAccount = record.roles?.some((role) => role.role_code === 'admin');
+    const [confirmOpen, setConfirmOpen] = React.useState(false);
+    const [deleting, setDeleting] = React.useState(false);
 
     const handleUpdate = () => {
         setModal({
@@ -26,6 +30,20 @@ const UserDetail: React.FC<UserDetailProps> = ({ record }) => {
             type: ActionType.UPDATE,
             user: record,
         });
+    };
+
+    const handleDelete = async () => {
+        setDeleting(true);
+        try {
+            await deleteUser(record.id);
+            setConfirmOpen(false);
+            setShouldReload(true);
+            showSuccessMessage('Xóa tài khoản thành công');
+        } catch (error: any) {
+            showErrorMessage(error?.message || 'Không thể xóa tài khoản');
+        } finally {
+            setDeleting(false);
+        }
     };
 
     const dataRow = [
@@ -68,22 +86,29 @@ const UserDetail: React.FC<UserDetailProps> = ({ record }) => {
                                 </Button>
                             )
                         }
-                        {/* {
-                            hasPermission(PermissionKey.USER_DELETE) && (userId != record.user_id) && (
-                                <BtnDeActiveDetete
-                                    record={{ id: record.user_id, ...record }}
-                                    contextActive='Ban có chắc muốn hoạt động lại người dùng này không?'
-                                    contextDeactive='Bạn có chắc chắn muốn ngừng hoạt động người dùng này?'
-                                    contextDelete='Bạn có chắc chắn muốn xoá người dùng này? Hành động này sẽ không thể hoàn tác.'
-                                    toggleStatus={toggleUserStatus}
-                                    onDelete={deleteUser}
-                                    setShouldReload={setShouldReload}
-                                />
-                            )
-                        } */}
+                        {hasPermission(PermissionKey.USER_DELETE) && currentUserId !== record.id && (
+                            <Button
+                                danger
+                                type="primary"
+                                icon={<DeleteOutlined />}
+                                onClick={() => setConfirmOpen(true)}
+                            >
+                                Xóa
+                            </Button>
+                        )}
                     </Space>
                 </Col>
             </Row>
+
+            <ConfirmModal
+                open={confirmOpen}
+                title="Xóa tài khoản"
+                content={`Bạn có chắc chắn muốn xóa tài khoản '${record.username}'?`}
+                okText="Xóa"
+                onOk={handleDelete}
+                onCancel={() => setConfirmOpen(false)}
+                loading={deleting}
+            />
         </div>
     );
 };

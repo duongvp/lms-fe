@@ -11,6 +11,8 @@ import {
     Tabs,
     Collapse,
     Table,
+    Alert,
+    Skeleton,
 } from "antd";
 import React, { useEffect, useState, useCallback } from "react";
 import {
@@ -172,10 +174,17 @@ const RoleModal = () => {
     const [fieldPolicy, setFieldPolicy] = useState<FieldPolicyFE>({});
     const [modulesStructure, setModulesStructure] = useState<ModuleStructure[]>([]);
     const [permissionsStructure, setPermissionsStructure] = useState<PermissionStructure>({});
+    const [structuresLoaded, setStructuresLoaded] = useState(false);
+    const [structuresError, setStructuresError] = useState<string | null>(null);
 
     // Lấy cấu trúc modules và permissions từ API
     useEffect(() => {
         if (!modal.open) return;
+        let cancelled = false;
+        setStructuresLoaded(false);
+        setStructuresError(null);
+        setModulesStructure([]);
+        setPermissionsStructure({});
 
         const fetchStructures = async () => {
             try {
@@ -201,6 +210,7 @@ const RoleModal = () => {
                 } else {
                     console.warn("Modules response không đúng định dạng", modulesResponse);
                 }
+                if (cancelled) return;
                 setModulesStructure(modulesArray);
 
                 // Permissions
@@ -212,12 +222,18 @@ const RoleModal = () => {
                 }
                 setPermissionsStructure(permissionsObj);
             } catch (error) {
+                if (cancelled) return;
                 console.error("Lỗi lấy cấu trúc phân quyền:", error);
-                showErrorMessage("Không thể tải cấu trúc phân quyền!");
+                setStructuresError("Không thể tải cấu trúc phân quyền. Vui lòng đóng và thử lại.");
+            } finally {
+                if (!cancelled) setStructuresLoaded(true);
             }
         };
 
-        fetchStructures();
+        void fetchStructures();
+        return () => {
+            cancelled = true;
+        };
     }, [modal.open]);
 
     // Đóng modal, reset state
@@ -227,6 +243,8 @@ const RoleModal = () => {
         setCheckedGroups({});
         setExpandedGroups({});
         setFieldPolicy({});
+        setStructuresLoaded(false);
+        setStructuresError(null);
     };
 
     const toggleGroup = (key: string) => {
@@ -375,16 +393,17 @@ const RoleModal = () => {
             showSuccessMessage(`${modal.title} thành công!`);
             setShouldReload(true);
             onCloseModal();
-        } catch (error) {
+        } catch (error: any) {
             console.error("Lỗi submit:", error);
-            showErrorMessage(`${modal.title} thất bại!`);
+            showErrorMessage(error?.message || `${modal.title} thất bại!`);
         } finally {
             setLoadingModalVisible(false);
         }
     };
 
-    // Nếu đang mở modal nhưng chưa load xong cấu trúc
-    if (modal.open && Object.keys(permissionsStructure).length === 0) {
+    // Giữ modal ổn định trong lúc tải, tránh lớp spinner toàn màn hình chồng
+    // lên modal rỗng ở lần mở đầu tiên.
+    if (modal.open && !structuresLoaded) {
         return (
             <Modal
                 title={modal.title}
@@ -394,9 +413,28 @@ const RoleModal = () => {
                 centered
                 footer={null}
             >
-                <div style={{ textAlign: "center", padding: 40 }}>
-                    <CustomSpin openSpin={true} />
+                <div style={{ padding: "16px 8px" }}>
+                    <Skeleton active title paragraph={{ rows: 7 }} />
                 </div>
+            </Modal>
+        );
+    }
+
+    if (modal.open && structuresError) {
+        return (
+            <Modal
+                title={modal.title}
+                open={modal.open}
+                onCancel={onCloseModal}
+                width={900}
+                centered
+                footer={[
+                    <Button key="close" onClick={onCloseModal} icon={<CloseCircleOutlined />}>
+                        Đóng
+                    </Button>,
+                ]}
+            >
+                <Alert type="error" showIcon message={structuresError} />
             </Modal>
         );
     }

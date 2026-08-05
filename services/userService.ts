@@ -108,6 +108,7 @@ export const updateUser = async (id: number, payload: UpdateUserPayload) => {
     return await fetchInstance(url, options);
 };
 
-// (Tạm thời bỏ delete, toggle do schema chưa hỗ trợ, nếu cần sau có thể thêm)
-// export const deleteUser = ...
-// export const toggleUserStatus = ...
+export const deleteUser = async (id: number) => {
+    const url = `${API_BASE_URL}/${id}`;
+    return fetchInstance(url, { method: 'DELETE' });
+};

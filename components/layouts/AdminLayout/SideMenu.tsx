@@ -291,25 +291,6 @@ const SideMenu: React.FC<SideMenuProps> = ({ drawerOpen, onCloseDrawer }) => {
             styles={{ body: { padding: 10 } }}
             width={250}
         >
-            <div
-                style={{
-                    height: 64,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: 10,
-                    overflow: "hidden",
-                }}
-            >
-                <Image
-                    src="/A2S.png"
-                    alt="Warehouse Logo"
-                    width={120}
-                    height={120}
-                    style={{ objectFit: "contain" }}
-                    priority={true}
-                />
-            </div>
             <Menu
                 mode="inline"
                 selectedKeys={[activeSideKey || activeTopKey]}

@@ -33,6 +33,8 @@ export interface RoleApiResponse {
     permissions?: RolePermissionItem[];
     fieldPolicy?: any;
     isActive?: boolean;
+    createdAt?: string;
+    updatedAt?: string;
 }
 
 export interface RolePayload {

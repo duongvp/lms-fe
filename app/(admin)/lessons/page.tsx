@@ -276,6 +276,11 @@ const Page = () => {
             const targetIndex = prev.findIndex((item) => item.key === targetKey);
             if (sourceIndex < 0 || targetIndex < 0) return prev;
 
+            // Giữ nguyên tập số thứ tự hiện có (kể cả khi có khoảng trống như
+            // 1..64, 66..88), chỉ đổi bài nào nhận số nào theo vị trí mới.
+            const learnNumbers = prev
+                .map((item) => Number(item.learn_number))
+                .sort((left, right) => left - right);
             const next = [...prev];
             if (reorderStrategy === "swap") {
                 [next[sourceIndex], next[targetIndex]] = [next[targetIndex], next[sourceIndex]];
@@ -283,7 +288,10 @@ const Page = () => {
                 const [moved] = next.splice(sourceIndex, 1);
                 next.splice(targetIndex, 0, moved);
             }
-            return next.map((item, index) => ({ ...item, learn_number: index + 1 }));
+            return next.map((item, index) => ({
+                ...item,
+                learn_number: learnNumbers[index],
+            }));
         });
         setDragRowKey(null);
     };
@@ -413,7 +421,7 @@ const Page = () => {
                         <span style={{ fontWeight: 600 }}>Quản lý nội dung bài học</span>
                     </div>
                     <Button
-                        type="text"
+                        type="link"
                         size="small"
                         icon={showPageInfo ? <UpOutlined /> : <DownOutlined />}
                         onClick={() => setShowPageInfo((value) => !value)}

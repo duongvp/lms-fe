@@ -1,4 +1,20 @@
 import dayjs, { Dayjs } from "dayjs";
+import utc from "dayjs/plugin/utc";
+
+dayjs.extend(utc);
+
+/**
+ * Database lưu giờ Việt Nam dạng wall-clock; API có thể serialize kèm Z.
+ * Đọc nguyên các thành phần UTC để trình duyệt không cộng thêm timezone.
+ */
+export const formatVietnamDateTime = (
+    value?: string | Date | null,
+    format = "DD/MM/YY HH:mm"
+): string => {
+    if (!value) return "-";
+    const date = dayjs.utc(value);
+    return date.isValid() ? date.format(format) : "-";
+};
 
 /**
  * Ghép Date + Time => ISO String

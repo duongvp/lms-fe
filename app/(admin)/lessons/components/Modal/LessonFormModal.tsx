@@ -212,6 +212,7 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
                 form={form}
                 layout="vertical"
                 onValuesChange={(changedValues, allValues) => {
+                    if (record) return;
                     if (
                         !Object.hasOwn(changedValues, "grade")
                         && !Object.hasOwn(changedValues, "subject_name")
@@ -232,7 +233,7 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
                             <Col xs={24} md={8}>
                                 <Form.Item name="grade" label="Khối" rules={[{ required: true, message: "Chọn khối" }]}>
                                     <Select
-                                        disabled={!canEdit("grade")}
+                                        disabled={Boolean(record) || !canEdit("grade")}
                                         options={GRADE_OPTIONS}
                                         placeholder="Chọn khối"
                                     />
@@ -244,7 +245,7 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
                             <Col xs={24} md={8}>
                                 <Form.Item name="subject_name" label="Môn học" rules={[{ required: true, message: "Chọn môn học" }]}>
                                     <Select
-                                        disabled={!canEdit("subject_name")}
+                                        disabled={Boolean(record) || !canEdit("subject_name")}
                                         options={subjectOptions}
                                         placeholder="Chọn môn học"
                                         showSearch
@@ -260,7 +261,7 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
                                     <Form.Item
                                         name="school_year"
                                         label="Năm học"
-                                        rules={[{ required: true, message: "Nhập năm học" }]}
+                                        rules={record ? [] : [{ required: true, message: "Nhập năm học" }]}
                                     >
                                         <InputNumber
                                             min={2000}
@@ -268,7 +269,7 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
                                             precision={0}
                                             style={{ width: "100%" }}
                                             placeholder="2027"
-                                            disabled={!canEdit("subject_code")}
+                                            disabled={Boolean(record) || !canEdit("subject_code")}
                                         />
                                     </Form.Item>
                                 </Col>
@@ -293,7 +294,7 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
                                                                 <Input
                                                                     maxLength={100}
                                                                     placeholder="nguvan-6-2027"
-                                                                    disabled={!canEdit("subject_code")}
+                                                                    disabled={Boolean(record) || !canEdit("subject_code")}
                                                                 />
                                                             </Form.Item>
                                                         </Col>

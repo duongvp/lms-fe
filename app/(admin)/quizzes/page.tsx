@@ -505,7 +505,7 @@ const QuizManagementPage = () => {
                     <span>Quản lý câu hỏi</span>
                 </div>
                 <Button
-                    type="text"
+                    type="link"
                     size="small"
                     icon={showPageInfo ? <UpOutlined /> : <DownOutlined />}
                     onClick={() => setShowPageInfo((value) => !value)}

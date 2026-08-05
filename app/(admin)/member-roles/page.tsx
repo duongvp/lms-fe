@@ -1,5 +1,4 @@
 "use client";
-import dayjs from "dayjs";
 import React, { useState, useEffect } from "react";
 import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
@@ -12,6 +11,7 @@ import { ActionType } from "@/enums/action";
 import { notification } from "antd";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
+import { formatVietnamDateTime } from "@/helper/convertDate";
 
 
 // Đây là kiểu dữ liệu cho Table (thêm key + description)
@@ -33,7 +33,12 @@ const columns: ColumnsType<DataType> = [
     {
         title: "Thời gian khởi tạo",
         dataIndex: "createdAt",
-        render: (value) => dayjs(value).format("DD/MM/YY HH:mm"),
+        render: (value) => formatVietnamDateTime(value),
+    },
+    {
+        title: "Thời gian cập nhật",
+        dataIndex: "updatedAt",
+        render: (value) => formatVietnamDateTime(value),
     },
 ];
 
@@ -49,6 +54,7 @@ const Page = () => {
 
     const fetchRoles = async () => {
         try {
+            setLoading(true);
             const apiData = await getRoles();
 
             // map lại dữ liệu cho Table

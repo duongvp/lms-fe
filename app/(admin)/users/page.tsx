@@ -1,5 +1,4 @@
 "use client";
-import dayjs from "dayjs";
 import React, { useState, useEffect } from "react";
 import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
@@ -14,6 +13,7 @@ import BranchModal from "./components/BranchModal";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
 import { notification } from "antd";
+import { formatVietnamDateTime } from "@/helper/convertDate";
 
 
 // Đây là kiểu dữ liệu cho Table (thêm key + description)
@@ -35,14 +35,14 @@ const columns: ColumnsType<DataType> = [
     {
         title: "Thời gian khởi tạo",
         dataIndex: "created_at",
-        render: (value) => dayjs(value).format("DD/MM/YY HH:mm"),
-        sorter: (a, b) => dayjs(a.created_at).unix() - dayjs(b.created_at).unix(),
+        render: (value) => formatVietnamDateTime(value),
+        sorter: (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     },
     {
         title: "Thời gian cập nhật",
         dataIndex: "updated_at",
-        render: (value) => dayjs(value).format("DD/MM/YY HH:mm"),
-        sorter: (a, b) => dayjs(a.updated_at).unix() - dayjs(b.updated_at).unix(),
+        render: (value) => formatVietnamDateTime(value),
+        sorter: (a, b) => new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime(),
     },
     {
         title: "Trạng thái",
