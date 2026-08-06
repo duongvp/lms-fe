@@ -135,7 +135,7 @@ interface ScheduleFilterValues {
     keyword?: string;
     code?: string;
     teacher?: string;
-    lesson_status?: string | number;
+    time_status?: "upcoming" | "ongoing" | "completed";
     date_range?: [Dayjs, Dayjs];
 }
 
@@ -197,33 +197,42 @@ const buildScheduleApiParams = (values: ScheduleFilterValues) => {
 
     return {
         ...rest,
-        start_time: date_range?.[0]?.startOf("day").toISOString(),
-        end_time: date_range?.[1]?.endOf("day").toISOString(),
+        // Calendar lưu giờ Việt Nam dạng wall-clock. Dùng Z dạng literal để
+        // giữ nguyên ngày người dùng chọn, không dịch 05/08 về 04/08 theo UTC.
+        start_time: date_range?.[0]?.startOf("day").format("YYYY-MM-DDTHH:mm:ss.SSS[Z]"),
+        end_time: date_range?.[1]?.endOf("day").format("YYYY-MM-DDTHH:mm:ss.SSS[Z]"),
     };
 };
 
-const lessonStatusText = (status?: number | null) => {
-    if (status === 1) return "Nghỉ học";
-    if (status === 2) return "Đang diễn ra";
+const lessonStatusText = (
+  startTime?: string,
+  endTime?: string
+) => {
+  if (!startTime || !endTime) return "-";
+
+  const now = dayjs();
+  const start = dayjs(startTime);
+  const end = dayjs(endTime);
+
+  if (now.isBefore(start)) {
     return "Chưa bắt đầu";
+  }
+
+  if (now.isAfter(end)) {
+    return "Đã kết thúc";
+  }
+
+  return "Đang diễn ra";
 };
 
 const canModifySchedule = (record: ScheduleDataType) => {
-    if (
-        record.lesson_status === 1
-        || record.lesson_status === "1"
-        || record.lesson_status === "Nghỉ học"
-    ) {
-        return false;
+    if (!record.start_time) {
+        return record.can_modify === true;
     }
 
-    if (record.start_time) {
-        const startTime = dayjs(record.start_time);
-        return startTime.isValid() && startTime.isAfter(dayjs());
-    }
+    const startTime = dayjs(record.start_time);
 
-    // Fallback fail-closed khi Field-Level không cho trả start_time.
-    return record.can_modify === true;
+    return startTime.isValid() && startTime.isAfter(dayjs());
 };
 
 const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
@@ -244,7 +253,7 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
         },
         { label: "Phòng/Kênh học", value: record.room || "-" },
         { label: "Hệ thống", value: record.system_type || "-" },
-        { label: "Trạng thái", value: record.lesson_status || "-" },
+        { label: "Trạng thái", value: lessonStatusText(record.start_time, record.end_time) },
         { label: "Link học", value: record.lesson_link || "-" },
         { label: "Tài liệu", value: renderScheduleDocuments(record.lesson_document) },
     ];
@@ -329,14 +338,14 @@ const ScheduleFilterDrawer = ({
                             placeholder="Chọn giáo viên"
                         />
                     </Form.Item>
-                    <Form.Item name="lesson_status" label="Trạng thái buổi học">
+                    <Form.Item name="time_status" label="Trạng thái buổi học">
                         <Select
                             allowClear
                             placeholder="Tất cả trạng thái"
                             options={[
-                                { value: 0, label: "Chưa bắt đầu" },
-                                { value: 2, label: "Đang diễn ra" },
-                                { value: 1, label: "Nghỉ học" },
+                                { value: "upcoming", label: "Chưa bắt đầu" },
+                                { value: "ongoing", label: "Đang diễn ra" },
+                                { value: "completed", label: "Đã kết thúc" },
                             ]}
                         />
                     </Form.Item>
@@ -766,6 +775,7 @@ const Page = () => {
                 : false,
             sortOrder: activeSort?.order,
             render: (text: any, record: ScheduleDataType) => {
+                console.log("text", text, "record", record);
                 const editing = isEditing(record);
                 const editable = editableFieldCodes.includes(fieldCode);
 
@@ -877,10 +887,13 @@ const Page = () => {
 
                 if (fieldCode === "lesson_document") return renderScheduleDocuments(text);
 
-                if (fieldCode === "lesson_status") {
-                    return <span>{lessonStatusText(Number(text))}</span>;
+             if (fieldCode === "lesson_status") {
+                    return (
+                        <span>
+                            {lessonStatusText(record.start_time, record.end_time)}
+                        </span>
+                    );
                 }
-
                 // If not editing or not editable, display plain text
                 return <span>{text}</span>;
             },

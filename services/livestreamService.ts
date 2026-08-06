@@ -90,6 +90,7 @@ export interface LivestreamListParams {
     classroom?: string;
     system_type?: string;
     lesson_status?: string | number;
+    time_status?: "upcoming" | "ongoing" | "completed";
     start_time?: string;
     end_time?: string;
     sort_by?: string;
