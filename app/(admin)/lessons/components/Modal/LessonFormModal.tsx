@@ -116,7 +116,7 @@ const toLessonPayload = (values: any): LessonPayload => ({
     lesson_ketqua: emptyToNull(values.lesson_ketqua),
 });
 
-const FormSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
+export const FormSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
     <fieldset
         style={{
             border: "1px solid rgba(0, 0, 0, 0.1)",
@@ -285,19 +285,19 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
                         )}
                     </Row>
                     <Row gutter={12}>
-                          <Col xs={12}>
-                                                            <Form.Item
-                                                                name="subject_code"
-                                                                label="Mã môn học"
-                                                                rules={[{ required: true, whitespace: true, message: "Nhập mã môn học" }]}
-                                                            >
-                                                                <Input
-                                                                    maxLength={100}
-                                                                    placeholder="nguvan-6-2027"
-                                                                    disabled={Boolean(record) || !canEdit("subject_code")}
-                                                                />
-                                                            </Form.Item>
-                                                        </Col>
+                        <Col xs={12}>
+                            <Form.Item
+                                name="subject_code"
+                                label="Mã môn học"
+                                rules={[{ required: true, whitespace: true, message: "Nhập mã môn học" }]}
+                            >
+                                <Input
+                                    maxLength={100}
+                                    placeholder="nguvan-6-2027"
+                                    disabled={Boolean(record) || !canEdit("subject_code")}
+                                />
+                            </Form.Item>
+                        </Col>
                         {canView("lesson_name") && (
                             <Col xs={12}>
                                 <Form.Item name="lesson_name" label="Tên bài học" rules={[{ required: true, message: "Nhập tên bài học" }]}>

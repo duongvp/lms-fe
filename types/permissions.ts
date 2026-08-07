@@ -51,4 +51,9 @@ export enum PermissionKey {
     CALENDAR_TEACHER_EDIT = 'calendar.teacher.update',
     CALENDAR_TEACHER_REMOVE = 'calendar.teacher.remove',
 
+    ROOM_CONFIG_VIEW = 'room_config.view',
+    ROOM_CONFIG_CREATE = 'room_config.create',
+    ROOM_CONFIG_EDIT = 'room_config.update',
+    ROOM_CONFIG_DELETE = 'room_config.delete',
+    ROOM_CONFIG_IMPORT = 'room_config.import',
 }

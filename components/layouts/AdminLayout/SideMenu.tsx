@@ -11,6 +11,7 @@ import {
     UserOutlined,
     TeamOutlined,
     QuestionCircleOutlined,
+    SettingOutlined,
 } from "@ant-design/icons";
 import Image from "next/image";
 import { useAuthStore } from "@/stores/authStore";
@@ -70,6 +71,13 @@ export const menuConfig: IMenuItem[] = [
         label: "Quản lý lịch học",
         path: "/schedule",
         permission: PermissionKey.SCHEDULE_VIEW,
+    },
+    {
+        key: "5_room",
+        icon: <SettingOutlined />,
+        label: "Cấu hình phòng học",
+        path: "/room-config",
+        permission: PermissionKey.ROOM_CONFIG_VIEW,
     },
     {
         key: "6",

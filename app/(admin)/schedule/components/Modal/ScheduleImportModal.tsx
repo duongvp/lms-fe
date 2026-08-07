@@ -6,6 +6,7 @@ import {
     Button,
     Flex,
     Modal,
+    Radio,
     Space,
     Table,
     Typography,
@@ -34,8 +35,12 @@ interface ScheduleImportModalProps {
     open: boolean;
     loading: boolean;
     errors: ScheduleImportError[];
+    mode: "create" | "mapping";
+    preview?: any;
     onClose: () => void;
     onSubmit: (file: File) => Promise<void>;
+    onModeChange: (mode: "create" | "mapping") => void;
+    onConfirmPreview: () => Promise<void>;
     onDownloadTemplate: (format: "csv" | "xlsx") => Promise<void>;
 }
 
@@ -43,8 +48,12 @@ const ScheduleImportModal = ({
     open,
     loading,
     errors,
+    mode,
+    preview,
     onClose,
     onSubmit,
+    onModeChange,
+    onConfirmPreview,
     onDownloadTemplate,
 }: ScheduleImportModalProps) => {
     const [fileList, setFileList] = useState<UploadFile[]>([]);
@@ -90,10 +99,10 @@ const ScheduleImportModal = ({
                             type="primary"
                             icon={<UploadOutlined />}
                             loading={loading}
-                            disabled={!selectedFile}
-                            onClick={() => selectedFile && onSubmit(selectedFile)}
+                            disabled={!selectedFile && !preview}
+                            onClick={() => preview ? onConfirmPreview() : selectedFile && onSubmit(selectedFile)}
                         >
-                            Import
+                            {preview ? 'Xác nhận cập nhật' : (mode === 'mapping' ? 'Xem trước' : 'Import')}
                         </Button>
                     </Space>
                 </Flex>
@@ -102,8 +111,18 @@ const ScheduleImportModal = ({
             <Alert
                 type="info"
                 showIcon
-                message="Mỗi dòng tương ứng một lịch học"
+                message={mode === 'mapping' ? "Import ghi đè mapping từng buổi" : "Mỗi dòng tương ứng một lịch học"}
                 description={
+                    mode === 'mapping' ? (
+                    <>
+                        File cần có <Typography.Text code>ID</Typography.Text> hoặc{" "}
+                        <Typography.Text code>key</Typography.Text> hoặc{" "}
+                        <Typography.Text code>Mã lớp + Buổi học</Typography.Text>, kèm{" "}
+                        <Typography.Text code>ID course</Typography.Text>,{" "}
+                        <Typography.Text code>ID Bài giảng</Typography.Text> và tùy chọn{" "}
+                        <Typography.Text code>ID package</Typography.Text>. Hệ thống chỉ ghi đè sau khi xác nhận preview.
+                    </>
+                    ) : (
                     <>
                         Dùng format Sheet vận hành với các cột{" "}
                         <Typography.Text code>ID course</Typography.Text>,{" "}
@@ -113,9 +132,20 @@ const ScheduleImportModal = ({
                         Hệ thống kiểm tra toàn bộ file với HMO trước khi tạo lịch;
                         nếu có một dòng lỗi thì không dòng nào được import.
                     </>
+                    )
                 }
                 style={{ marginBottom: 16 }}
             />
+            <Radio.Group
+                value={mode}
+                onChange={(event) => onModeChange(event.target.value)}
+                style={{ marginBottom: 16 }}
+                optionType="button"
+                buttonStyle="solid"
+            >
+                <Radio.Button value="create">Import tạo lịch</Radio.Button>
+                <Radio.Button value="mapping">Ghi đè mapping</Radio.Button>
+            </Radio.Group>
 
             <Upload.Dragger
                 accept=".xlsx,.csv"
@@ -173,6 +203,32 @@ const ScheduleImportModal = ({
                                     </Typography.Text>
                                 ),
                             },
+                        ]}
+                    />
+                </section>
+            )}
+            {preview && (
+                <section style={{ marginTop: 16 }}>
+                    <Alert
+                        type="info"
+                        showIcon
+                        message={`Preview ${preview.count || 0} bản ghi sẽ ghi đè mapping`}
+                        style={{ marginBottom: 12 }}
+                    />
+                    <Table
+                        size="small"
+                        rowKey={(record) => String(record)}
+                        pagination={false}
+                        dataSource={preview.updates || []}
+                        scroll={{ y: 260 }}
+                        columns={[
+                            {
+                                title: "Buổi",
+                                width: 160,
+                                render: (_, record: any) => `Buổi ${record.learn_number} - ${record.code}`,
+                            },
+                            { title: "Mapping hiện tại", dataIndex: "current_label" },
+                            { title: "Mapping mới", dataIndex: "next_label" },
                         ]}
                     />
                 </section>

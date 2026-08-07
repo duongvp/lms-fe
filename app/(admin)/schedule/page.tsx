@@ -17,8 +17,10 @@ import {
     downloadLivestreamImportTemplate,
     exportLivestreams,
     importLivestreamsFile,
+    previewLivestreamMappingImport,
     updateLivestream,
     updateLivestreamBulk,
+    updateLivestreamMappings,
 } from "@/services/livestreamService";
 import dayjs, { Dayjs } from "dayjs";
 import type { ModuleField, ResolvedFieldPermission } from "@/types/fieldPolicy";
@@ -205,24 +207,24 @@ const buildScheduleApiParams = (values: ScheduleFilterValues) => {
 };
 
 const lessonStatusText = (
-  startTime?: string,
-  endTime?: string
+    startTime?: string,
+    endTime?: string
 ) => {
-  if (!startTime || !endTime) return "-";
+    if (!startTime || !endTime) return "-";
 
-  const now = dayjs();
-  const start = dayjs(startTime);
-  const end = dayjs(endTime);
+    const now = dayjs();
+    const start = dayjs(startTime);
+    const end = dayjs(endTime);
 
-  if (now.isBefore(start)) {
-    return "Chưa bắt đầu";
-  }
+    if (now.isBefore(start)) {
+        return "Chưa bắt đầu";
+    }
 
-  if (now.isAfter(end)) {
-    return "Đã kết thúc";
-  }
+    if (now.isAfter(end)) {
+        return "Đã kết thúc";
+    }
 
-  return "Đang diễn ra";
+    return "Đang diễn ra";
 };
 
 const canModifySchedule = (record: ScheduleDataType) => {
@@ -317,9 +319,9 @@ const ScheduleFilterDrawer = ({
             width={360}
             footer={
                 <Space style={{ width: "100%", justifyContent: "flex-end" }}>
-                    <Button onClick={handleReset}>Reset</Button>
+                    <Button onClick={handleReset}>Xóa lọc</Button>
                     <Button type="primary" onClick={() => filterForm.submit()} loading={loading}>
-                        Search
+                        Tìm kiếm
                     </Button>
                 </Space>
             }
@@ -373,6 +375,9 @@ const Page = () => {
     const [openImportModal, setOpenImportModal] = useState(false);
     const [importing, setImporting] = useState(false);
     const [importErrors, setImportErrors] = useState<ScheduleImportError[]>([]);
+    const [importMode, setImportMode] = useState<"create" | "mapping">("create");
+    const [importMappingPreview, setImportMappingPreview] = useState<any | null>(null);
+    const [pendingMappingFile, setPendingMappingFile] = useState<File | null>(null);
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
     const [selectedRecord, setSelectedRecord] = useState<ScheduleDataType | null>(null);
@@ -554,6 +559,26 @@ const Page = () => {
     };
 
     const handleImportSchedule = async (file: File) => {
+        if (importMode === "mapping") {
+            // Bước 1: gọi preview endpoint, hiện preview rồi dừng lại
+            try {
+                setImporting(true);
+                setImportErrors([]);
+                setPendingMappingFile(file);
+                const response: any = await previewLivestreamMappingImport(file);
+                setImportMappingPreview(response?.data ?? null);
+            } catch (error: any) {
+                api.error({
+                    message: "Xem trước thất bại",
+                    description: error.message || "Không thể xem trước dữ liệu import.",
+                });
+            } finally {
+                setImporting(false);
+            }
+            return;
+        }
+
+        // Mode tạo lịch bình thường
         try {
             setImporting(true);
             setImportErrors([]);
@@ -561,11 +586,10 @@ const Page = () => {
             const summary = response?.data?.summary;
             api.success({
                 message: "Import thành công",
-                description: `Đã tạo ${response?.data?.count ?? 0} lịch học${
-                    summary?.hmoRequests !== undefined
-                        ? `, kiểm tra ${summary.hmoRequests} cặp Package/Course qua HMO`
-                        : ""
-                }.`,
+                description: `Đã tạo ${response?.data?.count ?? 0} lịch học${summary?.hmoRequests !== undefined
+                    ? `, kiểm tra ${summary.hmoRequests} cặp Package/Course qua HMO`
+                    : ""
+                    }.`,
             });
             setOpenImportModal(false);
             setSelectedRowKeys([]);
@@ -576,6 +600,33 @@ const Page = () => {
             api.error({
                 message: "Import thất bại",
                 description: error.message || "File import có dữ liệu không hợp lệ.",
+            });
+        } finally {
+            setImporting(false);
+        }
+    };
+
+    // Bước 2 (mapping mode): sau khi người dùng xác nhận preview, gọi API confirm
+    const handleConfirmMappingImport = async () => {
+        if (!pendingMappingFile) return;
+        try {
+            setImporting(true);
+            const response: any = await updateLivestreamMappings({
+                updates: importMappingPreview?.updates ?? [],
+            });
+            api.success({
+                message: "Cập nhật mapping thành công",
+                description: `Đã ghi đè mapping cho ${response?.data?.updated ?? importMappingPreview?.count ?? 0} buổi học.`,
+            });
+            setOpenImportModal(false);
+            setImportMappingPreview(null);
+            setPendingMappingFile(null);
+            setSelectedRowKeys([]);
+            await refreshSchedules();
+        } catch (error: any) {
+            api.error({
+                message: "Cập nhật thất bại",
+                description: error.message || "Không thể ghi đè mapping.",
             });
         } finally {
             setImporting(false);
@@ -762,14 +813,14 @@ const Page = () => {
             width:
                 fieldCode === "lesson_name" ? 250
                     : fieldCode === "lesson_document" ? 280
-                    : fieldCode === "lesson_link" ? 200
-                        : fieldCode === "teacher" ? 220
-                            : fieldCode === "assistant_teacher" ? 260
-                                : ["start_time", "end_time"].includes(fieldCode) ? 190
-                                    : fieldCode === "learn_number" ? 120
-                                        : fieldCode === "class_code" ? 120
-                                            : fieldCode === "subject" ? 120
-                                                : 150,
+                        : fieldCode === "lesson_link" ? 200
+                            : fieldCode === "teacher" ? 220
+                                : fieldCode === "assistant_teacher" ? 260
+                                    : ["start_time", "end_time"].includes(fieldCode) ? 190
+                                        : fieldCode === "learn_number" ? 120
+                                            : fieldCode === "class_code" ? 120
+                                                : fieldCode === "subject" ? 120
+                                                    : 150,
             sorter: SORTABLE_FIELDS.has(fieldCode)
                 ? { multiple: visibleFieldPermissions.length - columnIndex }
                 : false,
@@ -887,7 +938,7 @@ const Page = () => {
 
                 if (fieldCode === "lesson_document") return renderScheduleDocuments(text);
 
-             if (fieldCode === "lesson_status") {
+                if (fieldCode === "lesson_status") {
                     return (
                         <span>
                             {lessonStatusText(record.start_time, record.end_time)}
@@ -1027,16 +1078,16 @@ const Page = () => {
                     }}
                 >
                     <div style={{ minHeight: 0 }}>
-                        <div 
-                            style={{ 
-                                marginTop: 6, 
-                                paddingLeft: 24, 
-                                color: "rgba(0, 0, 0, 0.72)", 
-                                lineHeight: 1.55 
+                        <div
+                            style={{
+                                marginTop: 6,
+                                paddingLeft: 24,
+                                color: "rgba(0, 0, 0, 0.72)",
+                                lineHeight: 1.55
                             }}
                         >
-                          Theo dõi các buổi học theo lớp, giáo viên và khung giờ. Bạn có thể thêm lịch,
-                          dời lịch, nghỉ học, sửa nhanh từng dòng hoặc sửa hàng loạt những buổi chưa diễn ra.
+                            Theo dõi các buổi học theo lớp, giáo viên và khung giờ. Bạn có thể thêm lịch,
+                            dời lịch, nghỉ học, sửa nhanh từng dòng hoặc sửa hàng loạt những buổi chưa diễn ra.
                         </div>
                     </div>
                 </div>
@@ -1095,49 +1146,50 @@ const Page = () => {
                 style={{ flex: "1 1 0", minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}
             >
                 <div ref={tableContainerRef} style={{ flex: "1 1 0", minHeight: 0, overflow: "hidden" }}>
-                <CustomTable<ScheduleDataType>
-                    columns={columns}
-                    dataSource={filteredData}
-                    loading={loading}
-                    rowSelection={rowSelection}
-                    pagination={{
-                        current: currentPage,
-                        pageSize: pageSize,
-                        total: totalItems,
-                        showSizeChanger: true,
-                        position: ["bottomRight"],
-                        onChange: (page, size) => {
-                            setCurrentPage(page);
-                            setPageSize(size);
-                        }
-                    }}
-                    onChange={(_, __, sorter, extra) => {
-                        if (extra.action !== "sort") return;
-                        const sorterItems = (
-                            Array.isArray(sorter) ? sorter : [sorter]
-                        ) as SorterResult<ScheduleDataType>[];
-                        setSortState(
-                            sorterItems
-                                .filter((item) => item.field && item.order)
-                                .map((item) => ({
-                                    field: String(item.field),
-                                    order: item.order as "ascend" | "descend",
-                                }))
-                        );
-                        setCurrentPage(1);
-                    }}
-                    expandable={{
-                        expandedRowRender: (record) => <ScheduleDetailRow record={record} />,
-                        expandedRowKeys,
-                        onExpandedRowsChange: (keys) => setExpandedRowKeys([...keys]),
-                        expandRowByClick: true,
-                        columnWidth: 32,
-                    }}
-                    onRow={() => ({
-                        style: { cursor: editingKey ? "default" : "pointer" },
-                    })}
-                    scroll={{ x: "max-content", y: filteredData?.length > 5 ? tableScrollY : undefined }}
-                />
+                    <CustomTable<ScheduleDataType>
+                        columns={columns}
+                        dataSource={filteredData}
+                        loading={loading}
+                        rowSelection={rowSelection}
+                        pagination={{
+                            current: currentPage,
+                            pageSize: pageSize,
+                            total: totalItems,
+                            showSizeChanger: true,
+                            position: ["bottomRight"],
+                            showTotal: (total) => `Tổng ${total} buổi học`,
+                            onChange: (page, size) => {
+                                setCurrentPage(page);
+                                setPageSize(size);
+                            }
+                        }}
+                        onChange={(_, __, sorter, extra) => {
+                            if (extra.action !== "sort") return;
+                            const sorterItems = (
+                                Array.isArray(sorter) ? sorter : [sorter]
+                            ) as SorterResult<ScheduleDataType>[];
+                            setSortState(
+                                sorterItems
+                                    .filter((item) => item.field && item.order)
+                                    .map((item) => ({
+                                        field: String(item.field),
+                                        order: item.order as "ascend" | "descend",
+                                    }))
+                            );
+                            setCurrentPage(1);
+                        }}
+                        expandable={{
+                            expandedRowRender: (record) => <ScheduleDetailRow record={record} />,
+                            expandedRowKeys,
+                            onExpandedRowsChange: (keys) => setExpandedRowKeys([...keys]),
+                            expandRowByClick: true,
+                            columnWidth: 32,
+                        }}
+                        onRow={() => ({
+                            style: { cursor: editingKey ? "default" : "pointer" },
+                        })}
+                        scroll={{ x: "max-content", y: filteredData?.length > 5 ? tableScrollY : undefined }}
+                    />
                 </div>
                 <ScheduleFilterDrawer
                     open={openFilterDrawer}
@@ -1161,14 +1213,29 @@ const Page = () => {
                     open={openImportModal}
                     loading={importing}
                     errors={importErrors}
-                    onClose={() => setOpenImportModal(false)}
+                    mode={importMode}
+                    preview={importMappingPreview}
+                    onClose={() => {
+                        setOpenImportModal(false);
+                        setImportMappingPreview(null);
+                        setPendingMappingFile(null);
+                        setImportErrors([]);
+                    }}
                     onSubmit={handleImportSchedule}
+                    onModeChange={(mode) => {
+                        setImportMode(mode);
+                        setImportMappingPreview(null);
+                        setPendingMappingFile(null);
+                        setImportErrors([]);
+                    }}
+                    onConfirmPreview={handleConfirmMappingImport}
                     onDownloadTemplate={handleDownloadImportTemplate}
                 />
                 {/* Modal Sửa Hàng Loạt */}
                 <BulkEditModal
                     open={openBulkEditModal}
                     selectedRowKeys={selectedRowKeys}
+                    selectedRows={data.filter((item) => selectedRowKeys.map(String).includes(String(item.id)))}
                     onClose={() => setOpenBulkEditModal(false)}
                     onSuccess={async (modalPayload) => {
                         try {
@@ -1214,6 +1281,9 @@ const Page = () => {
                                     room: modalPayload.common_config.room,
                                     start_time: modalPayload.common_config.start_time,
                                     end_time: modalPayload.common_config.end_time,
+                                    ...(modalPayload.common_config.package_lesson_mappings?.length
+                                        ? { package_lesson_mappings: modalPayload.common_config.package_lesson_mappings }
+                                        : {}),
                                 };
                             } else if (modalPayload.config_mode === 'separate') {
                                 update_data = targetIds.map(id => {
@@ -1225,6 +1295,9 @@ const Page = () => {
                                         room: config.room,
                                         start_time: config.start_time,
                                         end_time: config.end_time,
+                                        ...(config.package_lesson_mappings?.length
+                                            ? { package_lesson_mappings: config.package_lesson_mappings }
+                                            : {}),
                                     }
                                 });
                             }

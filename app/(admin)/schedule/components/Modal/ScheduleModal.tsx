@@ -23,7 +23,7 @@ import TeachingStaffSelect from '@/components/shared/TeachingStaffSelect';
 
 const { Text, Title } = Typography;
 
-const FormSection = ({ title, children }: { title: string; children: React.ReactNode }) => {
+export const FormSection = ({ title, children }: { title: string; children: React.ReactNode }) => {
     return (
         <fieldset
             style={{
@@ -779,10 +779,10 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                             quickLessonForm.setFieldValue(
                                                                 'subject_code',
                                                                 selectedSubjectCode || buildLessonSubjectCode(
-                                                                        selectedSubject,
-                                                                        Number(selectedGrade),
-                                                                        getSuggestedSchoolYear()
-                                                                    )
+                                                                    selectedSubject,
+                                                                    Number(selectedGrade),
+                                                                    getSuggestedSchoolYear()
+                                                                )
                                                             );
                                                             setQuickLessonOpen(true);
                                                         }}
@@ -944,15 +944,15 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                 </Row>
                                 <Row gutter={24}>
                                     <Col span={24}>
-                                         <Form.Item label="Hệ thống" name="bulk_system_type" rules={[{ required: true, message: 'Chọn hệ thống' }]}>
-                                             <Select
-                                                 options={[
-                                                     { value: 'topclass', label: 'topclass' },
-                                                     { value: 'topuni', label: 'topuni' },
-                                                 ]}
-                                                 placeholder="Chọn hệ thống"
-                                             />
-                                         </Form.Item>
+                                        <Form.Item label="Hệ thống" name="bulk_system_type" rules={[{ required: true, message: 'Chọn hệ thống' }]}>
+                                            <Select
+                                                options={[
+                                                    { value: 'topclass', label: 'topclass' },
+                                                    { value: 'topuni', label: 'topuni' },
+                                                ]}
+                                                placeholder="Chọn hệ thống"
+                                            />
+                                        </Form.Item>
                                     </Col>
                                     <Col span={6}>
                                         <Form.Item label="Khối" name="bulk_grade" rules={[{ required: true, message: 'Chọn khối' }]}>
@@ -1027,8 +1027,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                 }))}
                                                 notFoundContent={
                                                     selectedBulkGrade &&
-                                                    selectedBulkSubjectCode &&
-                                                    !loadingBulkLessons
+                                                        selectedBulkSubjectCode &&
+                                                        !loadingBulkLessons
                                                         ? 'Chưa có bài học'
                                                         : undefined
                                                 }
@@ -1042,30 +1042,30 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                     selectedBulkSubjectCode &&
                                     !loadingBulkLessons &&
                                     bulkLessonOptions.length > 0 && (
-                                    <Alert
-                                        type="info"
-                                        showIcon
-                                        style={{ marginBottom: 16 }}
-                                        message={
-                                            latestScheduledBulkLesson
-                                                ? `Khóa ${selectedBulkCourseCode} đã xếp lịch đến Bài ${latestScheduledBulkLesson.learn_number}: ${latestScheduledBulkLesson.lesson_name}`
-                                                : `Khóa ${selectedBulkCourseCode} chưa có lịch học`
-                                        }
-                                        description={
-                                            latestScheduledBulkLesson
-                                                ? (
-                                                    suggestedBulkLesson
-                                                        ? `Bài ${latestScheduledBulkLesson.learn_number} đã được dạy ${Number(latestScheduledBulkLesson.scheduled_count)} buổi. Gợi ý bắt đầu từ Bài ${suggestedBulkLesson.learn_number}: ${suggestedBulkLesson.lesson_name}.`
-                                                        : `Bài ${latestScheduledBulkLesson.learn_number} đã được dạy ${Number(latestScheduledBulkLesson.scheduled_count)} buổi. Chưa có bài học tiếp theo trong danh mục; bạn có thể chọn lại một bài hoặc tạo thêm tại bước xem trước.`
-                                                )
-                                                : (
-                                                    suggestedBulkLesson
-                                                        ? `Gợi ý bắt đầu từ Bài ${suggestedBulkLesson.learn_number}: ${suggestedBulkLesson.lesson_name}.`
-                                                        : 'Chưa có bài học để xếp lịch.'
-                                                )
-                                        }
-                                    />
-                                )}
+                                        <Alert
+                                            type="info"
+                                            showIcon
+                                            style={{ marginBottom: 16 }}
+                                            message={
+                                                latestScheduledBulkLesson
+                                                    ? `Khóa ${selectedBulkCourseCode} đã xếp lịch đến Bài ${latestScheduledBulkLesson.learn_number}: ${latestScheduledBulkLesson.lesson_name}`
+                                                    : `Khóa ${selectedBulkCourseCode} chưa có lịch học`
+                                            }
+                                            description={
+                                                latestScheduledBulkLesson
+                                                    ? (
+                                                        suggestedBulkLesson
+                                                            ? `Bài ${latestScheduledBulkLesson.learn_number} đã được dạy ${Number(latestScheduledBulkLesson.scheduled_count)} buổi. Gợi ý bắt đầu từ Bài ${suggestedBulkLesson.learn_number}: ${suggestedBulkLesson.lesson_name}.`
+                                                            : `Bài ${latestScheduledBulkLesson.learn_number} đã được dạy ${Number(latestScheduledBulkLesson.scheduled_count)} buổi. Chưa có bài học tiếp theo trong danh mục; bạn có thể chọn lại một bài hoặc tạo thêm tại bước xem trước.`
+                                                    )
+                                                    : (
+                                                        suggestedBulkLesson
+                                                            ? `Gợi ý bắt đầu từ Bài ${suggestedBulkLesson.learn_number}: ${suggestedBulkLesson.lesson_name}.`
+                                                            : 'Chưa có bài học để xếp lịch.'
+                                                    )
+                                            }
+                                        />
+                                    )}
 
                                 <div style={{ marginBottom: 16 }}>
                                     <Radio.Group value={bulkConfigMode} onChange={(e) => setBulkConfigMode(e.target.value)}>

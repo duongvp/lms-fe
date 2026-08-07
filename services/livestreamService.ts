@@ -78,6 +78,32 @@ export const importLivestreamsFile = (file: File) => {
     }, "json", 120_000);
 };
 
+export const previewLivestreamMappingImport = (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return fetchInstance(`${API_BASE_URL}/mapping/import/preview`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+    }, "json", 120_000);
+};
+
+export const previewLivestreamMappingUpdates = (payload: any) =>
+    fetchInstance(`${API_BASE_URL}/mapping/preview`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+    });
+
+export const updateLivestreamMappings = (payload: any) =>
+    fetchInstance(`${API_BASE_URL}/mapping`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+    }, "json", 120_000);
+
 // Hàm mới: lấy danh sách lịch
 export interface LivestreamListParams {
     page?: number;

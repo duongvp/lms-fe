@@ -18,10 +18,12 @@ import {
     Tag,
     Card,
     Input,
+    Table,
 } from 'antd';
 import { EditOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import TeachingStaffSelect from '@/components/shared/TeachingStaffSelect';
+import { usePackageCoursesQuery } from '@/hooks/useLmsQueries';
 
 const { Text, Title } = Typography;
 
@@ -91,6 +93,7 @@ interface BulkEditModalProps {
     onClose: () => void;
     onSuccess: (updatedData: any) => void | Promise<void>;
     selectedRowKeys?: React.Key[]; // Danh sách ID/Bài học đã chọn từ Bảng
+    selectedRows?: any[];
 }
 
 export const BulkEditModal: React.FC<BulkEditModalProps> = ({
@@ -98,9 +101,28 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     onClose,
     onSuccess,
     selectedRowKeys = [],
+    selectedRows = [],
 }) => {
     const [form] = Form.useForm();
     const [loading, setLoading] = React.useState(false);
+    const [previewRows, setPreviewRows] = React.useState<any[]>([]);
+    const packageCoursesQuery = usePackageCoursesQuery();
+    const packageCourses = packageCoursesQuery.data?.data ?? [];
+    const courseOptions = React.useMemo(() => Array.from(
+        packageCourses.reduce((groups: Map<string, any>, item: any) => {
+            const current = groups.get(item.course_id) ?? {
+                course_id: item.course_id,
+                course_name: item.course_name,
+                package_ids: [] as string[],
+            };
+            if (!current.package_ids.includes(item.package_id)) current.package_ids.push(item.package_id);
+            groups.set(item.course_id, current);
+            return groups;
+        }, new Map<string, any>()).values()
+    ).map((item: any) => ({
+        value: item.course_id,
+        label: `${item.course_id}${item.course_name ? ` - ${item.course_name}` : ''} (Gói ${item.package_ids.join(', ')})`,
+    })), [packageCourses]);
 
     // Form Watchers
     const configMode = Form.useWatch('config_mode', form) || 'common';
@@ -110,15 +132,86 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     // Tự động set giá trị mặc định khi mở Modal
     useEffect(() => {
         if (open) {
+            const separateConfig: Record<string, any> = {};
+            selectedRows.forEach((row) => {
+                let mappings = row.package_lesson_mappings || [];
+                if (mappings.length === 0) {
+                    mappings = [{ lesson_ids: [] }];
+                } else {
+                    mappings = mappings.map((m: any) => ({
+                        course_id: m.course_id,
+                        lesson_ids: m.lesson_ids || (m.lesson_id ? [m.lesson_id] : []),
+                    }));
+                }
+                
+                separateConfig[row.id] = {
+                    start_time: row.start_time ? dayjs(row.start_time, 'HH:mm') : undefined,
+                    end_time: row.end_time ? dayjs(row.end_time, 'HH:mm') : undefined,
+                    teacher: row.teacher?.username,
+                    assistant_teacher: Array.isArray(row.assistant_teacher) 
+                        ? row.assistant_teacher.map((a: any) => a.username) 
+                        : (row.assistant_teacher?.username ? [row.assistant_teacher.username] : []),
+                    room: row.room,
+                    package_lesson_mappings: mappings,
+                };
+            });
+
+            let commonConfig: Record<string, any> = {};
+            if (selectedRows.length > 0) {
+                const firstRow = selectedRows[0];
+                const allSameTeacher = selectedRows.every(r => r.teacher?.username === firstRow.teacher?.username);
+                const allSameRoom = selectedRows.every(r => r.room === firstRow.room);
+                const allSameStartTime = selectedRows.every(r => r.start_time === firstRow.start_time);
+                const allSameEndTime = selectedRows.every(r => r.end_time === firstRow.end_time);
+
+                if (allSameTeacher) {
+                    commonConfig.common_teacher = firstRow.teacher?.username;
+                }
+                if (allSameRoom) {
+                    commonConfig.common_room = firstRow.room;
+                }
+                if (allSameStartTime && firstRow.start_time) {
+                    commonConfig.common_start_time = dayjs(firstRow.start_time, 'HH:mm');
+                }
+                if (allSameEndTime && firstRow.end_time) {
+                    commonConfig.common_end_time = dayjs(firstRow.end_time, 'HH:mm');
+                }
+
+                const firstAssistant = Array.isArray(firstRow.assistant_teacher) 
+                        ? firstRow.assistant_teacher.map((a: any) => a.username).sort().join(',') 
+                        : (firstRow.assistant_teacher?.username || '');
+                const allSameAssistant = selectedRows.every(r => {
+                    const ast = Array.isArray(r.assistant_teacher) 
+                        ? r.assistant_teacher.map((a: any) => a.username).sort().join(',') 
+                        : (r.assistant_teacher?.username || '');
+                    return ast === firstAssistant;
+                });
+                
+                if (allSameAssistant) {
+                    commonConfig.common_assistant_teacher = Array.isArray(firstRow.assistant_teacher) 
+                        ? firstRow.assistant_teacher.map((a: any) => a.username) 
+                        : (firstRow.assistant_teacher?.username ? [firstRow.assistant_teacher.username] : []);
+                }
+
+                // If exactly 1 row is selected, prefill mapping too
+                if (selectedRows.length === 1) {
+                    commonConfig.common_package_lesson_mappings = separateConfig[firstRow.id]?.package_lesson_mappings;
+                }
+            }
+
             form.setFieldsValue({
                 config_mode: 'common',
                 selected_lessons: selectedRowKeys,
+                separate_config: separateConfig,
+                ...commonConfig,
             });
+            setPreviewRows([]);
         }
-    }, [open, selectedRowKeys, form]);
+    }, [open, selectedRowKeys, selectedRows, form]);
 
     const handleClose = () => {
         form.resetFields();
+        setPreviewRows([]);
         onClose();
     };
 
@@ -153,6 +246,25 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         void form.validateFields([endFieldName]);
     };
 
+    const normalizeMappings = (mappings: any[] = []) => mappings
+        .map((mapping) => ({
+            course_id: String(mapping?.course_id ?? '').trim(),
+            lesson_ids: (mapping?.lesson_ids ?? [])
+                .map((lessonId: unknown) => String(lessonId).trim())
+                .filter(Boolean),
+        }))
+        .filter((mapping) => mapping.course_id && mapping.lesson_ids.length > 0);
+
+    const formatMappings = (mappings: any[] = []) => {
+        const rows = mappings.flatMap((mapping) => {
+            const packageText = mapping.package_id ? `Package ${mapping.package_id} → ` : '';
+            const courseId = mapping.course_id || '-';
+            const lessonIds = mapping.lesson_ids ?? (mapping.lesson_id ? [mapping.lesson_id] : []);
+            return lessonIds.map((lessonId: string) => `${packageText}Course ${courseId} → Lesson ${lessonId}`);
+        });
+        return rows.length ? rows.join('; ') : 'Chưa mapping';
+    };
+
     const handleFinish = async (values: any) => {
         try {
             setLoading(true);
@@ -167,8 +279,27 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         ...config,
                         start_time: config.start_time ? dayjs(config.start_time).format('HH:mm') : undefined,
                         end_time: config.end_time ? dayjs(config.end_time).format('HH:mm') : undefined,
+                        package_lesson_mappings: normalizeMappings(config.package_lesson_mappings),
                     };
                 });
+            }
+
+            if (previewRows.length === 0) {
+                setPreviewRows((selectedLessons as (string | number)[]).map((lessonKey) => {
+                    const record = selectedRows.find((item) => String(item.id) === String(lessonKey));
+                    const nextMappings = values.config_mode === 'separate'
+                        ? normalizeMappings(values.separate_config?.[lessonKey]?.package_lesson_mappings)
+                        : normalizeMappings(values.common_package_lesson_mappings);
+                    const isMappingUnchanged = values.config_mode === 'common' && !values.enable_mapping;
+                    
+                    return {
+                        id: lessonKey,
+                        label: record?.learn_number ? `Buổi ${record.learn_number}` : `ID ${lessonKey}`,
+                        current: formatMappings(record?.package_lesson_mappings || []),
+                        next: isMappingUnchanged ? 'Giữ nguyên' : (nextMappings.length ? formatMappings(nextMappings) : 'Xóa toàn bộ mapping'),
+                    };
+                }));
+                return;
             }
 
             const payload = {
@@ -185,6 +316,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     room: values.enable_room ? values.common_room : undefined,
                     start_time: values.enable_time && values.common_start_time ? dayjs(values.common_start_time).format('HH:mm') : undefined,
                     end_time: values.enable_time && values.common_end_time ? dayjs(values.common_end_time).format('HH:mm') : undefined,
+                    package_lesson_mappings: values.enable_mapping ? normalizeMappings(values.common_package_lesson_mappings) : undefined,
                 } : undefined,
                 separate_config: formattedSeparateConfig,
             };
@@ -223,7 +355,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     loading={loading}
                     icon={<EditOutlined />}
                 >
-                    Áp dụng thay đổi
+                    {previewRows.length ? 'Xác nhận cập nhật' : 'Xem trước'}
                 </Button>
             ]}
         >
@@ -237,6 +369,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     enable_assistant: false,
                     enable_time: true,
                     enable_room: false,
+                    enable_mapping: false,
                 }}
             >
                 {/* Banner thông tin phạm vi áp dụng */}
@@ -434,6 +567,59 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                 </Form.Item>
                             </Col>
                         </Row>
+                        <Divider style={{ margin: '12px 0' }} />
+                        <Row gutter={16} align="top" style={{ marginBottom: 8 }}>
+                            <Col span={8}>
+                                <Form.Item name="enable_mapping" valuePropName="checked" style={{ marginBottom: 0 }}>
+                                    <Checkbox><Text strong>Đổi Mapping</Text></Checkbox>
+                                </Form.Item>
+                                <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
+                                    Nếu nhập, mapping mới sẽ ghi đè cho tất cả bài đã chọn.
+                                </Text>
+                            </Col>
+                            <Col span={16}>
+                                <Form.Item noStyle dependencies={['enable_mapping']}>
+                                    {({ getFieldValue }) => {
+                                        const enabled = getFieldValue('enable_mapping');
+                                        return (
+                                            <div style={{ opacity: enabled ? 1 : 0.5, pointerEvents: enabled ? 'auto' : 'none' }}>
+                                                <Form.List name="common_package_lesson_mappings" initialValue={[{ lesson_ids: [] }]}>
+                                                    {(fields, { add, remove }) => (
+                                                        <Space direction="vertical" style={{ width: '100%' }}>
+                                                            {fields.map((field, index) => (
+                                                                <div key={field.key} style={{ background: '#fff', padding: '12px', border: '1px solid #d9d9d9', borderRadius: '6px', position: 'relative' }}>
+                                                                    <Row gutter={12}>
+                                                                        <Col span={12}>
+                                                                            <Form.Item label="Course ID" name={[field.name, 'course_id']} style={{ marginBottom: 0 }}>
+                                                                                <Select options={courseOptions} showSearch optionFilterProp="label" placeholder="Chọn Course ID" disabled={!enabled} popupMatchSelectWidth={false} />
+                                                                            </Form.Item>
+                                                                        </Col>
+                                                                        <Col span={12}>
+                                                                            <Form.Item label="Lesson ID" name={[field.name, 'lesson_ids']} style={{ marginBottom: 0 }}>
+                                                                                <Select mode="tags" tokenSeparators={[',', ' ']} placeholder="Nhập Lesson ID" disabled={!enabled} />
+                                                                            </Form.Item>
+                                                                        </Col>
+                                                                    </Row>
+                                                                    <Button 
+                                                                        type="text" 
+                                                                        danger 
+                                                                        icon={<CloseCircleOutlined />} 
+                                                                        onClick={() => remove(field.name)} 
+                                                                        disabled={fields.length === 1 || !enabled} 
+                                                                        style={{ position: 'absolute', top: 4, right: 4 }}
+                                                                    />
+                                                                </div>
+                                                            ))}
+                                                            <Button type="dashed" onClick={() => add({ lesson_ids: [] })} block disabled={!enabled}>+ Thêm Course ID</Button>
+                                                        </Space>
+                                                    )}
+                                                </Form.List>
+                                            </div>
+                                        );
+                                    }}
+                                </Form.Item>
+                            </Col>
+                        </Row>
                     </Card>
                 )}
 
@@ -516,12 +702,67 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                     >
                                         <TeachingStaffSelect teacherType={2} mode="multiple" showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" />
                                     </Form.Item>
+                                    <Form.List name={['separate_config', lessonKey, 'package_lesson_mappings']} initialValue={[{ lesson_ids: [] }]}>
+                                        {(fields, { add, remove }) => (
+                                            <div style={{ marginTop: 12, padding: 12, background: '#f5f5f5', borderRadius: 6 }}>
+                                                <Text strong style={{ display: 'block', marginBottom: 8 }}>Mapping Package / Course / Lesson</Text>
+                                                <Space direction="vertical" style={{ width: '100%' }}>
+                                                    {fields.map((field) => (
+                                                        <div key={field.key} style={{ background: '#fff', padding: '12px', border: '1px solid #d9d9d9', borderRadius: '6px', position: 'relative' }}>
+                                                            <Row gutter={12}>
+                                                                <Col span={12}>
+                                                                    <Form.Item label="Course ID" name={[field.name, 'course_id']} style={{ marginBottom: 0 }}>
+                                                                        <Select options={courseOptions} showSearch optionFilterProp="label" placeholder="Chọn Course ID" popupMatchSelectWidth={false} />
+                                                                    </Form.Item>
+                                                                </Col>
+                                                                <Col span={12}>
+                                                                    <Form.Item label="Lesson ID" name={[field.name, 'lesson_ids']} style={{ marginBottom: 0 }}>
+                                                                        <Select mode="tags" tokenSeparators={[',', ' ']} placeholder="Nhập Lesson ID" />
+                                                                    </Form.Item>
+                                                                </Col>
+                                                            </Row>
+                                                            <Button 
+                                                                type="text" 
+                                                                danger 
+                                                                icon={<CloseCircleOutlined />} 
+                                                                onClick={() => remove(field.name)} 
+                                                                disabled={fields.length === 1} 
+                                                                style={{ position: 'absolute', top: 4, right: 4 }}
+                                                            />
+                                                        </div>
+                                                    ))}
+                                                    <Button type="dashed" onClick={() => add({ lesson_ids: [] })} block>+ Thêm Course ID</Button>
+                                                </Space>
+                                            </div>
+                                        )}
+                                    </Form.List>
                                 </Card>
                             ))
                         ) : (
                             <Text type="secondary">Vui lòng chọn ít nhất 1 bài học từ Bảng ở trên.</Text>
                         )}
                     </div>
+                )}
+                {previewRows.length > 0 && (
+                    <Alert
+                        type="info"
+                        showIcon
+                        style={{ marginTop: 16 }}
+                        message="Preview mapping trước khi cập nhật"
+                        description={
+                            <Table
+                                size="small"
+                                pagination={false}
+                                rowKey="id"
+                                dataSource={previewRows}
+                                columns={[
+                                    { title: 'Buổi', dataIndex: 'label', width: 120 },
+                                    { title: 'Mapping hiện tại', dataIndex: 'current' },
+                                    { title: 'Mapping mới', dataIndex: 'next' },
+                                ]}
+                            />
+                        }
+                    />
                 )}
             </Form>
         </Modal>

@@ -174,64 +174,65 @@ const LessonTable = ({
             onDragOver={handleRowDragOver}
             onDragEnd={stopAutoScroll}
         >
-        <CustomTable<LessonDataType>
-            columns={columns}
-            dataSource={data}
-            loading={loading}
-            rowSelection={reorderMode ? undefined : {
-                selectedRowKeys,
-                onChange: onSelectionChange,
-                columnWidth: 32,
-            }}
-            onRow={(record) => ({
-                draggable: reorderMode,
-                onDragStart: (event) => {
-                    event.dataTransfer.effectAllowed = "move";
-                    onDragStart(record.key);
-                },
-                onDragOver: handleRowDragOver,
-                onDragEnd: stopAutoScroll,
-                onDrop: () => {
-                    stopAutoScroll();
-                    onDrop(record.key);
-                },
-                style: reorderMode
-                    ? {
-                        cursor: "grab",
-                        backgroundColor: dragRowKey === record.key
-                            ? "rgba(22, 119, 255, 0.06)"
-                            : undefined,
-                    }
-                    : { cursor: "pointer" },
-            })}
-            expandable={reorderMode ? undefined : {
-                expandedRowRender: (record) => (
-                    <LessonDetailRow record={record} visibleFieldCodes={visibleFormFieldCodes} />
-                ),
-                expandRowByClick: true,
-                columnWidth: 32,
-            }}
-            pagination={reorderMode ? false : {
-                current: currentPage,
-                pageSize,
-                total: totalItems,
-                showSizeChanger: true,
-                position: ["bottomRight"],
-                onChange: onPageChange,
-            }}
-            onChange={(_, __, sorter, extra) => {
-                if (extra.action !== "sort") return;
-                const activeSorter = Array.isArray(sorter)
-                    ? sorter[0]
-                    : sorter as SorterResult<LessonDataType>;
-                const field = activeSorter?.field ? String(activeSorter.field) : undefined;
-                onSortChange({
-                    sort_by: field && SORTABLE_FIELDS.has(field) ? field : undefined,
-                    sort_order: activeSorter?.order || undefined,
-                });
-            }}
-            scroll={{ x: "max-content", y: scrollY }}
-        />
+            <CustomTable<LessonDataType>
+                columns={columns}
+                dataSource={data}
+                loading={loading}
+                rowSelection={reorderMode ? undefined : {
+                    selectedRowKeys,
+                    onChange: onSelectionChange,
+                    columnWidth: 32,
+                }}
+                onRow={(record) => ({
+                    draggable: reorderMode,
+                    onDragStart: (event) => {
+                        event.dataTransfer.effectAllowed = "move";
+                        onDragStart(record.key);
+                    },
+                    onDragOver: handleRowDragOver,
+                    onDragEnd: stopAutoScroll,
+                    onDrop: () => {
+                        stopAutoScroll();
+                        onDrop(record.key);
+                    },
+                    style: reorderMode
+                        ? {
+                            cursor: "grab",
+                            backgroundColor: dragRowKey === record.key
+                                ? "rgba(22, 119, 255, 0.06)"
+                                : undefined,
+                        }
+                        : { cursor: "pointer" },
+                })}
+                expandable={reorderMode ? undefined : {
+                    expandedRowRender: (record) => (
+                        <LessonDetailRow record={record} visibleFieldCodes={visibleFormFieldCodes} />
+                    ),
+                    expandRowByClick: true,
+                    columnWidth: 32,
+                }}
+                pagination={reorderMode ? false : {
+                    current: currentPage,
+                    pageSize,
+                    total: totalItems,
+                    showSizeChanger: true,
+                    position: ["bottomRight"],
+                    showTotal: (total) => `Tổng ${total} bài học`,
+                    onChange: onPageChange,
+                }}
+                onChange={(_, __, sorter, extra) => {
+                    if (extra.action !== "sort") return;
+                    const activeSorter = Array.isArray(sorter)
+                        ? sorter[0]
+                        : sorter as SorterResult<LessonDataType>;
+                    const field = activeSorter?.field ? String(activeSorter.field) : undefined;
+                    onSortChange({
+                        sort_by: field && SORTABLE_FIELDS.has(field) ? field : undefined,
+                        sort_order: activeSorter?.order || undefined,
+                    });
+                }}
+                scroll={{ x: "max-content", y: scrollY }}
+            />
         </div>
     );
 };
