@@ -54,7 +54,7 @@ export const menuConfig: IMenuItem[] = [
     {
         key: "4",
         icon: <BookOutlined />,
-        label: "Quản lý nội dung",
+        label: "Quản lý đề cương",
         path: "/lessons",
         permission: PermissionKey.LESSON_VIEW,
     },

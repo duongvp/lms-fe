@@ -22,9 +22,6 @@ import {
 } from "@ant-design/icons";
 import type { ModuleField } from "@/types/fieldPolicy";
 import type { LessonApiResponse, LessonPayload } from "@/services/lessonService";
-import { GRADE_OPTIONS } from "@/constants/subjects";
-import { useLessonSubjectOptions } from "@/hooks/useLessonSubjectOptions";
-import { buildLessonSubjectCode, getSuggestedSchoolYear } from "@/helper/lesson";
 
 const { Text, Title } = Typography;
 
@@ -56,11 +53,6 @@ export const FIELD_LABELS = Object.fromEntries(
 const emptyToNull = (value?: string | null) => {
     const trimmed = typeof value === "string" ? value.trim() : "";
     return trimmed || null;
-};
-
-const getSchoolYearFromSubjectCode = (subjectCode?: string) => {
-    const match = String(subjectCode || "").match(/-(\d{4})$/);
-    return match ? Number(match[1]) : undefined;
 };
 
 type LessonDocumentValue = {
@@ -150,6 +142,11 @@ interface LessonFormModalProps {
     loading: boolean;
     visibleFieldCodes: string[];
     editableFieldCodes: string[];
+    programContext: {
+        grade?: number;
+        subject_code?: string;
+        subject_name?: string;
+    };
     onClose: () => void;
     onSubmit: (values: LessonPayload) => Promise<void>;
 }
@@ -160,10 +157,10 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
     loading,
     visibleFieldCodes,
     editableFieldCodes,
+    programContext,
     onClose,
     onSubmit,
 }) => {
-    const subjectOptions = useLessonSubjectOptions();
     const [form] = Form.useForm();
 
     useEffect(() => {
@@ -171,14 +168,13 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
         if (record) {
             form.setFieldsValue({
                 ...record,
-                school_year: getSchoolYearFromSubjectCode(record.subject_code),
                 lesson_documents: parseLessonDocuments(record.lesson_document),
             });
         } else {
             form.resetFields();
-            form.setFieldValue("school_year", getSuggestedSchoolYear());
+            form.setFieldsValue(programContext);
         }
-    }, [form, open, record]);
+    }, [form, open, record, programContext.grade, programContext.subject_code, programContext.subject_name]);
 
     const canView = (fieldCode: string) => visibleFieldCodes.includes(fieldCode);
     const canEdit = (fieldCode: string) => editableFieldCodes.includes(fieldCode);
@@ -211,71 +207,13 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
             <Form
                 form={form}
                 layout="vertical"
-                onValuesChange={(changedValues, allValues) => {
-                    if (record) return;
-                    if (
-                        !Object.hasOwn(changedValues, "grade")
-                        && !Object.hasOwn(changedValues, "subject_name")
-                        && !Object.hasOwn(changedValues, "school_year")
-                    ) return;
-                    const generatedCode = buildLessonSubjectCode(
-                        allValues.subject_name,
-                        Number(allValues.grade),
-                        Number(allValues.school_year)
-                    );
-                    if (generatedCode) form.setFieldValue("subject_code", generatedCode);
-                }}
                 onFinish={(values) => onSubmit(toLessonPayload(values))}
             >
                 <FormSection title="Thông tin cơ bản">
+                    <Form.Item name="grade" hidden><InputNumber /></Form.Item>
+                    <Form.Item name="subject_name" hidden><Input /></Form.Item>
+                    <Form.Item name="subject_code" hidden><Input /></Form.Item>
                     <Row gutter={12}>
-                        {canView("grade") && (
-                            <Col xs={24} md={8}>
-                                <Form.Item name="grade" label="Khối" rules={[{ required: true, message: "Chọn khối" }]}>
-                                    <Select
-                                        disabled={Boolean(record) || !canEdit("grade")}
-                                        options={GRADE_OPTIONS}
-                                        placeholder="Chọn khối"
-                                    />
-                                </Form.Item>
-                            </Col>
-                        )}
-
-                        {canView("subject_name") && (
-                            <Col xs={24} md={8}>
-                                <Form.Item name="subject_name" label="Môn học" rules={[{ required: true, message: "Chọn môn học" }]}>
-                                    <Select
-                                        disabled={Boolean(record) || !canEdit("subject_name")}
-                                        options={subjectOptions}
-                                        placeholder="Chọn môn học"
-                                        showSearch
-                                        optionFilterProp="label"
-                                    />
-                                </Form.Item>
-                            </Col>
-                        )}
-
-                        {canView("subject_code") && (
-                            <>
-                                <Col xs={24} md={8}>
-                                    <Form.Item
-                                        name="school_year"
-                                        label="Năm học"
-                                        rules={record ? [] : [{ required: true, message: "Nhập năm học" }]}
-                                    >
-                                        <InputNumber
-                                            min={2000}
-                                            max={2200}
-                                            precision={0}
-                                            style={{ width: "100%" }}
-                                            placeholder="2027"
-                                            disabled={Boolean(record) || !canEdit("subject_code")}
-                                        />
-                                    </Form.Item>
-                                </Col>
-                            </>
-                        )}
-
                         {record && canView("learn_number") && (
                             <Col xs={24} md={4}>
                                 <Form.Item name="learn_number" label="Số thứ tự bài">
@@ -285,21 +223,8 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
                         )}
                     </Row>
                     <Row gutter={12}>
-                        <Col xs={12}>
-                            <Form.Item
-                                name="subject_code"
-                                label="Mã môn học"
-                                rules={[{ required: true, whitespace: true, message: "Nhập mã môn học" }]}
-                            >
-                                <Input
-                                    maxLength={100}
-                                    placeholder="nguvan-6-2027"
-                                    disabled={Boolean(record) || !canEdit("subject_code")}
-                                />
-                            </Form.Item>
-                        </Col>
                         {canView("lesson_name") && (
-                            <Col xs={12}>
+                            <Col xs={24}>
                                 <Form.Item name="lesson_name" label="Tên bài học" rules={[{ required: true, message: "Nhập tên bài học" }]}>
                                     <Input
                                         maxLength={400}
@@ -311,7 +236,7 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
                     </Row>
                 </FormSection>
 
-                <FormSection title="Nội dung & Tài liệu học tập">
+                {/* <FormSection title="Nội dung & Tài liệu học tập">
                     <Tabs
                         defaultActiveKey="1"
                         type="card"
@@ -466,7 +391,7 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
                             },
                         ]}
                     />
-                </FormSection>
+                </FormSection> */}
             </Form>
         </Modal>
     );

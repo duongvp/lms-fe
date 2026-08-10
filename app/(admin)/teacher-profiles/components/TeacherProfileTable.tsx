@@ -6,9 +6,9 @@ import {
     Popconfirm,
     Space,
     Switch,
-    Table,
     Tag,
 } from 'antd';
+import CustomTable from '@/components/ui/Table';
 import {
     DeleteOutlined,
     EditOutlined,
@@ -106,7 +106,7 @@ const TeacherProfileTable = ({
                 overflow: 'hidden',
             }}
         >
-            <Table<TeacherProfile>
+            <CustomTable<TeacherProfile>
                 rowKey={(record) =>
                     String(record.id)
                 }

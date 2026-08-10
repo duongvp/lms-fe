@@ -3,7 +3,7 @@
 import useSWR, { useSWRConfig } from "swr";
 import { useAuthStore } from "@/stores/authStore";
 import { getLessons, type LessonListParams } from "@/services/lessonService";
-import { getLivestreams, type LivestreamListParams } from "@/services/livestreamService";
+import { getLivestreams, getSchedulingPrograms, type LivestreamListParams } from "@/services/livestreamService";
 import { getModuleFields } from "@/services/roleService";
 import { getTeachingStaffOptions, type TeacherType } from "@/services/teacherProfileService";
 import { getPackageCourses } from "@/services/packageCourseService";
@@ -29,6 +29,15 @@ export const useSchedulesQuery = (params: LivestreamListParams | null) => {
     );
 };
 
+export const useSchedulingProgramsQuery = () => {
+    const userId = useUserId();
+    return useSWR(
+        swrKeys.schedulePrograms(userId),
+        getSchedulingPrograms,
+        { dedupingInterval: 5 * 60_000 }
+    );
+};
+
 export const useModuleFieldsQuery = (moduleCode: string) => {
     const userId = useUserId();
     return useSWR(
@@ -47,10 +56,10 @@ export const useTeachingStaffQuery = (teacherType: TeacherType) => {
     );
 };
 
-export const usePackageCoursesQuery = () => {
+export const usePackageCoursesQuery = (enabled = true) => {
     const userId = useUserId();
     return useSWR(
-        swrKeys.packageCourses(userId),
+        enabled ? swrKeys.packageCourses(userId) : null,
         () => getPackageCourses(),
         { dedupingInterval: 5 * 60_000 }
     );

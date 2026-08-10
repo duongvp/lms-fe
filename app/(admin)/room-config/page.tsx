@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  Table,
+  Table as AntTable,
   Card,
   Button,
   Input,
@@ -52,6 +52,7 @@ import type { QuizClassOption, QuizLessonOption } from "@/services/quizService";
 import { buildLessonSelectOptions } from "@/app/(admin)/quizzes/quiz.utils";
 import { FormSection } from "../schedule/components/Modal/ScheduleModal";
 import TeachingStaffSelect from "@/components/shared/TeachingStaffSelect";
+import CustomTable from "@/components/ui/Table";
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -640,7 +641,7 @@ export default function RoomConfigPage() {
             </Button>
           </Col>
         </Row>
-        <Table
+        <CustomTable
           columns={columns}
           dataSource={data}
           rowKey={(record) => `${record.code}_${record.learn_number}`}
@@ -989,7 +990,7 @@ export default function RoomConfigPage() {
               showIcon
               style={{ marginBottom: 12 }}
             />
-            <Table
+            <AntTable
               size="small"
               dataSource={importRows}
               rowKey={(r, idx) => `${r.code}_${r.learn_number}_${idx}`}

@@ -9,6 +9,7 @@ import {
     Button,
     Card,
     Col,
+    DatePicker,
     Empty,
     Flex,
     List,
@@ -37,7 +38,7 @@ import {
     UserOutlined,
 } from '@ant-design/icons';
 import { Column } from '@ant-design/charts';
-import dayjs from 'dayjs';
+import dayjs, { Dayjs } from 'dayjs';
 import { DashboardOverview, getDashboardOverview } from '@/services/dashboardService';
 import { useAuthStore } from '@/stores/authStore';
 import { PermissionKey } from '@/types/permissions';
@@ -55,6 +56,8 @@ const EMPTY_DASHBOARD: DashboardOverview = {
         teachers: 0,
         assistants: 0,
         adminUsers: 0,
+        outlinesWithQuiz: 0,
+        outlinesWithoutQuiz: 0,
     },
     today: { total: 0, upcoming: 0, ongoing: 0, completed: 0, cancelled: 0 },
     nextSevenDays: [],
@@ -114,19 +117,26 @@ const Page: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState('');
+    const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>([
+        dayjs().startOf('week'),
+        dayjs().endOf('week'),
+    ]);
 
     const loadDashboard = useCallback(async (manual = false) => {
         manual ? setRefreshing(true) : setLoading(true);
         setError('');
         try {
-            setData(await getDashboardOverview());
+            setData(await getDashboardOverview({
+                from: dateRange[0].startOf('day').format('YYYY-MM-DDTHH:mm:ss.SSS[Z]'),
+                to: dateRange[1].endOf('day').format('YYYY-MM-DDTHH:mm:ss.SSS[Z]'),
+            }));
         } catch (loadError: any) {
             setError(loadError?.message || 'Không thể tải dữ liệu tổng quan.');
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    }, []);
+    }, [dateRange]);
 
     useEffect(() => {
         void loadDashboard();
@@ -198,6 +208,18 @@ const Page: React.FC = () => {
                         </Text>
                     </div>
                     <Flex vertical align="flex-end" gap={8}>
+                        <DatePicker.RangePicker
+                            value={dateRange}
+                            allowClear={false}
+                            format="DD/MM/YYYY"
+                            presets={[
+                                { label: 'Tuần này', value: [dayjs().startOf('week'), dayjs().endOf('week')] },
+                                { label: 'Tháng này', value: [dayjs().startOf('month'), dayjs().endOf('month')] },
+                            ]}
+                            onChange={(value) => {
+                                if (value?.[0] && value?.[1]) setDateRange([value[0], value[1]]);
+                            }}
+                        />
                         <Button
                             icon={<ReloadOutlined spin={refreshing} />}
                             onClick={() => void loadDashboard(true)}
@@ -233,6 +255,12 @@ const Page: React.FC = () => {
                             <SummaryCard title="Khóa học" value={data.summary.courses} description="Có lịch trên hệ thống" icon={<CalendarOutlined />} color="#1677ff" />
                         </Col>
                         <Col xs={24} sm={12} xl={6}>
+                            <SummaryCard title="Đề cương đã gán Quiz" value={data.summary.outlinesWithQuiz} description="Trong khoảng thời gian đã chọn" icon={<CheckCircleOutlined />} color="#52c41a" />
+                        </Col>
+                        <Col xs={24} sm={12} xl={6}>
+                            <SummaryCard title="Đề cương chưa gán Quiz" value={data.summary.outlinesWithoutQuiz} description="Cần bổ sung Quiz" icon={<ExclamationCircleOutlined />} color="#ff4d4f" />
+                        </Col>
+                        <Col xs={24} sm={12} xl={6}>
                             <SummaryCard title="Nội dung bài học" value={data.summary.lessons} description="Bài học đang hoạt động" icon={<BookOutlined />} color="#722ed1" />
                         </Col>
                         <Col xs={24} sm={12} xl={6}>
@@ -251,7 +279,7 @@ const Page: React.FC = () => {
 
                     <Row gutter={[16, 16]}>
                         <Col xs={24} xl={9}>
-                            <Card title="Lịch học hôm nay" className={styles.panelCard} extra={<Tag color="blue">{data.today.total} buổi</Tag>}>
+                            <Card title="Lịch học trong khoảng đã chọn" className={styles.panelCard} extra={<Tag color="blue">{data.today.total} buổi</Tag>}>
                                 <div className={styles.todayLead}>
                                     <Progress
                                         type="dashboard"
@@ -270,7 +298,7 @@ const Page: React.FC = () => {
                             </Card>
                         </Col>
                         <Col xs={24} xl={15}>
-                            <Card title="Lịch học trong 7 ngày tới" className={styles.panelCard} extra={<Text type="secondary">Theo ngày</Text>}>
+                            <Card title="Biểu đồ lịch học theo thời gian" className={styles.panelCard} extra={<Text type="secondary">Theo ngày</Text>}>
                                 {chartData.some((item) => item.value > 0) ? (
                                     <Column
                                         height={245}
@@ -283,7 +311,7 @@ const Page: React.FC = () => {
                                         axis={{ y: { title: false }, x: { title: false } }}
                                         legend={{ color: { position: 'top' } }}
                                     />
-                                ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Chưa có lịch trong 7 ngày tới" />}
+                                ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Chưa có lịch trong khoảng đã chọn" />}
                             </Card>
                         </Col>
                     </Row>

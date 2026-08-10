@@ -1,15 +1,21 @@
 "use client";
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import type { SorterResult } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
-import { notification, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, Drawer, Grid, Tooltip, Descriptions, Tabs, Dropdown, Typography } from "antd";
+import { notification, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, Drawer, Empty, Grid, Tooltip, Descriptions, Tabs, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented } from "antd";
 import type { TabsProps } from "antd";
-import { EditOutlined, SaveOutlined, CloseOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined } from "@ant-design/icons";
+import { EditOutlined, SaveOutlined, CloseOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, FilterOutlined } from "@ant-design/icons";
+import FullCalendar from "@fullcalendar/react";
+import dayGridPlugin from "@fullcalendar/daygrid";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import interactionPlugin from "@fullcalendar/interaction";
+import viLocale from "@fullcalendar/core/locales/vi";
 import ScheduleModal from "./components/Modal/ScheduleModal";
 import BulkEditModal from "./components/Modal/BulkEditModal";
 import ScheduleImportModal, { type ScheduleImportError } from "./components/Modal/ScheduleImportModal";
+import AutoScheduleModal from "./components/Modal/AutoScheduleModal";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
 import {
@@ -25,7 +31,7 @@ import {
 import dayjs, { Dayjs } from "dayjs";
 import type { ModuleField, ResolvedFieldPermission } from "@/types/fieldPolicy";
 import { canEditAnyField, resolveModuleFieldPermissions, sanitizeEditablePayload } from "@/helper/fieldPolicy";
-import { useLmsCache, useModuleFieldsQuery, useSchedulesQuery, useTeachingStaffQuery } from "@/hooks/useLmsQueries";
+import { useLmsCache, useModuleFieldsQuery, useSchedulesQuery, useSchedulingProgramsQuery, useTeachingStaffQuery } from "@/hooks/useLmsQueries";
 import type { LivestreamListParams } from "@/services/livestreamService";
 import TeachingStaffSelect from "@/components/shared/TeachingStaffSelect";
 import { useTableViewport } from "@/hooks/useTableViewport";
@@ -149,9 +155,9 @@ interface ScheduleSortItem {
 type ScheduleSortState = ScheduleSortItem[];
 
 const DEFAULT_MODULE_FIELDS: ModuleField[] = [
-    { fieldCode: "code", fieldLabel: "Mã lớp", fieldType: "text", sortOrder: 1 },
+    { fieldCode: "code", fieldLabel: "Chương trình", fieldType: "text", sortOrder: 1 },
     { fieldCode: "lesson_name", fieldLabel: "Tên bài học", fieldType: "text", sortOrder: 2 },
-    { fieldCode: "learn_number", fieldLabel: "Buổi học", fieldType: "number", sortOrder: 3 },
+    { fieldCode: "learn_number", fieldLabel: "Bài học", fieldType: "number", sortOrder: 3 },
     { fieldCode: "subject", fieldLabel: "Môn học", fieldType: "text", sortOrder: 4 },
     { fieldCode: "teacher", fieldLabel: "Giáo viên", fieldType: "text", sortOrder: 5 },
     { fieldCode: "assistant_teacher", fieldLabel: "Trợ giảng", fieldType: "select", sortOrder: 6 },
@@ -161,6 +167,27 @@ const DEFAULT_MODULE_FIELDS: ModuleField[] = [
 ];
 
 const MOCK_SCHEDULES: ScheduleDataType[] = [];
+const CALENDAR_PLUGINS = [dayGridPlugin, timeGridPlugin, interactionPlugin];
+
+const mapScheduleRows = (rows: any[]): ScheduleDataType[] => rows.map((item: any) => ({
+    ...item,
+    key: item.id?.toString() || item.key,
+    id: item.id?.toString(),
+    code: item.code,
+    class_name: item.class_name || item.code,
+    start_time: item.start_time ? dayjs(item.start_time).format("YYYY-MM-DDTHH:mm") : "",
+    end_time: item.end_time ? dayjs(item.end_time).format("YYYY-MM-DDTHH:mm") : "",
+    room: item.room || item.channel_name || "Phòng Online",
+    subject: item.subject || item.lesson_name || `Bài ${item.learn_number}`,
+    lesson_name: item.lesson_name || `Bài ${item.learn_number}`,
+    learn_number: item.learn_number,
+    lesson_link: item.lesson_link || item.link || "",
+    teacher: item.teacher,
+    assistant_teacher: item.assistant_teacher,
+    system_type: item.system_type,
+    lesson_status: item.lesson_status ?? 0,
+    can_modify: item.can_modify === true,
+}));
 const SORTABLE_FIELDS = new Set([
     "code",
     "learn_number",
@@ -199,8 +226,6 @@ const buildScheduleApiParams = (values: ScheduleFilterValues) => {
 
     return {
         ...rest,
-        // Calendar lưu giờ Việt Nam dạng wall-clock. Dùng Z dạng literal để
-        // giữ nguyên ngày người dùng chọn, không dịch 05/08 về 04/08 theo UTC.
         start_time: date_range?.[0]?.startOf("day").format("YYYY-MM-DDTHH:mm:ss.SSS[Z]"),
         end_time: date_range?.[1]?.endOf("day").format("YYYY-MM-DDTHH:mm:ss.SSS[Z]"),
     };
@@ -239,7 +264,7 @@ const canModifySchedule = (record: ScheduleDataType) => {
 
 const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
     const rows = [
-        { label: "Mã lớp", value: record.code || "-" },
+        { label: "Chương trình", value: record.code || "-" },
         { label: "Tên lớp", value: record.class_name || "-" },
         { label: "Bài học", value: record.lesson_name || "-" },
         { label: "Buổi học", value: record.learn_number ?? "-" },
@@ -257,7 +282,6 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
         { label: "Hệ thống", value: record.system_type || "-" },
         { label: "Trạng thái", value: lessonStatusText(record.start_time, record.end_time) },
         { label: "Link học", value: record.lesson_link || "-" },
-        { label: "Tài liệu", value: renderScheduleDocuments(record.lesson_document) },
     ];
 
     const items: TabsProps["items"] = [
@@ -285,6 +309,22 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
     return <Tabs defaultActiveKey="info" items={items} />;
 };
 
+// ✅ Hook debounce
+function useDebounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
+    const timerRef = useRef<NodeJS.Timeout | null>(null);
+    const fnRef = useRef(fn);
+    fnRef.current = fn;
+
+    return useCallback((...args: Parameters<T>) => {
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+        }
+        timerRef.current = setTimeout(() => {
+            fnRef.current(...args);
+        }, delay);
+    }, [delay]);
+}
+
 const ScheduleFilterDrawer = ({
     open,
     value,
@@ -292,6 +332,8 @@ const ScheduleFilterDrawer = ({
     onSearch,
     onReset,
     onClose,
+    programOptions,
+    loadingPrograms,
 }: {
     open: boolean;
     value: ScheduleFilterValues;
@@ -299,6 +341,8 @@ const ScheduleFilterDrawer = ({
     onSearch: (values: ScheduleFilterValues) => void;
     onReset: () => void;
     onClose: () => void;
+    programOptions: Array<{ value: string; label: string }>;
+    loadingPrograms: boolean;
 }) => {
     const [filterForm] = Form.useForm();
     useEffect(() => {
@@ -326,10 +370,22 @@ const ScheduleFilterDrawer = ({
                 </Space>
             }
         >
-            <div style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 16, background: "#fff" }}>
+            <div>
                 <Form form={filterForm} layout="vertical" onFinish={(values) => onSearch(cleanFilterValues(values))}>
-                    <Form.Item name="code" label="Mã lớp">
-                        <Input allowClear placeholder="VD: TOPC01" />
+                    <Form.Item
+                        name="code"
+                        label="Chương trình"
+                        rules={[{ required: true, message: "Vui lòng chọn Chương trình" }]}
+                    >
+                        <Select
+                            allowClear
+                            showSearch
+                            loading={loadingPrograms}
+                            options={programOptions}
+                            optionFilterProp="label"
+                            placeholder="Chọn Chương trình"
+                            notFoundContent={loadingPrograms ? "Đang tải..." : "Không có Chương trình"}
+                        />
                     </Form.Item>
                     <Form.Item name="teacher" label="Giáo viên">
                         <TeachingStaffSelect
@@ -373,6 +429,7 @@ const Page = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [openBulkEditModal, setOpenBulkEditModal] = useState(false);
     const [openImportModal, setOpenImportModal] = useState(false);
+    const [openAutoScheduleModal, setOpenAutoScheduleModal] = useState(false);
     const [importing, setImporting] = useState(false);
     const [importErrors, setImportErrors] = useState<ScheduleImportError[]>([]);
     const [importMode, setImportMode] = useState<"create" | "mapping">("create");
@@ -384,7 +441,6 @@ const Page = () => {
     const [isEditMode, setIsEditMode] = useState(false);
     const [showPageInfo, setShowPageInfo] = useState(true);
 
-    // Cấu hình Checkbox cho Bảng (Antd Row Selection)
     const rowSelection = {
         selectedRowKeys,
         onChange: (newSelectedRowKeys: React.Key[]) => {
@@ -399,7 +455,6 @@ const Page = () => {
         columnWidth: 32,
     };
 
-    // Hàm mở modal để dời lịch (Sửa)
     const handleReschedule = (record: ScheduleDataType) => {
         if (!canModifySchedule(record)) {
             api.warning({
@@ -413,59 +468,159 @@ const Page = () => {
         setIsModalOpen(true);
     };
 
-    // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const [totalItems, setTotalItems] = useState(0);
     const [filterValues, setFilterValues] = useState<ScheduleFilterValues>({});
+    const [submittedFilterValues, setSubmittedFilterValues] = useState<ScheduleFilterValues>({});
+    const [hasSearched, setHasSearched] = useState(false);
     const [sortState, setSortState] = useState<ScheduleSortState>([]);
+    const [viewMode, setViewMode] = useState<"table" | "calendar">("table");
+    const [calendarMounted, setCalendarMounted] = useState(false);
+    const [calendarData, setCalendarData] = useState<ScheduleDataType[]>([]);
+    const [calendarDetail, setCalendarDetail] = useState<ScheduleDataType | null>(null);
+    const calendarRef = useRef<FullCalendar>(null);
     const screens = Grid.useBreakpoint();
     const isDesktop = Boolean(screens.lg);
 
-    const scheduleParams = useMemo<LivestreamListParams>(() => ({
-        page: currentPage,
-        limit: pageSize,
-        ...buildScheduleApiParams(filterValues),
-        sort_by: sortState.length
-            ? sortState.map((item) => item.field).join(",")
-            : undefined,
-        sort_order: sortState.length
-            ? sortState.map((item) => item.order === "descend" ? "desc" : "asc").join(",")
-            : undefined,
-    }), [currentPage, pageSize, filterValues, sortState]);
-    const schedulesQuery = useSchedulesQuery(scheduleParams);
+    const scheduleParams = useMemo<LivestreamListParams>(() => {
+        if (!hasSearched) return {} as LivestreamListParams;
+
+        return {
+            page: currentPage,
+            limit: pageSize,
+            ...buildScheduleApiParams(submittedFilterValues),
+            sort_by: sortState.length
+                ? sortState.map((item) => item.field).join(",")
+                : undefined,
+            sort_order: sortState.length
+                ? sortState.map((item) => item.order === "descend" ? "desc" : "asc").join(",")
+                : undefined,
+        };
+    }, [currentPage, pageSize, submittedFilterValues, sortState, hasSearched]);
+
+    const calendarParams = useMemo<LivestreamListParams | null>(() => {
+        if (!hasSearched || !calendarMounted) return null;
+        return {
+            page: 1,
+            limit: 100,
+            ...buildScheduleApiParams(submittedFilterValues),
+            sort_by: "start_time",
+            sort_order: "asc",
+        };
+    }, [calendarMounted, hasSearched, submittedFilterValues]);
+
+    // ✅ Chỉ fetch khi đã bấm Lọc
+    const schedulesQuery = useSchedulesQuery(hasSearched ? scheduleParams : null);
+    const calendarSchedulesQuery = useSchedulesQuery(calendarParams);
     const moduleFieldsQuery = useModuleFieldsQuery(SCHEDULE_MODULE_CODE);
     const assistantsQuery = useTeachingStaffQuery(2);
+    const programsQuery = useSchedulingProgramsQuery();
     const { refreshSchedules } = useLmsCache();
     const loading = schedulesQuery.isLoading || schedulesQuery.isValidating;
     const assistantOptions = assistantsQuery.data ?? [];
+    const programOptions = useMemo(() => {
+        const rows = Array.isArray(programsQuery.data?.data) ? programsQuery.data.data : [];
+        return rows.map((program: any) => ({
+            value: String(program.code),
+            label: `${program.code}${program.subject_name ? ` · ${program.subject_name}` : ""}`,
+        }));
+    }, [programsQuery.data]);
 
     useEffect(() => {
+        if (!hasSearched) {
+            setData([]);
+            setFilteredData([]);
+            setTotalItems(0);
+            return;
+        }
+
         const response: any = schedulesQuery.data;
         if (!response?.data) return;
-        const mappedData: ScheduleDataType[] = (response.data.data ?? []).map((item: any) => ({
-            ...item,
-            key: item.id?.toString() || item.key,
-            id: item.id?.toString(),
-            code: item.code,
-            class_name: item.class_name || item.code,
-            start_time: item.start_time ? dayjs(item.start_time).format('YYYY-MM-DDTHH:mm') : "",
-            end_time: item.end_time ? dayjs(item.end_time).format('YYYY-MM-DDTHH:mm') : "",
-            room: item.room || item.channel_name || 'Phòng Online',
-            subject: item.subject || item.lesson_name || `Bài ${item.learn_number}`,
-            lesson_name: item.lesson_name || `Bài ${item.learn_number}`,
-            learn_number: item.learn_number,
-            lesson_link: item.lesson_link || item.link || "",
-            teacher: item.teacher,
-            assistant_teacher: item.assistant_teacher,
-            system_type: item.system_type,
-            lesson_status: item.lesson_status ?? 0,
-            can_modify: item.can_modify === true,
-        }));
+        const mappedData = mapScheduleRows(response.data.data ?? []);
         setData(mappedData);
         setFilteredData(mappedData);
         setTotalItems(response.data.total || 0);
-    }, [schedulesQuery.data]);
+    }, [schedulesQuery.data, hasSearched]);
+
+    useEffect(() => {
+        if (!hasSearched) {
+            setCalendarData([]);
+            return;
+        }
+        const response: any = calendarSchedulesQuery.data;
+        if (!response?.data) return;
+        setCalendarData(mapScheduleRows(response.data.data ?? []));
+    }, [calendarSchedulesQuery.data, hasSearched]);
+
+    useEffect(() => {
+        if (viewMode !== "calendar") return;
+        const frame = requestAnimationFrame(() => calendarRef.current?.getApi().updateSize());
+        return () => cancelAnimationFrame(frame);
+    }, [viewMode, isDesktop]);
+
+    const calendarEvents = useMemo(() => {
+        const now = dayjs();
+        return calendarData.filter((item) => item.start_time).map((item) => {
+            const start = dayjs(item.start_time);
+            const end = item.end_time ? dayjs(item.end_time) : start.add(1, "hour");
+            const styleType = now.isAfter(end)
+                ? "completed"
+                : now.isAfter(start) && now.isBefore(end)
+                    ? "ongoing"
+                    : "upcoming";
+            return {
+                id: String(item.key),
+                title: item.lesson_name || `Bài ${item.learn_number}`,
+                start: start.toDate(),
+                end: end.toDate(),
+                extendedProps: { record: item, styleType },
+            };
+        });
+    }, [calendarData]);
+
+    const calendarHeaderToolbar = useMemo(() => isDesktop ? ({
+        left: "prev,next today",
+        center: "title",
+        right: "dayGridMonth,timeGridWeek,timeGridDay",
+    }) : ({
+        left: "prev,next",
+        center: "title",
+        right: "timeGridDay,dayGridMonth",
+    }), [isDesktop]);
+
+    const renderCalendarEvent = useCallback((eventInfo: any) => {
+        const styleType = eventInfo.event.extendedProps.styleType;
+        const visual = styleType === "completed"
+            ? { background: "#f6ffed", color: "#389e0d", border: "3px solid #52c41a" }
+            : styleType === "ongoing"
+                ? { background: "#fff2e8", color: "#d4380d", border: "3px solid #fa541c" }
+                : { background: "#e6f4ff", color: "#0958d9", border: "3px solid #1677ff" };
+        return (
+            <div style={{
+                backgroundColor: visual.background,
+                color: visual.color,
+                borderLeft: visual.border,
+                padding: "4px 6px",
+                height: "100%",
+                width: "100%",
+                borderRadius: 4,
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
+                boxSizing: "border-box",
+            }}>
+                <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.85 }}>{eventInfo.timeText}</div>
+                <div style={{ fontSize: 12, whiteSpace: "normal", lineHeight: 1.3, marginTop: 2, fontWeight: 500 }}>
+                    {eventInfo.event.title}
+                </div>
+            </div>
+        );
+    }, []);
+
+    const handleCalendarEventClick = useCallback((info: any) => {
+        setCalendarDetail(info.event.extendedProps.record);
+    }, []);
 
     useEffect(() => {
         const fields = moduleFieldsQuery.data?.fields;
@@ -486,24 +641,52 @@ const Page = () => {
     const canExportSchedule = hasPermission(PermissionKey.SCHEDULE_EXPORT);
     const canEditTeachingAssignment = hasPermission(PermissionKey.CALENDAR_TEACHER_EDIT);
 
-
     const isEditing = (record: ScheduleDataType) => record.key === editingKey;
 
-    // Handle search filter locally
-    const handleSearch = async (value: string) => {
+    // ✅ Hàm thực sự submit search (được debounce)
+    const doSearch = useCallback((keyword: string) => {
+        if (!hasSearched) return;
+
+        setSubmittedFilterValues((prev) =>
+            cleanFilterValues({
+                ...prev,
+                keyword: keyword,
+            })
+        );
+        setCurrentPage(1);
+    }, [hasSearched]);
+
+    // ✅ Debounce hàm doSearch với 500ms
+    const debouncedDoSearch = useDebounce(doSearch, 500);
+
+    // ✅ Handle search với debounce
+    const handleSearch = useCallback(async (value: string) => {
         setSearchText(value);
         setFilterValues((prev) => cleanFilterValues({ ...prev, keyword: value }));
         setCurrentPage(1);
-    };
+
+        debouncedDoSearch(value);
+    }, [debouncedDoSearch]);
 
     const handleScheduleFilter = (values: ScheduleFilterValues) => {
-        setFilterValues(cleanFilterValues({ ...values, keyword: searchText }));
+        if (!String(values.code || "").trim()) {
+            api.warning({ message: "Vui lòng chọn Chương trình" });
+            return;
+        }
+        const cleaned = cleanFilterValues({ ...values, keyword: searchText });
+        setFilterValues(cleaned);
+        setSubmittedFilterValues(cleaned);
+        setHasSearched(true);
         setCurrentPage(1);
         setOpenFilterDrawer(false);
     };
 
     const handleResetScheduleFilter = () => {
-        setFilterValues(cleanFilterValues({ keyword: searchText }));
+        const cleaned = cleanFilterValues({ keyword: "" });
+        setSearchText("");
+        setFilterValues(cleaned);
+        setSubmittedFilterValues(cleaned);
+        setHasSearched(false);
         setCurrentPage(1);
         setOpenFilterDrawer(false);
     };
@@ -527,6 +710,8 @@ const Page = () => {
         setIsModalOpen(true);
         setIsEditMode(false)
     };
+
+    // ... (giữ nguyên tất cả các hàm còn lại: handleExportSchedule, handleDownloadImportTemplate, handleImportSchedule, handleConfirmMappingImport, handleModalSuccess, edit, cancel, handleDelete, save)
 
     const handleExportSchedule = async (format: "csv" | "xlsx") => {
         try {
@@ -559,8 +744,14 @@ const Page = () => {
     };
 
     const handleImportSchedule = async (file: File) => {
+        const programCode = String(submittedFilterValues.code || "").trim();
+        if (!programCode) {
+            api.warning({ message: "Vui lòng chọn Chương trình trước khi import" });
+            setOpenImportModal(false);
+            setOpenFilterDrawer(true);
+            return;
+        }
         if (importMode === "mapping") {
-            // Bước 1: gọi preview endpoint, hiện preview rồi dừng lại
             try {
                 setImporting(true);
                 setImportErrors([]);
@@ -578,11 +769,10 @@ const Page = () => {
             return;
         }
 
-        // Mode tạo lịch bình thường
         try {
             setImporting(true);
             setImportErrors([]);
-            const response: any = await importLivestreamsFile(file);
+            const response: any = await importLivestreamsFile(file, programCode);
             const summary = response?.data?.summary;
             api.success({
                 message: "Import thành công",
@@ -593,7 +783,9 @@ const Page = () => {
             });
             setOpenImportModal(false);
             setSelectedRowKeys([]);
-            await refreshSchedules();
+            if (hasSearched) {
+                await refreshSchedules();
+            }
         } catch (error: any) {
             const errors = error?.detail?.errors;
             if (Array.isArray(errors)) setImportErrors(errors);
@@ -606,7 +798,6 @@ const Page = () => {
         }
     };
 
-    // Bước 2 (mapping mode): sau khi người dùng xác nhận preview, gọi API confirm
     const handleConfirmMappingImport = async () => {
         if (!pendingMappingFile) return;
         try {
@@ -622,7 +813,9 @@ const Page = () => {
             setImportMappingPreview(null);
             setPendingMappingFile(null);
             setSelectedRowKeys([]);
-            await refreshSchedules();
+            if (hasSearched) {
+                await refreshSchedules();
+            }
         } catch (error: any) {
             api.error({
                 message: "Cập nhật thất bại",
@@ -634,7 +827,9 @@ const Page = () => {
     };
 
     const handleModalSuccess = (_values: any) => {
-        void refreshSchedules();
+        if (hasSearched) {
+            void refreshSchedules();
+        }
         api.success({
             message: "Cập nhật thành công",
             description: "Đã cập nhật danh sách lịch học.",
@@ -692,7 +887,9 @@ const Page = () => {
                     setSelectedRowKeys((keys) =>
                         keys.filter((key) => String(key) !== String(record.key))
                     );
-                    await refreshSchedules();
+                    if (hasSearched) {
+                        await refreshSchedules();
+                    }
                 } catch (error: any) {
                     api.error({
                         message: "Xóa thất bại",
@@ -734,8 +931,6 @@ const Page = () => {
                 ["start_time", "end_time"].forEach((fieldCode) => {
                     const value = sanitizedRow[fieldCode];
                     if (dayjs.isDayjs(value)) {
-                        // Calendar lưu giờ Việt Nam dạng wall-clock. Gắn Z dạng literal
-                        // để backend/Prisma giữ nguyên giờ người dùng đã chọn.
                         sanitizedRow[fieldCode] = value
                             .second(0)
                             .millisecond(0)
@@ -761,7 +956,9 @@ const Page = () => {
                     message: "Cập nhật thành công",
                     description: "Đã lưu thay đổi nhanh của dòng.",
                 });
-                await refreshSchedules();
+                if (hasSearched) {
+                    await refreshSchedules();
+                }
             }
         } catch (errInfo: any) {
             console.log("Validate Failed:", errInfo);
@@ -788,6 +985,7 @@ const Page = () => {
     const visibleFieldPermissions = fieldPermissions.filter(
         (item) =>
             item.field.fieldCode !== "id"
+            && item.field.fieldCode !== "lesson_document"
             && (item.visible || item.editable)
     );
     const editableFieldCodes = fieldPermissions
@@ -802,7 +1000,6 @@ const Page = () => {
         ))
         .map((item) => item.field.fieldCode);
 
-    // Build dynamic columns based on ModuleField and fieldPolicy from current role.
     const columns: ColumnsType<ScheduleDataType> = visibleFieldPermissions.map(({ field }, columnIndex) => {
         const fieldCode = field.fieldCode;
         const activeSort = sortState.find((item) => item.field === fieldCode);
@@ -945,13 +1142,11 @@ const Page = () => {
                         </span>
                     );
                 }
-                // If not editing or not editable, display plain text
                 return <span>{text}</span>;
             },
         };
     });
 
-    // Append Action columns if role has edit permissions
     if ((canEditSchedule && editableFieldCodes.length > 0) || canDeleteSchedule) {
         columns.push({
             title: "Thao tác",
@@ -1044,7 +1239,15 @@ const Page = () => {
     }
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, overflow: "hidden" }}>
+        <div style={{
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+            minHeight: 0,
+            overflowX: "hidden",
+            overflowY: isDesktop ? "hidden" : "auto",
+            WebkitOverflowScrolling: "touch",
+        }}>
             {contextHolder}
             <div
                 style={{
@@ -1095,7 +1298,7 @@ const Page = () => {
 
             <SearchAndActionsBar
                 onSearch={handleSearch}
-                placeholder="Tìm kiếm theo mã lớp, tên lớp, giáo viên, phòng học..."
+                placeholder="Tìm kiếm theo khóa học, bài học, giáo viên, phòng học..."
                 handleAddBtn={canCreateSchedule ? handleAddBtn : undefined}
                 handleImportClick={canImportSchedule ? () => {
                     setImportErrors([]);
@@ -1120,11 +1323,19 @@ const Page = () => {
                                 </Button>
                             </Dropdown>
                         )}
+                        {canCreateSchedule && (
+                            <Button
+                                icon={<CalendarOutlined />}
+                                disabled={!submittedFilterValues.code}
+                                onClick={() => setOpenAutoScheduleModal(true)}
+                            >
+                                Tạo lịch tự động
+                            </Button>
+                        )}
                         <Button
                             icon={<ReloadOutlined />}
                             onClick={() => {
-                                handleResetScheduleFilter();
-                                void refreshSchedules();
+                                if (hasSearched) void refreshSchedules();
                             }}
                         />
                         {canEditSchedule && (
@@ -1140,65 +1351,255 @@ const Page = () => {
                 }
             />
 
+            <div style={{ display: "flex", justifyContent: viewMode === "calendar" ? "space-between" : "flex-end", alignItems: "center", marginBottom: 12 }}>
+                {viewMode === "calendar" && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ width: 12, height: 12, borderRadius: 2, background: '#e6f4ff', borderLeft: '3px solid #1677ff' }} />
+                            <span style={{ fontSize: 13, color: '#555' }}>Sắp diễn ra</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ width: 12, height: 12, borderRadius: 2, background: '#fff2e8', borderLeft: '3px solid #fa541c' }} />
+                            <span style={{ fontSize: 13, color: '#555' }}>Đang diễn ra</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ width: 12, height: 12, borderRadius: 2, background: '#f6ffed', borderLeft: '3px solid #52c41a' }} />
+                            <span style={{ fontSize: 13, color: '#555' }}>Đã kết thúc</span>
+                        </div>
+                    </div>
+                )}
+                <Segmented
+                    value={viewMode}
+                    options={[
+                        { label: "Dạng bảng", value: "table" },
+                        { label: "Dạng lịch", value: "calendar" },
+                    ]}
+                    onChange={(value) => {
+                        const nextMode = value as "table" | "calendar";
+                        if (nextMode === "calendar") setCalendarMounted(true);
+                        setViewMode(nextMode);
+                    }}
+                />
+            </div>
+
             <Form
                 form={form}
                 component={false}
-                style={{ flex: "1 1 0", minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}
+                style={{
+                    flex: isDesktop ? "1 1 0" : "0 0 auto",
+                    height: isDesktop ? undefined : "65dvh",
+                    minHeight: isDesktop ? 0 : 420,
+                    overflow: "hidden",
+                    display: "flex",
+                    flexDirection: "column",
+                }}
             >
                 <div ref={tableContainerRef} style={{ flex: "1 1 0", minHeight: 0, overflow: "hidden" }}>
-                    <CustomTable<ScheduleDataType>
-                        columns={columns}
-                        dataSource={filteredData}
-                        loading={loading}
-                        rowSelection={rowSelection}
-                        pagination={{
-                            current: currentPage,
-                            pageSize: pageSize,
-                            total: totalItems,
-                            showSizeChanger: true,
-                            position: ["bottomRight"],
-                            showTotal: (total) => `Tổng ${total} buổi học`,
-                            onChange: (page, size) => {
-                                setCurrentPage(page);
-                                setPageSize(size);
+                    {!hasSearched ? (
+                        <Empty
+                            image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description={
+                                <span>
+                                    Vui lòng chọn điều kiện lọc và bấm{" "}
+                                    <FilterOutlined /> <b>Lọc</b> để xem dữ liệu
+                                </span>
                             }
-                        }}
-                        onChange={(_, __, sorter, extra) => {
-                            if (extra.action !== "sort") return;
-                            const sorterItems = (
-                                Array.isArray(sorter) ? sorter : [sorter]
-                            ) as SorterResult<ScheduleDataType>[];
-                            setSortState(
-                                sorterItems
-                                    .filter((item) => item.field && item.order)
-                                    .map((item) => ({
-                                        field: String(item.field),
-                                        order: item.order as "ascend" | "descend",
-                                    }))
-                            );
-                            setCurrentPage(1);
-                        }}
-                        expandable={{
-                            expandedRowRender: (record) => <ScheduleDetailRow record={record} />,
-                            expandedRowKeys,
-                            onExpandedRowsChange: (keys) => setExpandedRowKeys([...keys]),
-                            expandRowByClick: true,
-                            columnWidth: 32,
-                        }}
-                        onRow={() => ({
-                            style: { cursor: editingKey ? "default" : "pointer" },
-                        })}
-                        scroll={{ x: "max-content", y: filteredData?.length > 5 ? tableScrollY : undefined }}
-                    />
+                            style={{ padding: "48px 0" }}
+                        />
+                    ) : (
+                        <>
+                        <style>{`
+                            .schedule-view-stage {
+                                position: relative;
+                                height: 100%;
+                                min-height: 0;
+                                overflow: hidden;
+                            }
+                            .schedule-view-pane {
+                                position: absolute;
+                                inset: 0;
+                                min-height: 0;
+                                opacity: 0;
+                                transform: translateY(8px);
+                                pointer-events: none;
+                                transition:
+                                    opacity 180ms ease,
+                                    transform 180ms ease;
+                                will-change: opacity, transform;
+                            }
+                            .schedule-view-pane-active {
+                                opacity: 1;
+                                transform: translateY(0);
+                                pointer-events: auto;
+                                z-index: 1;
+                            }
+                            @media (prefers-reduced-motion: reduce) {
+                                .schedule-view-pane {
+                                    transition: none;
+                                    transform: none;
+                                }
+                            }
+                        `}</style>
+                        <div className="schedule-view-stage">
+                        <div
+                            className={`schedule-view-pane custom-calendar-wrapper${viewMode === "calendar" ? " schedule-view-pane-active" : ""}`}
+                            aria-hidden={viewMode !== "calendar"}
+                            style={{ height: "100%", padding: "16px", background: "#fff", borderRadius: "8px" }}
+                        >
+                            <style>{`
+                                .custom-calendar-wrapper .fc {
+                                    font-family: inherit;
+                                }
+                                .custom-calendar-wrapper .fc-theme-standard td,
+                                .custom-calendar-wrapper .fc-theme-standard th {
+                                    border-color: #f0f0f0;
+                                }
+                                .custom-calendar-wrapper .fc-col-header-cell-cushion {
+                                    padding: 8px 4px;
+                                    color: #1f1f1f;
+                                    font-weight: 600;
+                                }
+                                .custom-calendar-wrapper .fc-event {
+                                    border-radius: 4px;
+                                    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                                    border: none !important;
+                                    padding: 0;
+                                    background: transparent !important;
+                                    transition: transform 0.1s ease;
+                                }
+                                .custom-calendar-wrapper .fc-event:hover {
+                                    transform: translateY(-1px);
+                                    box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+                                    z-index: 5 !important;
+                                }
+                                .custom-calendar-wrapper .fc-timegrid-event-harness > .fc-timegrid-event {
+                                    box-shadow: none;
+                                }
+                                .custom-calendar-wrapper .fc-timegrid-slot-label-cushion {
+                                    font-size: 13px;
+                                    color: #8c8c8c;
+                                }
+                                .custom-calendar-wrapper .fc-daygrid-event-harness {
+                                    margin-bottom: 2px !important;
+                                }
+                                .custom-calendar-wrapper .fc .fc-button-primary {
+                                    background-color: #ffffff;
+                                    border-color: #d9d9d9;
+                                    color: rgba(0, 0, 0, 0.88);
+                                    background-image: none;
+                                    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.02);
+                                    text-shadow: none;
+                                    text-transform: capitalize;
+                                    transition: all 0.2s cubic-bezier(0.645, 0.045, 0.355, 1);
+                                }
+                                .custom-calendar-wrapper .fc .fc-button-primary:hover {
+                                    color: #4096ff;
+                                    border-color: #4096ff;
+                                    background-color: #ffffff;
+                                }
+                                .custom-calendar-wrapper .fc .fc-button-primary:focus,
+                                .custom-calendar-wrapper .fc .fc-button-primary:active,
+                                .custom-calendar-wrapper .fc .fc-button-primary:focus:active {
+                                    box-shadow: none !important;
+                                    outline: none !important;
+                                }
+                                .custom-calendar-wrapper .fc .fc-button-primary:not(:disabled):active,
+                                .custom-calendar-wrapper .fc .fc-button-primary:not(:disabled).fc-button-active {
+                                    color: #1677ff;
+                                    border-color: #1677ff;
+                                    background-color: #ffffff;
+                                }
+                            `}</style>
+                            {calendarMounted && <FullCalendar
+                                ref={calendarRef}
+                                plugins={CALENDAR_PLUGINS}
+                                initialView={isDesktop ? "timeGridWeek" : "timeGridDay"}
+                                locale={viLocale}
+                                headerToolbar={calendarHeaderToolbar}
+                                events={calendarEvents}
+                                eventContent={renderCalendarEvent}
+                                eventClick={handleCalendarEventClick}
+                                height="100%"
+                                allDaySlot={false}
+                                slotMinTime="06:00:00"
+                                slotMaxTime="23:00:00"
+                            />}
+                        </div>
+                        <div
+                            className={`schedule-view-pane${viewMode === "table" ? " schedule-view-pane-active" : ""}`}
+                            aria-hidden={viewMode !== "table"}
+                            style={{ height: "100%", minHeight: 0 }}
+                        >
+                        <CustomTable<ScheduleDataType>
+                            columns={columns}
+                            dataSource={filteredData}
+                            loading={loading}
+                            rowSelection={rowSelection}
+                            pagination={{
+                                current: currentPage,
+                                pageSize: pageSize,
+                                total: totalItems,
+                                showSizeChanger: true,
+                                position: ["bottomRight"],
+                                showTotal: (total) => `Tổng ${total} buổi học`,
+                                onChange: (page, size) => {
+                                    if (!hasSearched) return;
+                                    setCurrentPage(page);
+                                    setPageSize(size);
+                                }
+                            }}
+                            onChange={(_, __, sorter, extra) => {
+                                if (extra.action !== "sort") return;
+                                if (!hasSearched) return;
+                                const sorterItems = (
+                                    Array.isArray(sorter) ? sorter : [sorter]
+                                ) as SorterResult<ScheduleDataType>[];
+                                setSortState(
+                                    sorterItems
+                                        .filter((item) => item.field && item.order)
+                                        .map((item) => ({
+                                            field: String(item.field),
+                                            order: item.order as "ascend" | "descend",
+                                        }))
+                                );
+                                setCurrentPage(1);
+                            }}
+                            expandable={{
+                                expandedRowRender: (record) => <ScheduleDetailRow record={record} />,
+                                expandedRowKeys,
+                                onExpandedRowsChange: (keys) => setExpandedRowKeys([...keys]),
+                                expandRowByClick: true,
+                                columnWidth: 32,
+                            }}
+                            onRow={() => ({
+                                style: { cursor: editingKey ? "default" : "pointer" },
+                            })}
+                            scroll={{ x: "max-content", y: filteredData?.length > 5 ? tableScrollY : undefined }}
+                        />
+                        </div>
+                        </div>
+                        </>
+                    )}
                 </div>
                 <ScheduleFilterDrawer
                     open={openFilterDrawer}
                     onClose={() => setOpenFilterDrawer(false)}
                     value={filterValues}
                     loading={loading}
+                    programOptions={programOptions}
+                    loadingPrograms={programsQuery.isLoading || programsQuery.isValidating}
                     onSearch={handleScheduleFilter}
                     onReset={handleResetScheduleFilter}
                 />
+                <Modal
+                    open={Boolean(calendarDetail)}
+                    title={calendarDetail?.lesson_name || "Chi tiết buổi học"}
+                    footer={null}
+                    width={900}
+                    onCancel={() => setCalendarDetail(null)}
+                >
+                    {calendarDetail && <ScheduleDetailRow record={calendarDetail} />}
+                </Modal>
                 <ScheduleModal
                     open={isModalOpen}
                     onClose={() => setIsModalOpen(false)}
@@ -1231,7 +1632,15 @@ const Page = () => {
                     onConfirmPreview={handleConfirmMappingImport}
                     onDownloadTemplate={handleDownloadImportTemplate}
                 />
-                {/* Modal Sửa Hàng Loạt */}
+                <AutoScheduleModal
+                    open={openAutoScheduleModal}
+                    programCode={String(submittedFilterValues.code || "")}
+                    onClose={() => setOpenAutoScheduleModal(false)}
+                    onSuccess={async () => {
+                        api.success({ message: "Đã tạo lịch tự động" });
+                        await refreshSchedules();
+                    }}
+                />
                 <BulkEditModal
                     open={openBulkEditModal}
                     selectedRowKeys={selectedRowKeys}
@@ -1271,20 +1680,28 @@ const Page = () => {
                                 });
                             }
 
-                            // 2. Chuẩn bị payload chuẩn gửi cho Backend
                             let update_data: any = {};
+                            let apiConfigMode = modalPayload.config_mode;
 
                             if (modalPayload.config_mode === 'common') {
-                                update_data = {
+                                const commonUpdate = {
                                     teacher: modalPayload.common_config.teacher,
                                     assistant_teacher: modalPayload.common_config.assistant_teacher,
                                     room: modalPayload.common_config.room,
                                     start_time: modalPayload.common_config.start_time,
                                     end_time: modalPayload.common_config.end_time,
-                                    ...(modalPayload.common_config.package_lesson_mappings?.length
-                                        ? { package_lesson_mappings: modalPayload.common_config.package_lesson_mappings }
-                                        : {}),
                                 };
+                                const mappingUpdates = modalPayload.common_config.mapping_updates;
+                                if (mappingUpdates) {
+                                    apiConfigMode = 'separate';
+                                    update_data = targetIds.map((id) => ({
+                                        id,
+                                        ...commonUpdate,
+                                        package_lesson_mappings: mappingUpdates[String(id)] || [],
+                                    }));
+                                } else {
+                                    update_data = commonUpdate;
+                                }
                             } else if (modalPayload.config_mode === 'separate') {
                                 update_data = targetIds.map(id => {
                                     const config = modalPayload.separate_config?.[id] || {};
@@ -1295,8 +1712,8 @@ const Page = () => {
                                         room: config.room,
                                         start_time: config.start_time,
                                         end_time: config.end_time,
-                                        ...(config.package_lesson_mappings?.length
-                                            ? { package_lesson_mappings: config.package_lesson_mappings }
+                                        ...('package_lesson_mappings' in config
+                                            ? { package_lesson_mappings: config.package_lesson_mappings || [] }
                                             : {}),
                                     }
                                 });
@@ -1304,18 +1721,18 @@ const Page = () => {
 
                             const apiPayload = {
                                 ids: targetIds,
-                                config_mode: modalPayload.config_mode,
+                                config_mode: apiConfigMode,
                                 update_data: update_data
                             };
 
-                            // 3. Gọi Service API
                             await updateLivestreamBulk(apiPayload);
 
                             api.success({ message: "Thành công", description: `Đã cập nhật hàng loạt ${targetIds.length} bài học.` });
 
-                            // Reset state & Reload bảng
                             setSelectedRowKeys([]);
-                            await refreshSchedules();
+                            if (hasSearched) {
+                                await refreshSchedules();
+                            }
 
                         } catch (error: any) {
                             console.error(error);

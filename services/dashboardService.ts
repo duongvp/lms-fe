@@ -12,6 +12,8 @@ export interface DashboardOverview {
         teachers: number;
         assistants: number;
         adminUsers: number;
+        outlinesWithQuiz: number;
+        outlinesWithoutQuiz: number;
     };
     today: {
         total: number;
@@ -52,8 +54,11 @@ export interface DashboardOverview {
     };
 }
 
-export const getDashboardOverview = async (): Promise<DashboardOverview> => {
-    const response = await fetchInstance(`${API_BASE_URL}/overview`, {
+export const getDashboardOverview = async (params?: { from?: string; to?: string }): Promise<DashboardOverview> => {
+    const query = new URLSearchParams();
+    if (params?.from) query.set('from', params.from);
+    if (params?.to) query.set('to', params.to);
+    const response = await fetchInstance(`${API_BASE_URL}/overview?${query.toString()}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
     });

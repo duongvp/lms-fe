@@ -2,9 +2,9 @@
 
 import { useEffect, useRef } from "react";
 import type { DragEvent, Key } from "react";
-import { Button, Popconfirm, Space, Table, Tag, Tooltip, Typography } from "antd";
+import { Button, Empty, Popconfirm, Space, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { DeleteOutlined, DragOutlined, EditOutlined, EyeOutlined, UndoOutlined } from "@ant-design/icons";
+import { DeleteOutlined, DragOutlined, EditOutlined, EyeOutlined, FilterOutlined, UndoOutlined } from "@ant-design/icons";
 import type {
     QuizAnswerItem,
     QuizApiResponse,
@@ -17,6 +17,7 @@ import { quizTypeLabel, statusMeta } from "../quiz.constants";
 import { formatQuizDate } from "../quiz.utils";
 import { useTableViewport } from "@/hooks/useTableViewport";
 import styles from "../quiz.module.css";
+import CustomTable from "@/components/ui/Table";
 
 const { Text } = Typography;
 
@@ -36,6 +37,8 @@ interface QuizTableProps {
     lessons: QuizLessonOption[];
     filterCode?: string;
     canViewField: (field: string) => boolean;
+    /** Khi false: hiển thị empty placeholder thay vì bảng */
+    hasSearched: boolean;
     onSelectionChange: (keys: Key[]) => void;
     onPageChange: (page: number, pageSize: number) => void;
     onDragStart: (key: Key) => void;
@@ -62,6 +65,7 @@ const QuizTable = ({
     lessons,
     filterCode,
     canViewField,
+    hasSearched,
     onSelectionChange,
     onPageChange,
     onDragStart,
@@ -259,44 +263,57 @@ const QuizTable = ({
         onDragOver={handleRowDragOver}
         onDragEnd={stopAutoScroll}
     >
-    <Table<QuizApiResponse>
-        rowKey="quiz_id"
-        columns={columns}
-        dataSource={data}
-        loading={loading}
-        rowSelection={!reorderMode && canExport ? {
-            selectedRowKeys: selectedKeys,
-            onChange: onSelectionChange,
-        } : undefined}
-        onRow={(record) => ({
-            draggable: reorderMode,
-            onDragStart: (event) => {
-                event.dataTransfer.effectAllowed = "move";
-                onDragStart(record.quiz_id);
-            },
-            onDragOver: handleRowDragOver,
-            onDragEnd: stopAutoScroll,
-            onDrop: () => {
-                stopAutoScroll();
-                onDrop(record.quiz_id);
-            },
-            style: reorderMode ? {
-                cursor: "grab",
-                backgroundColor: dragRowKey === record.quiz_id
-                    ? "rgba(22, 119, 255, 0.06)"
-                    : undefined,
-            } : undefined,
-        })}
-        pagination={reorderMode ? false : {
-            current: page,
-            pageSize,
-            total,
-            showSizeChanger: true,
-            showTotal: (value) => `Tổng ${value} câu hỏi`,
-            onChange: onPageChange,
-        }}
-        scroll={{ x: 1250, y: scrollY }}
-    />
+        {!hasSearched ? (
+            <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                    <span>
+                        Vui lòng chọn điều kiện lọc và bấm{" "}
+                        <FilterOutlined /> <b>Lọc</b> để xem dữ liệu
+                    </span>
+                }
+                style={{ padding: "48px 0" }}
+            />
+        ) : (
+            <CustomTable<QuizApiResponse>
+                rowKey="quiz_id"
+                columns={columns}
+                dataSource={data}
+                loading={loading}
+                rowSelection={!reorderMode && canExport ? {
+                    selectedRowKeys: selectedKeys,
+                    onChange: onSelectionChange,
+                } : undefined}
+                onRow={(record) => ({
+                    draggable: reorderMode,
+                    onDragStart: (event) => {
+                        event.dataTransfer.effectAllowed = "move";
+                        onDragStart(record.quiz_id);
+                    },
+                    onDragOver: handleRowDragOver,
+                    onDragEnd: stopAutoScroll,
+                    onDrop: () => {
+                        stopAutoScroll();
+                        onDrop(record.quiz_id);
+                    },
+                    style: reorderMode ? {
+                        cursor: "grab",
+                        backgroundColor: dragRowKey === record.quiz_id
+                            ? "rgba(22, 119, 255, 0.06)"
+                            : undefined,
+                    } : undefined,
+                })}
+                pagination={reorderMode ? false : {
+                    current: page,
+                    pageSize,
+                    total,
+                    showSizeChanger: true,
+                    showTotal: (value) => `Tổng ${value} câu hỏi`,
+                    onChange: onPageChange,
+                }}
+                scroll={{ x: 1250, y: scrollY }}
+            />
+        )}
     </div>;
 };
 

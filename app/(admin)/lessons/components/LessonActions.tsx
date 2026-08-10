@@ -9,6 +9,8 @@ import {
     StopOutlined,
     UnorderedListOutlined,
     ReloadOutlined,
+    LinkOutlined,
+    FolderAddOutlined,
 } from "@ant-design/icons";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
 import type {
@@ -26,6 +28,7 @@ interface LessonActionsProps {
     savingReorder: boolean;
     onSearch: (value: string) => Promise<void>;
     onCreate: () => void;
+    onCreateProgram: () => void;
     onFilter: () => void;
     onImport: () => void;
     onExport: (format: LessonExportFormat, scope: LessonExportScope) => void;
@@ -34,6 +37,8 @@ interface LessonActionsProps {
     onSaveReorder: () => void;
     onReorderStrategyChange: (strategy: LessonReorderStrategy) => void;
     onReload: () => void;
+    onManageCourseIds: () => void;
+    canManageCourseIds: boolean;
 }
 
 const LessonActions = ({
@@ -45,6 +50,7 @@ const LessonActions = ({
     savingReorder,
     onSearch,
     onCreate,
+    onCreateProgram,
     onFilter,
     onImport,
     onExport,
@@ -53,6 +59,8 @@ const LessonActions = ({
     onSaveReorder,
     onReorderStrategyChange,
     onReload,
+    onManageCourseIds,
+    canManageCourseIds,
 }: LessonActionsProps) => (
     <>
         <SearchAndActionsBar
@@ -66,6 +74,11 @@ const LessonActions = ({
                 <>
                     {!reorderMode && (
                         <>
+                            {canCreate && (
+                                <Button icon={<FolderAddOutlined />} onClick={onCreateProgram}>
+                                    Chương trình mới
+                                </Button>
+                            )}
                             <Dropdown
                                 menu={{
                                     items: [
@@ -89,6 +102,11 @@ const LessonActions = ({
                                 <Button icon={<DownloadOutlined />}>Export</Button>
                             </Dropdown>
                             <Button icon={<ReloadOutlined />} onClick={onReload} />
+                            {canEdit && (
+                                <Button icon={<LinkOutlined />} disabled={!canManageCourseIds} onClick={onManageCourseIds}>
+                                    Course ID theo bài
+                                </Button>
+                            )}
                         </>
                     )}
 

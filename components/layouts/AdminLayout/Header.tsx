@@ -117,7 +117,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
   ];
 
   return (
-    <AntdHeader style={{ padding: '0 24px', background: '#ffffff', borderBottom: '1px solid #f0f0f0', height: 64, display: 'flex', alignItems: 'center' }}>
+    <AntdHeader style={{ padding: isMobile ? '0 10px' : '0 24px', background: '#ffffff', borderBottom: '1px solid #f0f0f0', height: 64, display: 'flex', alignItems: 'center' }}>
       <Flex align="center" justify="space-between" style={{ width: "100%", height: "100%" }}>
         {/* Left Side: Hamburger (mobile) + Logo */}
         {/* <Flex align="center" gap={12} style={{ flex: 1, minWidth: 0 }}>
@@ -200,7 +200,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
                 height={36}
                 style={{ objectFit: 'contain' }}
               />
-              <span style={{ fontSize: 20, fontWeight: 600, color: '#1890ff' }}>STREAM</span>
+              <span style={{ fontSize: isMobile ? 16 : 20, fontWeight: 600, color: '#1890ff' }}>STREAM</span>
             </Flex>
           </Flex>
           {!isMobile && (

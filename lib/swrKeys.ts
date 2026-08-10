@@ -24,6 +24,8 @@ export const swrKeys = {
         [SWR_NAMESPACES.quizzes, "index-suggestion", userId, params] as const,
     scheduleList: (userId: number, params: object) =>
         [SWR_NAMESPACES.schedules, "list", userId, params] as const,
+    schedulePrograms: (userId: number) =>
+        [SWR_NAMESPACES.schedules, "programs", userId] as const,
     moduleFields: (userId: number, moduleCode: string) =>
         [SWR_NAMESPACES.moduleFields, userId, moduleCode] as const,
     teachingStaff: (userId: number, teacherType: number) =>

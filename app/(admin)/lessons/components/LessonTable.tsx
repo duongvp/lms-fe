@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import type { DragEvent } from "react";
-import { Button, Grid, Space, Tooltip } from "antd";
+import { Button, Empty, Grid, Space, Tooltip } from "antd";
+import { FilterOutlined } from "@ant-design/icons";
 import {
     DeleteOutlined,
     DragOutlined,
@@ -34,6 +35,8 @@ interface LessonTableProps {
     canEdit: boolean;
     canDelete: boolean;
     visibleFormFieldCodes: string[];
+    /** Khi false: hiển thị empty placeholder, không hiển thị data */
+    hasSearched: boolean;
     onSelectionChange: (selectedRowKeys: React.Key[]) => void;
     onPageChange: (page: number, pageSize: number) => void;
     onSortChange: (sorter: LessonSortState) => void;
@@ -57,6 +60,7 @@ const LessonTable = ({
     canEdit,
     canDelete,
     visibleFormFieldCodes,
+    hasSearched,
     onSelectionChange,
     onPageChange,
     onSortChange,
@@ -65,6 +69,7 @@ const LessonTable = ({
     onEdit,
     onDelete,
 }: LessonTableProps) => {
+    const isPastLesson = (record: LessonDataType) => Number(record.past_scheduled_count || 0) > 0;
     const screens = Grid.useBreakpoint();
     const { containerRef, scrollY } = useTableViewport(reorderMode ? 64 : 112);
     const dragPointerYRef = useRef<number | null>(null);
@@ -174,65 +179,89 @@ const LessonTable = ({
             onDragOver={handleRowDragOver}
             onDragEnd={stopAutoScroll}
         >
-            <CustomTable<LessonDataType>
-                columns={columns}
-                dataSource={data}
-                loading={loading}
-                rowSelection={reorderMode ? undefined : {
-                    selectedRowKeys,
-                    onChange: onSelectionChange,
-                    columnWidth: 32,
-                }}
-                onRow={(record) => ({
-                    draggable: reorderMode,
-                    onDragStart: (event) => {
-                        event.dataTransfer.effectAllowed = "move";
-                        onDragStart(record.key);
-                    },
-                    onDragOver: handleRowDragOver,
-                    onDragEnd: stopAutoScroll,
-                    onDrop: () => {
-                        stopAutoScroll();
-                        onDrop(record.key);
-                    },
-                    style: reorderMode
-                        ? {
-                            cursor: "grab",
-                            backgroundColor: dragRowKey === record.key
-                                ? "rgba(22, 119, 255, 0.06)"
+            {!hasSearched ? (
+                <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description={
+                        <span>
+                            Vui lòng chọn điều kiện lọc và bấm{" "}
+                            <FilterOutlined /> <b>Lọc</b> để xem dữ liệu
+                        </span>
+                    }
+                    style={{ padding: "48px 0" }}
+                />
+            ) : (
+                <CustomTable<LessonDataType>
+                    columns={columns}
+                    dataSource={data}
+                    loading={loading}
+                    rowSelection={reorderMode ? undefined : {
+                        selectedRowKeys,
+                        onChange: onSelectionChange,
+                        columnWidth: 32,
+                        getCheckboxProps: (record) => ({
+                            disabled: isPastLesson(record),
+                            title: isPastLesson(record)
+                                ? "Bài học đã diễn ra, không thể thao tác hàng loạt"
                                 : undefined,
-                        }
-                        : { cursor: "pointer" },
-                })}
-                expandable={reorderMode ? undefined : {
-                    expandedRowRender: (record) => (
-                        <LessonDetailRow record={record} visibleFieldCodes={visibleFormFieldCodes} />
-                    ),
-                    expandRowByClick: true,
-                    columnWidth: 32,
-                }}
-                pagination={reorderMode ? false : {
-                    current: currentPage,
-                    pageSize,
-                    total: totalItems,
-                    showSizeChanger: true,
-                    position: ["bottomRight"],
-                    showTotal: (total) => `Tổng ${total} bài học`,
-                    onChange: onPageChange,
-                }}
-                onChange={(_, __, sorter, extra) => {
-                    if (extra.action !== "sort") return;
-                    const activeSorter = Array.isArray(sorter)
-                        ? sorter[0]
-                        : sorter as SorterResult<LessonDataType>;
-                    const field = activeSorter?.field ? String(activeSorter.field) : undefined;
-                    onSortChange({
-                        sort_by: field && SORTABLE_FIELDS.has(field) ? field : undefined,
-                        sort_order: activeSorter?.order || undefined,
-                    });
-                }}
-                scroll={{ x: "max-content", y: scrollY }}
-            />
+                        }),
+                    }}
+                    onRow={(record) => ({
+                        draggable: reorderMode && !isPastLesson(record),
+                        onDragStart: (event) => {
+                            if (isPastLesson(record)) {
+                                event.preventDefault();
+                                return;
+                            }
+                            event.dataTransfer.effectAllowed = "move";
+                            onDragStart(record.key);
+                        },
+                        onDragOver: handleRowDragOver,
+                        onDragEnd: stopAutoScroll,
+                        onDrop: () => {
+                            stopAutoScroll();
+                            onDrop(record.key);
+                        },
+                        style: reorderMode
+                            ? {
+                                cursor: isPastLesson(record) ? "not-allowed" : "grab",
+                                opacity: isPastLesson(record) ? 0.65 : 1,
+                                backgroundColor: dragRowKey === record.key
+                                    ? "rgba(22, 119, 255, 0.06)"
+                                    : undefined,
+                            }
+                            : { cursor: "pointer" },
+                    })}
+                    expandable={reorderMode ? undefined : {
+                        expandedRowRender: (record) => (
+                            <LessonDetailRow record={record} visibleFieldCodes={visibleFormFieldCodes} />
+                        ),
+                        expandRowByClick: true,
+                        columnWidth: 32,
+                    }}
+                    pagination={reorderMode ? false : {
+                        current: currentPage,
+                        pageSize,
+                        total: totalItems,
+                        showSizeChanger: true,
+                        position: ["bottomRight"],
+                        showTotal: (total) => `Tổng ${total} bài học`,
+                        onChange: onPageChange,
+                    }}
+                    onChange={(_, __, sorter, extra) => {
+                        if (extra.action !== "sort") return;
+                        const activeSorter = Array.isArray(sorter)
+                            ? sorter[0]
+                            : sorter as SorterResult<LessonDataType>;
+                        const field = activeSorter?.field ? String(activeSorter.field) : undefined;
+                        onSortChange({
+                            sort_by: field && SORTABLE_FIELDS.has(field) ? field : undefined,
+                            sort_order: activeSorter?.order || undefined,
+                        });
+                    }}
+                    scroll={{ x: "max-content", y: scrollY }}
+                />
+            )}
         </div>
     );
 };

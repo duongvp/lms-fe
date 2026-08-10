@@ -36,6 +36,101 @@ export interface BulkLivestreamPayload {
     calendars: LivestreamPayload[];
 }
 
+export interface AutoSchedulePayload {
+    program_code: string;
+    system_type: "topclass" | "topuni";
+    start_date: string;
+    strategy?: "by_block" | "interleaved";
+    holidays?: string[];
+    customize_lesson_names?: boolean;
+    lesson_name_prefix?: string;
+    lesson_name_suffix?: string;
+    blocks: Array<{
+        block_name?: string;
+        lessons: Array<{
+            learn_number: number;
+            session_id?: string | number;
+            lesson_name?: string;
+            sessions: Array<{
+            weekday: number;
+            start_time: string;
+            end_time: string;
+            teacher?: string;
+            assistant_teacher?: string;
+            room?: string;
+            lesson_id?: string;
+            hmo_mappings?: Array<{
+                package_id: string;
+                course_id: string;
+                lesson_id: string;
+            }>;
+            }>;
+        }>;
+    }>;
+}
+
+export interface SchedulingLesson {
+    id: string;
+    learn_number: number;
+    lesson_name: string;
+    scheduled_count: number;
+    past_scheduled_count: number;
+}
+
+export interface SchedulingProgram {
+    code: string;
+    subject_name?: string | null;
+}
+
+export const getSchedulingPrograms = () =>
+    fetchInstance(`${API_BASE_URL}/programs`, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+    });
+
+export interface HocmaiSectionOption {
+    package_id: string;
+    course_id: string;
+    lesson_id: string;
+    lesson_name?: string;
+}
+
+export const getProgramLessonsForScheduling = (programCode: string) =>
+    fetchInstance(`${API_BASE_URL}/programs/${encodeURIComponent(programCode)}/lessons`, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+    });
+
+export const getHocmaiSectionsForSchedulingLesson = (
+    programCode: string,
+    lessonId: string | number
+) => fetchInstance(
+    `${API_BASE_URL}/programs/${encodeURIComponent(programCode)}/lessons/${encodeURIComponent(String(lessonId))}/hmo-sections`,
+    {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+    }
+);
+
+export const previewAutoSchedule = (payload: AutoSchedulePayload) =>
+    fetchInstance(`${API_BASE_URL}/auto-schedule/preview`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+    });
+
+export const commitAutoSchedule = (payload: AutoSchedulePayload) =>
+    fetchInstance(`${API_BASE_URL}/auto-schedule/commit`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+    }, "json", 120_000);
+
 const request = (url: string, body: LivestreamPayload | BulkLivestreamPayload) =>
     fetchInstance(url, {
         method: "POST",
@@ -68,9 +163,10 @@ export const downloadLivestreamImportTemplate = (format: "csv" | "xlsx") =>
         credentials: "include",
     }, "blob");
 
-export const importLivestreamsFile = (file: File) => {
+export const importLivestreamsFile = (file: File, programCode: string) => {
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("program_code", programCode);
     return fetchInstance(`${API_BASE_URL}/import`, {
         method: "POST",
         body: formData,
@@ -218,7 +314,9 @@ export const toLivestreamPayload = (values: any): LivestreamPayload => {
         teacher: payload.teacher,
         assistant_teacher: serializeAssistantTeachers(payload.assistant_teacher),
         learn_number: Number(payload.learn_number ?? 1),
-        session_id: payload.session_id ?? payload.lesson_id,
+        // Internal lesson record only. HMO lesson_id (section ID) is carried
+        // by package_lesson_mappings and must never be used as session_id.
+        session_id: payload.session_id,
         grade: payload.grade,
         subject_name: payload.subject_name,
         lesson_name: payload.lesson_name,

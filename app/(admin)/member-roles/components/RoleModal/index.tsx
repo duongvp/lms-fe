@@ -14,7 +14,7 @@ import {
     Alert,
     Skeleton,
 } from "antd";
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
     CloseCircleOutlined,
     SaveOutlined,
@@ -177,17 +177,16 @@ const RoleModal = () => {
     const [structuresLoaded, setStructuresLoaded] = useState(false);
     const [structuresError, setStructuresError] = useState<string | null>(null);
 
-    // Lấy cấu trúc modules và permissions từ API
+    // 🆕 Fetch ngầm ngay khi component mount lần đầu
+    const hasFetchedInitially = useRef(false);
+
     useEffect(() => {
-        if (!modal.open) return;
-        let cancelled = false;
-        setStructuresLoaded(false);
-        setStructuresError(null);
-        setModulesStructure([]);
-        setPermissionsStructure({});
+        if (hasFetchedInitially.current) return; // Chỉ fetch 1 lần duy nhất
+        hasFetchedInitially.current = true;
 
         const fetchStructures = async () => {
             try {
+                setStructuresLoaded(false);
                 const [modulesResponse, permissionsResponse] = await Promise.all([
                     getModules(),
                     getPermissionsStructure(),
@@ -210,7 +209,6 @@ const RoleModal = () => {
                 } else {
                     console.warn("Modules response không đúng định dạng", modulesResponse);
                 }
-                if (cancelled) return;
                 setModulesStructure(modulesArray);
 
                 // Permissions
@@ -221,37 +219,31 @@ const RoleModal = () => {
                     console.warn("Permissions structure không đúng định dạng", permissionsResponse);
                 }
                 setPermissionsStructure(permissionsObj);
+                setStructuresLoaded(true);
+                setStructuresError(null);
             } catch (error) {
-                if (cancelled) return;
                 console.error("Lỗi lấy cấu trúc phân quyền:", error);
-                setStructuresError("Không thể tải cấu trúc phân quyền. Vui lòng đóng và thử lại.");
-            } finally {
-                if (!cancelled) setStructuresLoaded(true);
+                setStructuresError("Không thể tải cấu trúc phân quyền.");
+                setStructuresLoaded(true); // Vẫn set true để không bị treo Skeleton vĩnh viễn
             }
         };
 
         void fetchStructures();
-        return () => {
-            cancelled = true;
-        };
-    }, [modal.open]);
+    }, []); // ⚠️ Dependency rỗng → chỉ chạy 1 lần khi mount
 
-    // Đóng modal, reset state
+    // Đóng modal, reset state form nhưng giữ nguyên cấu trúc đã load
     const onCloseModal = () => {
         resetModal();
         form.resetFields();
         setCheckedGroups({});
         setExpandedGroups({});
         setFieldPolicy({});
-        setStructuresLoaded(false);
-        setStructuresError(null);
     };
 
     const toggleGroup = (key: string) => {
         setExpandedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
     };
 
-    // Lấy thông tin actions/keys của một item
     const getItemData = useCallback(
         (itemName: string): { actions: string[]; keys: string[] } | null => {
             for (const group of Object.values(permissionsStructure)) {
@@ -276,7 +268,6 @@ const RoleModal = () => {
         setCheckedGroups((prev) => ({ ...prev, [key]: values }));
     };
 
-    // Chuyển dữ liệu form permissions thành mảng string keys
     const convertFormPermissionsToApi = (formPermissions: Record<string, string[]> = {}): string[] => {
         const result: string[] = [];
         Object.entries(permissionsStructure).forEach(([_, groupItems]) => {
@@ -306,7 +297,7 @@ const RoleModal = () => {
         return checkedCount > 0 && checkedCount < itemData.actions.length;
     };
 
-    // Khi modal mở với role có sẵn (edit), load dữ liệu
+    // Khi modal mở với role có sẵn (edit), load dữ liệu role
     useEffect(() => {
         if (
             !modal.open ||
@@ -316,13 +307,11 @@ const RoleModal = () => {
         )
             return;
 
-        // Form cơ bản
         form.setFieldsValue({
             roleName: modal.role.name,
             description: modal.role.description,
         });
 
-        // Permissions
         const apiPermissions = new Set(
             (modal.role.permissions || []).map((p: any) =>
                 typeof p === "string" ? p : p.key
@@ -346,7 +335,6 @@ const RoleModal = () => {
         setCheckedGroups(initialChecked);
         form.setFieldValue("permissions", initialChecked);
 
-        // Field policy: lấy từ API riêng để luôn đồng bộ với backend.
         const loadFieldPolicy = async () => {
             try {
                 const rolePolicyResponse = await getRoleFieldPolicy(Number(modal.role?.id));
@@ -363,7 +351,6 @@ const RoleModal = () => {
         loadFieldPolicy();
     }, [modal.role, form, modal.open, permissionsStructure, modulesStructure]);
 
-    // Submit form
     const handleFormSubmit = async (values: any) => {
         try {
             setLoadingModalVisible(true);
@@ -401,8 +388,7 @@ const RoleModal = () => {
         }
     };
 
-    // Giữ modal ổn định trong lúc tải, tránh lớp spinner toàn màn hình chồng
-    // lên modal rỗng ở lần mở đầu tiên.
+    // Chỉ hiện Skeleton khi chưa load xong VÀ modal đang mở
     if (modal.open && !structuresLoaded) {
         return (
             <Modal
@@ -473,7 +459,6 @@ const RoleModal = () => {
                         </Form.Item>
 
                         <Tabs defaultActiveKey="1" style={{ marginTop: 16 }}>
-                            {/* Tab Quyền thao tác */}
                             <Tabs.TabPane tab="Quyền thao tác" key="1">
                                 <Title level={5}>Phân quyền thao tác</Title>
                                 <Row gutter={[24, 16]}>
@@ -542,7 +527,6 @@ const RoleModal = () => {
                                 </Row>
                             </Tabs.TabPane>
 
-                            {/* Tab Quyền dữ liệu (Field-Level) */}
                             <Tabs.TabPane tab="Quyền dữ liệu (Field-Level)" key="2">
                                 <Title level={5}>Cấu hình quyền trên trường dữ liệu</Title>
                                 <Collapse defaultActiveKey={modulesStructure.map((m) => m.code)}>

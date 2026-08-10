@@ -1,5 +1,5 @@
 'use client'
-import { Button, Row, Col, Flex, Dropdown, Menu } from 'antd';
+import { Button, Row, Col, Flex, Dropdown, Menu, Grid } from 'antd';
 import { CaretDownOutlined, FilterOutlined, MoreOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons';
 import CustomSearchInput from '@/components/ui/Inputs/CustomSearchInput';
 import React from 'react';
@@ -33,6 +33,8 @@ export default function SearchAndActionsBar({
     handlePrintBarcode,
     handleDeleteProducts
 }: Partial<SearchAndActionsBarProps>) {
+    const screens = Grid.useBreakpoint();
+    const compact = !screens.md;
 
     const menu = (
         <Menu
@@ -67,7 +69,7 @@ export default function SearchAndActionsBar({
                     justify='end'
                     style={{ gap: 8 }} // dùng style thay vì prop gap nếu cần độ tương thích cao
                 >
-                    <Flex wrap="wrap" justify="end" gap={8}>
+                    <Flex wrap="wrap" justify={compact ? "start" : "end"} gap={8}>
                         {
                             (handlePrintBarcode || handleDeleteProducts) && (
                                 <Dropdown menu={{ items: menu.props.items, onClick: menu.props.onClick }} trigger={['click']}>

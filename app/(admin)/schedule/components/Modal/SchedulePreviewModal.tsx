@@ -44,6 +44,10 @@ import {
 import { useLessonsQuery, useLmsCache, usePackageCoursesQuery } from '@/hooks/useLmsQueries';
 import TeachingStaffSelect from '@/components/shared/TeachingStaffSelect';
 
+// Course ID được quản lý theo từng bài tại module Đề cương. Giữ code đọc
+// mapping cũ để tương thích dữ liệu hiện hữu nhưng không nhập ở luồng tạo mới.
+const SHOW_LEGACY_HMO_MAPPING_EDITOR = false;
+
 const { Text } = Typography;
 
 interface SchedulePreviewModalProps {
@@ -602,12 +606,14 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
     };
 
     const normalizeSessionMappings = (session: PreviewSession) => (
-        (session.package_lesson_mappings ?? []).map((mapping) => ({
-            course_id: String(mapping.course_id ?? '').trim(),
-            lesson_ids: (mapping.lesson_ids ?? [])
-                .map((lessonId) => String(lessonId).trim())
-                .filter(Boolean),
-        }))
+        (session.package_lesson_mappings ?? [])
+            .map((mapping) => ({
+                course_id: String(mapping.course_id ?? '').trim(),
+                lesson_ids: (mapping.lesson_ids ?? [])
+                    .map((lessonId) => String(lessonId).trim())
+                    .filter(Boolean),
+            }))
+            .filter((mapping) => mapping.course_id && mapping.lesson_ids.length > 0)
     );
 
     const updateSessionLesson = (key: string, lessonId?: string) => {
@@ -753,41 +759,8 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
             return;
         }
 
-        if (!isEdit) {
-            if (loadingPackageCourses) {
-                messageApi.warning('Đang tải danh sách Course ID, vui lòng chờ trong giây lát.');
-                return;
-            }
-
-            const invalidMappingSession = sessions
-                .filter((session) => !session.isSkipped)
-                .find((session) => {
-                    const mappings = normalizeSessionMappings(session);
-                    return mappings.length === 0 || mappings.some(
-                        (mapping) => !mapping.course_id || mapping.lesson_ids.length === 0
-                    );
-                });
-            if (invalidMappingSession) {
-                messageApi.error(
-                    `Buổi ${invalidMappingSession.index}: Vui lòng chọn Course ID và nhập ít nhất một Lesson ID.`
-                );
-                return;
-            }
-
-            const duplicatedCourseSession = sessions
-                .filter((session) => !session.isSkipped)
-                .find((session) => {
-                    const courseIds = normalizeSessionMappings(session)
-                        .map((mapping) => mapping.course_id);
-                    return new Set(courseIds).size !== courseIds.length;
-                });
-            if (duplicatedCourseSession) {
-                messageApi.error(
-                    `Buổi ${duplicatedCourseSession.index}: Một Course ID chỉ nên xuất hiện một lần.`
-                );
-                return;
-            }
-        }
+        // lesson_id bên HOCMAI được BA gán sau. Calendar không còn bắt buộc
+        // Package/Course/Lesson mapping tại thời điểm tạo lịch.
 
         if (isEdit) {
             if (formValues.update_mode === 'cancel') {
@@ -1299,7 +1272,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     }}
                 />
 
-                {!isEdit && (
+                {SHOW_LEGACY_HMO_MAPPING_EDITOR && !isEdit && (
                     <div style={{ marginTop: 16 }}>
                         <Space direction="vertical" size={4} style={{ marginBottom: 12 }}>
                             <Text strong>Mapping Package / Course / Lesson theo từng buổi</Text>

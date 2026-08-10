@@ -23,7 +23,10 @@ import {
 import { EditOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import TeachingStaffSelect from '@/components/shared/TeachingStaffSelect';
-import { usePackageCoursesQuery } from '@/hooks/useLmsQueries';
+import {
+    getHocmaiSectionsForSchedulingLesson,
+    type HocmaiSectionOption,
+} from '@/services/livestreamService';
 
 const { Text, Title } = Typography;
 
@@ -60,6 +63,14 @@ const ROOM_OPTIONS = [
     { label: "Phòng 202 - Lab Máy Tính", value: "Phòng 202" },
     { label: "Phòng Online - Zoom 01", value: "Zoom 01" },
 ];
+
+const hmoOptionKey = (option: HocmaiSectionOption) => (
+    `${option.package_id}::${option.course_id}::${option.lesson_id}`
+);
+
+const mappingKeyFromCalendarMapping = (mapping: any) => (
+    `${String(mapping?.package_id || '')}::${String(mapping?.course_id || '')}::${String(mapping?.lesson_id || '')}`
+);
 
 const getTimeMinutes = (time?: Dayjs | null) => {
     if (!time) return undefined;
@@ -106,23 +117,57 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     const [form] = Form.useForm();
     const [loading, setLoading] = React.useState(false);
     const [previewRows, setPreviewRows] = React.useState<any[]>([]);
-    const packageCoursesQuery = usePackageCoursesQuery();
-    const packageCourses = packageCoursesQuery.data?.data ?? [];
-    const courseOptions = React.useMemo(() => Array.from(
-        packageCourses.reduce((groups: Map<string, any>, item: any) => {
-            const current = groups.get(item.course_id) ?? {
-                course_id: item.course_id,
-                course_name: item.course_name,
-                package_ids: [] as string[],
-            };
-            if (!current.package_ids.includes(item.package_id)) current.package_ids.push(item.package_id);
-            groups.set(item.course_id, current);
-            return groups;
-        }, new Map<string, any>()).values()
-    ).map((item: any) => ({
-        value: item.course_id,
-        label: `${item.course_id}${item.course_name ? ` - ${item.course_name}` : ''} (Gói ${item.package_ids.join(', ')})`,
-    })), [packageCourses]);
+    const [hmoOptionsByLesson, setHmoOptionsByLesson] = React.useState<Record<string, HocmaiSectionOption[]>>({});
+    const [loadingHmoLessons, setLoadingHmoLessons] = React.useState<Set<string>>(new Set());
+
+    const lessonContexts = React.useMemo(() => {
+        const contexts = new Map<string, { lessonId: string; code: string; label: string }>();
+        selectedRows.forEach((row) => {
+            const lessonId = String(row.session_id || '').trim();
+            if (!lessonId || contexts.has(lessonId)) return;
+            contexts.set(lessonId, {
+                lessonId,
+                code: String(row.code || '').trim(),
+                label: `Bài ${row.learn_number || '-'}${row.lesson_name ? `: ${row.lesson_name}` : ''}`,
+            });
+        });
+        return Array.from(contexts.values());
+    }, [selectedRows]);
+
+    useEffect(() => {
+        if (!open) return;
+        let active = true;
+        setHmoOptionsByLesson({});
+        setLoadingHmoLessons(new Set(lessonContexts.map((item) => item.lessonId)));
+        void Promise.all(lessonContexts.map(async (context) => {
+            try {
+                const response: any = await getHocmaiSectionsForSchedulingLesson(
+                    context.code,
+                    context.lessonId
+                );
+                if (!active) return;
+                const options = Array.isArray(response?.data) ? response.data : [];
+                setHmoOptionsByLesson((current) => ({
+                    ...current,
+                    [context.lessonId]: options,
+                }));
+            } catch {
+                if (!active) return;
+                setHmoOptionsByLesson((current) => ({
+                    ...current,
+                    [context.lessonId]: [],
+                }));
+            } finally {
+                if (!active) return;
+                setLoadingHmoLessons((current) => {
+                    const next = new Set(current);
+                    next.delete(context.lessonId);
+                    return next;
+                });
+            }
+        }));
+        return () => { active = false; };
+    }, [lessonContexts, open]);
 
     // Form Watchers
     const configMode = Form.useWatch('config_mode', form) || 'common';
@@ -134,15 +179,9 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         if (open) {
             const separateConfig: Record<string, any> = {};
             selectedRows.forEach((row) => {
-                let mappings = row.package_lesson_mappings || [];
-                if (mappings.length === 0) {
-                    mappings = [{ lesson_ids: [] }];
-                } else {
-                    mappings = mappings.map((m: any) => ({
-                        course_id: m.course_id,
-                        lesson_ids: m.lesson_ids || (m.lesson_id ? [m.lesson_id] : []),
-                    }));
-                }
+                const hmoMappingKeys = (row.package_lesson_mappings || [])
+                    .map(mappingKeyFromCalendarMapping)
+                    .filter((key: string) => !key.startsWith('::') && !key.endsWith('::'));
                 
                 separateConfig[row.id] = {
                     start_time: row.start_time ? dayjs(row.start_time, 'HH:mm') : undefined,
@@ -152,7 +191,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         ? row.assistant_teacher.map((a: any) => a.username) 
                         : (row.assistant_teacher?.username ? [row.assistant_teacher.username] : []),
                     room: row.room,
-                    package_lesson_mappings: mappings,
+                    hmo_mapping_keys: hmoMappingKeys,
                 };
             });
 
@@ -193,10 +232,19 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         : (firstRow.assistant_teacher?.username ? [firstRow.assistant_teacher.username] : []);
                 }
 
-                // If exactly 1 row is selected, prefill mapping too
-                if (selectedRows.length === 1) {
-                    commonConfig.common_package_lesson_mappings = separateConfig[firstRow.id]?.package_lesson_mappings;
-                }
+                commonConfig.common_hmo_mapping_keys_by_lesson = Object.fromEntries(
+                    lessonContexts.map((context) => {
+                        const firstLessonRow = selectedRows.find(
+                            (row) => String(row.session_id || '') === context.lessonId
+                        );
+                        return [
+                            context.lessonId,
+                            (firstLessonRow?.package_lesson_mappings || [])
+                                .map(mappingKeyFromCalendarMapping)
+                                .filter((key: string) => !key.startsWith('::') && !key.endsWith('::')),
+                        ];
+                    })
+                );
             }
 
             form.setFieldsValue({
@@ -207,7 +255,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             });
             setPreviewRows([]);
         }
-    }, [open, selectedRowKeys, selectedRows, form]);
+    }, [open, selectedRowKeys, selectedRows, form, lessonContexts]);
 
     const handleClose = () => {
         form.resetFields();
@@ -246,23 +294,38 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         void form.validateFields([endFieldName]);
     };
 
-    const normalizeMappings = (mappings: any[] = []) => mappings
-        .map((mapping) => ({
-            course_id: String(mapping?.course_id ?? '').trim(),
-            lesson_ids: (mapping?.lesson_ids ?? [])
-                .map((lessonId: unknown) => String(lessonId).trim())
-                .filter(Boolean),
-        }))
-        .filter((mapping) => mapping.course_id && mapping.lesson_ids.length > 0);
+    const mappingKeysToPayload = (keys: string[] = []) => keys
+        .map((key) => {
+            const [packageId, courseId, lessonId] = String(key).split('::');
+            if (!packageId || !courseId || !lessonId) return null;
+            return {
+                package_ids: [packageId],
+                course_id: courseId,
+                lesson_ids: [lessonId],
+            };
+        })
+        .filter(Boolean);
 
     const formatMappings = (mappings: any[] = []) => {
         const rows = mappings.flatMap((mapping) => {
-            const packageText = mapping.package_id ? `Package ${mapping.package_id} → ` : '';
-            const courseId = mapping.course_id || '-';
             const lessonIds = mapping.lesson_ids ?? (mapping.lesson_id ? [mapping.lesson_id] : []);
-            return lessonIds.map((lessonId: string) => `${packageText}Course ${courseId} → Lesson ${lessonId}`);
+            return lessonIds.map((lessonId: string) => `Lesson ${lessonId}`);
         });
         return rows.length ? rows.join('; ') : 'Chưa mapping';
+    };
+
+    const formatMappingKeys = (keys: string[] = [], lessonId: string) => {
+        const optionByKey = new Map(
+            (hmoOptionsByLesson[lessonId] || []).map((option) => [hmoOptionKey(option), option])
+        );
+        const labels = keys.map((key) => {
+            const option = optionByKey.get(key);
+            const externalLessonId = option?.lesson_id || String(key).split('::')[2];
+            return option?.lesson_name
+                ? `Lesson ${externalLessonId}: ${option.lesson_name}`
+                : `Lesson ${externalLessonId}`;
+        });
+        return labels.length ? labels.join('; ') : 'Chưa mapping';
     };
 
     const handleFinish = async (values: any) => {
@@ -275,28 +338,45 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 formattedSeparateConfig = {};
                 Object.keys(values.separate_config).forEach(key => {
                     const config = values.separate_config[key];
+                    const mappingTouched = form.isFieldTouched([
+                        'separate_config',
+                        key,
+                        'hmo_mapping_keys',
+                    ]);
                     formattedSeparateConfig[key] = {
                         ...config,
                         start_time: config.start_time ? dayjs(config.start_time).format('HH:mm') : undefined,
                         end_time: config.end_time ? dayjs(config.end_time).format('HH:mm') : undefined,
-                        package_lesson_mappings: normalizeMappings(config.package_lesson_mappings),
+                        ...(mappingTouched
+                            ? { package_lesson_mappings: mappingKeysToPayload(config.hmo_mapping_keys) }
+                            : {}),
                     };
+                    delete formattedSeparateConfig[key].hmo_mapping_keys;
                 });
             }
 
             if (previewRows.length === 0) {
                 setPreviewRows((selectedLessons as (string | number)[]).map((lessonKey) => {
                     const record = selectedRows.find((item) => String(item.id) === String(lessonKey));
-                    const nextMappings = values.config_mode === 'separate'
-                        ? normalizeMappings(values.separate_config?.[lessonKey]?.package_lesson_mappings)
-                        : normalizeMappings(values.common_package_lesson_mappings);
-                    const isMappingUnchanged = values.config_mode === 'common' && !values.enable_mapping;
+                    const internalLessonId = String(record?.session_id || '');
+                    const nextKeys = values.config_mode === 'separate'
+                        ? values.separate_config?.[lessonKey]?.hmo_mapping_keys || []
+                        : values.common_hmo_mapping_keys_by_lesson?.[internalLessonId] || [];
+                    const isMappingUnchanged = values.config_mode === 'common'
+                        ? !values.enable_mapping
+                        : !form.isFieldTouched([
+                            'separate_config',
+                            String(lessonKey),
+                            'hmo_mapping_keys',
+                        ]);
                     
                     return {
                         id: lessonKey,
                         label: record?.learn_number ? `Buổi ${record.learn_number}` : `ID ${lessonKey}`,
                         current: formatMappings(record?.package_lesson_mappings || []),
-                        next: isMappingUnchanged ? 'Giữ nguyên' : (nextMappings.length ? formatMappings(nextMappings) : 'Xóa toàn bộ mapping'),
+                        next: isMappingUnchanged
+                            ? 'Giữ nguyên'
+                            : (nextKeys.length ? formatMappingKeys(nextKeys, internalLessonId) : 'Xóa toàn bộ Lesson ID'),
                     };
                 }));
                 return;
@@ -316,7 +396,14 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     room: values.enable_room ? values.common_room : undefined,
                     start_time: values.enable_time && values.common_start_time ? dayjs(values.common_start_time).format('HH:mm') : undefined,
                     end_time: values.enable_time && values.common_end_time ? dayjs(values.common_end_time).format('HH:mm') : undefined,
-                    package_lesson_mappings: values.enable_mapping ? normalizeMappings(values.common_package_lesson_mappings) : undefined,
+                    mapping_updates: values.enable_mapping
+                        ? Object.fromEntries((selectedLessons as (string | number)[]).map((calendarId) => {
+                            const record = selectedRows.find((item) => String(item.id) === String(calendarId));
+                            const internalLessonId = String(record?.session_id || '');
+                            const keys = values.common_hmo_mapping_keys_by_lesson?.[internalLessonId] || [];
+                            return [String(calendarId), mappingKeysToPayload(keys)];
+                        }))
+                        : undefined,
                 } : undefined,
                 separate_config: formattedSeparateConfig,
             };
@@ -571,10 +658,10 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         <Row gutter={16} align="top" style={{ marginBottom: 8 }}>
                             <Col span={8}>
                                 <Form.Item name="enable_mapping" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                    <Checkbox><Text strong>Đổi Mapping</Text></Checkbox>
+                                    <Checkbox><Text strong>Đổi Lesson ID HMO</Text></Checkbox>
                                 </Form.Item>
                                 <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
-                                    Nếu nhập, mapping mới sẽ ghi đè cho tất cả bài đã chọn.
+                                    Course ID và Package ID được tự lấy từ từng bài trong Đề cương.
                                 </Text>
                             </Col>
                             <Col span={16}>
@@ -583,37 +670,39 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                         const enabled = getFieldValue('enable_mapping');
                                         return (
                                             <div style={{ opacity: enabled ? 1 : 0.5, pointerEvents: enabled ? 'auto' : 'none' }}>
-                                                <Form.List name="common_package_lesson_mappings" initialValue={[{ lesson_ids: [] }]}>
-                                                    {(fields, { add, remove }) => (
-                                                        <Space direction="vertical" style={{ width: '100%' }}>
-                                                            {fields.map((field, index) => (
-                                                                <div key={field.key} style={{ background: '#fff', padding: '12px', border: '1px solid #d9d9d9', borderRadius: '6px', position: 'relative' }}>
-                                                                    <Row gutter={12}>
-                                                                        <Col span={12}>
-                                                                            <Form.Item label="Course ID" name={[field.name, 'course_id']} style={{ marginBottom: 0 }}>
-                                                                                <Select options={courseOptions} showSearch optionFilterProp="label" placeholder="Chọn Course ID" disabled={!enabled} popupMatchSelectWidth={false} />
-                                                                            </Form.Item>
-                                                                        </Col>
-                                                                        <Col span={12}>
-                                                                            <Form.Item label="Lesson ID" name={[field.name, 'lesson_ids']} style={{ marginBottom: 0 }}>
-                                                                                <Select mode="tags" tokenSeparators={[',', ' ']} placeholder="Nhập Lesson ID" disabled={!enabled} />
-                                                                            </Form.Item>
-                                                                        </Col>
-                                                                    </Row>
-                                                                    <Button 
-                                                                        type="text" 
-                                                                        danger 
-                                                                        icon={<CloseCircleOutlined />} 
-                                                                        onClick={() => remove(field.name)} 
-                                                                        disabled={fields.length === 1 || !enabled} 
-                                                                        style={{ position: 'absolute', top: 4, right: 4 }}
-                                                                    />
-                                                                </div>
-                                                            ))}
-                                                            <Button type="dashed" onClick={() => add({ lesson_ids: [] })} block disabled={!enabled}>+ Thêm Course ID</Button>
-                                                        </Space>
+                                                <Space direction="vertical" style={{ width: '100%' }}>
+                                                    {lessonContexts.map((context) => {
+                                                        const options = hmoOptionsByLesson[context.lessonId] || [];
+                                                        return (
+                                                            <Form.Item
+                                                                key={context.lessonId}
+                                                                name={['common_hmo_mapping_keys_by_lesson', context.lessonId]}
+                                                                label={context.label}
+                                                                style={{ marginBottom: 8 }}
+                                                            >
+                                                                <Select
+                                                                    mode="multiple"
+                                                                    allowClear
+                                                                    showSearch
+                                                                    optionFilterProp="label"
+                                                                    loading={loadingHmoLessons.has(context.lessonId)}
+                                                                    disabled={!enabled}
+                                                                    placeholder={options.length
+                                                                        ? 'Chọn Lesson ID HMO'
+                                                                        : 'Bài chưa có Course ID hoặc HMO không có Lesson ID'}
+                                                                    options={options.map((option) => ({
+                                                                        value: hmoOptionKey(option),
+                                                                        label: `${option.lesson_id}${option.lesson_name ? ` · ${option.lesson_name}` : ''}`,
+                                                                    }))}
+                                                                    maxTagCount="responsive"
+                                                                />
+                                                            </Form.Item>
+                                                        );
+                                                    })}
+                                                    {!lessonContexts.length && (
+                                                        <Alert type="warning" showIcon message="Lịch đã chọn chưa gắn bài học nội bộ" />
                                                     )}
-                                                </Form.List>
+                                                </Space>
                                             </div>
                                         );
                                     }}
@@ -702,40 +791,44 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                     >
                                         <TeachingStaffSelect teacherType={2} mode="multiple" showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" />
                                     </Form.Item>
-                                    <Form.List name={['separate_config', lessonKey, 'package_lesson_mappings']} initialValue={[{ lesson_ids: [] }]}>
-                                        {(fields, { add, remove }) => (
+                                    {(() => {
+                                        const record = selectedRows.find(
+                                            (item) => String(item.id) === String(lessonKey)
+                                        );
+                                        const internalLessonId = String(record?.session_id || '');
+                                        const options = hmoOptionsByLesson[internalLessonId] || [];
+                                        return (
                                             <div style={{ marginTop: 12, padding: 12, background: '#f5f5f5', borderRadius: 6 }}>
-                                                <Text strong style={{ display: 'block', marginBottom: 8 }}>Mapping Package / Course / Lesson</Text>
-                                                <Space direction="vertical" style={{ width: '100%' }}>
-                                                    {fields.map((field) => (
-                                                        <div key={field.key} style={{ background: '#fff', padding: '12px', border: '1px solid #d9d9d9', borderRadius: '6px', position: 'relative' }}>
-                                                            <Row gutter={12}>
-                                                                <Col span={12}>
-                                                                    <Form.Item label="Course ID" name={[field.name, 'course_id']} style={{ marginBottom: 0 }}>
-                                                                        <Select options={courseOptions} showSearch optionFilterProp="label" placeholder="Chọn Course ID" popupMatchSelectWidth={false} />
-                                                                    </Form.Item>
-                                                                </Col>
-                                                                <Col span={12}>
-                                                                    <Form.Item label="Lesson ID" name={[field.name, 'lesson_ids']} style={{ marginBottom: 0 }}>
-                                                                        <Select mode="tags" tokenSeparators={[',', ' ']} placeholder="Nhập Lesson ID" />
-                                                                    </Form.Item>
-                                                                </Col>
-                                                            </Row>
-                                                            <Button 
-                                                                type="text" 
-                                                                danger 
-                                                                icon={<CloseCircleOutlined />} 
-                                                                onClick={() => remove(field.name)} 
-                                                                disabled={fields.length === 1} 
-                                                                style={{ position: 'absolute', top: 4, right: 4 }}
-                                                            />
-                                                        </div>
-                                                    ))}
-                                                    <Button type="dashed" onClick={() => add({ lesson_ids: [] })} block>+ Thêm Course ID</Button>
-                                                </Space>
+                                                <Form.Item
+                                                    label="Lesson ID HMO"
+                                                    name={['separate_config', lessonKey, 'hmo_mapping_keys']}
+                                                    style={{ marginBottom: 0 }}
+                                                >
+                                                    <Select
+                                                        mode="multiple"
+                                                        allowClear
+                                                        showSearch
+                                                        optionFilterProp="label"
+                                                        loading={loadingHmoLessons.has(internalLessonId)}
+                                                        disabled={!internalLessonId}
+                                                        placeholder={!internalLessonId
+                                                            ? 'Lịch chưa gắn bài học nội bộ'
+                                                            : options.length
+                                                                ? 'Chọn Lesson ID HMO'
+                                                                : 'Bài chưa có Course ID hoặc HMO không có Lesson ID'}
+                                                        options={options.map((option) => ({
+                                                            value: hmoOptionKey(option),
+                                                            label: `${option.lesson_id}${option.lesson_name ? ` · ${option.lesson_name}` : ''}`,
+                                                        }))}
+                                                        maxTagCount="responsive"
+                                                    />
+                                                </Form.Item>
+                                                <Text type="secondary" style={{ display: 'block', marginTop: 6 }}>
+                                                    Course ID và Package ID được tự lấy từ bài học trong Đề cương.
+                                                </Text>
                                             </div>
-                                        )}
-                                    </Form.List>
+                                        );
+                                    })()}
                                 </Card>
                             ))
                         ) : (

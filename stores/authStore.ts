@@ -114,6 +114,9 @@ export const useAuthStore = create<AuthState>()(
             },
 
             logout: () => {
+                if (typeof window !== 'undefined') {
+                    sessionStorage.removeItem('lms.lessons.reauth');
+                }
                 set({ user: defaultUser, accessToken: null });
                 void mutate(() => true, undefined, { revalidate: false });
                 handleLogout();

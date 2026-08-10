@@ -1,14 +1,18 @@
+// components/QuizActionsBar.tsx
 "use client";
 
-import { Alert, Button, Tooltip } from "antd";
+import { Button, Input, Space, Tooltip } from "antd";
 import {
-    DragOutlined,
+    PlusOutlined,
+    ImportOutlined,
     ExportOutlined,
+    FilterOutlined,
     ReloadOutlined,
-    SaveOutlined,
-    StopOutlined,
+    SwapOutlined,
+    CheckOutlined,
+    CloseOutlined,
+    SearchOutlined,
 } from "@ant-design/icons";
-import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
 
 interface QuizActionsBarProps {
     canCreate: boolean;
@@ -21,6 +25,7 @@ interface QuizActionsBarProps {
     savingReorder: boolean;
     onSearch: (value: string) => Promise<void>;
     onCreate: () => void;
+    onFilter: () => void;
     onImport: () => void;
     onExport: () => void;
     onEnableReorder: () => void;
@@ -40,76 +45,115 @@ const QuizActionsBar = ({
     savingReorder,
     onSearch,
     onCreate,
+    onFilter,
     onImport,
     onExport,
     onEnableReorder,
     onCancelReorder,
     onSaveReorder,
     onRefresh,
-}: QuizActionsBarProps) => (
-    <>
-        <SearchAndActionsBar
-            onSearch={onSearch}
-            placeholder="Tìm theo nội dung câu hỏi..."
-            titleBtnAdd="Câu hỏi"
-            titleBtnImport="Nhập từ Excel"
-            handleAddBtn={canCreate && !reorderMode ? onCreate : undefined}
-            handleImportClick={canImport && !reorderMode ? onImport : undefined}
-            extraExportButton={
-                <>
-                    {!reorderMode && canExport && (
-                        <Tooltip title={selectedCount
-                            ? `Chỉ xuất ${selectedCount} câu hỏi đang được chọn trong bảng`
-                            : "Xuất toàn bộ câu hỏi phù hợp với bộ lọc hiện tại"}
-                        >
-                            <Button icon={<ExportOutlined />} onClick={onExport}>
-                                {selectedCount
-                                    ? `Xuất ${selectedCount} câu đã chọn`
-                                    : "Xuất danh sách đang lọc"}
-                            </Button>
-                        </Tooltip>
-                    )}
-                    {!reorderMode && (
-                        <Button
-                            aria-label="Tải lại danh sách"
-                            icon={<ReloadOutlined />}
-                            onClick={onRefresh}
-                            loading={refreshing}
-                        />
-                    )}
-                    {canEdit && !reorderMode && (
-                        <Button icon={<DragOutlined />} onClick={onEnableReorder}>
-                            Sắp xếp câu hỏi
-                        </Button>
-                    )}
-                    {reorderMode && (
-                        <>
-                            <Button icon={<StopOutlined />} onClick={onCancelReorder}>
-                                Hủy sắp xếp
-                            </Button>
-                            <Button
-                                type="primary"
-                                icon={<SaveOutlined />}
-                                loading={savingReorder}
-                                onClick={onSaveReorder}
-                            >
-                                Lưu thứ tự
-                            </Button>
-                        </>
-                    )}
-                </>
-            }
-        />
+}: QuizActionsBarProps) => {
+    if (reorderMode) {
+        return (
+            <div
+                style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    marginBottom: 16,
+                }}
+            >
+                <span style={{ fontWeight: 500, color: "#1677ff" }}>
+                    Chế độ sắp xếp: Kéo thả để thay đổi thứ tự câu hỏi
+                </span>
+                <Space>
+                    <Button
+                        type="primary"
+                        icon={<CheckOutlined />}
+                        loading={savingReorder}
+                        onClick={onSaveReorder}
+                    >
+                        Lưu thứ tự
+                    </Button>
+                    <Button
+                        icon={<CloseOutlined />}
+                        disabled={savingReorder}
+                        onClick={onCancelReorder}
+                    >
+                        Hủy
+                    </Button>
+                </Space>
+            </div>
+        );
+    }
 
-        {reorderMode && (
-            <Alert
-                type="info"
-                showIcon
-                style={{ marginBottom: 12 }}
-                message="Kéo từng dòng đến vị trí mới trong bài học. Thứ tự chỉ được lưu khi bạn chọn “Lưu thứ tự”."
-            />
-        )}
-    </>
-);
+    return (
+        <div
+            style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                marginBottom: 16,
+                flexWrap: "wrap",
+            }}
+        >
+            <Space size="middle" wrap>
+                <Input.Search
+                    placeholder="Tìm kiếm câu hỏi..."
+                    allowClear
+                    onSearch={onSearch}
+                    style={{ width: 280 }}
+                    prefix={<SearchOutlined />}
+                />
+
+
+            </Space>
+
+            <Space size="small" wrap>
+                {canCreate && (
+                    <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
+                        Thêm câu hỏi
+                    </Button>
+                )}
+
+                {canImport && (
+                    <Button icon={<ImportOutlined />} onClick={onImport}>
+                        Import
+                    </Button>
+                )}
+
+                {canExport && (
+                    <Button
+                        icon={<ExportOutlined />}
+                        onClick={onExport}
+                    >
+                        Export{selectedCount > 0 ? ` (${selectedCount})` : ""}
+                    </Button>
+                )}
+
+                <Tooltip title="Làm mới">
+                    <Button
+                        icon={<ReloadOutlined />}
+                        loading={refreshing}
+                        onClick={onRefresh}
+                    />
+                </Tooltip>
+
+                {canEdit && (
+                    <Button
+                        type="primary"
+                        icon={<SwapOutlined />}
+                        onClick={onEnableReorder}
+                    >
+                        Sắp xếp
+                    </Button>
+                )}
+                <Button icon={<FilterOutlined />} onClick={onFilter} />
+            </Space>
+        </div>
+    );
+};
 
 export default QuizActionsBar;

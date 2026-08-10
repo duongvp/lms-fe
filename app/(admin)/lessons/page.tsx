@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Button, Modal, notification } from "antd";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { Button, Input, Modal, notification, Spin } from "antd";
 import { DownOutlined, InfoCircleOutlined, UpOutlined } from "@ant-design/icons";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
@@ -12,15 +12,21 @@ import {
 } from "@/helper/fieldPolicy";
 import type { ModuleField } from "@/types/fieldPolicy";
 import {
+    clearLessonReauthToken,
+    createLessonProgram,
     createLesson,
     deleteLesson,
     downloadLessonTemplate,
     exportLessons,
     importLessonsFile,
+    hasLessonReauthToken,
+    reauthenticateLessons,
+    validateLessonReauthentication,
     type LessonApiResponse,
     type LessonExportParams,
     type LessonListParams,
     type LessonPayload,
+    type CreateLessonProgramPayload,
     reorderLessons,
     updateLesson,
 } from "@/services/lessonService";
@@ -29,6 +35,8 @@ import LessonFormModal, { FORM_FIELDS } from "./components/Modal/LessonFormModal
 import LessonActions from "./components/LessonActions";
 import LessonFilterDrawer from "./components/LessonFilterDrawer";
 import LessonImportModal from "./components/LessonImportModal";
+import LessonCourseMappingModal from "./components/Modal/LessonCourseMappingModal";
+import ProgramCreateModal from "./components/Modal/ProgramCreateModal";
 import LessonTable from "./components/LessonTable";
 import {
     DEFAULT_MODULE_FIELDS,
@@ -47,6 +55,22 @@ import type {
 } from "./lesson.types";
 import { cleanFilterValues, downloadBlob } from "./lesson.utils";
 
+// ✅ Hàm debounce helper
+function useDebounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
+    const timerRef = useRef<NodeJS.Timeout | null>(null);
+    const fnRef = useRef(fn);
+    fnRef.current = fn;
+
+    return useCallback((...args: Parameters<T>) => {
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+        }
+        timerRef.current = setTimeout(() => {
+            fnRef.current(...args);
+        }, delay);
+    }, [delay]);
+}
+
 const Page = () => {
     const [data, setData] = useState<LessonDataType[]>([]);
     const [saving, setSaving] = useState(false);
@@ -55,10 +79,17 @@ const Page = () => {
     const [totalItems, setTotalItems] = useState(0);
     const [searchText, setSearchText] = useState("");
     const [filterValues, setFilterValues] = useState<LessonFilterValues>({});
-    const [sortState, setSortState] = useState<LessonSortState>({});
+    const [submittedFilterValues, setSubmittedFilterValues] = useState<LessonFilterValues>({});
+    const [hasSearched, setHasSearched] = useState(false);
+    const [sortState, setSortState] = useState<LessonSortState>({
+        sort_by: "learn_number",
+        sort_order: "ascend",
+    });
     const [openFilterDrawer, setOpenFilterDrawer] = useState(false);
     const [openFormModal, setOpenFormModal] = useState(false);
+    const [openProgramModal, setOpenProgramModal] = useState(false);
     const [openImportModal, setOpenImportModal] = useState(false);
+    const [openCourseMappingModal, setOpenCourseMappingModal] = useState(false);
     const [openDetailDrawer, setOpenDetailDrawer] = useState(false);
     const [moduleFields, setModuleFields] = useState<ModuleField[]>(DEFAULT_MODULE_FIELDS);
     const [selectedRecord, setSelectedRecord] = useState<LessonDataType | null>(null);
@@ -70,6 +101,11 @@ const Page = () => {
     const [importErrors, setImportErrors] = useState<LessonImportError[]>([]);
     const [dragRowKey, setDragRowKey] = useState<React.Key | null>(null);
     const [showPageInfo, setShowPageInfo] = useState(true);
+    const [secondaryUnlocked, setSecondaryUnlocked] = useState(false);
+    const [secondaryPromptOpen, setSecondaryPromptOpen] = useState(false);
+    const [secondaryChecking, setSecondaryChecking] = useState(true);
+    const [secondaryPassword, setSecondaryPassword] = useState("");
+    const [secondaryLoading, setSecondaryLoading] = useState(false);
     const [api, contextHolder] = notification.useNotification();
     const hasPermission = useAuthStore((state) => state.hasPermission);
     const { fieldPolicy } = useAuthStore((state) => state.user);
@@ -98,21 +134,78 @@ const Page = () => {
         .filter((item) => item.editable)
         .map((item) => item.field.fieldCode);
 
-    const lessonParams = useMemo<LessonListParams>(() => ({
-        page: currentPage,
-        limit: pageSize,
-        ...filterValues,
-        sort_by: sortState.sort_by,
-        sort_order: sortState.sort_by
-            ? (sortState.sort_order === "descend" ? "desc" : "asc")
-            : undefined,
-    }), [currentPage, pageSize, filterValues, sortState]);
-    const lessonsQuery = useLessonsQuery(lessonParams);
+    // ✅ Hàm thực sự submit filter (được debounce)
+    const doSearch = useCallback((keyword: string) => {
+        if (!hasSearched) return;
+
+        setSubmittedFilterValues((prev) =>
+            cleanFilterValues({
+                ...prev,
+                keyword: keyword,
+            })
+        );
+        setCurrentPage(1);
+    }, [hasSearched]);
+
+    // ✅ Debounce hàm doSearch với 500ms
+    const debouncedDoSearch = useDebounce(doSearch, 500);
+
+    const lessonParams = useMemo<LessonListParams>(() => {
+        if (!hasSearched) return {} as LessonListParams;
+
+        return {
+            page: currentPage,
+            limit: pageSize,
+            ...submittedFilterValues,
+            sort_by: sortState.sort_by,
+            sort_order: sortState.sort_by
+                ? (sortState.sort_order === "descend" ? "desc" : "asc")
+                : undefined,
+        };
+    }, [currentPage, pageSize, submittedFilterValues, sortState, hasSearched]);
+
+    const lessonsQuery = useLessonsQuery(
+        secondaryUnlocked && hasSearched ? lessonParams : null
+    );
     const moduleFieldsQuery = useModuleFieldsQuery(LESSON_MODULE_CODE);
     const { refreshLessons } = useLmsCache();
     const loading = lessonsQuery.isLoading || lessonsQuery.isValidating;
 
     useEffect(() => {
+        let active = true;
+        const validateStoredToken = async () => {
+            if (!hasLessonReauthToken()) {
+                if (!active) return;
+                setSecondaryUnlocked(false);
+                setSecondaryPromptOpen(true);
+                setSecondaryChecking(false);
+                return;
+            }
+            try {
+                await validateLessonReauthentication();
+                if (!active) return;
+                setSecondaryUnlocked(true);
+                setSecondaryPromptOpen(false);
+            } catch {
+                if (!active) return;
+                clearLessonReauthToken();
+                setSecondaryUnlocked(false);
+                setSecondaryPromptOpen(true);
+            } finally {
+                if (active) setSecondaryChecking(false);
+            }
+        };
+        void validateStoredToken();
+        return () => { active = false; };
+    }, []);
+
+    useEffect(() => {
+        if (!hasSearched) {
+            setData([]);
+            setTotalItems(0);
+            return;
+        }
+
         const response: any = lessonsQuery.data;
         if (!response?.data) return;
         const list = response.data.data ?? [];
@@ -121,15 +214,46 @@ const Page = () => {
             key: String(item.id),
         })));
         setTotalItems(response.data.total ?? 0);
-    }, [lessonsQuery.data]);
+    }, [lessonsQuery.data, hasSearched]);
 
     useEffect(() => {
         if (!lessonsQuery.error) return;
+        if (
+            Number((lessonsQuery.error as any)?.status) === 428
+            || (lessonsQuery.error as any)?.detail?.code === "LESSONS_REAUTH_REQUIRED"
+        ) {
+            clearLessonReauthToken();
+            setSecondaryUnlocked(false);
+            setSecondaryPromptOpen(true);
+            setHasSearched(false);
+            setData([]);
+            setTotalItems(0);
+            return;
+        }
         api.error({
             message: "Lỗi khi tải dữ liệu",
             description: lessonsQuery.error.message || "Không thể tải danh sách bài học.",
         });
     }, [api, lessonsQuery.error]);
+
+    const handleSecondaryAuth = async () => {
+        try {
+            setSecondaryLoading(true);
+            await reauthenticateLessons(secondaryPassword);
+            setSecondaryPassword("");
+            setSecondaryUnlocked(true);
+            setSecondaryPromptOpen(false);
+            await refreshLessons();
+            api.success({ message: "Xác thực cấp 2 thành công" });
+        } catch (error: any) {
+            api.error({
+                message: "Xác thực thất bại",
+                description: error?.message || "Mật khẩu cấp 2 không đúng.",
+            });
+        } finally {
+            setSecondaryLoading(false);
+        }
+    };
 
     useEffect(() => {
         const fields = moduleFieldsQuery.data?.fields;
@@ -144,25 +268,44 @@ const Page = () => {
         }
     }, [moduleFieldsQuery.data]);
 
-    const handleSearch = async (value: string) => {
+    // ✅ Sửa thành async để khớp với type yêu cầu
+    const handleSearch = useCallback(async (value: string) => {
         setSearchText(value);
         setFilterValues((prev) => cleanFilterValues({ ...prev, keyword: value }));
         setCurrentPage(1);
-    };
+
+        debouncedDoSearch(value);
+    }, [debouncedDoSearch]);
 
     const handleFilter = (values: LessonFilterValues) => {
-        setFilterValues(cleanFilterValues({ ...values, keyword: searchText }));
+        if (!values.subject_code) {
+            api.warning({ message: "Vui lòng chọn Chương trình" });
+            return;
+        }
+        const cleaned = cleanFilterValues({ ...values, keyword: searchText });
+        setFilterValues(cleaned);
+        setSubmittedFilterValues(cleaned);
+        setHasSearched(true);
         setCurrentPage(1);
         setOpenFilterDrawer(false);
     };
 
     const handleResetFilter = () => {
-        setFilterValues(cleanFilterValues({ keyword: searchText }));
+        const cleaned = cleanFilterValues({ keyword: "" });
+        setSearchText("");
+        setFilterValues(cleaned);
+        setSubmittedFilterValues(cleaned);
+        setHasSearched(false);
         setCurrentPage(1);
         setOpenFilterDrawer(false);
     };
 
     const handleOpenCreate = () => {
+        if (!hasSearched || !submittedFilterValues.subject_code) {
+            api.warning({ message: "Vui lòng chọn Chương trình trước khi thêm đề cương" });
+            setOpenFilterDrawer(true);
+            return;
+        }
         if (!canEditAnyField(FORM_FIELDS, fieldPolicy, LESSON_MODULE_CODE)) {
             api.warning({
                 message: "Không có quyền",
@@ -208,11 +351,50 @@ const Page = () => {
 
             setOpenFormModal(false);
             setSelectedRecord(null);
-            await refreshLessons();
+            if (hasSearched) {
+                await refreshLessons();
+            }
         } catch (error: any) {
             api.error({
                 message: "Lưu thất bại",
                 description: error.message || "Vui lòng kiểm tra lại dữ liệu.",
+            });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleCreateProgram = async (payload: CreateLessonProgramPayload) => {
+        try {
+            setSaving(true);
+            const response: any = await createLessonProgram({
+                ...payload,
+                subject_code: payload.subject_code.trim(),
+                subject_name: payload.subject_name.trim(),
+                lesson_name: payload.lesson_name.trim(),
+            });
+            const program = response?.data;
+            const nextFilters = cleanFilterValues({
+                grade: program?.grade ?? payload.grade,
+                subject_code: program?.subject_code ?? payload.subject_code,
+                subject: program?.subject_name ?? payload.subject_name,
+                keyword: "",
+            });
+            setSearchText("");
+            setFilterValues(nextFilters);
+            setSubmittedFilterValues(nextFilters);
+            setHasSearched(true);
+            setCurrentPage(1);
+            setOpenProgramModal(false);
+            await refreshLessons();
+            api.success({
+                message: "Tạo Chương trình thành công",
+                description: `Đã tạo ${nextFilters.subject_code} cùng bài học đầu tiên.`,
+            });
+        } catch (error: any) {
+            api.error({
+                message: "Không thể tạo Chương trình",
+                description: error?.message || "Vui lòng kiểm tra lại thông tin.",
             });
         } finally {
             setSaving(false);
@@ -233,7 +415,9 @@ const Page = () => {
                         message: "Xóa thành công",
                         description: "Bài học chưa được gán lịch đã được xóa khỏi hệ thống.",
                     });
-                    await refreshLessons();
+                    if (hasSearched) {
+                        await refreshLessons();
+                    }
                 } catch (error: any) {
                     api.error({
                         message: "Xóa thất bại",
@@ -254,6 +438,12 @@ const Page = () => {
             return;
         }
 
+        if (!hasSearched) {
+            const cleaned = cleanFilterValues(filterValues);
+            setSubmittedFilterValues(cleaned);
+            setHasSearched(true);
+        }
+
         setSelectedRowKeys([]);
         setReorderMode(true);
         setReorderStrategy("insert");
@@ -265,7 +455,9 @@ const Page = () => {
     const handleCancelReorder = () => {
         setReorderMode(false);
         setDragRowKey(null);
-        void refreshLessons();
+        if (hasSearched) {
+            void refreshLessons();
+        }
     };
 
     const handleDropRow = (targetKey: React.Key) => {
@@ -276,8 +468,6 @@ const Page = () => {
             const targetIndex = prev.findIndex((item) => item.key === targetKey);
             if (sourceIndex < 0 || targetIndex < 0) return prev;
 
-            // Giữ nguyên tập số thứ tự hiện có (kể cả khi có khoảng trống như
-            // 1..64, 66..88), chỉ đổi bài nào nhận số nào theo vị trí mới.
             const learnNumbers = prev
                 .map((item) => Number(item.learn_number))
                 .sort((left, right) => left - right);
@@ -316,7 +506,9 @@ const Page = () => {
             });
             api.success({ message: "Đã lưu thứ tự bài học" });
             setReorderMode(false);
-            await refreshLessons();
+            if (hasSearched) {
+                await refreshLessons();
+            }
         } catch (error: any) {
             api.error({
                 message: "Lưu thứ tự thất bại",
@@ -379,16 +571,25 @@ const Page = () => {
     };
 
     const handleImport = async (file: File, mode: LessonImportMode) => {
+        const programCode = String(submittedFilterValues.subject_code || "").trim();
+        if (!programCode) {
+            api.warning({ message: "Vui lòng chọn Chương trình trước khi import" });
+            setOpenImportModal(false);
+            setOpenFilterDrawer(true);
+            return;
+        }
         try {
             setImporting(true);
             setImportErrors([]);
-            const response: any = await importLessonsFile(file, mode);
+            const response: any = await importLessonsFile(file, mode, programCode);
             api.success({
                 message: "Import thành công",
                 description: `Đã xử lý ${response?.data?.total ?? 0} dòng: tạo mới ${response?.data?.created ?? 0}, cập nhật ${response?.data?.updated ?? 0}, bỏ qua ${response?.data?.skipped ?? 0}.`,
             });
             setOpenImportModal(false);
-            await refreshLessons();
+            if (hasSearched) {
+                await refreshLessons();
+            }
         } catch (error: any) {
             const errors = error?.detail?.errors ?? [];
             if (Array.isArray(errors) && errors.length) {
@@ -406,6 +607,33 @@ const Page = () => {
     return (
         <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, overflow: "hidden" }}>
             {contextHolder}
+            <Modal
+                open={!secondaryChecking && !secondaryUnlocked && secondaryPromptOpen}
+                title="Xác thực bảo mật Đề cương"
+                closable
+                maskClosable
+                keyboard
+                okText="Xác thực"
+                cancelText="Để sau"
+                confirmLoading={secondaryLoading}
+                okButtonProps={{ disabled: !secondaryPassword }}
+                onOk={() => void handleSecondaryAuth()}
+                onCancel={() => {
+                    setSecondaryPassword("");
+                    setSecondaryPromptOpen(false);
+                }}
+            >
+                <p>Nhập mật khẩu cấp 2 để truy cập phân hệ Quản lý đề cương.</p>
+                <Input.Password
+                    autoFocus
+                    value={secondaryPassword}
+                    placeholder="Mật khẩu cấp 2"
+                    onChange={(event) => setSecondaryPassword(event.target.value)}
+                    onPressEnter={() => {
+                        if (secondaryPassword && !secondaryLoading) void handleSecondaryAuth();
+                    }}
+                />
+            </Modal>
             <div
                 style={{
                     border: "1px solid #d6e4ff",
@@ -418,7 +646,14 @@ const Page = () => {
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                         <InfoCircleOutlined style={{ color: "#1677ff", fontSize: 16 }} />
-                        <span style={{ fontWeight: 600 }}>Quản lý nội dung bài học</span>
+                        <span style={{ fontWeight: 600 }}>Quản lý đề cương</span>
+                        <Button
+                            size="small"
+                            type={secondaryUnlocked ? "default" : "primary"}
+                            onClick={() => setSecondaryPromptOpen(true)}
+                        >
+                            {secondaryUnlocked ? "Xác thực lại" : "Xác thực cấp 2"}
+                        </Button>
                     </div>
                     <Button
                         type="link"
@@ -438,12 +673,12 @@ const Page = () => {
                     }}
                 >
                     <div style={{ minHeight: 0 }}>
-                        <div 
-                            style={{ 
-                                marginTop: 6, 
-                                paddingLeft: 24, 
-                                color: "rgba(0, 0, 0, 0.72)", 
-                                lineHeight: 1.55 
+                        <div
+                            style={{
+                                marginTop: 6,
+                                paddingLeft: 24,
+                                color: "rgba(0, 0, 0, 0.72)",
+                                lineHeight: 1.55
                             }}
                         >
                             Tạo và chỉnh sửa danh mục bài học theo khối, môn học, thứ tự bài. Dùng bộ lọc để tìm nhanh,
@@ -452,6 +687,12 @@ const Page = () => {
                     </div>
                 </div>
             </div>
+            {secondaryChecking ? (
+                <div style={{ padding: "48px 24px", textAlign: "center" }}>
+                    <Spin tip="Đang kiểm tra phiên xác thực cấp 2..." />
+                </div>
+            ) : secondaryUnlocked ? (
+                <>
             <LessonActions
                 canCreate={canCreate}
                 canEdit={canEdit}
@@ -461,6 +702,7 @@ const Page = () => {
                 savingReorder={savingReorder}
                 onSearch={handleSearch}
                 onCreate={handleOpenCreate}
+                onCreateProgram={() => setOpenProgramModal(true)}
                 onFilter={() => setOpenFilterDrawer(true)}
                 onImport={() => {
                     setImportErrors([]);
@@ -472,9 +714,10 @@ const Page = () => {
                 onSaveReorder={handleSaveReorder}
                 onReorderStrategyChange={setReorderStrategy}
                 onReload={() => {
-                    handleResetFilter();
-                    void refreshLessons();
+                    if (hasSearched) void refreshLessons();
                 }}
+                canManageCourseIds={Boolean(submittedFilterValues.subject_code)}
+                onManageCourseIds={() => setOpenCourseMappingModal(true)}
             />
 
             <LessonTable
@@ -491,12 +734,15 @@ const Page = () => {
                 canEdit={canEdit}
                 canDelete={canDelete}
                 visibleFormFieldCodes={[...visibleFormFieldCodes, "updated_at"]}
+                hasSearched={hasSearched}
                 onSelectionChange={setSelectedRowKeys}
                 onPageChange={(page, size) => {
+                    if (!hasSearched) return;
                     setCurrentPage(page);
                     setPageSize(size);
                 }}
                 onSortChange={(sorter) => {
+                    if (!hasSearched) return;
                     setSortState(sorter);
                     setCurrentPage(1);
                 }}
@@ -523,11 +769,22 @@ const Page = () => {
                 loading={saving}
                 visibleFieldCodes={visibleFormFieldCodes}
                 editableFieldCodes={editableFormFieldCodes}
+                programContext={{
+                    grade: submittedFilterValues.grade,
+                    subject_code: submittedFilterValues.subject_code,
+                    subject_name: submittedFilterValues.subject,
+                }}
                 onClose={() => {
                     setOpenFormModal(false);
                     setSelectedRecord(null);
                 }}
                 onSubmit={handleSubmit}
+            />
+            <ProgramCreateModal
+                open={openProgramModal}
+                loading={saving}
+                onClose={() => setOpenProgramModal(false)}
+                onSubmit={handleCreateProgram}
             />
             <LessonImportModal
                 open={openImportModal}
@@ -537,6 +794,31 @@ const Page = () => {
                 onSubmit={handleImport}
                 onDownloadTemplate={handleDownloadTemplate}
             />
+            <LessonCourseMappingModal
+                open={openCourseMappingModal}
+                programCode={String(submittedFilterValues.subject_code || "")}
+                selectedLessonIds={selectedRowKeys.map(String)}
+                onClose={() => setOpenCourseMappingModal(false)}
+            />
+                </>
+            ) : (
+                <div
+                    style={{
+                        border: "1px dashed #91caff",
+                        borderRadius: 8,
+                        padding: "40px 24px",
+                        textAlign: "center",
+                        color: "rgba(0, 0, 0, 0.65)",
+                    }}
+                >
+                    <p style={{ marginBottom: 16 }}>
+                        Xác thực cấp 2 để sử dụng tìm kiếm, thêm, import, export và chỉnh sửa đề cương.
+                    </p>
+                    <Button type="primary" onClick={() => setSecondaryPromptOpen(true)}>
+                        Xác thực cấp 2
+                    </Button>
+                </div>
+            )}
         </div>
     );
 };

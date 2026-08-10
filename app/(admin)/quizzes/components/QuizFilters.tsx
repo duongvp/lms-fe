@@ -1,109 +1,160 @@
+// components/QuizActionsBar.tsx
 "use client";
 
-import { Button, Col, Row, Select } from "antd";
-import { ClearOutlined } from "@ant-design/icons";
-import type { QuizClassOption, QuizLessonOption } from "@/services/quizService";
-import { QUIZ_TYPE_OPTIONS, STATUS_OPTIONS } from "../quiz.constants";
-import type { QuizClassSelectOption, QuizFilterValues } from "../quiz.types";
-import { buildLessonSelectOptions } from "../quiz.utils";
-import styles from "../quiz.module.css";
+import { Button, Input, Space, Tooltip } from "antd";
+import {
+    PlusOutlined,
+    ImportOutlined,
+    ExportOutlined,
+    FilterOutlined,
+    ReloadOutlined,
+    SwapOutlined,
+    CheckOutlined,
+    CloseOutlined,
+    SearchOutlined,
+} from "@ant-design/icons";
 
-interface QuizFiltersProps {
-    filters: QuizFilterValues;
-    classOptions: QuizClassSelectOption[];
-    classes: QuizClassOption[];
-    classesLoading: boolean;
-    lessons: QuizLessonOption[];
-    lessonsLoading: boolean;
+interface QuizActionsBarProps {
+    canCreate: boolean;
+    canEdit: boolean;
+    canImport: boolean;
+    canExport: boolean;
+    selectedCount: number;
     reorderMode: boolean;
-    onFiltersChange: (filters: QuizFilterValues) => void;
+    refreshing: boolean;
+    savingReorder: boolean;
+    onSearch: (value: string) => Promise<void>;
+    onCreate: () => void;
+    onFilter: () => void;
+    onImport: () => void;
+    onExport: () => void;
+    onEnableReorder: () => void;
+    onCancelReorder: () => void;
+    onSaveReorder: () => void;
+    onRefresh: () => void;
 }
 
-const QuizFilters = ({
-    filters,
-    classOptions,
-    classes,
-    classesLoading,
-    lessons,
-    lessonsLoading,
+const QuizActionsBar = ({
+    canCreate,
+    canEdit,
+    canImport,
+    canExport,
+    selectedCount,
     reorderMode,
-    onFiltersChange,
-}: QuizFiltersProps) => {
-    const lessonNameByNumber = new Map(
-        lessons.map((item) => [Number(item.learn_number), item.lesson_name])
-    );
-    const hasActiveFilters = Object.values(filters).some(
-        (value) => value !== undefined && value !== null && value !== ""
-    );
+    refreshing,
+    savingReorder,
+    onSearch,
+    onCreate,
+    onFilter,
+    onImport,
+    onExport,
+    onEnableReorder,
+    onCancelReorder,
+    onSaveReorder,
+    onRefresh,
+}: QuizActionsBarProps) => {
+    if (reorderMode) {
+        return (
+            <div
+                style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    marginBottom: 16,
+                }}
+            >
+                <span style={{ fontWeight: 500, color: "#1677ff" }}>
+                    Chế độ sắp xếp: Kéo thả để thay đổi thứ tự câu hỏi
+                </span>
+                <Space>
+                    <Button
+                        type="primary"
+                        icon={<CheckOutlined />}
+                        loading={savingReorder}
+                        onClick={onSaveReorder}
+                    >
+                        Lưu thứ tự
+                    </Button>
+                    <Button
+                        icon={<CloseOutlined />}
+                        disabled={savingReorder}
+                        onClick={onCancelReorder}
+                    >
+                        Hủy
+                    </Button>
+                </Space>
+            </div>
+        );
+    }
 
-    return <div className={styles.filters}>
-        <Row gutter={[12, 12]}>
-            <Col xs={24} sm={12} xl={6}>
-                <Select
-                    options={classOptions}
-                    value={filters.code}
-                    onChange={(value) => onFiltersChange({
-                        ...filters,
-                        code: value,
-                        learn_number: undefined,
-                    })}
-                    placeholder="Chọn lớp học"
-                    style={{ width: "100%" }}
+    return (
+        <div
+            style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                marginBottom: 16,
+                flexWrap: "wrap",
+            }}
+        >
+            <Space size="middle" wrap>
+                <Input.Search
+                    placeholder="Tìm kiếm câu hỏi..."
                     allowClear
-                    showSearch
-                    loading={classesLoading}
-                    optionFilterProp="searchText"
-                    disabled={reorderMode}
+                    onSearch={onSearch}
+                    style={{ width: 280 }}
+                    prefix={<SearchOutlined />}
                 />
-            </Col>
-            <Col xs={24} sm={12} xl={6}>
-                <Select
-                    value={filters.learn_number === undefined ? undefined : Number(filters.learn_number)}
-                    onChange={(value) => onFiltersChange({ ...filters, learn_number: value })}
-                    options={buildLessonSelectOptions(lessons)}
-                    placeholder={filters.code ? "Chọn bài học" : "Chọn lớp trước"}
-                    style={{ width: "100%" }}
-                    allowClear
-                    showSearch
-                    optionFilterProp="label"
-                    loading={lessonsLoading}
-                    disabled={!filters.code || reorderMode}
-                />
-            </Col>
-            <Col xs={12} sm={6} xl={4}>
-                <Select
-                    value={filters.quiz_type}
-                    onChange={(value) => onFiltersChange({ ...filters, quiz_type: value })}
-                    options={QUIZ_TYPE_OPTIONS}
-                    placeholder="Loại câu hỏi"
-                    style={{ width: "100%" }}
-                    allowClear
-                    disabled={reorderMode}
-                />
-            </Col>
-            <Col xs={12} sm={6} xl={4}>
-                <Select
-                    value={filters.quiz_status}
-                    onChange={(value) => onFiltersChange({ ...filters, quiz_status: value })}
-                    options={STATUS_OPTIONS}
-                    placeholder="Trạng thái"
-                    style={{ width: "100%" }}
-                    allowClear
-                    disabled={reorderMode}
-                />
-            </Col>
-            <Col xs={24} sm={12} xl={4}>
-                <Button
-                    icon={<ClearOutlined />}
-                    onClick={() => onFiltersChange({})}
-                    disabled={!hasActiveFilters || reorderMode}
-                    style={{ width: "100%" }}
-                >
-                    Xóa bộ lọc
+
+                <Button icon={<FilterOutlined />} onClick={onFilter}>
+                    Bộ lọc
                 </Button>
-            </Col>
-        </Row>
-    </div>;
+            </Space>
+
+            <Space size="middle" wrap>
+                {canCreate && (
+                    <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
+                        Thêm câu hỏi
+                    </Button>
+                )}
+
+                {canImport && (
+                    <Button icon={<ImportOutlined />} onClick={onImport}>
+                        Import
+                    </Button>
+                )}
+
+                {canExport && (
+                    <Button
+                        icon={<ExportOutlined />}
+                        onClick={onExport}
+                    >
+                        Export{selectedCount > 0 ? ` (${selectedCount})` : ""}
+                    </Button>
+                )}
+
+                <Tooltip title="Làm mới">
+                    <Button
+                        icon={<ReloadOutlined />}
+                        loading={refreshing}
+                        onClick={onRefresh}
+                    />
+                </Tooltip>
+
+                {canEdit && (
+                    <Button
+                        type="primary"
+                        icon={<SwapOutlined />}
+                        onClick={onEnableReorder}
+                    >
+                        Sắp xếp
+                    </Button>
+                )}
+            </Space>
+        </div>
+    );
 };
 
-export default QuizFilters;
+export default QuizActionsBar;

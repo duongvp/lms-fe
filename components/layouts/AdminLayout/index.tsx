@@ -136,11 +136,12 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
   if (!isClient || !authReady) return <Spin size="large" fullscreen />;
 
   const isMobile = screens && !screens.xl;
-  const layoutPadding = isMobile ? 12 : 16;
+  const isPhone = screens && !screens.md;
+  const layoutPadding = isPhone ? 6 : isMobile ? 10 : 16;
 
   return (
     <ConfigProvider locale={viVN}>
-      <Layout style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#f5f6f8' }}>
+      <Layout style={{ height: '100dvh', minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#f5f6f8' }}>
         {/* Sticky top Header */}
         <div
           style={{
@@ -169,10 +170,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
             style={{
               flex: 1,
               background: '#ffffff',
-              borderRadius: 12,
-              padding: isMobile ? 12 : 24,
+              borderRadius: isPhone ? 8 : 12,
+              padding: isPhone ? 8 : isMobile ? 12 : 24,
               boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03)',
-              overflowY: 'auto',
+              overflow: 'auto',
+              minWidth: 0,
               height: '100%'
             }}
           >

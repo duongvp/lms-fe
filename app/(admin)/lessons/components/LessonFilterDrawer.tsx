@@ -2,8 +2,7 @@
 
 import { useEffect } from "react";
 import { Button, Drawer, Form, InputNumber, Select, Space } from "antd";
-import { GRADE_OPTIONS } from "@/constants/subjects";
-import { useLessonProgramOptions, useLessonSubjectOptions } from "@/hooks/useLessonSubjectOptions";
+import { useLessonProgramOptions } from "@/hooks/useLessonSubjectOptions";
 import type { LessonFilterValues } from "../lesson.types";
 import { cleanFilterValues } from "../lesson.utils";
 
@@ -25,15 +24,13 @@ const LessonFilterDrawer = ({
     onReset,
 }: LessonFilterDrawerProps) => {
     const [filterForm] = Form.useForm();
-    const subjectOptions = useLessonSubjectOptions();
     const lessonPrograms = useLessonProgramOptions();
-    const subjectCodeOptions = Array.from(new Set(
-        lessonPrograms
-            .map((program) => String(program.subject_code || "").trim())
-            .filter(Boolean)
-    ))
-        .sort((left, right) => left.localeCompare(right, "vi"))
-        .map((subjectCode) => ({ value: subjectCode, label: subjectCode }));
+    const programOptions = lessonPrograms.map((program) => ({
+        value: program.subject_code,
+        label: program.subject_code,
+        grade: program.grade,
+        subject_name: program.subject_name,
+    }));
 
     useEffect(() => {
         filterForm.setFieldsValue(value);
@@ -41,7 +38,7 @@ const LessonFilterDrawer = ({
 
     return (
         <Drawer
-            title="Bộ lọc bài học"
+            title="Bộ lọc đề cương"
             placement="right"
             open={open}
             onClose={onClose}
@@ -67,27 +64,27 @@ const LessonFilterDrawer = ({
                 layout="vertical"
                 onFinish={(values) => onSearch(cleanFilterValues(values))}
             >
-                <Form.Item name="grade" label="Khối">
-                    <Select allowClear options={GRADE_OPTIONS} placeholder="Chọn khối" />
-                </Form.Item>
-                <Form.Item name="subject" label="Môn học">
-                    <Select
-                        allowClear
-                        options={subjectOptions}
-                        placeholder="Chọn môn học"
-                        showSearch
-                        optionFilterProp="label"
-                    />
-                </Form.Item>
-                <Form.Item name="subject_code" label="Mã môn học">
+                <Form.Item
+                    name="subject_code"
+                    label="Chương trình"
+                    rules={[{ required: true, message: "Vui lòng chọn Chương trình" }]}
+                >
                     <Select
                         allowClear
                         showSearch
                         optionFilterProp="label"
-                        options={subjectCodeOptions}
-                        placeholder="Nhập hoặc chọn mã môn học"
+                        options={programOptions}
+                        placeholder="Chọn Chương trình"
+                        onChange={(_, option: any) => {
+                            filterForm.setFieldsValue({
+                                grade: option?.grade,
+                                subject: option?.subject_name,
+                            });
+                        }}
                     />
                 </Form.Item>
+                <Form.Item name="grade" hidden><InputNumber /></Form.Item>
+                <Form.Item name="subject" hidden><Select /></Form.Item>
                 <Form.Item name="learn_number" label="Số thứ tự bài">
                     <InputNumber min={1} style={{ width: "100%" }} placeholder="VD: 1" />
                 </Form.Item>
