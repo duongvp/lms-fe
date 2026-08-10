@@ -1680,6 +1680,24 @@ const Page = () => {
                                 });
                             }
 
+                            if (modalPayload.operation === 'cancel' || modalPayload.operation === 'makeup') {
+                                await updateLivestreamBulk({
+                                    ids: targetIds,
+                                    operation: modalPayload.operation,
+                                    reason: modalPayload.reason,
+                                    offset_days: modalPayload.offset_days,
+                                });
+                                api.success({
+                                    message: "Thành công",
+                                    description: modalPayload.operation === 'cancel'
+                                        ? `Đã đánh dấu nghỉ ${targetIds.length} lịch học.`
+                                        : `Đã đánh dấu nghỉ và tạo ${targetIds.length} lịch bù.`,
+                                });
+                                setSelectedRowKeys([]);
+                                if (hasSearched) await refreshSchedules();
+                                return;
+                            }
+
                             let update_data: any = {};
                             let apiConfigMode = modalPayload.config_mode;
 
@@ -1737,6 +1755,7 @@ const Page = () => {
                         } catch (error: any) {
                             console.error(error);
                             api.error({ message: "Cập nhật thất bại", description: error.message || "Đã xảy ra lỗi" });
+                            throw error;
                         }
                     }}
                 />

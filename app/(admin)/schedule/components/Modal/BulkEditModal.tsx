@@ -18,6 +18,7 @@ import {
     Tag,
     Card,
     Input,
+    InputNumber,
     Table,
 } from 'antd';
 import { EditOutlined, CloseCircleOutlined } from '@ant-design/icons';
@@ -171,6 +172,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
 
     // Form Watchers
     const configMode = Form.useWatch('config_mode', form) || 'common';
+    const operation = Form.useWatch('operation', form) || 'update';
     const selectedLessons = Form.useWatch('selected_lessons', form) || selectedRowKeys;
     const commonStartTime = Form.useWatch('common_start_time', form) as Dayjs | undefined;
 
@@ -248,6 +250,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             }
 
             form.setFieldsValue({
+                operation: 'update',
                 config_mode: 'common',
                 selected_lessons: selectedRowKeys,
                 separate_config: separateConfig,
@@ -331,6 +334,47 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     const handleFinish = async (values: any) => {
         try {
             setLoading(true);
+
+            if (values.operation !== 'update') {
+                if (previewRows.length === 0) {
+                    const offsetDays = Number(values.offset_days || 0);
+                    setPreviewRows((selectedLessons as (string | number)[]).map((calendarId) => {
+                        const record = selectedRows.find(
+                            (item) => String(item.id) === String(calendarId)
+                        );
+                        const currentStart = record?.start_time ? dayjs(record.start_time) : null;
+                        const currentEnd = record?.end_time ? dayjs(record.end_time) : null;
+                        const currentText = currentStart && currentEnd
+                            ? `${currentStart.format('DD/MM/YYYY HH:mm')} - ${currentEnd.format('HH:mm')}`
+                            : 'Không xác định';
+                        const nextText = values.operation === 'cancel'
+                            ? 'Nghỉ học, không tạo lịch thay thế'
+                            : currentStart && currentEnd
+                                ? `Nghỉ học và tạo lịch bù: ${currentStart.add(offsetDays, 'day').format('DD/MM/YYYY HH:mm')} - ${currentEnd.add(offsetDays, 'day').format('HH:mm')}`
+                                : 'Không xác định được thời gian lịch bù';
+                        return {
+                            id: calendarId,
+                            label: record?.learn_number ? `Bài ${record.learn_number}` : `ID ${calendarId}`,
+                            current: currentText,
+                            next: nextText,
+                        };
+                    }));
+                    return;
+                }
+                await onSuccess({
+                    operation: values.operation,
+                    scope: {
+                        type: 'selected_rows',
+                        selected_lessons: values.selected_lessons,
+                    },
+                    reason: String(values.reason || '').trim(),
+                    offset_days: values.operation === 'makeup'
+                        ? Number(values.offset_days)
+                        : undefined,
+                });
+                handleClose();
+                return;
+            }
 
             // Chuẩn hóa separate_config (Format TimePicker dayjs -> "HH:mm")
             let formattedSeparateConfig = values.separate_config;
@@ -423,7 +467,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 <div>
                     <Title level={5} style={{ marginBottom: 4, color: '#1890ff' }}>Cập Nhật Lịch Học Hàng Loạt</Title>
                     <Text type="secondary" style={{ fontSize: 13 }}>
-                        Điều chỉnh Giáo viên, Khung giờ và Phòng học cho nhiều bài học cùng lúc.
+                        Cập nhật, cho nghỉ hoặc tạo lịch bù cho nhiều lịch học cùng lúc.
                     </Text>
                 </div>
             }
@@ -442,7 +486,9 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     loading={loading}
                     icon={<EditOutlined />}
                 >
-                    {previewRows.length ? 'Xác nhận cập nhật' : 'Xem trước'}
+                    {previewRows.length
+                        ? (operation === 'update' ? 'Xác nhận cập nhật' : 'Xác nhận thực hiện')
+                        : 'Xem trước'}
                 </Button>
             ]}
         >
@@ -450,7 +496,11 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 form={form}
                 layout="vertical"
                 onFinish={handleFinish}
+                onValuesChange={() => {
+                    if (previewRows.length) setPreviewRows([]);
+                }}
                 initialValues={{
+                    operation: 'update',
                     config_mode: 'common',
                     enable_teacher: true,
                     enable_assistant: false,
@@ -467,7 +517,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                             <Text>Thay đổi chỉ áp dụng cho các dòng đã tích chọn.</Text>
                             <Tag color="blue" style={{ marginRight: 0, fontWeight: 500 }}>
-                                {selectedRowKeys.length} bài học đã chọn
+                                {selectedRowKeys.length} lịch học đã chọn
                             </Tag>
                         </div>
                     }
@@ -488,6 +538,22 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     <Input type="hidden" />
                 </Form.Item>
 
+                <Form.Item name="operation" label="Thao tác hàng loạt">
+                    <Radio.Group
+                        buttonStyle="solid"
+                        onChange={() => setPreviewRows([])}
+                        style={{ display: 'flex', flexWrap: 'wrap' }}
+                        options={[
+                            { value: 'update', label: 'Cập nhật lịch' },
+                            { value: 'cancel', label: 'Nghỉ hẳn' },
+                            { value: 'makeup', label: 'Nghỉ & thêm lịch bù' },
+                        ]}
+                        optionType="button"
+                    />
+                </Form.Item>
+
+                {operation === 'update' && (
+                    <>
                 {/* Chọn chế độ cấu hình */}
                 <div style={{ marginBottom: 20 }}>
                     <Form.Item name="config_mode" style={{ marginBottom: 0 }}>
@@ -836,12 +902,47 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         )}
                     </div>
                 )}
+                    </>
+                )}
+
+                {operation !== 'update' && (
+                    <FormSection title={operation === 'cancel' ? 'Xác nhận nghỉ học hàng loạt' : 'Cấu hình lịch bù hàng loạt'}>
+                        <Alert
+                            showIcon
+                            type={operation === 'cancel' ? 'warning' : 'info'}
+                            style={{ marginBottom: 16 }}
+                            message={operation === 'cancel'
+                                ? 'Các lịch đã chọn sẽ chuyển sang trạng thái Nghỉ học và không tạo lịch thay thế.'
+                                : 'Mỗi lịch đã chọn sẽ được giữ lại dưới dạng lịch nghỉ và tạo một lịch bù mới có cùng nội dung.'}
+                        />
+                        {operation === 'makeup' && (
+                            <Form.Item
+                                name="offset_days"
+                                label="Dịch lịch bù thêm bao nhiêu ngày"
+                                initialValue={7}
+                                rules={[{ required: true, message: 'Nhập số ngày dịch lịch bù' }]}
+                            >
+                                <InputNumber min={1} max={3650} precision={0} style={{ width: 220 }} addonAfter="ngày" />
+                            </Form.Item>
+                        )}
+                        <Form.Item
+                            name="reason"
+                            label="Lý do thay đổi"
+                            rules={[
+                                { required: true, whitespace: true, message: 'Nhập lý do thay đổi lịch học' },
+                                { max: 500, message: 'Lý do không được quá 500 ký tự' },
+                            ]}
+                        >
+                            <Input.TextArea rows={3} maxLength={500} showCount placeholder="Ví dụ: Nghỉ lễ theo thông báo của nhà trường" />
+                        </Form.Item>
+                    </FormSection>
+                )}
                 {previewRows.length > 0 && (
                     <Alert
                         type="info"
                         showIcon
                         style={{ marginTop: 16 }}
-                        message="Preview mapping trước khi cập nhật"
+                        message={operation === 'update' ? 'Xem trước Lesson ID trước khi cập nhật' : 'Xem trước thao tác hàng loạt'}
                         description={
                             <Table
                                 size="small"
@@ -850,8 +951,8 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                 dataSource={previewRows}
                                 columns={[
                                     { title: 'Buổi', dataIndex: 'label', width: 120 },
-                                    { title: 'Mapping hiện tại', dataIndex: 'current' },
-                                    { title: 'Mapping mới', dataIndex: 'next' },
+                                    { title: operation === 'update' ? 'Lesson ID hiện tại' : 'Lịch hiện tại', dataIndex: 'current' },
+                                    { title: operation === 'update' ? 'Lesson ID mới' : 'Sau thao tác', dataIndex: 'next' },
                                 ]}
                             />
                         }
