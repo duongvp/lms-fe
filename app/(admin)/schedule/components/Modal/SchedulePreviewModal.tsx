@@ -946,7 +946,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
             width: 220,
             render: (value: string[] | undefined, record: PreviewSession) => (
                 <TeachingStaffSelect
-                    teacherType={2}
+                    teacherType={0}
                     mode="multiple"
                     value={value ?? []}
                     onChange={(nextValue) => updateSessionField(record.key, 'assistant_teacher', nextValue)}

@@ -27,7 +27,9 @@ const LessonFilterDrawer = ({
     const lessonPrograms = useLessonProgramOptions();
     const programOptions = lessonPrograms.map((program) => ({
         value: program.subject_code,
-        label: program.subject_code,
+        label: program.subject_name
+            ? `${program.subject_code} — ${program.subject_name}`
+            : program.subject_code,
         grade: program.grade,
         subject_name: program.subject_name,
     }));

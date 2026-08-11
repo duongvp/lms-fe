@@ -93,7 +93,7 @@ const TeacherProfilesPage = () => {
 
     const [teacherType, setTeacherType] =
         React.useState<
-            1 | 2 | undefined
+            0 | 1 | undefined
         >();
 
     const [status, setStatus] =
@@ -173,7 +173,7 @@ const TeacherProfilesPage = () => {
                             search:
                                 search ||
                                 undefined,
-                            teacher_type:
+                            can_view_stream_key:
                                 teacherType,
                             status,
                         });
@@ -268,7 +268,7 @@ const TeacherProfilesPage = () => {
         form.setFieldsValue({
             username: '',
             display_name: '',
-            teacher_type: 1,
+            can_view_stream_key: 1,
             status: 1,
         });
 
@@ -286,8 +286,8 @@ const TeacherProfilesPage = () => {
         form.setFieldsValue({
             display_name:
                 record.display_name,
-            teacher_type:
-                record.teacher_type,
+            can_view_stream_key:
+                record.can_view_stream_key,
             status: record.status,
         });
 
@@ -310,8 +310,8 @@ const TeacherProfilesPage = () => {
                     {
                         display_name:
                             values.display_name,
-                        teacher_type:
-                            values.teacher_type,
+                        can_view_stream_key:
+                            values.can_view_stream_key,
                     }
                 );
             } else {
@@ -454,7 +454,7 @@ const TeacherProfilesPage = () => {
                         search:
                             search ||
                             undefined,
-                        teacher_type:
+                        can_view_stream_key:
                             teacherType,
                         status,
                     }

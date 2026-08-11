@@ -29,6 +29,7 @@ interface LessonImportModalProps {
     open: boolean;
     loading: boolean;
     errors: LessonImportError[];
+    programName: string;
     onClose: () => void;
     onSubmit: (file: File, mode: LessonImportMode) => Promise<void>;
     onDownloadTemplate: (format: LessonExportFormat) => Promise<void>;
@@ -38,6 +39,7 @@ const LessonImportModal = ({
     open,
     loading,
     errors,
+    programName,
     onClose,
     onSubmit,
     onDownloadTemplate,
@@ -55,7 +57,7 @@ const LessonImportModal = ({
 
     return (
         <Modal
-            title="Import bài học"
+            title={`Import đề cương${programName ? `: ${programName}` : ""}`}
             open={open}
             width={920}
             centered
@@ -99,14 +101,14 @@ const LessonImportModal = ({
                     type="info"
                     showIcon
                     message="Quy tắc import"
-                    description="Các cột trong file tương ứng với form Tạo bài học. Mỗi tài liệu gồm Tiêu đề, Loại và Đường dẫn; có thể thêm Tài liệu 4, 5... theo cùng cấu trúc. Nếu để trống số thứ tự, hệ thống tự sinh bài tiếp theo."
+                    description="File chỉ gồm Số thứ tự bài, Tên bài học và Trạng thái (1: hoạt động, 0: ngừng dùng). Chương trình được xác định từ bộ lọc hiện tại; nếu để trống Số thứ tự bài, hệ thống tự sinh bài tiếp theo. Tài liệu và nội dung từng buổi được cấu hình tại Quản lý lịch học."
                     style={{ marginBottom: 16 }}
                 />
 
                 <Flex wrap gap={16} align="flex-end" style={{ marginBottom: 16 }}>
                     <div style={{ flex: "1 1 320px" }}>
                         <Typography.Text strong>
-                            Khi trùng Khối + Môn học + Số thứ tự
+                            Khi trùng Số thứ tự bài trong chương trình đã chọn
                         </Typography.Text>
                         <div style={{ marginTop: 8 }}>
                             <Radio.Group

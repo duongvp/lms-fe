@@ -88,14 +88,14 @@ export const buildLessonSelectOptions = (
     ) {
         rows.push({
             learn_number: Number(fallbackLearnNumber),
-            lesson_name: `Buổi ${fallbackLearnNumber}`,
+            lesson_name: `Bài ${fallbackLearnNumber}`,
         });
     }
     return rows
         .sort((left, right) => Number(left.learn_number) - Number(right.learn_number))
         .map((item) => ({
             value: Number(item.learn_number),
-            label: `Buổi ${item.learn_number} — ${item.lesson_name}`,
+            label: `Bài ${item.learn_number} — ${item.lesson_name}`,
         }));
 };
 

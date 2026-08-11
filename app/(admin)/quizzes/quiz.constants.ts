@@ -5,8 +5,8 @@ export const QUIZ_MODULE_CODE = "quiz";
 
 export const QUIZ_FIELDS: ModuleField[] = [
     { fieldCode: "quiz_id", fieldLabel: "Mã câu hỏi", fieldType: "text", sortOrder: 1 },
-    { fieldCode: "code", fieldLabel: "Mã lớp học", fieldType: "text", sortOrder: 2 },
-    { fieldCode: "learn_number", fieldLabel: "Buổi học", fieldType: "number", sortOrder: 3 },
+    { fieldCode: "code", fieldLabel: "Mã chương trình", fieldType: "text", sortOrder: 2 },
+    { fieldCode: "learn_number", fieldLabel: "Bài học", fieldType: "number", sortOrder: 3 },
     { fieldCode: "quiz_type", fieldLabel: "Loại câu hỏi", fieldType: "select", sortOrder: 4 },
     { fieldCode: "quiz_name", fieldLabel: "Nội dung câu hỏi", fieldType: "textarea", sortOrder: 5 },
     { fieldCode: "ans", fieldLabel: "Đáp án", fieldType: "json", sortOrder: 6 },

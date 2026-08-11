@@ -20,7 +20,7 @@ interface TeacherProfileFormModalProps {
     >[0];
     onSubmit: () => Promise<void>;
     onClose: () => void;
-    fixedTeacherType?: 1 | 2;
+    fixedTeacherType?: 0 | 1;
 }
 
 const TeacherProfileFormModal = ({
@@ -100,7 +100,7 @@ const TeacherProfileFormModal = ({
 
                 <Form.Item
                     label="Loại nhân sự"
-                    name="teacher_type"
+                    name="can_view_stream_key"
                     rules={[
                         {
                             required: true,
@@ -115,7 +115,7 @@ const TeacherProfileFormModal = ({
                                 label: 'Giáo viên',
                             },
                             {
-                                value: 2,
+                                value: 0,
                                 label: 'Trợ giảng',
                             },
                         ]}

@@ -4,7 +4,7 @@ import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import type { SorterResult } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
-import { notification, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, Drawer, Empty, Grid, Tooltip, Descriptions, Tabs, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented } from "antd";
+import { notification, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, Drawer, Empty, Grid, Tooltip, Descriptions, Tabs, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag } from "antd";
 import type { TabsProps } from "antd";
 import { EditOutlined, SaveOutlined, CloseOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, FilterOutlined } from "@ant-design/icons";
 import FullCalendar from "@fullcalendar/react";
@@ -22,11 +22,11 @@ import {
     deleteLivestream,
     downloadLivestreamImportTemplate,
     exportLivestreams,
+    importLivestreamMappings,
     importLivestreamsFile,
     previewLivestreamMappingImport,
     updateLivestream,
     updateLivestreamBulk,
-    updateLivestreamMappings,
 } from "@/services/livestreamService";
 import dayjs, { Dayjs } from "dayjs";
 import type { ModuleField, ResolvedFieldPermission } from "@/types/fieldPolicy";
@@ -132,6 +132,7 @@ interface ScheduleDataType {
     lesson_name?: string;
     learn_number?: number;
     lesson_status?: string | number;
+    cancel_reason?: string | null;
     system_type?: string;
     class_name?: string;
     room?: string;
@@ -155,16 +156,29 @@ interface ScheduleSortItem {
 type ScheduleSortState = ScheduleSortItem[];
 
 const DEFAULT_MODULE_FIELDS: ModuleField[] = [
-    { fieldCode: "code", fieldLabel: "Chương trình", fieldType: "text", sortOrder: 1 },
-    { fieldCode: "lesson_name", fieldLabel: "Tên bài học", fieldType: "text", sortOrder: 2 },
-    { fieldCode: "learn_number", fieldLabel: "Bài học", fieldType: "number", sortOrder: 3 },
-    { fieldCode: "subject", fieldLabel: "Môn học", fieldType: "text", sortOrder: 4 },
-    { fieldCode: "teacher", fieldLabel: "Giáo viên", fieldType: "text", sortOrder: 5 },
-    { fieldCode: "assistant_teacher", fieldLabel: "Trợ giảng", fieldType: "select", sortOrder: 6 },
-    { fieldCode: "start_time", fieldLabel: "Bắt đầu", fieldType: "date", sortOrder: 7 },
-    { fieldCode: "end_time", fieldLabel: "Kết thúc", fieldType: "date", sortOrder: 8 },
-    { fieldCode: "lesson_link", fieldLabel: "Link học", fieldType: "text", sortOrder: 9 },
+    { fieldCode: "lesson_name", fieldLabel: "Tên bài học", fieldType: "text", sortOrder: 1 },
+    { fieldCode: "learn_number", fieldLabel: "Bài học", fieldType: "number", sortOrder: 2 },
+    { fieldCode: "teacher", fieldLabel: "Giáo viên", fieldType: "text", sortOrder: 3 },
+    { fieldCode: "assistant_teacher", fieldLabel: "Trợ giảng", fieldType: "select", sortOrder: 4 },
+    { fieldCode: "start_time", fieldLabel: "Bắt đầu", fieldType: "date", sortOrder: 5 },
+    { fieldCode: "end_time", fieldLabel: "Kết thúc", fieldType: "date", sortOrder: 6 },
 ];
+
+// Các thông tin này vẫn được lưu/cấu hình cho từng lịch, nhưng không cần nằm
+// trong bảng quản lý lịch học. Danh sách bao gồm mã cũ để cấu hình field động
+// từ DB không làm các cột này xuất hiện trở lại.
+const HIDDEN_SCHEDULE_LIST_FIELDS = new Set([
+    "code",
+    "class_code",
+    "course",
+    "course_code",
+    "course_name",
+    "class_name",
+    "subject",
+    "lesson_link",
+    "evg_stream",
+    "stream",
+]);
 
 const MOCK_SCHEDULES: ScheduleDataType[] = [];
 const CALENDAR_PLUGINS = [dayGridPlugin, timeGridPlugin, interactionPlugin];
@@ -253,6 +267,7 @@ const lessonStatusText = (
 };
 
 const canModifySchedule = (record: ScheduleDataType) => {
+    if (Number(record.lesson_status) === 1) return false;
     if (!record.start_time) {
         return record.can_modify === true;
     }
@@ -267,7 +282,7 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
         { label: "Chương trình", value: record.code || "-" },
         { label: "Tên lớp", value: record.class_name || "-" },
         { label: "Bài học", value: record.lesson_name || "-" },
-        { label: "Buổi học", value: record.learn_number ?? "-" },
+        { label: "Bài học", value: record.learn_number ?? "-" },
         { label: "Môn học", value: record.subject || "-" },
         { label: "Giáo viên", value: record.teacher || "-" },
         {
@@ -280,7 +295,10 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
         },
         { label: "Phòng/Kênh học", value: record.room || "-" },
         { label: "Hệ thống", value: record.system_type || "-" },
-        { label: "Trạng thái", value: lessonStatusText(record.start_time, record.end_time) },
+        { label: "Trạng thái", value: Number(record.lesson_status) === 1 ? "Nghỉ học" : lessonStatusText(record.start_time, record.end_time) },
+        ...(Number(record.lesson_status) === 1
+            ? [{ label: "Lý do nghỉ", value: record.cancel_reason || "Chưa có lý do" }]
+            : []),
         { label: "Link học", value: record.lesson_link || "-" },
     ];
 
@@ -514,7 +532,7 @@ const Page = () => {
     const schedulesQuery = useSchedulesQuery(hasSearched ? scheduleParams : null);
     const calendarSchedulesQuery = useSchedulesQuery(calendarParams);
     const moduleFieldsQuery = useModuleFieldsQuery(SCHEDULE_MODULE_CODE);
-    const assistantsQuery = useTeachingStaffQuery(2);
+    const assistantsQuery = useTeachingStaffQuery(0);
     const programsQuery = useSchedulingProgramsQuery();
     const { refreshSchedules } = useLmsCache();
     const loading = schedulesQuery.isLoading || schedulesQuery.isValidating;
@@ -564,11 +582,13 @@ const Page = () => {
         return calendarData.filter((item) => item.start_time).map((item) => {
             const start = dayjs(item.start_time);
             const end = item.end_time ? dayjs(item.end_time) : start.add(1, "hour");
-            const styleType = now.isAfter(end)
-                ? "completed"
-                : now.isAfter(start) && now.isBefore(end)
-                    ? "ongoing"
-                    : "upcoming";
+            const styleType = Number(item.lesson_status) === 1
+                ? "cancelled"
+                : now.isAfter(end)
+                    ? "completed"
+                    : now.isAfter(start) && now.isBefore(end)
+                        ? "ongoing"
+                        : "upcoming";
             return {
                 id: String(item.key),
                 title: item.lesson_name || `Bài ${item.learn_number}`,
@@ -591,11 +611,13 @@ const Page = () => {
 
     const renderCalendarEvent = useCallback((eventInfo: any) => {
         const styleType = eventInfo.event.extendedProps.styleType;
-        const visual = styleType === "completed"
-            ? { background: "#f6ffed", color: "#389e0d", border: "3px solid #52c41a" }
-            : styleType === "ongoing"
-                ? { background: "#fff2e8", color: "#d4380d", border: "3px solid #fa541c" }
-                : { background: "#e6f4ff", color: "#0958d9", border: "3px solid #1677ff" };
+        const visual = styleType === "cancelled"
+            ? { background: "#fff1f0", color: "#cf1322", border: "3px solid #ff4d4f" }
+            : styleType === "completed"
+                ? { background: "#f6ffed", color: "#389e0d", border: "3px solid #52c41a" }
+                : styleType === "ongoing"
+                    ? { background: "#fff2e8", color: "#d4380d", border: "3px solid #fa541c" }
+                    : { background: "#e6f4ff", color: "#0958d9", border: "3px solid #1677ff" };
         return (
             <div style={{
                 backgroundColor: visual.background,
@@ -611,6 +633,9 @@ const Page = () => {
                 boxSizing: "border-box",
             }}>
                 <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.85 }}>{eventInfo.timeText}</div>
+                {styleType === "cancelled" && (
+                    <div style={{ fontSize: 10, fontWeight: 700, marginTop: 2 }}>NGHỈ HỌC</div>
+                )}
                 <div style={{ fontSize: 12, whiteSpace: "normal", lineHeight: 1.3, marginTop: 2, fontWeight: 500 }}>
                     {eventInfo.event.title}
                 </div>
@@ -634,12 +659,14 @@ const Page = () => {
     const [openFilterDrawer, setOpenFilterDrawer] = useState(false);
     const { fieldPolicy } = useAuthStore((state) => state.user)
     const hasPermission = useAuthStore(state => state.hasPermission);
-    const canCreateSchedule = hasPermission(PermissionKey.SCHEDULE_CREATE);
-    const canEditSchedule = hasPermission(PermissionKey.SCHEDULE_EDIT);
-    const canDeleteSchedule = hasPermission(PermissionKey.SCHEDULE_DELETE);
-    const canImportSchedule = hasPermission(PermissionKey.SCHEDULE_IMPORT);
-    const canExportSchedule = hasPermission(PermissionKey.SCHEDULE_EXPORT);
-    const canEditTeachingAssignment = hasPermission(PermissionKey.CALENDAR_TEACHER_EDIT);
+    const can = useAuthStore(state => state.can);
+    const activeProgramCode = String(submittedFilterValues.code || "").trim() || undefined;
+    const canCreateSchedule = can(PermissionKey.SCHEDULE_CREATE, activeProgramCode);
+    const canEditSchedule = can(PermissionKey.SCHEDULE_EDIT, activeProgramCode);
+    const canDeleteSchedule = can(PermissionKey.SCHEDULE_DELETE, activeProgramCode);
+    const canImportSchedule = can(PermissionKey.SCHEDULE_IMPORT, activeProgramCode);
+    const canExportSchedule = can(PermissionKey.SCHEDULE_EXPORT, activeProgramCode);
+    const canEditTeachingAssignment = can(PermissionKey.CALENDAR_TEACHER_EDIT, activeProgramCode);
 
     const isEditing = (record: ScheduleDataType) => record.key === editingKey;
 
@@ -756,7 +783,7 @@ const Page = () => {
                 setImporting(true);
                 setImportErrors([]);
                 setPendingMappingFile(file);
-                const response: any = await previewLivestreamMappingImport(file);
+                const response: any = await previewLivestreamMappingImport(file, programCode);
                 setImportMappingPreview(response?.data ?? null);
             } catch (error: any) {
                 api.error({
@@ -802,7 +829,13 @@ const Page = () => {
         if (!pendingMappingFile) return;
         try {
             setImporting(true);
-            const response: any = await updateLivestreamMappings({
+            const programCode = String(submittedFilterValues.code || "").trim();
+            if (!programCode) {
+                api.warning({ message: "Vui lòng chọn Chương trình trước khi import" });
+                return;
+            }
+            const response: any = await importLivestreamMappings({
+                program_code: programCode,
                 updates: importMappingPreview?.updates ?? [],
             });
             api.success({
@@ -986,12 +1019,14 @@ const Page = () => {
         (item) =>
             item.field.fieldCode !== "id"
             && item.field.fieldCode !== "lesson_document"
+            && !HIDDEN_SCHEDULE_LIST_FIELDS.has(item.field.fieldCode)
             && (item.visible || item.editable)
     );
     const editableFieldCodes = fieldPermissions
         .filter((item) => (
             item.field.fieldCode !== "id"
             && item.editable
+            && !["lesson_status", "cancel_reason"].includes(item.field.fieldCode)
             && !QUICK_EDIT_LOCKED_FIELDS.has(item.field.fieldCode)
             && (
                 !["teacher", "assistant_teacher"].includes(item.field.fieldCode)
@@ -1004,7 +1039,7 @@ const Page = () => {
         const fieldCode = field.fieldCode;
         const activeSort = sortState.find((item) => item.field === fieldCode);
         return {
-            title: field.fieldLabel || fieldCode,
+            title: fieldCode === "lesson_status" ? "Tiến độ" : (field.fieldLabel || fieldCode),
             dataIndex: fieldCode,
             key: fieldCode,
             width:
@@ -1048,28 +1083,13 @@ const Page = () => {
                         return (
                             <Form.Item name={fieldCode} style={{ margin: 0 }}>
                                 <TeachingStaffSelect
-                                    teacherType={2}
+                                    teacherType={0}
                                     mode="multiple"
                                     size="small"
                                     showSearch
                                     optionFilterProp="label"
                                     style={{ width: "100%" }}
                                 />
-                            </Form.Item>
-                        );
-                    }
-                    if (fieldCode === "lesson_status") {
-                        return (
-                            <Form.Item
-                                name={fieldCode}
-                                style={{ margin: 0 }}
-                                rules={[{ required: true, message: "Chọn trạng thái!" }]}
-                            >
-                                <Select size="small" style={{ width: 130 }} options={[
-                                    { value: 0, label: "Chưa bắt đầu" },
-                                    { value: 1, label: "Nghỉ học" },
-                                    { value: 2, label: "Đang diễn ra" },
-                                ]} />
                             </Form.Item>
                         );
                     }
@@ -1146,6 +1166,23 @@ const Page = () => {
             },
         };
     });
+
+    const progressColumnIndex = columns.findIndex((column) => column.key === "lesson_status");
+    if (progressColumnIndex >= 0) {
+        columns.splice(progressColumnIndex + 1, 0,
+            {
+                title: "Nghỉ học",
+                key: "is_cancelled",
+                width: 110,
+                align: "center",
+                render: (_value: unknown, record: ScheduleDataType) => (
+                    Number(record.lesson_status) === 1
+                        ? <Tag color="red">Nghỉ học</Tag>
+                        : <Tag>Không</Tag>
+                ),
+            },
+        );
+    }
 
     if ((canEditSchedule && editableFieldCodes.length > 0) || canDeleteSchedule) {
         columns.push({

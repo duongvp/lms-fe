@@ -47,6 +47,15 @@ const buildSessions = (position: number) => [
     },
 ];
 
+const cloneScheduleTemplate = (template: any[]) => template
+    .filter((item) => item?.weekday && item?.start_time && item?.end_time)
+    .map((item) => ({
+        weekday: Number(item.weekday),
+        start_time: dayjs(item.start_time),
+        end_time: dayjs(item.end_time),
+        hmo_mapping_keys: [],
+    }));
+
 const AutoScheduleModal = ({ open, programCode, onClose, onSuccess }: Props) => {
     const [form] = Form.useForm();
     const [lessons, setLessons] = useState<SchedulingLesson[]>([]);
@@ -60,6 +69,11 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess }: Props) => 
     const [hmoOptions, setHmoOptions] = useState<Record<string, HocmaiSectionOption[]>>({});
     const [loadingHmoLessonIds, setLoadingHmoLessonIds] = useState<Set<string>>(new Set());
     const requestedHmoLessonIds = useRef(new Set<string>());
+
+    const getScheduleTemplate = () => {
+        const template = cloneScheduleTemplate(form.getFieldValue("schedule_template") || []);
+        return template.length ? template : null;
+    };
 
     const divideIntoBlocks = (source: SchedulingLesson[], size: 1 | 2, requestedLimit = lessonLimit) => {
         const remaining = source.filter((lesson) => Number(lesson.scheduled_count || 0) === 0);
@@ -77,7 +91,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess }: Props) => 
                     learn_number: lesson.learn_number,
                     session_id: lesson.id,
                     lesson_name: lesson.lesson_name,
-                    sessions: buildSessions(lessonIndex),
+                    sessions: getScheduleTemplate() || buildSessions(lessonIndex),
                 })),
             });
         }
@@ -85,6 +99,27 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess }: Props) => 
         setBlockPage(1);
         setPreview([]);
         setPayload(null);
+    };
+
+    const applyScheduleTemplateToAllLessons = async () => {
+        try {
+            await form.validateFields(["schedule_template"]);
+            const sessions = getScheduleTemplate();
+            if (!sessions?.length) return;
+            const blocks = form.getFieldValue("blocks") || [];
+            form.setFieldValue("blocks", blocks.map((block: any) => ({
+                ...block,
+                lessons: (block.lessons || []).map((lesson: any) => ({
+                    ...lesson,
+                    sessions: cloneScheduleTemplate(sessions),
+                })),
+            })));
+            setPreview([]);
+            setPayload(null);
+            message.success("Đã áp dụng mẫu lịch cho toàn bộ bài đã chọn");
+        } catch {
+            // Ant Design đã hiển thị lỗi ngay tại dòng mẫu không hợp lệ.
+        }
     };
 
     useEffect(() => {
@@ -233,6 +268,10 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess }: Props) => 
                         customize_lesson_names: false,
                         lesson_name_prefix: "[Lịch {n}] - ",
                         lesson_name_suffix: "",
+                        schedule_template: [
+                            { weekday: 1, start_time: dayjs("19:00", "HH:mm"), end_time: dayjs("20:30", "HH:mm") },
+                            { weekday: 6, start_time: dayjs("19:00", "HH:mm"), end_time: dayjs("20:30", "HH:mm") },
+                        ],
                         blocks: [],
                     }}
                     onValuesChange={() => { setPreview([]); setPayload(null); }}
@@ -309,6 +348,46 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess }: Props) => 
                                 </>
                             )}
                         </Form.Item>
+                    </Card>
+
+                    <Card
+                        size="small"
+                        title="Mẫu lịch chung"
+                        extra={<Typography.Text type="secondary">Khai báo một lần, áp dụng cho mọi bài</Typography.Text>}
+                        style={{ marginBottom: 12 }}
+                    >
+                        <Form.List name="schedule_template">
+                            {(fields, { add, remove }) => (
+                                <Space direction="vertical" style={{ width: "100%" }}>
+                                    {fields.map((field, index) => (
+                                        <Space key={field.key} align="start" wrap>
+                                            <Form.Item
+                                                name={[field.name, "weekday"]}
+                                                label={`Buổi mẫu ${index + 1}`}
+                                                rules={[{ required: true, message: "Chọn thứ học" }]}
+                                            >
+                                                <Select style={{ width: 125 }} options={WEEKDAYS} />
+                                            </Form.Item>
+                                            <Form.Item name={[field.name, "start_time"]} label="Bắt đầu" rules={[{ required: true }]}>
+                                                <TimePicker format="HH:mm" />
+                                            </Form.Item>
+                                            <Form.Item name={[field.name, "end_time"]} label="Kết thúc" rules={[{ required: true }]}>
+                                                <TimePicker format="HH:mm" />
+                                            </Form.Item>
+                                            {fields.length > 1 && <Button danger type="text" onClick={() => remove(field.name)} style={{ marginTop: 30 }}>Xóa</Button>}
+                                        </Space>
+                                    ))}
+                                    <Space wrap>
+                                        <Button type="dashed" size="small" icon={<PlusOutlined />} onClick={() => add({ weekday: 1, start_time: dayjs("19:00", "HH:mm"), end_time: dayjs("20:30", "HH:mm") })}>
+                                            Thêm buổi vào mẫu
+                                        </Button>
+                                        <Button type="primary" onClick={() => void applyScheduleTemplateToAllLessons()} disabled={remainingCount === 0}>
+                                            Áp dụng mẫu cho tất cả bài
+                                        </Button>
+                                    </Space>
+                                </Space>
+                            )}
+                        </Form.List>
                     </Card>
 
                     {!!lessons.length && (

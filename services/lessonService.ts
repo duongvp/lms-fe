@@ -46,15 +46,6 @@ export interface LessonApiResponse {
     subject_name: string;
     learn_number: number;
     lesson_name: string;
-    lesson_document?: string | null;
-    evg_banner?: string | null;
-    evg_stream?: string | null;
-    lesson_link?: string | null;
-    lesson_baitap?: string | null;
-    lesson_tomtat?: string | null;
-    lesson_phuongphap?: string | null;
-    lesson_luuy?: string | null;
-    lesson_ketqua?: string | null;
     scheduled_count?: number | string;
     past_scheduled_count?: number | string;
     status: number;
@@ -81,7 +72,7 @@ export interface LessonSubjectOption {
 }
 
 export interface LessonProgramOption extends LessonSubjectOption {
-    grade: number;
+    grade?: number | null;
 }
 
 export interface CreateLessonProgramPayload {
@@ -102,15 +93,6 @@ export interface LessonPayload {
     subject_name: string;
     learn_number?: number;
     lesson_name: string;
-    lesson_document?: string | null;
-    evg_banner?: string | null;
-    evg_stream?: string | null;
-    lesson_link?: string | null;
-    lesson_baitap?: string | null;
-    lesson_tomtat?: string | null;
-    lesson_phuongphap?: string | null;
-    lesson_luuy?: string | null;
-    lesson_ketqua?: string | null;
 }
 
 export interface LessonBulkUpdatePayload {
@@ -255,8 +237,8 @@ export const exportLessons = (params: LessonExportParams) =>
         credentials: "include",
     }, "blob");
 
-export const downloadLessonTemplate = (format: "csv" | "xlsx") =>
-    fetchInstance(`${API_BASE_URL}/template?format=${format}`, {
+export const downloadLessonTemplate = (format: "csv" | "xlsx", programCode: string) =>
+    fetchInstance(`${API_BASE_URL}/template?format=${format}&program_code=${encodeURIComponent(programCode)}`, {
         method: "GET",
         headers: lessonHeaders(false),
         credentials: "include",

@@ -5,7 +5,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { getLessons, type LessonListParams } from "@/services/lessonService";
 import { getLivestreams, getSchedulingPrograms, type LivestreamListParams } from "@/services/livestreamService";
 import { getModuleFields } from "@/services/roleService";
-import { getTeachingStaffOptions, type TeacherType } from "@/services/teacherProfileService";
+import { getTeachingStaffOptions, type CanViewStreamKey } from "@/services/teacherProfileService";
 import { getPackageCourses } from "@/services/packageCourseService";
 import { isSWRNamespace, SWR_NAMESPACES, swrKeys } from "@/lib/swrKeys";
 
@@ -47,7 +47,7 @@ export const useModuleFieldsQuery = (moduleCode: string) => {
     );
 };
 
-export const useTeachingStaffQuery = (teacherType: TeacherType) => {
+export const useTeachingStaffQuery = (teacherType: CanViewStreamKey) => {
     const userId = useUserId();
     return useSWR(
         swrKeys.teachingStaff(userId, teacherType),
@@ -78,7 +78,7 @@ export const useLmsCache = () => {
             undefined,
             { revalidate: true }
         ),
-        refreshTeachingStaff: (teacherType?: TeacherType) => mutate(
+        refreshTeachingStaff: (teacherType?: CanViewStreamKey) => mutate(
             (key) => Array.isArray(key)
                 && key[0] === SWR_NAMESPACES.teachingStaff
                 && (teacherType === undefined || key[2] === teacherType),

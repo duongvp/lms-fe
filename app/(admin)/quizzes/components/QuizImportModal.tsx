@@ -99,7 +99,7 @@ const QuizImportModal = ({
                 type="warning"
                 showIcon
                 message="Lưu ý trước khi nhập"
-                description="Không đổi tên cột. Thứ tự nên là duy nhất trong cùng lớp và bài học. Hệ thống kiểm tra toàn bộ file trước; nếu có một dòng lỗi thì chưa dòng nào được lưu."
+                description="Chương trình được xác định từ bộ lọc hiện tại, không cần cột Mã chương trình trong file. Thứ tự nên là duy nhất trong cùng Chương trình và bài học. Hệ thống kiểm tra toàn bộ file trước; nếu có một dòng lỗi thì chưa dòng nào được lưu."
             />
         </Space>
     </Modal>

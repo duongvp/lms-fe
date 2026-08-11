@@ -8,14 +8,14 @@ import {
     createTeacherProfile,
     formatTeachingStaffLabel,
     type TeacherProfilePayload,
-    type TeacherType,
+    type CanViewStreamKey,
 } from "@/services/teacherProfileService";
 import { useTeachingStaffQuery } from "@/hooks/useLmsQueries";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
 
 type TeachingStaffSelectProps = Omit<SelectProps, "options"> & {
-    teacherType: TeacherType;
+    teacherType: CanViewStreamKey;
     allowQuickCreate?: boolean;
     teacherValueMode?: "username" | "displayName";
 };
@@ -81,7 +81,7 @@ const TeachingStaffSelect = ({
         form.setFieldsValue({
             username: "",
             display_name: "",
-            teacher_type: teacherType,
+            can_view_stream_key: teacherType,
             status: 1,
         });
         setModalOpen(true);
@@ -91,7 +91,7 @@ const TeachingStaffSelect = ({
         try {
             const values = await form.validateFields();
             setSaving(true);
-            await createTeacherProfile({ ...values, teacher_type: teacherType, status: 1 });
+            await createTeacherProfile({ ...values, can_view_stream_key: teacherType, status: 1 });
             await staffQuery.mutate();
 
             const value = teacherType === 1 && teacherValueMode === "displayName"

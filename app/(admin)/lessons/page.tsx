@@ -97,6 +97,9 @@ const Page = () => {
     const [reorderMode, setReorderMode] = useState(false);
     const [reorderStrategy, setReorderStrategy] = useState<LessonReorderStrategy>("insert");
     const [savingReorder, setSavingReorder] = useState(false);
+    const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
+    const [editingLessonName, setEditingLessonName] = useState("");
+    const [savingInlineName, setSavingInlineName] = useState(false);
     const [importing, setImporting] = useState(false);
     const [importErrors, setImportErrors] = useState<LessonImportError[]>([]);
     const [dragRowKey, setDragRowKey] = useState<React.Key | null>(null);
@@ -108,11 +111,13 @@ const Page = () => {
     const [secondaryLoading, setSecondaryLoading] = useState(false);
     const [api, contextHolder] = notification.useNotification();
     const hasPermission = useAuthStore((state) => state.hasPermission);
+    const can = useAuthStore((state) => state.can);
     const { fieldPolicy } = useAuthStore((state) => state.user);
 
-    const canCreate = hasPermission(PermissionKey.LESSON_CREATE);
-    const canEdit = hasPermission(PermissionKey.LESSON_EDIT);
-    const canDelete = hasPermission(PermissionKey.LESSON_DELETE);
+    const activeProgramCode = String(submittedFilterValues.subject_code || "").trim() || undefined;
+    const canCreate = can(PermissionKey.LESSON_CREATE, activeProgramCode);
+    const canEdit = can(PermissionKey.LESSON_EDIT, activeProgramCode);
+    const canDelete = can(PermissionKey.LESSON_DELETE, activeProgramCode);
 
     const fieldPermissions = resolveModuleFieldPermissions(
         moduleFields,
@@ -133,6 +138,7 @@ const Page = () => {
     const editableFormFieldCodes = formFieldPermissions
         .filter((item) => item.editable)
         .map((item) => item.field.fieldCode);
+    const canEditTitle = editableFormFieldCodes.includes("lesson_name");
 
     // ✅ Hàm thực sự submit filter (được debounce)
     const doSearch = useCallback((keyword: string) => {
@@ -428,6 +434,39 @@ const Page = () => {
         });
     };
 
+    const handleStartEditTitle = (record: LessonDataType) => {
+        if (Number(record.past_scheduled_count || 0) > 0) {
+            api.warning({ message: "Bài học đã được dạy, không thể chỉnh sửa" });
+            return;
+        }
+        setEditingLessonId(String(record.id));
+        setEditingLessonName(String(record.lesson_name || ""));
+    };
+
+    const handleSaveEditTitle = async () => {
+        if (!editingLessonId) return;
+        const lessonName = editingLessonName.trim();
+        if (!lessonName) {
+            api.warning({ message: "Tên bài học không được để trống" });
+            return;
+        }
+        try {
+            setSavingInlineName(true);
+            await updateLesson(editingLessonId, { lesson_name: lessonName });
+            api.success({ message: "Đã cập nhật tên bài học" });
+            setEditingLessonId(null);
+            setEditingLessonName("");
+            if (hasSearched) await refreshLessons();
+        } catch (error: any) {
+            api.error({
+                message: "Cập nhật thất bại",
+                description: error.message || "Không thể cập nhật tên bài học.",
+            });
+        } finally {
+            setSavingInlineName(false);
+        }
+    };
+
     const handleEnableReorder = () => {
         if (!filterValues.grade || !filterValues.subject_code) {
             api.warning({
@@ -477,6 +516,17 @@ const Page = () => {
             } else {
                 const [moved] = next.splice(sourceIndex, 1);
                 next.splice(targetIndex, 0, moved);
+            }
+            const movedPastLesson = next.some((item, index) => (
+                Number(item.past_scheduled_count || 0) > 0
+                && item.key !== prev[index]?.key
+            ));
+            if (movedPastLesson) {
+                api.warning({
+                    message: "Không thể sắp xếp qua bài đã dạy",
+                    description: "Thứ tự của bài đã dạy phải được giữ nguyên.",
+                });
+                return prev;
             }
             return next.map((item, index) => ({
                 ...item,
@@ -559,8 +609,13 @@ const Page = () => {
     };
 
     const handleDownloadTemplate = async (format: LessonExportFormat) => {
+        const programCode = String(submittedFilterValues.subject_code || "").trim();
+        if (!programCode) {
+            api.warning({ message: "Vui lòng chọn Chương trình trước khi tải file mẫu" });
+            return;
+        }
         try {
-            const blob = await downloadLessonTemplate(format);
+            const blob = await downloadLessonTemplate(format, programCode);
             downloadBlob(blob, `lessons-import-template.${format}`);
         } catch (error: any) {
             api.error({
@@ -732,7 +787,11 @@ const Page = () => {
                 reorderMode={reorderMode}
                 dragRowKey={dragRowKey as React.Key}
                 canEdit={canEdit}
+                canEditTitle={canEditTitle}
                 canDelete={canDelete}
+                editingLessonId={editingLessonId}
+                editingLessonName={editingLessonName}
+                savingInlineName={savingInlineName}
                 visibleFormFieldCodes={[...visibleFormFieldCodes, "updated_at"]}
                 hasSearched={hasSearched}
                 onSelectionChange={setSelectedRowKeys}
@@ -748,9 +807,12 @@ const Page = () => {
                 }}
                 onDragStart={setDragRowKey}
                 onDrop={handleDropRow}
-                onEdit={(record) => {
-                    setSelectedRecord(record);
-                    setOpenFormModal(true);
+                onStartEditTitle={handleStartEditTitle}
+                onChangeEditTitle={setEditingLessonName}
+                onSaveEditTitle={handleSaveEditTitle}
+                onCancelEditTitle={() => {
+                    setEditingLessonId(null);
+                    setEditingLessonName("");
                 }}
                 onDelete={handleDelete}
             />
@@ -790,6 +852,7 @@ const Page = () => {
                 open={openImportModal}
                 loading={importing}
                 errors={importErrors}
+                programName={String(submittedFilterValues.subject || submittedFilterValues.subject_code || "")}
                 onClose={() => setOpenImportModal(false)}
                 onSubmit={handleImport}
                 onDownloadTemplate={handleDownloadTemplate}

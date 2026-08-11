@@ -174,9 +174,10 @@ export const importLivestreamsFile = (file: File, programCode: string) => {
     }, "json", 120_000);
 };
 
-export const previewLivestreamMappingImport = (file: File) => {
+export const previewLivestreamMappingImport = (file: File, programCode: string) => {
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("program_code", programCode);
     return fetchInstance(`${API_BASE_URL}/mapping/import/preview`, {
         method: "POST",
         body: formData,
@@ -194,6 +195,14 @@ export const previewLivestreamMappingUpdates = (payload: any) =>
 
 export const updateLivestreamMappings = (payload: any) =>
     fetchInstance(`${API_BASE_URL}/mapping`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+    }, "json", 120_000);
+
+export const importLivestreamMappings = (payload: any) =>
+    fetchInstance(`${API_BASE_URL}/mapping/import`, {
         method: "PUT",
         body: JSON.stringify(payload),
         headers: { "Content-Type": "application/json" },

@@ -44,6 +44,16 @@ export interface RolePayload {
     fieldPolicy?: any;
 }
 
+export type ProgramScopeMode = "ALL" | "RESTRICTED" | "DENY";
+export interface ProgramResource {
+    code: string;
+    displayName?: string | null;
+}
+export interface RoleProgramScope {
+    mode: ProgramScopeMode;
+    programs: string[];
+}
+
 // ==================== HELPER ====================
 
 /**
@@ -168,3 +178,21 @@ export const updateRoleFieldPolicy = async (id: number, fieldPolicy: any) => {
     };
     return await fetchInstance(url, options);
 };
+
+export const getProgramResources = async (): Promise<ProgramResource[]> => {
+    const res = await fetchInstance(`${API_BASE_URL}/program-resources`);
+    return extractData(res, []);
+};
+
+export const getRoleProgramScope = async (id: number): Promise<RoleProgramScope> => {
+    const res = await fetchInstance(`${API_BASE_URL}/${id}/program-scope`);
+    return extractData(res, { mode: "ALL", programs: [] });
+};
+
+export const updateRoleProgramScope = async (id: number, programScope: RoleProgramScope) => (
+    fetchInstance(`${API_BASE_URL}/${id}/program-scope`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ programScope }),
+    })
+);

@@ -2,13 +2,12 @@
 
 import { useEffect, useRef } from "react";
 import type { DragEvent } from "react";
-import { Button, Empty, Grid, Space, Tooltip } from "antd";
+import { Button, Empty, Grid, Input, Space, Tag, Tooltip } from "antd";
 import { FilterOutlined } from "@ant-design/icons";
 import {
     DeleteOutlined,
     DragOutlined,
     EditOutlined,
-    EyeOutlined,
 } from "@ant-design/icons";
 import CustomTable from "@/components/ui/Table";
 import type { ResolvedFieldPermission } from "@/types/fieldPolicy";
@@ -17,7 +16,6 @@ import type { SorterResult } from "antd/es/table/interface";
 import { FIELD_LABELS } from "./Modal/LessonFormModal";
 import { SORTABLE_FIELDS } from "../lesson.constants";
 import type { LessonDataType, LessonSortState } from "../lesson.types";
-import LessonDetailRow from "./LessonDetailRow";
 import { formatLessonDateTime } from "../lesson.utils";
 import { useTableViewport } from "@/hooks/useTableViewport";
 
@@ -33,7 +31,11 @@ interface LessonTableProps {
     reorderMode: boolean;
     dragRowKey: React.Key;
     canEdit: boolean;
+    canEditTitle: boolean;
     canDelete: boolean;
+    editingLessonId: string | null;
+    editingLessonName: string;
+    savingInlineName: boolean;
     visibleFormFieldCodes: string[];
     /** Khi false: hiển thị empty placeholder, không hiển thị data */
     hasSearched: boolean;
@@ -42,7 +44,10 @@ interface LessonTableProps {
     onSortChange: (sorter: LessonSortState) => void;
     onDragStart: (key: React.Key) => void;
     onDrop: (key: React.Key) => void;
-    onEdit: (record: LessonDataType) => void;
+    onStartEditTitle: (record: LessonDataType) => void;
+    onChangeEditTitle: (value: string) => void;
+    onSaveEditTitle: () => void;
+    onCancelEditTitle: () => void;
     onDelete: (record: LessonDataType) => void;
 }
 
@@ -58,7 +63,11 @@ const LessonTable = ({
     reorderMode,
     dragRowKey,
     canEdit,
+    canEditTitle,
     canDelete,
+    editingLessonId,
+    editingLessonName,
+    savingInlineName,
     visibleFormFieldCodes,
     hasSearched,
     onSelectionChange,
@@ -66,7 +75,10 @@ const LessonTable = ({
     onSortChange,
     onDragStart,
     onDrop,
-    onEdit,
+    onStartEditTitle,
+    onChangeEditTitle,
+    onSaveEditTitle,
+    onCancelEditTitle,
     onDelete,
 }: LessonTableProps) => {
     const isPastLesson = (record: LessonDataType) => Number(record.past_scheduled_count || 0) > 0;
@@ -132,7 +144,22 @@ const LessonTable = ({
         sortOrder: sortState.sort_by === field.fieldCode ? sortState.sort_order : undefined,
         width: field.fieldCode === "lesson_name" ? 260 : 150,
         ellipsis: field.fieldCode === "lesson_name",
-        render: (value: unknown) => {
+        render: (value: unknown, record) => {
+            if (field.fieldCode === "lesson_name" && String(record.id) === editingLessonId) {
+                return (
+                    <Space.Compact style={{ width: "100%" }} onClick={(event) => event.stopPropagation()}>
+                        <Input
+                            autoFocus
+                            value={editingLessonName}
+                            onChange={(event) => onChangeEditTitle(event.target.value)}
+                            onPressEnter={onSaveEditTitle}
+                            disabled={savingInlineName}
+                        />
+                        <Button type="primary" size="small" loading={savingInlineName} onClick={onSaveEditTitle}>Lưu</Button>
+                        <Button size="small" disabled={savingInlineName} onClick={onCancelEditTitle}>Hủy</Button>
+                    </Space.Compact>
+                );
+            }
             if (field.fieldCode === "updated_at") {
                 return formatLessonDateTime(value as string | undefined);
             }
@@ -151,20 +178,41 @@ const LessonTable = ({
 
     if (!reorderMode) {
         columns.push({
+            title: "Trạng thái",
+            key: "taught",
+            width: 92,
+            render: (_: unknown, record: LessonDataType) => isPastLesson(record)
+                ? <Tag color="green">Đã dạy</Tag>
+                : <Tag>Chưa dạy</Tag>,
+        });
+        columns.push({
             title: "Thao tác",
             key: "action",
             fixed: screens.lg ? "right" : undefined,
             width: 120,
             render: (_: unknown, record: LessonDataType) => (
                 <Space>
-                    {canEdit && (
-                        <Tooltip title="Sửa">
-                            <Button type="link" size="small" icon={<EditOutlined />} onClick={(e) => { e.stopPropagation(); onEdit(record); }} />
+                    {canEdit && canEditTitle && (
+                        <Tooltip title={isPastLesson(record) ? "Bài học đã được dạy, không thể sửa" : "Sửa tên bài học"}>
+                            <Button
+                                type="link"
+                                size="small"
+                                icon={<EditOutlined />}
+                                disabled={isPastLesson(record)}
+                                onClick={(e) => { e.stopPropagation(); onStartEditTitle(record); }}
+                            />
                         </Tooltip>
                     )}
                     {canDelete && (
-                        <Tooltip title="Xóa">
-                            <Button type="text" danger size="small" icon={<DeleteOutlined />} onClick={(e) => { e.stopPropagation(); onDelete(record); }} />
+                        <Tooltip title={isPastLesson(record) ? "Bài học đã được dạy, không thể xóa" : "Xóa"}>
+                            <Button
+                                type="text"
+                                danger
+                                size="small"
+                                icon={<DeleteOutlined />}
+                                disabled={isPastLesson(record)}
+                                onClick={(e) => { e.stopPropagation(); onDelete(record); }}
+                            />
                         </Tooltip>
                     )}
                 </Space>
@@ -220,6 +268,7 @@ const LessonTable = ({
                         onDragEnd: stopAutoScroll,
                         onDrop: () => {
                             stopAutoScroll();
+                            if (isPastLesson(record)) return;
                             onDrop(record.key);
                         },
                         style: reorderMode
@@ -230,15 +279,8 @@ const LessonTable = ({
                                     ? "rgba(22, 119, 255, 0.06)"
                                     : undefined,
                             }
-                            : { cursor: "pointer" },
+                            : undefined,
                     })}
-                    expandable={reorderMode ? undefined : {
-                        expandedRowRender: (record) => (
-                            <LessonDetailRow record={record} visibleFieldCodes={visibleFormFieldCodes} />
-                        ),
-                        expandRowByClick: true,
-                        columnWidth: 32,
-                    }}
                     pagination={reorderMode ? false : {
                         current: currentPage,
                         pageSize,

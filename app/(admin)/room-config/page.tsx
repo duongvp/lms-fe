@@ -72,7 +72,8 @@ export default function RoomConfigPage() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importRows, setImportRows] = useState<SaveRoomConfigPayload[]>([]);
-  const [pastedText, setPastedText] = useState("");
+  const [importProgramCode, setImportProgramCode] = useState<string | undefined>();
+  const [importErrors, setImportErrors] = useState<string[]>([]);
   const [importResult, setImportResult] = useState<any | null>(null);
 
 
@@ -310,6 +311,57 @@ export default function RoomConfigPage() {
     setIsDetailDrawerOpen(true);
   };
 
+  const prepareImportRows = (jsonRows: any[]) => {
+    if (!importProgramCode) {
+      message.warning("Vui lòng chọn Chương trình trước khi đọc dữ liệu import");
+      return;
+    }
+    const errors: string[] = [];
+    const parsedRows: SaveRoomConfigPayload[] = [];
+    jsonRows.forEach((row: any, index) => {
+      const rowNumber = index + 2;
+      const sourceCode = String(row.subject || row.code || row["Mã chương trình"] || row["Mã môn"] || row["subject_code"] || "").trim();
+      const code = sourceCode || importProgramCode;
+      const learn_number = Number(row.learn_number || row["Bài"] || row["Buổi học"] || row["learnNumber"] || 0);
+      if (code !== importProgramCode) {
+        errors.push(`Dòng ${rowNumber}: không thuộc Chương trình ${importProgramCode}`);
+        return;
+      }
+      if (!Number.isInteger(learn_number) || learn_number <= 0) {
+        errors.push(`Dòng ${rowNumber}: Số bài phải là số nguyên lớn hơn 0`);
+        return;
+      }
+
+      let configObj: Record<string, unknown> = {};
+      if (row.config) {
+        if (typeof row.config === "object" && !Array.isArray(row.config)) configObj = row.config;
+        else if (typeof row.config === "string") {
+          try { configObj = JSON.parse(row.config); } catch { errors.push(`Dòng ${rowNumber}: Cấu hình JSON không hợp lệ`); return; }
+        }
+      }
+
+      const payloadRow: SaveRoomConfigPayload = { code, learn_number, config: configObj };
+      parsedRows.push(payloadRow);
+    });
+    setImportRows(parsedRows);
+    setImportErrors(errors);
+    if (errors.length) message.warning(`Đã đọc ${parsedRows.length} dòng hợp lệ, có ${errors.length} dòng cần sửa`);
+    else message.success(`Đã đọc ${parsedRows.length} dòng hợp lệ`);
+  };
+
+  const downloadImportTemplate = () => {
+    const worksheet = XLSX.utils.json_to_sheet([{
+      learn_number: 1,
+      config: '{"cam":false,"evg":"evg","mic":false,"leaderboard":true,"screen_share":false,"stream_key":""}',
+    }]);
+    worksheet['!cols'] = [
+      { wch: 14 }, { wch: 76 },
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Cấu hình phòng');
+    XLSX.writeFile(workbook, 'mau-import-cau-hinh-phong-hoc.xlsx');
+  };
+
   // Process uploaded Excel / CSV for Import Modal
   const handleFileUpload = (file: File) => {
     const reader = new FileReader();
@@ -321,61 +373,7 @@ export default function RoomConfigPage() {
         const worksheet = workbook.Sheets[firstSheetName];
         const jsonRows: any[] = XLSX.utils.sheet_to_json(worksheet);
 
-        const parsedRows: SaveRoomConfigPayload[] = jsonRows.map((row: any) => {
-          const code = String(row.subject || row.code || row["Mã môn"] || row["subject_code"] || "").trim();
-          const learn_number = Number(row.learn_number || row["Buổi học"] || row["learnNumber"] || 0);
-
-          let configObj = {};
-          if (row.config) {
-            if (typeof row.config === "object") configObj = row.config;
-            else if (typeof row.config === "string") {
-              try { configObj = JSON.parse(row.config); } catch (e) { configObj = { raw: row.config }; }
-            }
-          }
-
-          const teacherUsername = String(row.username || row.email || row.teacher_username || row.teacher_email || "").trim();
-          const teacherHmid = String(row.student_hmid || row.hmid || row.teacher_hmid || "").trim();
-          const teacherName = String(row.name || row.teacher_name || "").trim();
-
-          const assistantUsername = String(row.assistant_username || row.assistant_email || "").trim();
-          const assistantHmid = String(row.assistant_hmid || "").trim();
-          const assistantName = String(row.assistant_name || "").trim();
-
-          const payloadRow: SaveRoomConfigPayload = {
-            code,
-            learn_number,
-            config: configObj,
-          };
-
-          if (teacherUsername) {
-            payloadRow.teacher = {
-              username: teacherUsername,
-              student_hmid: teacherHmid,
-              name: teacherName || (teacherHmid ? `${teacherHmid} - Giáo viên` : teacherUsername),
-              code,
-              learn_number,
-              islearn: 0,
-              room_id: 1,
-            };
-          }
-
-          if (assistantUsername) {
-            payloadRow.assistant_teacher = {
-              username: assistantUsername,
-              student_hmid: assistantHmid,
-              name: assistantName || (assistantHmid ? `${assistantHmid} - Trợ giảng` : assistantUsername),
-              code,
-              learn_number,
-              islearn: 0,
-              room_id: 2,
-            };
-          }
-
-          return payloadRow;
-        }).filter((r) => r.code && !isNaN(r.learn_number) && r.learn_number > 0);
-
-        setImportRows(parsedRows);
-        message.success(`Đã đọc ${parsedRows.length} dòng hợp lệ từ file`);
+        prepareImportRows(jsonRows);
       } catch (err: any) {
         message.error("Lỗi khi đọc file Excel/CSV: " + err.message);
       }
@@ -394,7 +392,7 @@ export default function RoomConfigPage() {
     setImporting(true);
     setImportResult(null);
     try {
-      const res: any = await importRoomConfigs(importRows);
+      const res: any = await importRoomConfigs(importProgramCode!, importRows);
       if (res?.success) {
         setImportResult(res.data);
         message.success(res.message || "Import cấu hình phòng hoàn tất!");
@@ -440,7 +438,7 @@ export default function RoomConfigPage() {
       width: 120,
       align: "center" as const,
       render: (val: number) => (
-        <Badge count={`Buổi ${val}`} style={{ backgroundColor: "#52c41a", padding: "0 8px" }} />
+        <Badge count={`Bài ${val}`} style={{ backgroundColor: "#52c41a", padding: "0 8px" }} />
       ),
     },
     {
@@ -456,9 +454,6 @@ export default function RoomConfigPage() {
               <UserOutlined style={{ color: "#1890ff" }} />
               <Text>{record.teacher.name || record.teacher.username}</Text>
             </Space>
-            {/* {record.teacher.student_hmid && (
-              <Tag color="purple">Mã: {record.teacher.student_hmid}</Tag>
-            )} */}
           </Space>
         );
       },
@@ -586,12 +581,13 @@ export default function RoomConfigPage() {
                 style={{ backgroundColor: "#2e7d32", color: "#fff", borderColor: "#2e7d32" }}
                 onClick={() => {
                   setImportRows([]);
-                  setPastedText("");
+                  setImportProgramCode(undefined);
+                  setImportErrors([]);
                   setImportResult(null);
                   setIsImportModalOpen(true);
                 }}
               >
-                Import file / Google Sheet
+                Import file
               </Button>
               <Button
                 type="primary"
@@ -754,7 +750,7 @@ export default function RoomConfigPage() {
               <Col span={12}>
                 <Form.Item label="Trợ giảng" name="assistant_username">
                   <TeachingStaffSelect
-                    teacherType={2}
+                    teacherType={0}
                     showSearch
                     optionFilterProp="label"
                     placeholder="Chọn trợ giảng"
@@ -933,7 +929,7 @@ export default function RoomConfigPage() {
         title={
           <Space>
             <FileExcelOutlined style={{ color: "#52c41a" }} />
-            <span>Import Cấu hình Phòng học từ Excel / Google Sheet</span>
+            <span>Import Cấu hình Phòng học từ Excel</span>
           </Space>
         }
         open={isImportModalOpen}
@@ -947,7 +943,7 @@ export default function RoomConfigPage() {
             type="primary"
             loading={importing}
             onClick={handleExecuteImport}
-            disabled={importRows.length === 0}
+            disabled={importRows.length === 0 || !importProgramCode || importErrors.length > 0}
           >
             Thực hiện Import ({importRows.length} dòng)
           </Button>,
@@ -955,6 +951,27 @@ export default function RoomConfigPage() {
         width={800}
         destroyOnClose
       >
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="Import được thực hiện cho đúng một Chương trình"
+          description="Chọn Chương trình trước, sau đó tải file Excel. Nếu có cột Mã chương trình, giá trị phải trùng với lựa chọn này."
+        />
+        <Form.Item label="Chương trình" required style={{ marginBottom: 12 }}>
+          <Select
+            showSearch
+            placeholder="Chọn Chương trình để import"
+            value={importProgramCode}
+            options={classSelectOptions}
+            optionFilterProp="searchText"
+            onChange={(value) => {
+              setImportProgramCode(value);
+              setImportRows([]);
+              setImportErrors([]);
+            }}
+          />
+        </Form.Item>
         <Tabs
           defaultActiveKey="file"
           items={[
@@ -973,14 +990,27 @@ export default function RoomConfigPage() {
                     </p>
                     <p className="ant-upload-text">Nhấp hoặc Kéo thả file Excel (.xlsx, .csv) vào đây</p>
                     <p className="ant-upload-hint">
-                      Cột tự động nhận diện: <Text code>subject</Text>, <Text code>learn_number</Text>, <Text code>username</Text>, <Text code>name</Text>, <Text code>assistant_username</Text>.
+                      Tải file mẫu để dùng đúng các cột: <Text code>learn_number</Text>, <Text code>config</Text>. Giáo viên và trợ giảng được quản lý tại Lịch học.
                     </p>
+                    <Button type="link" onClick={(event) => { event.stopPropagation(); downloadImportTemplate(); }}>
+                      Tải file mẫu Excel
+                    </Button>
                   </Upload.Dragger>
                 </div>
               ),
             },
           ]}
         />
+
+        {importErrors.length > 0 && (
+          <Alert
+            style={{ marginTop: 16 }}
+            type="error"
+            showIcon
+            message={`Có ${importErrors.length} dòng không hợp lệ`}
+            description={<ul style={{ margin: 0, paddingLeft: 18 }}>{importErrors.slice(0, 10).map((error) => <li key={error}>{error}</li>)}</ul>}
+          />
+        )}
 
         {importRows.length > 0 && (
           <div style={{ marginTop: 16 }}>
@@ -997,19 +1027,7 @@ export default function RoomConfigPage() {
               pagination={{ pageSize: 5 }}
               columns={[
                 { title: "Mã môn", dataIndex: "code", key: "code" },
-                { title: "Buổi học", dataIndex: "learn_number", key: "learn_number" },
-                {
-                  title: "Giáo viên",
-                  key: "teacher",
-                  render: (r: SaveRoomConfigPayload) =>
-                    r.teacher ? `${r.teacher.name || r.teacher.username}` : "-",
-                },
-                {
-                  title: "Trợ giảng",
-                  key: "assistant_teacher",
-                  render: (r: SaveRoomConfigPayload) =>
-                    r.assistant_teacher ? `${r.assistant_teacher.name || r.assistant_teacher.username}` : "-",
-                },
+                { title: "Bài học", dataIndex: "learn_number", key: "learn_number" },
               ]}
             />
           </div>

@@ -145,10 +145,10 @@ const TeacherProfileTable = ({
 
                 {
                     title: 'Loại',
-                    dataIndex: 'teacher_type',
+                    dataIndex: 'can_view_stream_key',
                     width: 140,
                     render: (value) =>
-                        value === 2 ? (
+                        value === 0 ? (
                             <Tag color="blue">
                                 Trợ giảng
                             </Tag>

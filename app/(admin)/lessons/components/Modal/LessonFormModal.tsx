@@ -9,15 +9,10 @@ import {
     InputNumber,
     Modal,
     Row,
-    Select,
-    Space,
-    Tabs,
     Typography,
 } from "antd";
 import {
     CloseCircleOutlined,
-    DeleteOutlined,
-    PlusOutlined,
     SaveOutlined,
 } from "@ant-design/icons";
 import type { ModuleField } from "@/types/fieldPolicy";
@@ -35,77 +30,17 @@ export const FORM_FIELDS: ModuleField[] = [
     { fieldCode: "subject_code", fieldLabel: "Mã môn học", fieldType: "text", sortOrder: 3 },
     { fieldCode: "learn_number", fieldLabel: "Số thứ tự bài", fieldType: "number", sortOrder: 4 },
     { fieldCode: "lesson_name", fieldLabel: "Tên bài học", fieldType: "text", sortOrder: 5 },
-    { fieldCode: "lesson_document", fieldLabel: "Tài liệu bài học", fieldType: "textarea", sortOrder: 5 },
-    { fieldCode: "evg_banner", fieldLabel: "Banner", fieldType: "text", sortOrder: 6 },
-    { fieldCode: "evg_stream", fieldLabel: "EVG Stream", fieldType: "text", sortOrder: 7 },
-    { fieldCode: "lesson_link", fieldLabel: "Link bài học", fieldType: "text", sortOrder: 8 },
-    { fieldCode: "lesson_baitap", fieldLabel: "Bài tập", fieldType: "textarea", sortOrder: 9 },
-    { fieldCode: "lesson_tomtat", fieldLabel: "Tóm tắt", fieldType: "textarea", sortOrder: 10 },
-    { fieldCode: "lesson_phuongphap", fieldLabel: "Phương pháp", fieldType: "textarea", sortOrder: 11 },
-    { fieldCode: "lesson_luuy", fieldLabel: "Lưu ý", fieldType: "textarea", sortOrder: 12 },
-    { fieldCode: "lesson_ketqua", fieldLabel: "Kết quả", fieldType: "textarea", sortOrder: 13 },
 ];
 
 export const FIELD_LABELS = Object.fromEntries(
     FORM_FIELDS.map((field) => [field.fieldCode, field.fieldLabel])
 );
 
-const emptyToNull = (value?: string | null) => {
-    const trimmed = typeof value === "string" ? value.trim() : "";
-    return trimmed || null;
-};
-
-type LessonDocumentValue = {
-    link: string;
-    title: string;
-    type: string;
-};
-
-const parseLessonDocuments = (value?: string | null): LessonDocumentValue[] => {
-    const text = String(value || "").trim();
-    if (!text) return [];
-    try {
-        const parsed = JSON.parse(text);
-        if (Array.isArray(parsed)) {
-            return parsed
-                .filter((item) => item && typeof item === "object")
-                .map((item) => ({
-                    link: String(item.link || "").trim(),
-                    title: String(item.title || "").trim(),
-                    type: String(item.type || "pdf").trim(),
-                }));
-        }
-    } catch {
-        // Dữ liệu cũ chỉ có một URL/tên file sẽ được đưa vào một dòng tài liệu.
-    }
-    return [{ link: text, title: "Tài liệu bài học", type: "pdf" }];
-};
-
-const serializeLessonDocuments = (documents?: LessonDocumentValue[]) => {
-    const normalized = (documents || [])
-        .map((item) => ({
-            link: String(item?.link || "").trim(),
-            title: String(item?.title || "").trim(),
-            type: String(item?.type || "pdf").trim(),
-        }))
-        .filter((item) => item.link && item.title);
-    return normalized.length ? JSON.stringify(normalized) : null;
-};
-
 const toLessonPayload = (values: any): LessonPayload => ({
     grade: Number(values.grade),
     subject_code: String(values.subject_code).trim(),
     subject_name: String(values.subject_name).trim(),
     lesson_name: String(values.lesson_name).trim(),
-    lesson_document: serializeLessonDocuments(values.lesson_documents),
-    evg_banner: emptyToNull(values.evg_banner),
-    evg_stream: emptyToNull(values.evg_stream),
-    lesson_link: emptyToNull(values.lesson_link),
-    lesson_baitap: emptyToNull(values.lesson_baitap),
-    lesson_tomtat: emptyToNull(values.lesson_tomtat),
-    lesson_phuongphap: emptyToNull(values.lesson_phuongphap),
-    lesson_luuy: emptyToNull(values.lesson_luuy),
-    lesson_ketqua: emptyToNull(values.lesson_ketqua),
 });
 
 export const FormSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
@@ -166,10 +101,7 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
     useEffect(() => {
         if (!open) return;
         if (record) {
-            form.setFieldsValue({
-                ...record,
-                lesson_documents: parseLessonDocuments(record.lesson_document),
-            });
+            form.setFieldsValue(record);
         } else {
             form.resetFields();
             form.setFieldsValue(programContext);

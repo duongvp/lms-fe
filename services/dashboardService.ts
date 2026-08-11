@@ -15,6 +15,22 @@ export interface DashboardOverview {
         outlinesWithQuiz: number;
         outlinesWithoutQuiz: number;
     };
+    outlineQuizDetails: {
+        withQuiz: Array<{
+            id: string;
+            programCode: string;
+            subjectName: string | null;
+            learnNumber: number;
+            lessonName: string;
+        }>;
+        withoutQuiz: Array<{
+            id: string;
+            programCode: string;
+            subjectName: string | null;
+            learnNumber: number;
+            lessonName: string;
+        }>;
+    };
     today: {
         total: number;
         upcoming: number;

@@ -2,14 +2,14 @@ import { fetchInstance } from '@/ultils/fetchInstance';
 
 const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/api/teacher-profiles`;
 
-export type TeacherType = 1 | 2;
+export type CanViewStreamKey = 0 | 1;
 export type TeacherProfileStatus = 0 | 1;
 
 export interface TeacherProfile {
     id: number;
     username: string;
     display_name?: string | null;
-    teacher_type: TeacherType;
+    can_view_stream_key: CanViewStreamKey;
     status: TeacherProfileStatus;
     created_at?: string;
     updated_at?: string;
@@ -18,7 +18,7 @@ export interface TeacherProfile {
 export interface TeacherProfilePayload {
     username?: string;
     display_name?: string | null;
-    teacher_type?: TeacherType;
+    can_view_stream_key?: CanViewStreamKey;
     status?: TeacherProfileStatus;
 }
 
@@ -26,7 +26,7 @@ export interface TeacherProfileListParams {
     page?: number;
     limit?: number;
     search?: string;
-    teacher_type?: TeacherType;
+    can_view_stream_key?: CanViewStreamKey;
     status?: TeacherProfileStatus;
 }
 
@@ -115,7 +115,7 @@ export const importTeacherProfiles = (
     });
 };
 
-export const getTeachingStaffOptions = async (teacherType: TeacherType) => {
+export const getTeachingStaffOptions = async (canViewStreamKey: CanViewStreamKey) => {
     const profiles: TeacherProfile[] = [];
     let page = 1;
     let total = 0;
@@ -123,7 +123,7 @@ export const getTeachingStaffOptions = async (teacherType: TeacherType) => {
         const response: any = await getTeacherProfiles({
             page,
             limit: 100,
-            teacher_type: teacherType,
+            can_view_stream_key: canViewStreamKey,
             status: 1,
         });
         const rows: TeacherProfile[] = response?.data?.data ?? [];

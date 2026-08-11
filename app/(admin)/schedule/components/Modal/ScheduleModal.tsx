@@ -862,7 +862,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                     <Col span={8}>
                                         <Form.Item label="Trợ giảng" name="assistant_teacher">
                                             <TeachingStaffSelect
-                                                teacherType={2}
+                                                teacherType={0}
                                                 mode="multiple"
                                                 showSearch
                                                 optionFilterProp="label"
@@ -1118,7 +1118,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             </Col>
                                             <Col span={12}>
                                                 <Form.Item label="Trợ giảng" name="bulk_assistant_teacher">
-                                                    <TeachingStaffSelect teacherType={2} mode="multiple" showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" disabled={!isFieldEditable('assistant_teacher')} />
+                                                    <TeachingStaffSelect teacherType={0} mode="multiple" showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" disabled={!isFieldEditable('assistant_teacher')} />
                                                 </Form.Item>
                                             </Col>
                                         </Row>
@@ -1179,7 +1179,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                         </Col>
                                                         <Col span={4}>
                                                             <Form.Item name={['separate_config', dayValue, 'assistant_teacher']} style={{ marginBottom: 8 }}>
-                                                                <TeachingStaffSelect teacherType={2} mode="multiple" showSearch optionFilterProp="label" placeholder="Trợ giảng" disabled={!isFieldEditable('assistant_teacher')} />
+                                                                <TeachingStaffSelect teacherType={0} mode="multiple" showSearch optionFilterProp="label" placeholder="Trợ giảng" disabled={!isFieldEditable('assistant_teacher')} />
                                                             </Form.Item>
                                                         </Col>
                                                     </Row>
@@ -1299,7 +1299,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                     </Col>
                                     <Col span={12}>
                                         <Form.Item label="Trợ giảng" name={['new_session', 'assistant_teacher']}>
-                                            <TeachingStaffSelect teacherType={2} mode="multiple" showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" disabled={!isFieldEditable('assistant_teacher')} />
+                                            <TeachingStaffSelect teacherType={0} mode="multiple" showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" disabled={!isFieldEditable('assistant_teacher')} />
                                         </Form.Item>
                                     </Col>
                                     {/* <Col span={12}>

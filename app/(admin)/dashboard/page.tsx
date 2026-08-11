@@ -13,6 +13,7 @@ import {
     Empty,
     Flex,
     List,
+    Modal,
     Progress,
     Row,
     Skeleton,
@@ -59,6 +60,7 @@ const EMPTY_DASHBOARD: DashboardOverview = {
         outlinesWithQuiz: 0,
         outlinesWithoutQuiz: 0,
     },
+    outlineQuizDetails: { withQuiz: [], withoutQuiz: [] },
     today: { total: 0, upcoming: 0, ongoing: 0, completed: 0, cancelled: 0 },
     nextSevenDays: [],
     upcomingSchedules: [],
@@ -90,14 +92,21 @@ const SummaryCard = ({
     description,
     icon,
     color,
+    onClick,
 }: {
     title: string;
     value: number;
     description: string;
     icon: React.ReactNode;
     color: string;
+    onClick?: () => void;
 }) => (
-    <Card className={styles.summaryCard} styles={{ body: { padding: 20 } }}>
+    <Card
+        className={styles.summaryCard}
+        styles={{ body: { padding: 20 } }}
+        onClick={onClick}
+        style={onClick ? { cursor: 'pointer' } : undefined}
+    >
         <Flex justify="space-between" align="flex-start" gap={12}>
             <div>
                 <Text type="secondary">{title}</Text>
@@ -117,6 +126,7 @@ const Page: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState('');
+    const [outlineModalType, setOutlineModalType] = useState<'withQuiz' | 'withoutQuiz' | null>(null);
     const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>([
         dayjs().startOf('week'),
         dayjs().endOf('week'),
@@ -190,6 +200,10 @@ const Page: React.FC = () => {
     const completionPercent = activeToday
         ? Math.round((data.today.completed / activeToday) * 100)
         : 0;
+    const outlineModalRows = outlineModalType ? data.outlineQuizDetails[outlineModalType] : [];
+    const outlineModalTitle = outlineModalType === 'withQuiz'
+        ? 'Bài đã gắn Quiz'
+        : 'Bài chưa gắn Quiz';
 
     return (
         <div className={styles.page}>
@@ -213,6 +227,7 @@ const Page: React.FC = () => {
                             allowClear={false}
                             format="DD/MM/YYYY"
                             presets={[
+                                { label: 'Hôm nay', value: [dayjs().startOf('day'), dayjs().endOf('day')] },
                                 { label: 'Tuần này', value: [dayjs().startOf('week'), dayjs().endOf('week')] },
                                 { label: 'Tháng này', value: [dayjs().startOf('month'), dayjs().endOf('month')] },
                             ]}
@@ -255,10 +270,24 @@ const Page: React.FC = () => {
                             <SummaryCard title="Khóa học" value={data.summary.courses} description="Có lịch trên hệ thống" icon={<CalendarOutlined />} color="#1677ff" />
                         </Col>
                         <Col xs={24} sm={12} xl={6}>
-                            <SummaryCard title="Đề cương đã gán Quiz" value={data.summary.outlinesWithQuiz} description="Trong khoảng thời gian đã chọn" icon={<CheckCircleOutlined />} color="#52c41a" />
+                            <SummaryCard
+                                title="Bài đã gán Quiz"
+                                value={data.summary.outlinesWithQuiz}
+                                description="Bấm để xem danh sách"
+                                icon={<CheckCircleOutlined />}
+                                color="#52c41a"
+                                onClick={() => setOutlineModalType('withQuiz')}
+                            />
                         </Col>
                         <Col xs={24} sm={12} xl={6}>
-                            <SummaryCard title="Đề cương chưa gán Quiz" value={data.summary.outlinesWithoutQuiz} description="Cần bổ sung Quiz" icon={<ExclamationCircleOutlined />} color="#ff4d4f" />
+                            <SummaryCard
+                                title="Bài chưa gán Quiz"
+                                value={data.summary.outlinesWithoutQuiz}
+                                description="Bấm để xem danh sách"
+                                icon={<ExclamationCircleOutlined />}
+                                color="#ff4d4f"
+                                onClick={() => setOutlineModalType('withoutQuiz')}
+                            />
                         </Col>
                         <Col xs={24} sm={12} xl={6}>
                             <SummaryCard title="Nội dung bài học" value={data.summary.lessons} description="Bài học đang hoạt động" icon={<BookOutlined />} color="#722ed1" />
@@ -276,6 +305,28 @@ const Page: React.FC = () => {
                             />
                         </Col>
                     </Row>
+                    <Modal
+                        title={outlineModalTitle}
+                        open={outlineModalType !== null}
+                        onCancel={() => setOutlineModalType(null)}
+                        footer={<Button onClick={() => setOutlineModalType(null)}>Đóng</Button>}
+                        width={760}
+                    >
+                        {outlineModalRows.length ? (
+                            <List
+                                size="small"
+                                dataSource={outlineModalRows}
+                                renderItem={(item) => (
+                                    <List.Item>
+                                        <List.Item.Meta
+                                            title={<><Tag color="blue">{item.programCode}</Tag> Bài {item.learnNumber}: {item.lessonName}</>}
+                                            description={item.subjectName || 'Chưa có tên môn học'}
+                                        />
+                                    </List.Item>
+                                )}
+                            />
+                        ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không có đề cương phù hợp" />}
+                    </Modal>
 
                     <Row gutter={[16, 16]}>
                         <Col xs={24} xl={9}>

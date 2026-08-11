@@ -5,11 +5,11 @@ import { Flex, Input, Select } from 'antd';
 
 interface TeacherProfileFiltersProps {
     search: string;
-    teacherType: 1 | 2 | undefined;
+    teacherType: 0 | 1 | undefined;
     status: 0 | 1 | undefined;
     onSearchChange: (value: string) => void;
     onTeacherTypeChange: (
-        value: 1 | 2 | undefined
+        value: 0 | 1 | undefined
     ) => void;
     onStatusChange: (
         value: 0 | 1 | undefined
@@ -55,7 +55,7 @@ const TeacherProfileFilters = ({
                         label: 'Giáo viên',
                     },
                     {
-                        value: 2,
+                        value: 0,
                         label: 'Trợ giảng',
                     },
                 ]}

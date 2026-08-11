@@ -619,7 +619,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                     {({ getFieldValue }) => (
                                         <Form.Item name="common_assistant_teacher" style={{ marginBottom: 0 }}>
                                             <TeachingStaffSelect
-                                                teacherType={2}
+                                                teacherType={0}
                                                 mode="multiple"
                                                 showSearch
                                                 optionFilterProp="label"
@@ -855,7 +855,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                         name={['separate_config', lessonKey, 'assistant_teacher']}
                                         style={{ marginTop: 12, marginBottom: 0 }}
                                     >
-                                        <TeachingStaffSelect teacherType={2} mode="multiple" showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" />
+                                        <TeachingStaffSelect teacherType={0} mode="multiple" showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" />
                                     </Form.Item>
                                     {(() => {
                                         const record = selectedRows.find(

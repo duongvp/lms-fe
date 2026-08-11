@@ -8,7 +8,6 @@ import { DeleteOutlined, DragOutlined, EditOutlined, EyeOutlined, FilterOutlined
 import type {
     QuizAnswerItem,
     QuizApiResponse,
-    QuizClassOption,
     QuizLessonOption,
     QuizStatus,
     QuizType,
@@ -33,7 +32,6 @@ interface QuizTableProps {
     canEdit: boolean;
     canDelete: boolean;
     canExport: boolean;
-    classes: QuizClassOption[];
     lessons: QuizLessonOption[];
     filterCode?: string;
     canViewField: (field: string) => boolean;
@@ -61,7 +59,6 @@ const QuizTable = ({
     canEdit,
     canDelete,
     canExport,
-    classes,
     lessons,
     filterCode,
     canViewField,
@@ -138,18 +135,6 @@ const QuizTable = ({
             width: 86,
             align: "center" as const,
         }] : []),
-        ...(canViewField("code") ? [{
-            title: "Lớp học",
-            dataIndex: "code" as const,
-            width: 170,
-            render: (value: string) => {
-                const classInfo = classes.find((item) => item.code === value);
-                return <div>
-                    <Text strong>{value || "—"}</Text>
-                    {classInfo?.subject_name && <div className={styles.tableSub}>{classInfo.subject_name}</div>}
-                </div>;
-            },
-        }] : []),
         ...(canViewField("learn_number") ? [{
             title: "Bài học",
             dataIndex: "learn_number" as const,
@@ -159,7 +144,7 @@ const QuizTable = ({
                     ? lessonNameByNumber.get(Number(value))
                     : undefined;
                 return <div>
-                    <Tag color="geekblue">Buổi {value}</Tag>
+                    <Tag color="geekblue">Bài {value}</Tag>
                     {lessonName && <div className={styles.tableSub}>{lessonName}</div>}
                 </div>;
             },

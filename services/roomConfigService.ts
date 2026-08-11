@@ -63,10 +63,10 @@ export const saveRoomConfig = (payload: SaveRoomConfigPayload) => {
   });
 };
 
-export const importRoomConfigs = (items: SaveRoomConfigPayload[]) => {
+export const importRoomConfigs = (programCode: string, items: SaveRoomConfigPayload[]) => {
   return fetchInstance(`${API_BASE_URL}/import`, {
     method: 'POST',
-    body: JSON.stringify({ items }),
+    body: JSON.stringify({ program_code: programCode, items }),
     headers: { 'Content-Type': 'application/json' },
   });
 };

@@ -11,18 +11,15 @@ import {
     Modal,
     Row,
     Select,
-    Typography,
 } from "antd";
 import type { FormInstance } from "antd";
 import { EyeOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from "@ant-design/icons";
-import type { QuizApiResponse, QuizClassOption, QuizLessonOption, QuizType } from "@/services/quizService";
+import type { QuizApiResponse, QuizLessonOption, QuizType } from "@/services/quizService";
 import { QUIZ_TYPE_OPTIONS, SCORE_TYPE_OPTIONS, STATUS_OPTIONS } from "../quiz.constants";
 import type { QuizClassSelectOption, QuizFormValues } from "../quiz.types";
 import { buildLessonSelectOptions, INITIAL_QUIZ_FORM_VALUES } from "../quiz.utils";
 import QuizAnswerEditor from "./QuizAnswerEditor";
 import styles from "../quiz.module.css";
-
-const { Text } = Typography;
 
 interface QuizFormModalProps {
     open: boolean;
@@ -31,7 +28,6 @@ interface QuizFormModalProps {
     classOptions: QuizClassSelectOption[];
     classesLoading: boolean;
     selectedCode?: string;
-    selectedClass?: QuizClassOption;
     lessons: QuizLessonOption[];
     lessonsLoading: boolean;
     suggestedQuizIndex?: number;
@@ -53,7 +49,6 @@ const QuizFormModal = ({
     classOptions,
     classesLoading,
     selectedCode,
-    selectedClass,
     lessons,
     lessonsLoading,
     suggestedQuizIndex,
@@ -114,10 +109,10 @@ const QuizFormModal = ({
             >
                 <Row gutter={14}>
                     {canViewField("code") && <Col xs={24} md={12}>
-                        <Form.Item name="code" label="Lớp học" rules={[{ required: true, message: "Chọn lớp học" }]}>
+                        <Form.Item name="code" label="Chương trình" rules={[{ required: true, message: "Chọn Chương trình" }]}> 
                             <Select
                                 options={classOptions}
-                                placeholder="Chọn mã lớp học"
+                                placeholder="Chọn Chương trình"
                                 disabled={!canEditField("code")}
                                 loading={classesLoading}
                                 showSearch
@@ -138,7 +133,7 @@ const QuizFormModal = ({
                         <Form.Item name="learn_number" label="Bài học" rules={[{ required: true, message: "Chọn bài học" }]}>
                             <Select
                                 options={buildLessonSelectOptions(lessons, editing?.learn_number)}
-                                placeholder={selectedCode ? "Chọn bài học" : "Chọn lớp học trước"}
+                                placeholder={selectedCode ? "Chọn bài học" : "Chọn Chương trình trước"}
                                 disabled={!canEditField("learn_number") || !selectedCode}
                                 loading={lessonsLoading}
                                 showSearch
@@ -172,23 +167,11 @@ const QuizFormModal = ({
                                 min={1}
                                 precision={0}
                                 style={{ width: "100%" }}
-                                disabled={!canEditField("quiz_index")}
+                                disabled={!canEditField("quiz_index") || !editing}
                             />
                         </Form.Item>
                     </Col>}
                 </Row>
-
-                {selectedCode && <div className={styles.formContext}>
-                    <div><Text type="secondary">Mã lớp</Text><Text strong>{selectedCode}</Text></div>
-                    <div>
-                        <Text type="secondary">Môn học</Text>
-                        <Text strong>{selectedClass?.subject_name || lessons[0]?.subject_name || "Chưa xác định"}</Text>
-                    </div>
-                    <div>
-                        <Text type="secondary">Số bài học</Text>
-                        <Text strong>{lessons.length || selectedClass?.lesson_count || 0}</Text>
-                    </div>
-                </div>}
 
                 {canViewField("quiz_name") && <Form.Item
                     name="quiz_name"

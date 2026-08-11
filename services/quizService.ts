@@ -126,16 +126,17 @@ export const reorderQuizzes = (payload: { code: string; learn_number: number; or
 export const exportQuizzes = (params: QuizExportParams) =>
     fetchInstance(`${API_BASE_URL}/export?${buildQuery(params)}`, { method: "GET", credentials: "include" }, "blob");
 
-export const downloadQuizTemplate = (format: "csv" | "xlsx") =>
+export const downloadQuizTemplate = (format: "csv" | "xlsx", code: string) =>
     fetchInstance(
-        `${API_BASE_URL}/template?format=${format}&_=${Date.now()}`,
+        `${API_BASE_URL}/template?format=${format}&code=${encodeURIComponent(code)}&_=${Date.now()}`,
         { method: "GET", credentials: "include", cache: "no-store" },
         "blob"
     );
 
-export const importQuizzesFile = (file: File, mode: "skip" | "overwrite") => {
+export const importQuizzesFile = (file: File, mode: "skip" | "overwrite", code: string) => {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("mode", mode);
+    formData.append("code", code);
     return fetchInstance(API_BASE_URL + "/import", { method: "POST", body: formData, credentials: "include" });
 };

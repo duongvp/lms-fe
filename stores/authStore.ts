@@ -12,6 +12,7 @@ interface AuthState {
         permissions: string[];
         fieldPolicy?: any;
         roles?: any[];
+        programScope?: { mode: 'ALL' | 'RESTRICTED' | 'DENY'; programs: string[] };
     };
     accessToken: string | null;
     setUser: (userData: any) => void;
@@ -20,6 +21,7 @@ interface AuthState {
     clearAccessToken: () => void;
     logout: () => void;
     hasPermission: (permission: string) => boolean;
+    can: (permission: string, programCode?: string) => boolean;
 }
 
 const defaultUser = {
@@ -27,7 +29,8 @@ const defaultUser = {
     username: '',
     warehouseId: -1,
     warehouseName: '',
-    permissions: []
+    permissions: [],
+    programScope: { mode: 'ALL' as const, programs: [] }
 }
 
 const mergeFieldPolicies = (policies: any[]) => {
@@ -86,6 +89,9 @@ const normalizeUserData = (userData: any) => ({
     permissions: Array.isArray(userData?.permissions) ? userData.permissions : [],
     fieldPolicy: extractFieldPolicy(userData),
     roles: Array.isArray(userData?.roles) ? userData.roles : [],
+    programScope: userData?.programScope && typeof userData.programScope === 'object'
+        ? userData.programScope
+        : defaultUser.programScope,
 });
 
 export const useAuthStore = create<AuthState>()(
@@ -111,6 +117,19 @@ export const useAuthStore = create<AuthState>()(
                 if (!user) return false;
                 if (user.permissions.includes('*')) return true;
                 return user.permissions.includes(permission);
+            },
+
+            can: (permission, programCode) => {
+                if (typeof window === 'undefined') return false;
+                const { user } = get();
+                if (user.permissions.includes('*')) return true;
+                if (!user.permissions.includes(permission)) return false;
+                if (!programCode) return true;
+                const scope = user.programScope;
+                // Missing policy is the explicit legacy compatibility mode.
+                if (!scope || scope.mode === 'ALL') return true;
+                if (scope.mode === 'DENY') return false;
+                return scope.programs.includes(String(programCode).trim());
             },
 
             logout: () => {

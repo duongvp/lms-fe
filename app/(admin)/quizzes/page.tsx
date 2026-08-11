@@ -95,12 +95,14 @@ const QuizManagementPage = () => {
     const [openFilterDrawer, setOpenFilterDrawer] = useState(false);
 
     const hasPermission = useAuthStore((state) => state.hasPermission);
+    const can = useAuthStore((state) => state.can);
     const fieldPolicy = useAuthStore((state) => state.user.fieldPolicy);
-    const canCreate = hasPermission(PermissionKey.QUIZ_CREATE);
-    const canEdit = hasPermission(PermissionKey.QUIZ_EDIT);
-    const canDelete = hasPermission(PermissionKey.QUIZ_DELETE);
-    const canImport = hasPermission(PermissionKey.QUIZ_IMPORT);
-    const canExport = hasPermission(PermissionKey.QUIZ_EXPORT);
+    const activeProgramCode = String(submittedFilters.code || "").trim() || undefined;
+    const canCreate = can(PermissionKey.QUIZ_CREATE, activeProgramCode);
+    const canEdit = can(PermissionKey.QUIZ_EDIT, activeProgramCode);
+    const canDelete = can(PermissionKey.QUIZ_DELETE, activeProgramCode);
+    const canImport = can(PermissionKey.QUIZ_IMPORT, activeProgramCode);
+    const canExport = can(PermissionKey.QUIZ_EXPORT, activeProgramCode);
 
     const params = useMemo<QuizListParams>(() => {
         if (!hasSearched && !reorderMode) return {} as QuizListParams;
@@ -191,7 +193,7 @@ const QuizManagementPage = () => {
     useEffect(() => {
         if (!classesQuery.error) return;
         api.error({
-            message: "Không thể tải danh sách lớp học",
+            message: "Không thể tải danh sách Chương trình",
             description: classesQuery.error.message,
         });
     }, [api, classesQuery.error]);
@@ -263,6 +265,10 @@ const QuizManagementPage = () => {
     }, [debouncedDoSearch]);
 
     const handleFilterSubmit = () => {
+        if (!filters.code) {
+            api.warning({ message: "Vui lòng chọn Chương trình" });
+            return;
+        }
         setSubmittedFilters(filters);
         setSubmittedKeyword(keyword);
         setHasSearched(true);
@@ -281,7 +287,13 @@ const QuizManagementPage = () => {
     };
 
     const handleOpenCreate = () => {
+        if (!submittedFilters.code) {
+            api.warning({ message: "Vui lòng chọn Chương trình trước khi thêm câu hỏi" });
+            setOpenFilterDrawer(true);
+            return;
+        }
         resetEditor();
+        form.setFieldValue("code", submittedFilters.code);
         setFormOpen(true);
     };
 
@@ -410,6 +422,10 @@ const QuizManagementPage = () => {
     };
 
     const handleExport = async () => {
+        if (!submittedFilters.code) {
+            api.warning({ message: "Vui lòng chọn Chương trình trước khi xuất file" });
+            return;
+        }
         try {
             const blob = await exportQuizzes({
                 ...params,
@@ -429,9 +445,14 @@ const QuizManagementPage = () => {
     };
 
     const handleDownloadTemplate = async () => {
+        const code = String(submittedFilters.code || "").trim();
+        if (!code) {
+            api.warning({ message: "Vui lòng chọn Chương trình trước khi tải file mẫu" });
+            return;
+        }
         try {
             downloadQuizBlob(
-                await downloadQuizTemplate("xlsx"),
+                await downloadQuizTemplate("xlsx", code),
                 "mau-import-cau-hoi-v2.xlsx"
             );
         } catch (error: any) {
@@ -440,6 +461,11 @@ const QuizManagementPage = () => {
     };
 
     const handleImport = async () => {
+        const code = String(submittedFilters.code || "").trim();
+        if (!code) {
+            api.warning({ message: "Vui lòng chọn Chương trình trước khi import" });
+            return;
+        }
         const file = importFiles[0]?.originFileObj;
         if (!file) {
             api.warning({ message: "Vui lòng chọn file .xlsx hoặc .csv" });
@@ -447,7 +473,7 @@ const QuizManagementPage = () => {
         }
         try {
             setImporting(true);
-            const result = await importQuizzesFile(file, importMode);
+            const result = await importQuizzesFile(file, importMode, code);
             const summary = result?.data;
             api.success({
                 message: "Nhập câu hỏi thành công",
@@ -501,7 +527,7 @@ const QuizManagementPage = () => {
             || filters.learn_number === ""
         ) {
             api.warning({
-                message: "Chọn lớp học và bài học trước",
+                message: "Chọn Chương trình và bài học trước",
                 description: "Thứ tự câu hỏi được quản lý riêng trong từng bài học.",
             });
             return;
@@ -597,11 +623,11 @@ const QuizManagementPage = () => {
         >
             <div>
                 <Form layout="vertical">
-                    <Form.Item label="Lớp học">
+                    <Form.Item label="Chương trình" required>
                         <Select
                             showSearch
                             allowClear
-                            placeholder="Chọn lớp học"
+                            placeholder="Chọn Chương trình"
                             loading={classesQuery.isLoading || classesQuery.isValidating}
                             filterOption={(input, option) =>
                                 (option?.label as string)?.toLowerCase().includes(input.toLowerCase())
@@ -707,7 +733,7 @@ const QuizManagementPage = () => {
             <div className={styles.pageInfoBody} style={{ gridTemplateRows: showPageInfo ? "1fr" : "0fr" }}>
                 <div>
                     <p>
-                        Tạo và quản lý ngân hàng câu hỏi theo lớp, môn học và bài học. Dùng bộ lọc để tìm nhanh,
+                        Tạo và quản lý ngân hàng câu hỏi theo Chương trình và bài học. Dùng bộ lọc để tìm nhanh,
                         nhập/xuất Excel khi cập nhật hàng loạt và kéo thả để sắp xếp câu hỏi trong từng bài học.
                     </p>
                 </div>
@@ -719,6 +745,11 @@ const QuizManagementPage = () => {
             placeholder="Tìm kiếm câu hỏi..."
             handleAddBtn={canCreate ? handleOpenCreate : undefined}
             handleImportClick={canImport ? () => {
+                if (!submittedFilters.code) {
+                    api.warning({ message: "Vui lòng chọn Chương trình trước khi import" });
+                    setOpenFilterDrawer(true);
+                    return;
+                }
                 setImportFiles([]);
                 setImportOpen(true);
             } : undefined}
@@ -785,7 +816,6 @@ const QuizManagementPage = () => {
                 canEdit={canEdit}
                 canDelete={canDelete}
                 canExport={canExport}
-                classes={classRows}
                 lessons={filterLessons}
                 filterCode={filters.code}
                 canViewField={canViewField}
@@ -812,7 +842,6 @@ const QuizManagementPage = () => {
             classOptions={classOptions}
             classesLoading={classesQuery.isLoading || classesQuery.isValidating}
             selectedCode={selectedFormCode}
-            selectedClass={classRows.find((item) => item.code === selectedFormCode)}
             lessons={formLessons}
             lessonsLoading={formLessonsQuery.isLoading || formLessonsQuery.isValidating}
             suggestedQuizIndex={suggestedQuizIndex}
