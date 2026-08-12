@@ -22,6 +22,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
   const pathname = usePathname();
   const screens = useBreakpoint();
   const isMobile = screens && !screens.xl;
+  const isPhone = screens && !screens.sm;
 
   const { hasPermission: _hasPermission } = useAuthStore();
 
@@ -117,7 +118,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
   ];
 
   return (
-    <AntdHeader style={{ padding: isMobile ? '0 10px' : '0 24px', background: '#ffffff', borderBottom: '1px solid #f0f0f0', height: 64, display: 'flex', alignItems: 'center' }}>
+    <AntdHeader style={{ padding: isPhone ? '0 6px' : isMobile ? '0 10px' : '0 24px', background: '#ffffff', borderBottom: '1px solid #f0f0f0', height: isPhone ? 56 : 64, display: 'flex', alignItems: 'center' }}>
       <Flex align="center" justify="space-between" style={{ width: "100%", height: "100%" }}>
         {/* Left Side: Hamburger (mobile) + Logo */}
         {/* <Flex align="center" gap={12} style={{ flex: 1, minWidth: 0 }}>
@@ -182,7 +183,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
             />
           </div>
         )} */}
-        <div style={{ flex: 2, minWidth: 0, height: '100%', display: 'flex', justifyContent: 'start', alignItems: 'center', gap: 32 }}>
+        <div style={{ flex: 2, minWidth: 0, height: '100%', display: 'flex', justifyContent: 'start', alignItems: 'center', gap: isMobile ? 8 : 32 }}>
           <Flex align="center" >
             {isMobile && (
               <Button
@@ -196,11 +197,11 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
               <img
                 src="https://hocmai.vn/study/public/images/logo.png"
                 alt="Warehouse Logo"
-                width={36}
-                height={36}
+                width={isPhone ? 30 : 36}
+                height={isPhone ? 30 : 36}
                 style={{ objectFit: 'contain' }}
               />
-              <span style={{ fontSize: isMobile ? 16 : 20, fontWeight: 600, color: '#1890ff' }}>STREAM</span>
+              {!isPhone && <span style={{ fontSize: isMobile ? 16 : 20, fontWeight: 600, color: '#1890ff' }}>STREAM</span>}
             </Flex>
           </Flex>
           {!isMobile && (

@@ -100,6 +100,7 @@ const QuizFormModal = ({
             }}
         >
             <Form<QuizFormValues>
+                className="responsive-modal-form"
                 form={form}
                 layout="vertical"
                 initialValues={INITIAL_QUIZ_FORM_VALUES}

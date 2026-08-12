@@ -62,10 +62,11 @@ function CustomTable<T extends object>({
   rowKey,
   onRow,
   onChange,
+  scroll,
   ...rest
 }: CustomTableProps<T>) {
   const screens = Grid.useBreakpoint();
-  const useCards = responsiveCards && !screens.xl;
+  const useCards = responsiveCards && !screens.lg;
   const [internalPage, setInternalPage] = useState(1);
   const [internalPageSize, setInternalPageSize] = useState(10);
   const [internalSelectedKeys, setInternalSelectedKeys] = useState<React.Key[]>([]);
@@ -155,6 +156,7 @@ function CustomTable<T extends object>({
         rowKey={rowKey}
         onRow={onRow}
         onChange={onChange}
+        scroll={scroll ?? { x: "max-content" }}
         {...rest}
       />
     );

@@ -107,12 +107,16 @@ body {
   transform: translate(-50%, -50%);
   margin: 0 auto;
   z-index: 2;
+  width: min(430px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
 }
 
 @media only screen and (max-width: 600px) {
   .login-form {
-    left: 5%;
-    right: 5%;
+    left: 16px;
+    right: 16px;
+    width: auto;
     top: 50%;
     transform: translateY(-50%);
   }
@@ -182,6 +186,125 @@ body {
   .ant-tabs-nav-wrap {
     overflow-x: auto;
   }
+
+  .responsive-search-actions .responsive-action-buttons {
+    width: 100%;
+  }
+
+  .responsive-search-actions .responsive-action-buttons > :where(.ant-btn, .ant-dropdown-trigger) {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+  }
+
+  .responsive-search-actions .responsive-action-buttons > .ant-radio-group {
+    display: flex;
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+  }
+
+  .responsive-search-actions .responsive-action-buttons > .ant-radio-group .ant-radio-button-wrapper {
+    flex: 1;
+    text-align: center;
+  }
+
+  .responsive-page-info-header,
+  .responsive-page-toolbar,
+  .responsive-card-header {
+    align-items: flex-start !important;
+    flex-direction: column;
+  }
+
+  .responsive-page-toolbar > *,
+  .responsive-card-header > * {
+    max-width: 100%;
+  }
+
+  .responsive-modal-form .ant-row {
+    row-gap: 0;
+  }
+
+  .responsive-modal-form .ant-col {
+    max-width: 100%;
+  }
+
+  .responsive-modal-form .ant-form-item-row > :where(.ant-form-item-label, .ant-form-item-control) {
+    flex: 0 0 100%;
+    max-width: 100%;
+    text-align: start;
+  }
+
+  .responsive-modal-form .ant-form-item-label > label {
+    height: auto;
+  }
+
+  .responsive-modal-form :where(.ant-input, .ant-input-number, .ant-picker, .ant-select) {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .responsive-modal-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .responsive-modal-footer .ant-btn {
+    flex: 1 1 auto;
+    margin-inline-start: 0 !important;
+  }
+
+  .responsive-filter-flex {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .responsive-filter-flex > :where(.ant-input-group-wrapper, .ant-select, .ant-input, .ant-picker) {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .responsive-page-toolbar .responsive-action-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .responsive-page-toolbar .responsive-action-buttons > * {
+    width: 100%;
+  }
+
+  .responsive-schedule-view-toolbar {
+    align-items: stretch !important;
+    flex-direction: column;
+  }
+
+  .responsive-schedule-view-toolbar > .ant-segmented {
+    width: 100%;
+  }
+
+  .responsive-schedule-view-toolbar > .ant-segmented .ant-segmented-item {
+    flex: 1;
+    text-align: center;
+  }
+
+  .responsive-calendar-legend {
+    font-size: 12px;
+  }
+
+  .custom-calendar-wrapper .fc .fc-header-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .custom-calendar-wrapper .fc .fc-toolbar-chunk {
+    display: flex;
+    justify-content: center;
+  }
+
+  .custom-calendar-wrapper .fc .fc-toolbar-title {
+    font-size: 1.1rem;
+  }
 }
 
 @media (min-width: 576px) and (max-width: 1199px) {
@@ -221,6 +344,94 @@ body {
   .responsive-table-card video {
     max-width: 100%;
     height: auto;
+  }
+}
+
+@media (max-width: 991px) {
+  .responsive-filter-row > .ant-col,
+  .responsive-form-row > .ant-col {
+    min-width: 0;
+  }
+
+  .responsive-table-only {
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .responsive-table-only .ant-table-wrapper {
+    min-width: 720px;
+  }
+
+  .responsive-schedule-form > .ant-space,
+  .responsive-schedule-form .ant-card-body > .ant-space-wrap {
+    width: 100%;
+  }
+
+  .responsive-schedule-form .ant-space-wrap > .ant-space-item {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 767px) {
+  .schedule-responsive-modal .ant-modal-title {
+    padding-right: 24px;
+    line-height: 1.35;
+  }
+
+  .schedule-responsive-modal .ant-modal-body {
+    overscroll-behavior-y: contain;
+  }
+
+  .responsive-schedule-form .ant-row > .ant-col {
+    flex: 0 0 100% !important;
+    max-width: 100% !important;
+  }
+
+  .responsive-schedule-form .ant-space-wrap > .ant-space-item {
+    flex: 1 1 min(100%, 280px);
+    max-width: 100%;
+  }
+
+  .responsive-schedule-form :where(.ant-input, .ant-input-number, .ant-picker, .ant-select) {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .schedule-responsive-modal .ant-modal-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin-inline: -14px;
+    margin-bottom: -14px;
+    padding: 10px 14px;
+    border-top: 1px solid #f0f0f0;
+    background: #fff;
+  }
+
+  .responsive-mapping-grid {
+    grid-template-columns: minmax(0, 1fr) 36px !important;
+  }
+
+  .responsive-mapping-grid > :nth-child(2) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .responsive-config-mode {
+    align-items: stretch !important;
+    flex-direction: column;
+  }
+
+  .responsive-config-mode > *,
+  .responsive-config-mode .ant-segmented {
+    width: 100%;
+  }
+
+  .responsive-config-mode .ant-segmented-group {
+    flex-direction: column;
   }
 }
 

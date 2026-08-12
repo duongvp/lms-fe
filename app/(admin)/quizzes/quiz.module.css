@@ -129,6 +129,7 @@
 }
 
 @media (max-width: 640px) {
+    .pageInfoHeader { align-items: flex-start; flex-direction: column; }
     .pageInfoBody p { padding-left: 0; }
     .filterGrid { grid-template-columns: 1fr; }
     .contextStrip { flex-direction: column; gap: 8px; }

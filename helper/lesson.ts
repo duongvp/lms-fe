@@ -26,7 +26,8 @@ export const buildLessonSubjectCode = (
 };
 
 export const formatLessonScheduleOption = (lesson: LessonApiResponse) => {
-    const baseLabel = `[${lesson.subject_code}] Bài ${lesson.learn_number}: ${lesson.lesson_name}`;
+    const programPrefix = String(lesson.subject_code || "").trim();
+    const baseLabel = `${programPrefix ? `[${programPrefix}] ` : ""}Bài ${lesson.learn_number}: ${lesson.lesson_name}`;
     const scheduledCount = Number(lesson.scheduled_count ?? 0);
     if (scheduledCount <= 0) return baseLabel;
 

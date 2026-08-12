@@ -109,7 +109,7 @@ const LessonCourseMappingModal = ({ open, programCode, selectedLessonIds, onClos
                 message="Package ID và Course ID được tải từ PACKAGE_COURSE_SHEET_URL. Chọn Package trước, danh sách Course tương ứng sẽ được lọc tự động."
                 style={{ marginBottom: 16 }}
             />
-            <Form form={form} layout="vertical" initialValues={{ action: "add", scope: selectedLessonIds.length ? "selected" : "all" }}>
+            <Form className="responsive-modal-form" form={form} layout="vertical" initialValues={{ action: "add", scope: selectedLessonIds.length ? "selected" : "all" }}>
                 <Space align="start" wrap>
                     <Form.Item name="action" label="Thao tác" rules={[{ required: true }]}>
                         <Radio.Group optionType="button" buttonStyle="solid" options={[{ value: "add", label: "Thêm" }, { value: "delete", label: "Xóa" }]} />

@@ -137,6 +137,7 @@ const LessonFormModal: React.FC<LessonFormModalProps> = ({
             ]}
         >
             <Form
+                className="responsive-modal-form"
                 form={form}
                 layout="vertical"
                 onFinish={(values) => onSubmit(toLessonPayload(values))}

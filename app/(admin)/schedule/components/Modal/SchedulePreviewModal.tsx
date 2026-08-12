@@ -76,6 +76,7 @@ interface PreviewSession {
     master_lesson_name?: string;
     lesson_name?: string;
     learn_number?: number;
+    scheduled_count?: number;
     isSkipped: boolean;
     isGenerated: boolean;
     isEditable?: boolean;
@@ -332,7 +333,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
             );
             const lessonKey = String(session.lesson_id);
             const previousPreviewCount = previewCounts.get(lessonKey) ?? 0;
-            const occurrence = Number(lesson?.scheduled_count ?? 0) + previousPreviewCount + 1;
+            const occurrence = Number(session.scheduled_count ?? lesson?.scheduled_count ?? 0) + previousPreviewCount + 1;
 
             if (!session.isSkipped) {
                 previewCounts.set(lessonKey, previousPreviewCount + 1);
@@ -386,6 +387,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 master_lesson_name: formValues.master_lesson_name || formValues.lesson_name,
                 lesson_name: formValues.lesson_name,
                 learn_number: Number(formValues.learn_number),
+                scheduled_count: Number(formValues.lesson_scheduled_count ?? 0),
                 package_lesson_mappings: [{ lesson_ids: [] }],
                 isSkipped: false,
                 isGenerated: true,
@@ -995,12 +997,11 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
     }
 
     if (!isEdit) {
-        columns.push({
-            title: 'Bài học gốc',
+        if (isBulkCreate) columns.push({
+            title: 'Bài học',
             key: 'lesson',
-            width: isBulkCreate ? 330 : 260,
+            width: 330,
             render: (_: any, record: PreviewSession) => (
-                isBulkCreate ? (
                     <Space.Compact style={{ width: '100%' }}>
                         <Select
                             value={record.lesson_id}
@@ -1025,9 +1026,6 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                             />
                         </Tooltip>
                     </Space.Compact>
-                ) : (
-                    <Text>{record.master_lesson_name || record.lesson_name || '-'}</Text>
-                )
             ),
         });
         columns.push({
@@ -1035,17 +1033,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
             key: 'display_lesson_name',
             width: 330,
             render: (_: any, record: PreviewSession) => (
-                <Input
-                    value={record.lesson_name}
-                    onChange={(event) => updateSessionField(
-                        record.key,
-                        'lesson_name',
-                        event.target.value
-                    )}
-                    disabled={record.isSkipped || !record.lesson_id}
-                    maxLength={400}
-                    placeholder="Nhập tên hiển thị trên lịch"
-                />
+                <Text>{record.lesson_name || record.master_lesson_name || '-'}</Text>
             ),
         });
     }
@@ -1091,6 +1079,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
         <>
             {contextHolder}
             <Modal
+                rootClassName="schedule-responsive-modal"
                 open={open}
                 title={
                     <Space>
@@ -1118,7 +1107,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 ]}
                 styles={{
                     content: {
-                        maxHeight: 'calc(100vh - 32px)',
+                        maxHeight: 'calc(100dvh - 32px)',
                         display: 'flex',
                         flexDirection: 'column',
                     },
@@ -1134,11 +1123,11 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     <Text type="secondary">
                         {isEdit
                             ? <>Kiểm tra thông tin buổi học sẽ cập nhật. Có thể sửa nhanh giờ học và giáo viên trên bảng.</>
-                            : <>Kiểm tra các buổi sẽ tạo. Có thể sửa nhanh giờ học, giáo viên, bài học hoặc bỏ qua buổi không phù hợp.</>}
+                            : <>Kiểm tra các buổi sẽ tạo. Có thể sửa nhanh giờ học, giáo viên, bài học hoặc bỏ qua buổi; tên hiển thị chỉ được tạo từ tiền tố/hậu tố và không sửa tên bài học gốc.</>}
                     </Text>
                 </div>
 
-                {isBulkCreate && (
+                {!isEdit && (
                     <div
                         style={{
                             padding: 12,
@@ -1152,7 +1141,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                             checked={customizeLessonNames}
                             onChange={(event) => handleToggleLessonNameTemplate(event.target.checked)}
                         >
-                            Tạo tên hiển thị theo mẫu cho toàn bộ danh sách
+                            Tạo tên hiển thị bằng tiền tố/hậu tố
                         </Checkbox>
                         {customizeLessonNames && (
                             <Space
@@ -1334,6 +1323,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
 
                                                     return (
                                                         <div
+                                                            className="responsive-mapping-grid"
                                                             key={`${session.key}_${mappingIndex}`}
                                                             style={{
                                                                 display: 'grid',

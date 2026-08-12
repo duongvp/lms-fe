@@ -133,13 +133,14 @@ const UserModal = () => {
                 ]}
             >
                 <Form
+                    className="responsive-modal-form"
                     form={form}
                     onFinish={handleFormSubmit}
                     {...formItemLayout}
                     labelAlign="left"
                 >
                     <Row gutter={24} style={{ marginTop: 12 }}>
-                        <Col span={12}>
+                        <Col xs={24} md={12}>
                             <Form.Item
                                 label="Tên đăng nhập"
                                 name="username"
@@ -185,7 +186,7 @@ const UserModal = () => {
                                 />
                             </Form.Item>
                         </Col>
-                        <Col span={12}>
+                        <Col xs={24} md={12}>
                             <Form.Item
                                 label="Tên người dùng"
                                 name="full_name"

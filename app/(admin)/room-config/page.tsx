@@ -548,7 +548,7 @@ export default function RoomConfigPage() {
   ];
 
   return (
-    <div style={{ minHeight: "100vh" }}>
+    <div style={{ minHeight: 0 }}>
       {/* Header section */}
       <Card
         style={{
@@ -688,6 +688,7 @@ export default function RoomConfigPage() {
         destroyOnClose
       >
         <Form
+          className="responsive-modal-form"
           form={form}
           layout="vertical"
           style={{ marginTop: 16 }}
@@ -699,7 +700,7 @@ export default function RoomConfigPage() {
         >
           <FormSection title="Thông tin buổi học">
             <Row gutter={24}>
-              <Col span={14}>
+              <Col xs={24} md={14}>
                 <Form.Item
                   label="Mã lớp"
                   name="code"
@@ -718,7 +719,7 @@ export default function RoomConfigPage() {
                   />
                 </Form.Item>
               </Col>
-              <Col span={10}>
+              <Col xs={24} md={10}>
                 <Form.Item
                   label="Bài thứ"
                   name="learn_number"
@@ -737,7 +738,7 @@ export default function RoomConfigPage() {
               </Col>
             </Row>
             <Row gutter={24}>
-              <Col span={12}>
+              <Col xs={24} md={12}>
                 <Form.Item label="Giáo viên" name="teacher_username">
                   <TeachingStaffSelect
                     teacherType={1}
@@ -747,7 +748,7 @@ export default function RoomConfigPage() {
                   />
                 </Form.Item>
               </Col>
-              <Col span={12}>
+              <Col xs={24} md={12}>
                 <Form.Item label="Trợ giảng" name="assistant_username">
                   <TeachingStaffSelect
                     teacherType={0}
@@ -788,22 +789,22 @@ export default function RoomConfigPage() {
                   children: (
                     <div style={{ paddingTop: 8 }}>
                       <Row gutter={[16, 8]}>
-                        <Col span={6}>
+                        <Col xs={12} sm={6}>
                           <Form.Item label="Camera" name="cam" valuePropName="checked">
                             <Switch checkedChildren="Bật" unCheckedChildren="Tắt" />
                           </Form.Item>
                         </Col>
-                        <Col span={6}>
+                        <Col xs={12} sm={6}>
                           <Form.Item label="Microphone" name="mic" valuePropName="checked">
                             <Switch checkedChildren="Bật" unCheckedChildren="Tắt" />
                           </Form.Item>
                         </Col>
-                        <Col span={6}>
+                        <Col xs={12} sm={6}>
                           <Form.Item label="Leaderboard" name="leaderboard" valuePropName="checked">
                             <Switch checkedChildren="Bật" unCheckedChildren="Tắt" />
                           </Form.Item>
                         </Col>
-                        <Col span={6}>
+                        <Col xs={12} sm={6}>
                           <Form.Item label="Chia sẻ màn hình" name="screen_share" valuePropName="checked">
                             <Switch checkedChildren="Bật" unCheckedChildren="Tắt" />
                           </Form.Item>
@@ -811,12 +812,12 @@ export default function RoomConfigPage() {
                       </Row>
 
                       <Row gutter={16}>
-                        <Col span={12}>
+                        <Col xs={24} md={12}>
                           <Form.Item label="EVG" name="evg">
                             <Input placeholder="evg" />
                           </Form.Item>
                         </Col>
-                        <Col span={12}>
+                        <Col xs={24} md={12}>
                           <Form.Item label="Stream Key" name="stream_key">
                             <Input placeholder="mã-stream-key" />
                           </Form.Item>
@@ -858,7 +859,7 @@ export default function RoomConfigPage() {
       <Drawer
         title={`Chi tiết Cấu hình Phòng học: ${detailRecord?.code} - Bài ${detailRecord?.learn_number}`}
         placement="right"
-        width={600}
+        width="min(92vw, 600px)"
         onClose={() => setIsDetailDrawerOpen(false)}
         open={isDetailDrawerOpen}
       >
@@ -1025,6 +1026,7 @@ export default function RoomConfigPage() {
               dataSource={importRows}
               rowKey={(r, idx) => `${r.code}_${r.learn_number}_${idx}`}
               pagination={{ pageSize: 5 }}
+              scroll={{ x: "max-content" }}
               columns={[
                 { title: "Mã môn", dataIndex: "code", key: "code" },
                 { title: "Bài học", dataIndex: "learn_number", key: "learn_number" },

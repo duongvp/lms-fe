@@ -44,9 +44,9 @@ const LessonFilterDrawer = ({
             placement="right"
             open={open}
             onClose={onClose}
-            width={360}
+            width="min(92vw, 400px)"
             footer={
-                <Space style={{ width: "100%", justifyContent: "flex-end" }}>
+                <Space className="responsive-modal-footer" style={{ width: "100%", justifyContent: "flex-end" }}>
                     <Button
                         onClick={() => {
                             filterForm.resetFields();

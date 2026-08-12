@@ -48,6 +48,7 @@ const TeacherProfileFormModal = ({
             destroyOnClose
         >
             <Form
+                className="responsive-modal-form"
                 form={form}
                 layout="vertical"
                 preserve={false}

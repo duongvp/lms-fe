@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import type { SorterResult } from "antd/es/table/interface";
@@ -13,9 +14,7 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import viLocale from "@fullcalendar/core/locales/vi";
 import ScheduleModal from "./components/Modal/ScheduleModal";
-import BulkEditModal from "./components/Modal/BulkEditModal";
 import ScheduleImportModal, { type ScheduleImportError } from "./components/Modal/ScheduleImportModal";
-import AutoScheduleModal from "./components/Modal/AutoScheduleModal";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
 import {
@@ -26,7 +25,6 @@ import {
     importLivestreamsFile,
     previewLivestreamMappingImport,
     updateLivestream,
-    updateLivestreamBulk,
 } from "@/services/livestreamService";
 import dayjs, { Dayjs } from "dayjs";
 import type { ModuleField, ResolvedFieldPermission } from "@/types/fieldPolicy";
@@ -182,6 +180,7 @@ const HIDDEN_SCHEDULE_LIST_FIELDS = new Set([
 
 const MOCK_SCHEDULES: ScheduleDataType[] = [];
 const CALENDAR_PLUGINS = [dayGridPlugin, timeGridPlugin, interactionPlugin];
+const parseCalendarWallTime = (value: unknown) => dayjs(String(value || "").replace(/Z$/, ""));
 
 const mapScheduleRows = (rows: any[]): ScheduleDataType[] => rows.map((item: any) => ({
     ...item,
@@ -189,8 +188,8 @@ const mapScheduleRows = (rows: any[]): ScheduleDataType[] => rows.map((item: any
     id: item.id?.toString(),
     code: item.code,
     class_name: item.class_name || item.code,
-    start_time: item.start_time ? dayjs(item.start_time).format("YYYY-MM-DDTHH:mm") : "",
-    end_time: item.end_time ? dayjs(item.end_time).format("YYYY-MM-DDTHH:mm") : "",
+    start_time: item.start_time ? parseCalendarWallTime(item.start_time).format("YYYY-MM-DDTHH:mm") : "",
+    end_time: item.end_time ? parseCalendarWallTime(item.end_time).format("YYYY-MM-DDTHH:mm") : "",
     room: item.room || item.channel_name || "Phòng Online",
     subject: item.subject || item.lesson_name || `Bài ${item.learn_number}`,
     lesson_name: item.lesson_name || `Bài ${item.learn_number}`,
@@ -378,9 +377,9 @@ const ScheduleFilterDrawer = ({
             placement="right"
             open={open}
             onClose={onClose}
-            width={360}
+            width="min(92vw, 400px)"
             footer={
-                <Space style={{ width: "100%", justifyContent: "flex-end" }}>
+                <Space className="responsive-modal-footer" style={{ width: "100%", justifyContent: "flex-end" }}>
                     <Button onClick={handleReset}>Xóa lọc</Button>
                     <Button type="primary" onClick={() => filterForm.submit()} loading={loading}>
                         Tìm kiếm
@@ -444,10 +443,11 @@ const Page = () => {
     const [moduleFields, setModuleFields] = useState<ModuleField[]>(DEFAULT_MODULE_FIELDS);
     const [form] = Form.useForm();
     const [api, contextHolder] = notification.useNotification();
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const initializedFromUrl = useRef(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [openBulkEditModal, setOpenBulkEditModal] = useState(false);
     const [openImportModal, setOpenImportModal] = useState(false);
-    const [openAutoScheduleModal, setOpenAutoScheduleModal] = useState(false);
     const [importing, setImporting] = useState(false);
     const [importErrors, setImportErrors] = useState<ScheduleImportError[]>([]);
     const [importMode, setImportMode] = useState<"create" | "mapping">("create");
@@ -458,6 +458,42 @@ const Page = () => {
     const [selectedRecord, setSelectedRecord] = useState<ScheduleDataType | null>(null);
     const [isEditMode, setIsEditMode] = useState(false);
     const [showPageInfo, setShowPageInfo] = useState(true);
+
+    const replaceScheduleUrl = useCallback((values: ScheduleFilterValues, targetPage = 1) => {
+        const params = new URLSearchParams();
+        const program = String(values.code || "").trim();
+        const keyword = String(values.keyword || "").trim();
+        const teacher = String(values.teacher || "").trim();
+        if (program) params.set("program", program);
+        if (keyword) params.set("q", keyword);
+        if (teacher) params.set("teacher", teacher);
+        if (values.time_status) params.set("status", values.time_status);
+        if (values.date_range?.[0]?.isValid()) params.set("from", values.date_range[0].format("YYYY-MM-DD"));
+        if (values.date_range?.[1]?.isValid()) params.set("to", values.date_range[1].format("YYYY-MM-DD"));
+        if (targetPage > 1) params.set("page", String(targetPage));
+        router.replace(params.size ? `/schedule?${params.toString()}` : "/schedule", { scroll: false });
+    }, [router]);
+
+    useEffect(() => {
+        if (initializedFromUrl.current) return;
+        initializedFromUrl.current = true;
+        const program = String(searchParams.get("program") || "").trim();
+        if (!program) return;
+        const from = dayjs(searchParams.get("from"));
+        const to = dayjs(searchParams.get("to"));
+        const values: ScheduleFilterValues = cleanFilterValues({
+            code: program,
+            keyword: String(searchParams.get("q") || "").trim(),
+            teacher: String(searchParams.get("teacher") || "").trim(),
+            time_status: searchParams.get("status") as ScheduleFilterValues["time_status"],
+            date_range: from.isValid() && to.isValid() ? [from, to] : undefined,
+        });
+        setFilterValues(values);
+        setSubmittedFilterValues(values);
+        setSearchText(String(values.keyword || ""));
+        setCurrentPage(Math.max(1, Number(searchParams.get("page")) || 1));
+        setHasSearched(true);
+    }, [searchParams]);
 
     const rowSelection = {
         selectedRowKeys,
@@ -673,15 +709,11 @@ const Page = () => {
     // ✅ Hàm thực sự submit search (được debounce)
     const doSearch = useCallback((keyword: string) => {
         if (!hasSearched) return;
-
-        setSubmittedFilterValues((prev) =>
-            cleanFilterValues({
-                ...prev,
-                keyword: keyword,
-            })
-        );
+        const nextValues = cleanFilterValues({ ...submittedFilterValues, keyword });
+        setSubmittedFilterValues(nextValues);
         setCurrentPage(1);
-    }, [hasSearched]);
+        replaceScheduleUrl(nextValues);
+    }, [hasSearched, replaceScheduleUrl, submittedFilterValues]);
 
     // ✅ Debounce hàm doSearch với 500ms
     const debouncedDoSearch = useDebounce(doSearch, 500);
@@ -705,6 +737,7 @@ const Page = () => {
         setSubmittedFilterValues(cleaned);
         setHasSearched(true);
         setCurrentPage(1);
+        replaceScheduleUrl(cleaned);
         setOpenFilterDrawer(false);
     };
 
@@ -715,6 +748,7 @@ const Page = () => {
         setSubmittedFilterValues(cleaned);
         setHasSearched(false);
         setCurrentPage(1);
+        replaceScheduleUrl(cleaned);
         setOpenFilterDrawer(false);
     };
 
@@ -732,6 +766,14 @@ const Page = () => {
                 message: "Không có quyền",
                 description: "Vai trò hiện tại không có quyền chỉnh sửa/thêm dữ liệu.",
             });
+            return;
+        }
+        if (!submittedFilterValues.code) {
+            api.warning({
+                message: "Vui lòng chọn Chương trình",
+                description: "Chọn Chương trình trong bộ lọc trước khi thêm lịch học.",
+            });
+            setOpenFilterDrawer(true);
             return;
         }
         setIsModalOpen(true);
@@ -1295,7 +1337,7 @@ const Page = () => {
                     marginBottom: 10,
                 }}
             >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <div className="responsive-page-info-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                         <InfoCircleOutlined style={{ color: "#1677ff", fontSize: 16 }} />
                         <span style={{ fontWeight: 600 }}>Quản lý lịch học</span>
@@ -1364,7 +1406,7 @@ const Page = () => {
                             <Button
                                 icon={<CalendarOutlined />}
                                 disabled={!submittedFilterValues.code}
-                                onClick={() => setOpenAutoScheduleModal(true)}
+                                onClick={() => router.push(`/schedule/auto?program=${encodeURIComponent(String(submittedFilterValues.code))}`)}
                             >
                                 Tạo lịch tự động
                             </Button>
@@ -1379,7 +1421,23 @@ const Page = () => {
                             <Button
                                 type="primary"
                                 icon={<EditOutlined />}
-                                onClick={() => setOpenBulkEditModal(true)}
+                                onClick={() => {
+                                    const requestedRows = data.filter((item) => selectedRowKeys.map(String).includes(String(item.id)));
+                                    const selectedRows = requestedRows.filter(canModifySchedule);
+                                    if (!selectedRows.length) {
+                                        api.warning({ message: "Không có lịch học nào có thể cập nhật", description: "Lịch đã bắt đầu hoặc đã nghỉ không được chỉnh sửa." });
+                                        return;
+                                    }
+                                    if (selectedRows.length < requestedRows.length) {
+                                        api.info({ message: "Đã bỏ qua lịch không thể cập nhật", description: "Chỉ mở trang chỉnh sửa cho các lịch chưa bắt đầu." });
+                                    }
+                                    sessionStorage.setItem("schedule:auto-edit:rows", JSON.stringify(selectedRows));
+                                    const params = new URLSearchParams({
+                                        ids: selectedRows.map((item) => String(item.id)).join(","),
+                                        program: String(submittedFilterValues.code || ""),
+                                    });
+                                    router.push(`/schedule/auto-edit?${params.toString()}`);
+                                }}
                             >
                                 Sửa hàng loạt
                             </Button>
@@ -1388,9 +1446,9 @@ const Page = () => {
                 }
             />
 
-            <div style={{ display: "flex", justifyContent: viewMode === "calendar" ? "space-between" : "flex-end", alignItems: "center", marginBottom: 12 }}>
+            <div className="responsive-schedule-view-toolbar" style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: viewMode === "calendar" ? "space-between" : "flex-end", alignItems: "center", marginBottom: 12 }}>
                 {viewMode === "calendar" && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div className="responsive-calendar-legend" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <div style={{ width: 12, height: 12, borderRadius: 2, background: '#e6f4ff', borderLeft: '3px solid #1677ff' }} />
                             <span style={{ fontSize: 13, color: '#555' }}>Sắp diễn ra</span>
@@ -1568,6 +1626,7 @@ const Page = () => {
                             style={{ height: "100%", minHeight: 0 }}
                         >
                         <CustomTable<ScheduleDataType>
+                            responsiveCards={false}
                             columns={columns}
                             dataSource={filteredData}
                             loading={loading}
@@ -1583,6 +1642,7 @@ const Page = () => {
                                     if (!hasSearched) return;
                                     setCurrentPage(page);
                                     setPageSize(size);
+                                    replaceScheduleUrl(submittedFilterValues, size !== pageSize ? 1 : page);
                                 }
                             }}
                             onChange={(_, __, sorter, extra) => {
@@ -1600,6 +1660,7 @@ const Page = () => {
                                         }))
                                 );
                                 setCurrentPage(1);
+                                replaceScheduleUrl(submittedFilterValues);
                             }}
                             expandable={{
                                 expandedRowRender: (record) => <ScheduleDetailRow record={record} />,
@@ -1646,6 +1707,7 @@ const Page = () => {
                     moduleFields={moduleFields}
                     fieldPolicy={fieldPolicy}
                     moduleCode={SCHEDULE_MODULE_CODE}
+                    programCode={isEditMode ? undefined : String(submittedFilterValues.code || "").trim() || undefined}
                 />
                 <ScheduleImportModal
                     open={openImportModal}
@@ -1668,133 +1730,6 @@ const Page = () => {
                     }}
                     onConfirmPreview={handleConfirmMappingImport}
                     onDownloadTemplate={handleDownloadImportTemplate}
-                />
-                <AutoScheduleModal
-                    open={openAutoScheduleModal}
-                    programCode={String(submittedFilterValues.code || "")}
-                    onClose={() => setOpenAutoScheduleModal(false)}
-                    onSuccess={async () => {
-                        api.success({ message: "Đã tạo lịch tự động" });
-                        await refreshSchedules();
-                    }}
-                />
-                <BulkEditModal
-                    open={openBulkEditModal}
-                    selectedRowKeys={selectedRowKeys}
-                    selectedRows={data.filter((item) => selectedRowKeys.map(String).includes(String(item.id)))}
-                    onClose={() => setOpenBulkEditModal(false)}
-                    onSuccess={async (modalPayload) => {
-                        try {
-                            let targetIds: (string | number)[] =
-                                modalPayload.scope.selected_lessons || [];
-
-                            if (targetIds.length === 0) {
-                                api.warning({ message: "Cảnh báo", description: "Không tìm thấy bài học nào phù hợp với điều kiện để cập nhật!" });
-                                return;
-                            }
-
-                            const modifiableIds = new Set(
-                                data
-                                    .filter(canModifySchedule)
-                                    .map((item) => String(item.key))
-                            );
-                            const requestedCount = targetIds.length;
-                            targetIds = targetIds.filter((id) =>
-                                modifiableIds.has(String(id))
-                            );
-
-                            if (targetIds.length === 0) {
-                                api.warning({
-                                    message: "Không thể cập nhật",
-                                    description: "Các buổi được chọn đều đã bắt đầu.",
-                                });
-                                return;
-                            }
-                            if (targetIds.length < requestedCount) {
-                                api.warning({
-                                    message: "Đã bỏ qua lịch cũ",
-                                    description: "Các buổi đã bắt đầu không được cập nhật.",
-                                });
-                            }
-
-                            if (modalPayload.operation === 'cancel' || modalPayload.operation === 'makeup') {
-                                await updateLivestreamBulk({
-                                    ids: targetIds,
-                                    operation: modalPayload.operation,
-                                    reason: modalPayload.reason,
-                                    offset_days: modalPayload.offset_days,
-                                });
-                                api.success({
-                                    message: "Thành công",
-                                    description: modalPayload.operation === 'cancel'
-                                        ? `Đã đánh dấu nghỉ ${targetIds.length} lịch học.`
-                                        : `Đã đánh dấu nghỉ và tạo ${targetIds.length} lịch bù.`,
-                                });
-                                setSelectedRowKeys([]);
-                                if (hasSearched) await refreshSchedules();
-                                return;
-                            }
-
-                            let update_data: any = {};
-                            let apiConfigMode = modalPayload.config_mode;
-
-                            if (modalPayload.config_mode === 'common') {
-                                const commonUpdate = {
-                                    teacher: modalPayload.common_config.teacher,
-                                    assistant_teacher: modalPayload.common_config.assistant_teacher,
-                                    room: modalPayload.common_config.room,
-                                    start_time: modalPayload.common_config.start_time,
-                                    end_time: modalPayload.common_config.end_time,
-                                };
-                                const mappingUpdates = modalPayload.common_config.mapping_updates;
-                                if (mappingUpdates) {
-                                    apiConfigMode = 'separate';
-                                    update_data = targetIds.map((id) => ({
-                                        id,
-                                        ...commonUpdate,
-                                        package_lesson_mappings: mappingUpdates[String(id)] || [],
-                                    }));
-                                } else {
-                                    update_data = commonUpdate;
-                                }
-                            } else if (modalPayload.config_mode === 'separate') {
-                                update_data = targetIds.map(id => {
-                                    const config = modalPayload.separate_config?.[id] || {};
-                                    return {
-                                        id: id,
-                                        teacher: config.teacher,
-                                        assistant_teacher: config.assistant_teacher,
-                                        room: config.room,
-                                        start_time: config.start_time,
-                                        end_time: config.end_time,
-                                        ...('package_lesson_mappings' in config
-                                            ? { package_lesson_mappings: config.package_lesson_mappings || [] }
-                                            : {}),
-                                    }
-                                });
-                            }
-
-                            const apiPayload = {
-                                ids: targetIds,
-                                config_mode: apiConfigMode,
-                                update_data: update_data
-                            };
-
-                            await updateLivestreamBulk(apiPayload);
-
-                            api.success({ message: "Thành công", description: `Đã cập nhật hàng loạt ${targetIds.length} bài học.` });
-
-                            setSelectedRowKeys([]);
-                            if (hasSearched) {
-                                await refreshSchedules();
-                            }
-
-                        } catch (error: any) {
-                            console.error(error);
-                            api.error({ message: "Cập nhật thất bại", description: error.message || "Đã xảy ra lỗi" });
-                            throw error;
-                        }
-                    }}
                 />
             </Form>
         </div>

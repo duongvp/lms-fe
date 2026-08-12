@@ -6,6 +6,7 @@ import dayjs, { type Dayjs } from 'dayjs';
 import {
     createLivestream,
     createLivestreamBulk,
+    getProgramLessonsForScheduling,
     updateLivestream,
     rescheduleLivestream
 } from '@/services/livestreamService';
@@ -63,6 +64,7 @@ interface ScheduleModalProps {
     moduleFields?: ModuleField[];
     fieldPolicy?: any;
     moduleCode?: string;
+    programCode?: string;
 }
 
 const DAYS_OPTIONS = [
@@ -148,15 +150,19 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     moduleFields = [],
     fieldPolicy,
     moduleCode = 'calendar',
+    programCode,
 }) => {
     const [form] = Form.useForm();
-    const subjectOptions = useLessonSubjectOptions();
-    const lessonPrograms = useLessonProgramOptions();
+    const usesProgramContext = !isEdit && Boolean(programCode);
     const [loading, setLoading] = useState(false);
 
     // For Add
     const [addMode, setAddMode] = useState<"single" | "bulk">("single");
     const [bulkConfigMode, setBulkConfigMode] = useState<"common" | "separate">("common");
+    const needsManualProgramOptions = open && (isEdit || !usesProgramContext || addMode === 'bulk');
+    const subjectOptions = useLessonSubjectOptions(needsManualProgramOptions);
+    const lessonPrograms = useLessonProgramOptions(needsManualProgramOptions);
+    const selectedProgram = lessonPrograms.find((program) => program.subject_code === programCode);
 
     // For Update
     const [updateMode, setUpdateMode] = useState<"current" | "makeup" | "following" | "cancel">("following");
@@ -165,6 +171,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const selectedGrade = Form.useWatch('grade', form);
     const selectedSubject = Form.useWatch('subject_name', form);
     const selectedSubjectCode = Form.useWatch('subject_code', form);
+    const contextProgramCode = usesProgramContext ? String(programCode).trim() : selectedSubjectCode;
     const selectedCourseCode = Form.useWatch('class_code', form);
     const selectedLessonId = Form.useWatch('lesson_id', form);
     const selectedBulkGrade = Form.useWatch('bulk_grade', form);
@@ -176,6 +183,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const singleStartTime = Form.useWatch('start_time', form) as Dayjs | undefined;
     const bulkStartTime = Form.useWatch('bulk_start_time', form) as Dayjs | undefined;
     const [lessonOptions, setLessonOptions] = useState<LessonApiResponse[]>([]);
+    const [loadingProgramLessons, setLoadingProgramLessons] = useState(false);
     const [bulkLessonOptions, setBulkLessonOptions] = useState<LessonApiResponse[]>([]);
     const [quickLessonOpen, setQuickLessonOpen] = useState(false);
     const [creatingLesson, setCreatingLesson] = useState(false);
@@ -193,12 +201,12 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     );
     usePackageCoursesQuery();
     const singleLessonParams: LessonListParams | null = (
-        open && !isEdit && addMode === 'single' && selectedGrade && selectedSubjectCode
+        open && !isEdit && addMode === 'single' && contextProgramCode && !usesProgramContext
     ) ? {
         page: 1,
         limit: 100,
-        grade: selectedGrade,
-        subject_code: selectedSubjectCode,
+        grade: selectedGrade || undefined,
+        subject_code: contextProgramCode,
         course_code: selectedCourseCode?.trim() || undefined,
         sort_by: 'learn_number',
         sort_order: 'asc',
@@ -227,7 +235,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             sort_order: 'desc',
         } : null
     );
-    const loadingLessons = singleLessonsQuery.isLoading || singleLessonsQuery.isValidating;
+    const loadingLessons = loadingProgramLessons || singleLessonsQuery.isLoading || singleLessonsQuery.isValidating;
     const loadingBulkLessons = bulkLessonsQuery.isLoading || bulkLessonsQuery.isValidating;
     const { refreshLessons } = useLmsCache();
     const getProgramOptions = (grade?: number, subjectName?: string) => lessonPrograms
@@ -241,8 +249,32 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         }));
 
     React.useEffect(() => {
+        if (!open || !usesProgramContext || !contextProgramCode || addMode !== 'single') return;
+        let active = true;
+        setLoadingProgramLessons(true);
+        getProgramLessonsForScheduling(contextProgramCode)
+            .then((response: any) => {
+                if (!active) return;
+                setLessonOptions((Array.isArray(response?.data) ? response.data : []).map((lesson: any) => ({
+                    ...lesson,
+                    id: String(lesson.id),
+                    subject_code: contextProgramCode,
+                    learn_number: Number(lesson.learn_number),
+                    lesson_name: String(lesson.lesson_name || ''),
+                    scheduled_count: Number(lesson.scheduled_count || 0),
+                })));
+            })
+            .catch((error: any) => {
+                if (active) messageApi.error(error?.message || 'Không thể tải bài học của Chương trình');
+            })
+            .finally(() => active && setLoadingProgramLessons(false));
+        return () => { active = false; };
+    }, [addMode, contextProgramCode, messageApi, open, usesProgramContext]);
+
+    React.useEffect(() => {
+        if (usesProgramContext) return;
         setLessonOptions(singleLessonsQuery.data?.data?.data ?? []);
-    }, [singleLessonsQuery.data]);
+    }, [singleLessonsQuery.data, usesProgramContext]);
 
     React.useEffect(() => {
         const rows: LessonApiResponse[] = bulkLessonsQuery.data?.data?.data ?? [];
@@ -513,9 +545,18 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                 form.resetFields();
                 setAddMode("single");
                 setBulkConfigMode("common");
+                if (programCode) {
+                    const inferredGrade = Number(String(programCode).match(/-(\d{1,2})-/)?.[1]) || undefined;
+                    form.setFieldsValue({
+                        grade: selectedProgram?.grade || inferredGrade,
+                        subject_name: selectedProgram?.subject_name || String(programCode),
+                        subject_code: String(programCode),
+                        class_code: String(programCode),
+                    });
+                }
             }
         }
-    }, [open, initialData, form, isEdit]);
+    }, [open, initialData, form, isEdit, programCode, selectedProgram]);
 
     React.useEffect(() => {
         const rows: any[] = courseEndQuery.data?.data?.data ?? [];
@@ -543,6 +584,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         <>
             {contextHolder}
             <Modal
+                rootClassName="schedule-responsive-modal"
                 title={
                     <>
                         <Title level={5} style={{ marginBottom: 4 }}>
@@ -560,14 +602,14 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                 centered
                 styles={{
                     content: {
-                        maxHeight: 'calc(100vh - 32px)',
+                        maxHeight: 'calc(100dvh - 32px)',
                         display: 'flex',
                         flexDirection: 'column',
                     },
                     body: {
                         flex: 1,
                         minHeight: 0,
-                        maxHeight: 'calc(100vh - 200px)',
+                        maxHeight: 'calc(100dvh - 200px)',
                         overflowY: 'auto',
                         overflowX: 'hidden',
                         paddingRight: 8,
@@ -588,19 +630,6 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                     </Button>,
                 ]}
             >
-                {!isEdit && (
-                    <div style={{ marginBottom: 24 }}>
-                        <Radio.Group
-                            value={addMode}
-                            onChange={(e) => setAddMode(e.target.value)}
-                            buttonStyle="solid"
-                        >
-                            <Radio.Button value="single">Thêm 1 buổi</Radio.Button>
-                            <Radio.Button value="bulk">Thêm nhiều lịch tự động</Radio.Button>
-                        </Radio.Group>
-                    </div>
-                )}
-
                 {isEdit && (
                     <div style={{ marginBottom: 24 }}>
                         <Radio.Group
@@ -625,7 +654,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                     </div>
                 )}
 
-                <Form layout="vertical" form={form} onFinish={handleFinish}>
+                <Form className="responsive-modal-form responsive-schedule-form" layout="vertical" form={form} onFinish={handleFinish}>
 
                     {isEdit && (
                         <FormSection title="Lý do thay đổi">
@@ -658,7 +687,15 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                     {((!isEdit && addMode === 'single') || (isEdit && updateMode === 'current')) && (
                         <>
                             <FormSection title="Thông tin lớp học">
-                                <Row gutter={24}>
+                                {usesProgramContext && (
+                                    <>
+                                        <Form.Item name="grade" hidden><Input /></Form.Item>
+                                        <Form.Item name="subject_name" hidden><Input /></Form.Item>
+                                        <Form.Item name="subject_code" hidden><Input /></Form.Item>
+                                        <Form.Item name="class_code" hidden><Input /></Form.Item>
+                                    </>
+                                )}
+                                {!usesProgramContext && <Row gutter={24}>
                                     <Col span={8}>
                                         <Form.Item label="Khối" name="grade" rules={[{ required: true, message: 'Chọn khối' }]}>
                                             <Select
@@ -713,8 +750,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             />
                                         </Form.Item>
                                     </Col>
-                                </Row>
-                                <Row gutter={24}>
+                                </Row>}
+                                {!usesProgramContext && <Row gutter={24}>
                                     <Col span={12}>
                                         <Form.Item label="Mã khóa học / Lớp" name="class_code" rules={requiredWhenEditable('code', 'Nhập mã khóa học')}>
                                             <Input placeholder="Tự đề xuất theo mã môn học" disabled={!isFieldEditable('code')} />
@@ -730,12 +767,12 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                 >
                                                     <Select
                                                         placeholder={
-                                                            selectedGrade && selectedSubjectCode
+                                                            contextProgramCode
                                                                 ? 'Chọn bài học'
                                                                 : 'Chọn Khối và Môn học trước'
                                                         }
                                                         loading={loadingLessons}
-                                                        disabled={!selectedGrade || !selectedSubjectCode}
+                                                        disabled={!selectedSubjectCode}
                                                         showSearch
                                                         optionFilterProp="label"
                                                         popupMatchSelectWidth={480}
@@ -753,13 +790,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                             form.setFieldsValue({
                                                                 learn_number: lesson?.learn_number,
                                                                 master_lesson_name: lesson?.lesson_name,
-                                                                lesson_name: lesson
-                                                                    ? (
-                                                                        scheduledCount > 0
-                                                                            ? `[Lịch ${scheduledCount + 1}] - ${lesson.lesson_name}`
-                                                                            : lesson.lesson_name
-                                                                    )
-                                                                    : undefined,
+                                                                lesson_name: lesson?.lesson_name,
+                                                                lesson_scheduled_count: scheduledCount,
                                                             });
                                                         }}
                                                         notFoundContent={
@@ -791,7 +823,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             </Space.Compact>
                                         </Form.Item>
                                     </Col>
-                                    <Col span={24}>
+                                    <Col span={24} style={{ display: 'none' }}>
                                         <Form.Item
                                             label="Tên bài học hiển thị trên lịch"
                                             name="lesson_name"
@@ -808,9 +840,76 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             />
                                         </Form.Item>
                                     </Col>
-                                </Row>
+                                </Row>}
+                                {usesProgramContext && <Row gutter={24}>
+                                    <Col span={usesProgramContext ? 24 : 12}>
+                                        <Form.Item label="Tên bài học" required>
+                                            <Space.Compact style={{ width: '100%' }}>
+                                                <Form.Item
+                                                    name="lesson_id"
+                                                    noStyle
+                                                    rules={[{ required: true, message: 'Chọn bài học' }]}
+                                                >
+                                                    <Select
+                                                        placeholder={
+                                                            selectedGrade && selectedSubjectCode
+                                                                ? 'Chọn bài học'
+                                                                : 'Đang tải danh sách bài học'
+                                                        }
+                                                        loading={loadingLessons}
+                                                        disabled={!contextProgramCode}
+                                                        showSearch
+                                                        optionFilterProp="label"
+                                                        popupMatchSelectWidth={480}
+                                                        options={lessonOptions.map((lesson) => ({
+                                                            value: String(lesson.id),
+                                                            label: formatLessonScheduleOption(lesson),
+                                                        }))}
+                                                        onChange={(lessonId) => {
+                                                            const lesson = lessonOptions.find((item) => String(item.id) === String(lessonId));
+                                                            const scheduledCount = Number(lesson?.scheduled_count ?? 0);
+                                                            form.setFieldsValue({
+                                                                learn_number: lesson?.learn_number,
+                                                                master_lesson_name: lesson?.lesson_name,
+                                                                lesson_name: lesson?.lesson_name,
+                                                                lesson_scheduled_count: scheduledCount,
+                                                            });
+                                                        }}
+                                                        notFoundContent={contextProgramCode && !loadingLessons ? 'Chưa có bài học' : undefined}
+                                                        style={{ width: 'calc(100% - 32px)' }}
+                                                    />
+                                                </Form.Item>
+                                                <Tooltip title={canCreateLesson ? 'Tạo nhanh bài học' : 'Bạn không có quyền tạo bài học'}>
+                                                    <Button icon={<PlusOutlined />} disabled={!selectedGrade || !selectedSubject || !selectedSubjectCode || !canCreateLesson} onClick={() => {
+                                                        quickLessonForm.resetFields();
+                                                        quickLessonForm.setFieldValue('subject_code', selectedSubjectCode || buildLessonSubjectCode(selectedSubject, Number(selectedGrade), getSuggestedSchoolYear()));
+                                                        setQuickLessonOpen(true);
+                                                    }} />
+                                                </Tooltip>
+                                            </Space.Compact>
+                                        </Form.Item>
+                                    </Col>
+                                    <Col span={24} style={{ display: 'none' }}>
+                                        <Form.Item
+                                            label="Tên bài học hiển thị trên lịch"
+                                            name="lesson_name"
+                                            rules={[
+                                                { required: true, whitespace: true, message: 'Nhập tên bài học hiển thị' },
+                                                { max: 400, message: 'Tên bài học không được vượt quá 400 ký tự' },
+                                            ]}
+                                        >
+                                            <Input
+                                                placeholder="Có thể thêm tiền tố hoặc hậu tố, ví dụ: [Lịch 2] - Tên bài học"
+                                                maxLength={400}
+                                                showCount
+                                                disabled={!selectedLessonId}
+                                            />
+                                        </Form.Item>
+                                    </Col>
+                                </Row>}
                                 <Form.Item name="learn_number" hidden><Input /></Form.Item>
                                 <Form.Item name="master_lesson_name" hidden><Input /></Form.Item>
+                                <Form.Item name="lesson_scheduled_count" hidden><Input /></Form.Item>
                             </FormSection>
 
                             <FormSection title="Chi tiết thời gian">

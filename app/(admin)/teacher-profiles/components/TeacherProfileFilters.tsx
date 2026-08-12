@@ -26,6 +26,7 @@ const TeacherProfileFilters = ({
 }: TeacherProfileFiltersProps) => {
     return (
         <Flex
+            className="responsive-filter-flex"
             gap={12}
             wrap
             style={{ marginBottom: 16 }}

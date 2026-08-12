@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button, Input, Modal, notification, Spin } from "antd";
 import { DownOutlined, InfoCircleOutlined, UpOutlined } from "@ant-design/icons";
 import { useAuthStore } from "@/stores/authStore";
@@ -72,6 +73,9 @@ function useDebounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
 }
 
 const Page = () => {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const initializedFromUrl = useRef(false);
     const [data, setData] = useState<LessonDataType[]>([]);
     const [saving, setSaving] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
@@ -110,6 +114,43 @@ const Page = () => {
     const [secondaryPassword, setSecondaryPassword] = useState("");
     const [secondaryLoading, setSecondaryLoading] = useState(false);
     const [api, contextHolder] = notification.useNotification();
+
+    const replaceLessonUrl = useCallback((values: LessonFilterValues, page = 1) => {
+        const params = new URLSearchParams();
+        const program = String(values.subject_code || "").trim();
+        const lesson = values.learn_number;
+        const keyword = String(values.keyword || "").trim();
+        if (program) params.set("program", program);
+        if (values.grade !== undefined && values.grade !== null) params.set("grade", String(values.grade));
+        if (values.subject) params.set("subject", String(values.subject).trim());
+        if (lesson !== undefined && lesson !== null) params.set("lesson", String(lesson));
+        if (keyword) params.set("q", keyword);
+        if (page > 1) params.set("page", String(page));
+        router.replace(params.size ? `/lessons?${params.toString()}` : "/lessons", { scroll: false });
+    }, [router]);
+
+    useEffect(() => {
+        if (initializedFromUrl.current) return;
+        initializedFromUrl.current = true;
+        const program = String(searchParams.get("program") || "").trim();
+        if (!program) return;
+        const lesson = Number(searchParams.get("lesson"));
+        const grade = Number(searchParams.get("grade"));
+        const keyword = String(searchParams.get("q") || "").trim();
+        const page = Math.max(1, Number(searchParams.get("page")) || 1);
+        const values = cleanFilterValues({
+            subject_code: program,
+            grade: grade || undefined,
+            subject: String(searchParams.get("subject") || "").trim() || undefined,
+            learn_number: lesson || undefined,
+            keyword,
+        });
+        setFilterValues(values);
+        setSubmittedFilterValues(values);
+        setSearchText(keyword);
+        setCurrentPage(page);
+        setHasSearched(true);
+    }, [searchParams]);
     const hasPermission = useAuthStore((state) => state.hasPermission);
     const can = useAuthStore((state) => state.can);
     const { fieldPolicy } = useAuthStore((state) => state.user);
@@ -143,15 +184,11 @@ const Page = () => {
     // ✅ Hàm thực sự submit filter (được debounce)
     const doSearch = useCallback((keyword: string) => {
         if (!hasSearched) return;
-
-        setSubmittedFilterValues((prev) =>
-            cleanFilterValues({
-                ...prev,
-                keyword: keyword,
-            })
-        );
+        const nextValues = cleanFilterValues({ ...submittedFilterValues, keyword });
+        setSubmittedFilterValues(nextValues);
         setCurrentPage(1);
-    }, [hasSearched]);
+        replaceLessonUrl(nextValues);
+    }, [hasSearched, submittedFilterValues, replaceLessonUrl]);
 
     // ✅ Debounce hàm doSearch với 500ms
     const debouncedDoSearch = useDebounce(doSearch, 500);
@@ -293,6 +330,7 @@ const Page = () => {
         setSubmittedFilterValues(cleaned);
         setHasSearched(true);
         setCurrentPage(1);
+        replaceLessonUrl(cleaned);
         setOpenFilterDrawer(false);
     };
 
@@ -303,6 +341,7 @@ const Page = () => {
         setSubmittedFilterValues(cleaned);
         setHasSearched(false);
         setCurrentPage(1);
+        replaceLessonUrl(cleaned);
         setOpenFilterDrawer(false);
     };
 
@@ -698,8 +737,8 @@ const Page = () => {
                     marginBottom: 10,
                 }}
             >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                <div className="responsive-page-info-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, minWidth: 0 }}>
                         <InfoCircleOutlined style={{ color: "#1677ff", fontSize: 16 }} />
                         <span style={{ fontWeight: 600 }}>Quản lý đề cương</span>
                         <Button
@@ -799,11 +838,13 @@ const Page = () => {
                     if (!hasSearched) return;
                     setCurrentPage(page);
                     setPageSize(size);
+                    replaceLessonUrl(submittedFilterValues, size !== pageSize ? 1 : page);
                 }}
                 onSortChange={(sorter) => {
                     if (!hasSearched) return;
                     setSortState(sorter);
                     setCurrentPage(1);
+                    replaceLessonUrl(submittedFilterValues);
                 }}
                 onDragStart={setDragRowKey}
                 onDrop={handleDropRow}

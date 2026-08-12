@@ -45,6 +45,12 @@ export interface AutoSchedulePayload {
     customize_lesson_names?: boolean;
     lesson_name_prefix?: string;
     lesson_name_suffix?: string;
+    lesson_name_rules?: Array<{
+        from_learn_number: number;
+        to_learn_number: number;
+        prefix?: string;
+        suffix?: string;
+    }>;
     blocks: Array<{
         block_name?: string;
         lessons: Array<{
@@ -443,7 +449,7 @@ export const updateLivestreamBulk = (payload: any) =>
         body: JSON.stringify(payload),
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-    });
+    }, "json", 120_000);
 
 /** 
  * Chuyển dữ liệu từ form BulkEditModal thành payload gửi lên BE 

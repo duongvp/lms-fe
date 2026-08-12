@@ -74,6 +74,24 @@ const TeachingStaffSelect = ({
             `${String(option.label ?? "")} ${String(option.value ?? "")}`
         ).includes(normalizedSearch));
     }, [options, searchText]);
+    const staffTagRender: SelectProps["tagRender"] = (tag) => {
+        const selected = options.find((option) => String(option.value) === String(tag.value));
+        const shortLabel = selected?.displayName || String(tag.value || "");
+        return (
+            <span className="ant-select-selection-item" style={{ marginInlineEnd: 4 }}>
+                <span className="ant-select-selection-item-content">{shortLabel}</span>
+                {tag.closable && (
+                    <span
+                        className="ant-select-selection-item-remove"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={tag.onClose}
+                    >
+                        ×
+                    </span>
+                )}
+            </span>
+        );
+    };
     const showQuickCreate = allowQuickCreate && canCreate && !disabled;
 
     const openCreate = () => {
@@ -131,6 +149,7 @@ const TeachingStaffSelect = ({
                         onChange?.(value, option);
                     }}
                     options={filteredOptions}
+                    tagRender={props.mode === "multiple" ? staffTagRender : props.tagRender}
                     style={{ width: showQuickCreate ? "calc(100% - 32px)" : "100%" }}
                 />
                 {showQuickCreate && (

@@ -173,7 +173,7 @@ const ScheduleImportModal = ({
                         rowKey={(record, index) => `${record.row}-${record.field}-${index}`}
                         pagination={false}
                         dataSource={errors}
-                        scroll={{ y: 240 }}
+                        scroll={{ x: "max-content", y: 240 }}
                         columns={[
                             { title: "Dòng", dataIndex: "row", width: 80 },
                             {
@@ -220,7 +220,7 @@ const ScheduleImportModal = ({
                         rowKey={(record) => String(record)}
                         pagination={false}
                         dataSource={preview.updates || []}
-                        scroll={{ y: 260 }}
+                        scroll={{ x: "max-content", y: 260 }}
                         columns={[
                             {
                                 title: "Buổi",

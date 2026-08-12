@@ -82,6 +82,7 @@ const BranchModal = () => {
                 ]}
             >
                 <Form
+                    className="responsive-modal-form"
                     form={form}
                     onFinish={handleFormSubmit}
                     {...formItemLayout}

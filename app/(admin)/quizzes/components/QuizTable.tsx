@@ -261,6 +261,7 @@ const QuizTable = ({
             />
         ) : (
             <CustomTable<QuizApiResponse>
+                responsiveCards={false}
                 rowKey="quiz_id"
                 columns={columns}
                 dataSource={data}

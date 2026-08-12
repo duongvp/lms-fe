@@ -57,6 +57,7 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
                 description="Hệ thống hiện lưu Chương trình qua các bài học, vì vậy cần khai báo bài học đầu tiên. Sau khi tạo, bạn có thể tiếp tục thêm hoặc import các bài còn lại."
             />
             <Form
+                className="responsive-modal-form"
                 form={form}
                 layout="vertical"
                 initialValues={{ school_year: getSuggestedSchoolYear() }}

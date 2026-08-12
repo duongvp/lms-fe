@@ -240,6 +240,7 @@ const LessonTable = ({
                 />
             ) : (
                 <CustomTable<LessonDataType>
+                    responsiveCards={false}
                     columns={columns}
                     dataSource={data}
                     loading={loading}

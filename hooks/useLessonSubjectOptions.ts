@@ -39,10 +39,10 @@ const mergeSubjectOptions = (databaseSubjects: LessonSubjectOption[]) => {
     ));
 };
 
-export const useLessonSubjectOptions = () => {
+export const useLessonSubjectOptions = (enabled = true) => {
     const userId = useAuthStore((state) => state.user.userId);
     const { data } = useSWR(
-        swrKeys.lessonSubjects(userId),
+        enabled ? swrKeys.lessonSubjects(userId) : null,
         getLessonSubjects,
         { dedupingInterval: 5 * 60_000 }
     );
@@ -58,10 +58,10 @@ export const useLessonSubjectOptions = () => {
     return mergeSubjectOptions(subjects);
 };
 
-export const useLessonProgramOptions = () => {
+export const useLessonProgramOptions = (enabled = true) => {
     const userId = useAuthStore((state) => state.user.userId);
     const { data } = useSWR(
-        swrKeys.lessonPrograms(userId),
+        enabled ? swrKeys.lessonPrograms(userId) : null,
         getLessonPrograms,
         { dedupingInterval: 5 * 60_000 }
     );

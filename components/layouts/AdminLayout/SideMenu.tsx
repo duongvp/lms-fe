@@ -297,7 +297,7 @@ const SideMenu: React.FC<SideMenuProps> = ({ drawerOpen, onCloseDrawer }) => {
             onClose={onCloseDrawer}
             open={drawerOpen}
             styles={{ body: { padding: 10 } }}
-            width={250}
+            width={screens.sm ? 280 : "86vw"}
         >
             <Menu
                 mode="inline"

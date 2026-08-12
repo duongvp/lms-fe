@@ -57,13 +57,13 @@ const UserDetail: React.FC<UserDetailProps> = ({ record }) => {
         <div>
             <div style={{ overflow: 'hidden', padding: 16 }}>
                 <Row gutter={[16, 16]}>
-                    <Col span={12}>
+                    <Col xs={24} lg={12}>
                         {dataRow.map((item, index) => (
                             <Row key={index} gutter={[8, 8]} style={{ marginBottom: 8 }}>
-                                <Col span={6}>
+                                <Col xs={24} sm={6}>
                                     <Text strong>{item.label}</Text>
                                 </Col>
-                                <Col span={18}>
+                                <Col xs={24} sm={18}>
                                     <Text>{item.value}</Text>
                                 </Col>
                             </Row>
@@ -74,7 +74,7 @@ const UserDetail: React.FC<UserDetailProps> = ({ record }) => {
 
             <Row justify="end" align="middle" style={{ marginTop: 16 }}>
                 <Col>
-                    <Space>
+                    <Space wrap>
                         {
                             hasPermission(PermissionKey.USER_EDIT) && !isAdminAccount && (
                                 <Button

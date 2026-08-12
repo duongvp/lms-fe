@@ -464,8 +464,8 @@ const RoleModal = () => {
                     </Button>,
                 ]}
             >
-                <div style={{ maxHeight: 568, overflowY: "auto", overflowX: "hidden", paddingRight: 8 }}>
-                    <Form form={form} onFinish={handleFormSubmit} {...formItemLayout} labelAlign="left">
+                <div style={{ maxHeight: "calc(100dvh - 220px)", overflowY: "auto", overflowX: "hidden", paddingRight: 8 }}>
+                    <Form className="responsive-modal-form" form={form} onFinish={handleFormSubmit} {...formItemLayout} labelAlign="left">
                         <Form.Item
                             name="roleName"
                             label="Vai trò"
@@ -662,6 +662,7 @@ const RoleModal = () => {
                                                     columns={columns}
                                                     pagination={false}
                                                     size="small"
+                                                    scroll={{ x: "max-content" }}
                                                 />
                                             </Collapse.Panel>
                                         );
@@ -677,7 +678,7 @@ const RoleModal = () => {
                                 />
                                 <div style={{ padding: 12, border: "1px solid #f0f0f0", borderRadius: 8 }}>
                                             <Row gutter={12} style={{ marginTop: 8 }}>
-                                                <Col span={7}>
+                                                <Col xs={24} md={7}>
                                                     <Select
                                                         value={programScope.mode}
                                                         style={{ width: "100%" }}
@@ -693,7 +694,7 @@ const RoleModal = () => {
                                                         }))}
                                                     />
                                                 </Col>
-                                                <Col span={17}>
+                                                <Col xs={24} md={17}>
                                                     <Select
                                                         mode="multiple"
                                                         allowClear

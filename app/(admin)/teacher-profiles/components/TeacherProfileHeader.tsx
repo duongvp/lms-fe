@@ -41,6 +41,7 @@ const TeacherProfileHeader = ({
 }: TeacherProfileHeaderProps) => {
     return (
         <Flex
+            className="responsive-page-toolbar"
             justify="space-between"
             align="center"
             wrap
@@ -54,7 +55,7 @@ const TeacherProfileHeader = ({
                 Giáo viên & Trợ giảng
             </Title>
 
-            <Space wrap>
+            <Space className="responsive-action-buttons" wrap>
                 {canImport && (
                     <>
                         <Dropdown
@@ -143,4 +144,3 @@ const TeacherProfileHeader = ({
 };
 
 export default TeacherProfileHeader;
-

@@ -53,8 +53,8 @@ export default function SearchAndActionsBar({
     );
 
     return (
-        <Row style={{ width: '100%', marginBottom: '16px' }} gutter={[16, 8]}>
-            <Col xxl={6} lg={8} md={12} sm={24} xs={24}>
+        <Row className="responsive-search-actions" style={{ width: '100%', marginBottom: '16px' }} gutter={[16, 8]}>
+            <Col xxl={6} lg={8} md={10} sm={24} xs={24}>
                 {showSearch && (
                     <CustomSearchInput
                         placeholder={placeholder}
@@ -62,14 +62,14 @@ export default function SearchAndActionsBar({
                     />
                 )}
             </Col>
-            <Col xxl={18} lg={16} md={12} sm={24} xs={24}>
+            <Col xxl={18} lg={16} md={14} sm={24} xs={24}>
                 <Flex
                     vertical
                     align='stretch'
                     justify='end'
                     style={{ gap: 8 }} // dùng style thay vì prop gap nếu cần độ tương thích cao
                 >
-                    <Flex wrap="wrap" justify={compact ? "start" : "end"} gap={8}>
+                    <Flex className="responsive-action-buttons" wrap="wrap" justify={compact ? "start" : "end"} gap={8}>
                         {
                             (handlePrintBarcode || handleDeleteProducts) && (
                                 <Dropdown menu={{ items: menu.props.items, onClick: menu.props.onClick }} trigger={['click']}>
@@ -106,7 +106,7 @@ export default function SearchAndActionsBar({
                 </Flex>
             </Col>
 
-            {extraButtons}
+            {extraButtons && <Col span={24}>{extraButtons}</Col>}
         </Row>
     );
 }
