@@ -14,6 +14,7 @@ import {
 } from "@/services/livestreamService";
 import { useEffect, useRef, useState } from "react";
 import TeachingStaffSelect from "@/components/shared/TeachingStaffSelect";
+import { buildGroupedHmoOptions, hmoOptionKey, summarizeHmoOptions } from "@/helper/hmoOptions";
 
 type Props = {
     open: boolean;
@@ -30,10 +31,6 @@ const WEEKDAYS = [
     { value: 7, label: "Chủ nhật" },
 ];
 const BLOCKS_PER_PAGE = 3;
-const hmoOptionKey = (option: HocmaiSectionOption) => (
-    `${option.package_id}::${option.course_id}::${option.lesson_id}`
-);
-
 const normalizeLessonTitle = (value: unknown) => String(value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -783,24 +780,29 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                                                                     />
                                                                                 </Form.Item>
                                                                                 <Form.Item name={[sessionField.name, "hmo_mapping_keys"]} label="Lesson ID HMO">
-                                                                                    <Select
-                                                                                        mode="multiple"
-                                                                                        allowClear
-                                                                                        showSearch
-                                                                                        loading={loadingHmoLessonIds.has(lessonId)}
-                                                                                        style={{ width: 520 }}
-                                                                                        popupMatchSelectWidth={620}
-                                                                                        placeholder={outlineOptions.length
-                                                                                            ? "Chọn section lesson_id từ HMO"
-                                                                                            : "Bài chưa có Course ID hoặc HMO không có section"}
-                                                                                        options={outlineOptions.map((option) => ({
-                                                                                            value: hmoOptionKey(option),
-                                                                                            label: `${option.lesson_id} · ${option.lesson_name || "Không tên"} · Course ${option.course_id} / Package ${option.package_id}`,
-                                                                                        }))}
-                                                                                        tagRender={renderHmoSelectedTag}
-                                                                                        optionFilterProp="label"
-                                                                                        maxTagCount="responsive"
-                                                                                    />
+                                                                                    <Space direction="vertical" size={2} style={{ width: 520, maxWidth: "100%" }}>
+                                                                                        <Select
+                                                                                            mode="multiple"
+                                                                                            allowClear
+                                                                                            showSearch
+                                                                                            loading={loadingHmoLessonIds.has(lessonId)}
+                                                                                            style={{ width: "100%" }}
+                                                                                            popupMatchSelectWidth={680}
+                                                                                            listHeight={420}
+                                                                                            placeholder={outlineOptions.length
+                                                                                                ? "Chọn section lesson_id từ HMO"
+                                                                                                : "Bài chưa có Course ID hoặc HMO không có section"}
+                                                                                            options={buildGroupedHmoOptions(outlineOptions)}
+                                                                                            tagRender={renderHmoSelectedTag}
+                                                                                            optionFilterProp="label"
+                                                                                            maxTagCount="responsive"
+                                                                                        />
+                                                                                        {!!outlineOptions.length && (
+                                                                                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                                                                                {summarizeHmoOptions(outlineOptions)} — danh sách được nhóm theo Package/Course.
+                                                                                            </Typography.Text>
+                                                                                        )}
+                                                                                    </Space>
                                                                                 </Form.Item>
                                                                                 {sessionFields.length > 1 && <Button danger type="text" onClick={() => remove(sessionField.name)} style={{ marginTop: 30 }}>Xóa</Button>}
                                                                             </Space>

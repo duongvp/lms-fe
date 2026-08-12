@@ -28,6 +28,7 @@ import {
 import { EditOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import TeachingStaffSelect from '@/components/shared/TeachingStaffSelect';
+import { buildGroupedHmoOptions, hmoOptionKey, summarizeHmoOptions } from '@/helper/hmoOptions';
 import {
     getHocmaiSectionsForSchedulingLesson,
     updateLivestreamBulk,
@@ -69,10 +70,6 @@ const ROOM_OPTIONS = [
     { label: "Phòng 202 - Lab Máy Tính", value: "Phòng 202" },
     { label: "Phòng Online - Zoom 01", value: "Zoom 01" },
 ];
-
-const hmoOptionKey = (option: HocmaiSectionOption) => (
-    `${option.package_id}::${option.course_id}::${option.lesson_id}`
-);
 
 const renderHmoSelectedTag: SelectProps['tagRender'] = ({ value, closable, onClose }) => {
     const lessonId = String(value || '').split('::').at(-1) || String(value || '');
@@ -884,6 +881,9 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                                 key={context.calendarId}
                                                                 name={['common_hmo_mapping_keys_by_calendar', context.calendarId]}
                                                                 label={context.label}
+                                                                extra={options.length
+                                                                    ? `${summarizeHmoOptions(options)} — danh sách được nhóm theo Package/Course.`
+                                                                    : undefined}
                                                                 style={{ marginBottom: 8 }}
                                                             >
                                                                 <Select
@@ -893,13 +893,12 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                                     optionFilterProp="label"
                                                                     loading={loadingHmoLessons.has(context.internalLessonId)}
                                                                     disabled={!enabled}
+                                                                    listHeight={420}
+                                                                    popupMatchSelectWidth={680}
                                                                     placeholder={options.length
                                                                         ? 'Chọn Lesson ID HMO'
                                                                         : 'Bài chưa có Course ID hoặc HMO không có Lesson ID'}
-                                                                    options={options.map((option) => ({
-                                                                        value: hmoOptionKey(option),
-                                                                        label: `${option.lesson_id}${option.lesson_name ? ` · ${option.lesson_name}` : ''}`,
-                                                                    }))}
+                                                                    options={buildGroupedHmoOptions(options)}
                                                                     tagRender={renderHmoSelectedTag}
                                                                     maxTagCount="responsive"
                                                                 />
@@ -1011,6 +1010,9 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                     <Form.Item
                                                         label={<Text>Lesson ID HMO</Text>}
                                                         name={['separate_config', lessonKey, 'hmo_mapping_keys']}
+                                                        extra={options.length
+                                                            ? `${summarizeHmoOptions(options)} — danh sách được nhóm theo Package/Course.`
+                                                            : undefined}
                                                         style={{ marginBottom: 0 }}
                                                     >
                                                         <Select
@@ -1020,15 +1022,14 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                             optionFilterProp="label"
                                                             loading={loadingHmoLessons.has(internalLessonId)}
                                                             disabled={!internalLessonId}
+                                                            listHeight={420}
+                                                            popupMatchSelectWidth={680}
                                                             placeholder={!internalLessonId
                                                                 ? 'Lịch chưa gắn bài học'
                                                                 : options.length
                                                                     ? 'Chọn Lesson ID HMO'
                                                                     : 'Bài chưa có Course ID / HMO không có Lesson ID'}
-                                                            options={options.map((option) => ({
-                                                                value: hmoOptionKey(option),
-                                                                label: `${option.lesson_id}${option.lesson_name ? ` · ${option.lesson_name}` : ''}`,
-                                                            }))}
+                                                            options={buildGroupedHmoOptions(options)}
                                                             tagRender={renderHmoSelectedTag}
                                                             maxTagCount="responsive"
                                                             style={{ width: '100%' }}
