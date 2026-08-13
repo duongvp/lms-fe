@@ -11,6 +11,8 @@ import {
     Modal,
     Row,
     Select,
+    Spin,
+    Space,
 } from "antd";
 import type { FormInstance } from "antd";
 import { EyeOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from "@ant-design/icons";
@@ -134,9 +136,10 @@ const QuizFormModal = ({
                         <Form.Item name="learn_number" label="Bài học" rules={[{ required: true, message: "Chọn bài học" }]}>
                             <Select
                                 options={buildLessonSelectOptions(lessons, editing?.learn_number)}
-                                placeholder={selectedCode ? "Chọn bài học" : "Chọn Chương trình trước"}
-                                disabled={!canEditField("learn_number") || !selectedCode}
+                                placeholder={lessonsLoading ? "Đang tải bài học..." : selectedCode ? "Chọn bài học" : "Chọn Chương trình trước"}
+                                disabled={!canEditField("learn_number") || !selectedCode || lessonsLoading}
                                 loading={lessonsLoading}
+                                notFoundContent={lessonsLoading ? <Space><Spin size="small" /> Đang tải bài học...</Space> : "Không có bài học"}
                                 showSearch
                                 optionFilterProp="label"
                                 popupMatchSelectWidth={500}

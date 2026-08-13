@@ -1758,6 +1758,11 @@ const Page = () => {
                                 events={calendarEvents}
                                 eventContent={renderCalendarEvent}
                                 eventClick={handleCalendarEventClick}
+                                // Khi admin xem nhiều chương trình, các lịch trùng giờ có
+                                // thể rất dày. Giới hạn stack để event còn đủ rộng để đọc;
+                                // các lịch còn lại nằm trong liên kết "+ thêm" của FullCalendar.
+                                eventMaxStack={isAdmin && !activeProgramCode ? 3 : undefined}
+                                moreLinkClick="popover"
                                 height="100%"
                                 allDaySlot={false}
                                 slotMinTime="06:00:00"

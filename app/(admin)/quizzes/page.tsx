@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Key } from "react";
-import { Button, Form, Modal, notification, Drawer, Select, Space, Empty, Dropdown } from "antd";
+import { Button, Form, Modal, notification, Drawer, Select, Space, Empty, Dropdown, Spin, Tag } from "antd";
 import { DownOutlined, InfoCircleOutlined, UpOutlined, EditOutlined, ReloadOutlined, DownloadOutlined, FilterOutlined } from "@ant-design/icons";
 import type { UploadFile } from "antd/es/upload/interface";
 import { useAuthStore } from "@/stores/authStore";
@@ -697,7 +697,10 @@ const QuizManagementPage = () => {
                             allowClear
                             placeholder="Chọn bài học"
                             loading={filterLessonsQuery.isLoading || filterLessonsQuery.isValidating}
-                            disabled={!filters.code}
+                            disabled={!filters.code || filterLessonsQuery.isLoading || filterLessonsQuery.isValidating}
+                            notFoundContent={filterLessonsQuery.isLoading || filterLessonsQuery.isValidating
+                                ? <Space><Spin size="small" /> Đang tải bài học...</Space>
+                                : "Không có bài học"}
                             filterOption={(input, option) =>
                                 (option?.label as string)?.toLowerCase().includes(input.toLowerCase())
                             }
@@ -765,6 +768,11 @@ const QuizManagementPage = () => {
                 <div className={styles.pageInfoTitle}>
                     <InfoCircleOutlined />
                     <span>Quản lý câu hỏi</span>
+                    {submittedFilters.code && (
+                    <Tag color="blue" style={{ fontWeight: 400 }}>
+                            Chương trình: {classOptions.find((item) => item.value === submittedFilters.code)?.label || submittedFilters.code}
+                        </Tag>
+                    )}
                 </div>
                 <Button
                     type="link"

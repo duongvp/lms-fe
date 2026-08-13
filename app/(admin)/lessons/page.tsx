@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button, Input, Modal, notification, Spin } from "antd";
+import { Button, Input, Modal, notification, Spin, Tag } from "antd";
 import { DownOutlined, InfoCircleOutlined, UpOutlined } from "@ant-design/icons";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
@@ -108,7 +108,9 @@ const Page = () => {
     const [importErrors, setImportErrors] = useState<LessonImportError[]>([]);
     const [dragRowKey, setDragRowKey] = useState<React.Key | null>(null);
     const [showPageInfo, setShowPageInfo] = useState(true);
-    const [secondaryUnlocked, setSecondaryUnlocked] = useState(false);
+    // Dùng token sẵn có ngay khi quay lại trang để tránh nháy trạng thái chưa xác thực.
+    // API vẫn kiểm tra token và sẽ khóa lại nếu token đã hết hạn.
+    const [secondaryUnlocked, setSecondaryUnlocked] = useState(() => hasLessonReauthToken());
     const [secondaryPromptOpen, setSecondaryPromptOpen] = useState(false);
     const [secondaryChecking, setSecondaryChecking] = useState(true);
     const [secondaryPassword, setSecondaryPassword] = useState("");
@@ -741,12 +743,19 @@ const Page = () => {
                     <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, minWidth: 0 }}>
                         <InfoCircleOutlined style={{ color: "#1677ff", fontSize: 16 }} />
                         <span style={{ fontWeight: 600 }}>Quản lý đề cương</span>
+                        {submittedFilterValues.subject_code && (
+                            <Tag color="blue">
+                                Chương trình: {submittedFilterValues.subject_code}{submittedFilterValues.subject ? ` — ${submittedFilterValues.subject}` : ""}
+                            </Tag>
+                        )}
                         <Button
                             size="small"
                             type={secondaryUnlocked ? "default" : "primary"}
                             onClick={() => setSecondaryPromptOpen(true)}
+                            loading={secondaryChecking}
+                            disabled={secondaryChecking}
                         >
-                            {secondaryUnlocked ? "Xác thực lại" : "Xác thực cấp 2"}
+                            {secondaryChecking ? "Đang kiểm tra" : secondaryUnlocked ? "Xác thực lại" : "Xác thực cấp 2"}
                         </Button>
                     </div>
                     <Button
@@ -781,7 +790,7 @@ const Page = () => {
                     </div>
                 </div>
             </div>
-            {secondaryChecking ? (
+            {secondaryChecking && !secondaryUnlocked ? (
                 <div style={{ padding: "48px 24px", textAlign: "center" }}>
                     <Spin tip="Đang kiểm tra phiên xác thực cấp 2..." />
                 </div>

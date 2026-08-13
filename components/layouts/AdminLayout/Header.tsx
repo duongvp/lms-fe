@@ -6,6 +6,7 @@ import { MenuProps } from "antd/lib";
 import { useRouter, usePathname } from "next/navigation";
 import React from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { menuConfig, getActiveKeys } from "./SideMenu";
 
 const { Header: AntdHeader } = Layout;
@@ -44,7 +45,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
   const { activeTopKey, activeSideKey } = getActiveKeys(pathname);
 
   // Get allowed top level menu items for the desktop header (exclude Logout '9')
-  const headerItems = menuConfig
+    const headerItems = menuConfig
     .filter(item => {
       if (item.key === '9') return false;
       if (item.children) {
@@ -54,11 +55,16 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
     })
     .map(item => {
       const allowedChildren = item.children?.filter(child => hasPermission(child.permission));
+      const targetPath = item.path || allowedChildren?.[0]?.path || '/dashboard';
       return {
         key: item.key,
-        label: item.label,
+        // Dùng link thật để menu chuột phải của trình duyệt có thể mở tab mới.
+        label: <Link href={targetPath}>{item.label}</Link>,
         children: allowedChildren && allowedChildren.length > 0
-          ? allowedChildren.map(child => ({ key: child.key, label: child.label }))
+          ? allowedChildren.map(child => ({
+            key: child.key,
+            label: <Link href={child.path as string}>{child.label}</Link>,
+          }))
           : undefined,
       };
     });
@@ -168,7 +174,6 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
             <Menu
               mode="horizontal"
               selectedKeys={[activeTopKey, activeSideKey]}
-              onClick={onHeaderMenuClick}
               items={headerItems}
               style={{
                 borderBottom: 'none',
