@@ -1478,8 +1478,9 @@ const Page = () => {
                 onSearch={handleSearch}
                 placeholder="Tìm kiếm theo khóa học, bài học, giáo viên, phòng học..."
                 handleAddBtn={canCreateSchedule ? handleAddBtn : undefined}
-                handleImportClick={canImportSchedule ? () => {
+                handleImportClick={(canImportSchedule || canEditSchedule) ? () => {
                     setImportErrors([]);
+                    setImportMode(canImportSchedule ? "create" : "mapping");
                     setOpenImportModal(true);
                 } : undefined}
                 handleFilterBtn={() => setOpenFilterDrawer(true)}
@@ -1901,6 +1902,8 @@ const Page = () => {
                     errors={importErrors}
                     mode={importMode}
                     preview={importMappingPreview}
+                    allowCreateImport={canImportSchedule}
+                    allowMappingImport={canEditSchedule}
                     onClose={() => {
                         setOpenImportModal(false);
                         setImportMappingPreview(null);

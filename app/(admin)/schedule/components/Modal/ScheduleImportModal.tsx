@@ -37,6 +37,8 @@ interface ScheduleImportModalProps {
     errors: ScheduleImportError[];
     mode: "create" | "mapping";
     preview?: any;
+    allowCreateImport: boolean;
+    allowMappingImport: boolean;
     onClose: () => void;
     onSubmit: (file: File) => Promise<void>;
     onModeChange: (mode: "create" | "mapping") => void;
@@ -50,6 +52,8 @@ const ScheduleImportModal = ({
     errors,
     mode,
     preview,
+    allowCreateImport,
+    allowMappingImport,
     onClose,
     onSubmit,
     onModeChange,
@@ -143,8 +147,8 @@ const ScheduleImportModal = ({
                 optionType="button"
                 buttonStyle="solid"
             >
-                <Radio.Button value="create">Import tạo lịch</Radio.Button>
-                <Radio.Button value="mapping">Ghi đè mapping</Radio.Button>
+                {allowCreateImport && <Radio.Button value="create">Import tạo lịch</Radio.Button>}
+                {allowMappingImport && <Radio.Button value="mapping">Ghi đè mapping</Radio.Button>}
             </Radio.Group>
 
             <Upload.Dragger
