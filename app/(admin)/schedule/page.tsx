@@ -5,7 +5,7 @@ import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import type { SorterResult } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
-import { notification, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, Drawer, Empty, Grid, Tooltip, Descriptions, Tabs, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag } from "antd";
+import { notification, Alert, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, Drawer, Empty, FloatButton, Grid, Tooltip, Descriptions, Tabs, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag } from "antd";
 import type { TabsProps } from "antd";
 import { EditOutlined, SaveOutlined, CloseOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, FilterOutlined } from "@ant-design/icons";
 import FullCalendar from "@fullcalendar/react";
@@ -32,7 +32,6 @@ import { canEditAnyField, resolveModuleFieldPermissions, sanitizeEditablePayload
 import { useLmsCache, useModuleFieldsQuery, useSchedulesQuery, useSchedulingProgramsQuery, useTeachingStaffQuery } from "@/hooks/useLmsQueries";
 import type { LivestreamListParams } from "@/services/livestreamService";
 import TeachingStaffSelect from "@/components/shared/TeachingStaffSelect";
-import { useTableViewport } from "@/hooks/useTableViewport";
 
 const SCHEDULE_MODULE_CODE = "calendar";
 const { RangePicker } = DatePicker;
@@ -351,6 +350,7 @@ const ScheduleFilterDrawer = ({
     onClose,
     programOptions,
     loadingPrograms,
+    allowFilterWithoutProgram,
 }: {
     open: boolean;
     value: ScheduleFilterValues;
@@ -360,6 +360,7 @@ const ScheduleFilterDrawer = ({
     onClose: () => void;
     programOptions: Array<{ value: string; label: string }>;
     loadingPrograms: boolean;
+    allowFilterWithoutProgram: boolean;
 }) => {
     const [filterForm] = Form.useForm();
     useEffect(() => {
@@ -392,7 +393,7 @@ const ScheduleFilterDrawer = ({
                     <Form.Item
                         name="code"
                         label="Chương trình"
-                        rules={[{ required: true, message: "Vui lòng chọn Chương trình" }]}
+                        rules={allowFilterWithoutProgram ? [] : [{ required: true, message: "Vui lòng chọn Chương trình" }]}
                     >
                         <Select
                             allowClear
@@ -404,6 +405,14 @@ const ScheduleFilterDrawer = ({
                             notFoundContent={loadingPrograms ? "Đang tải..." : "Không có Chương trình"}
                         />
                     </Form.Item>
+                    {allowFilterWithoutProgram && (
+                        <Alert
+                            type="info"
+                            showIcon
+                            message="Admin có thể lọc theo thời gian mà không cần chọn Chương trình"
+                            style={{ marginTop: -8, marginBottom: 16 }}
+                        />
+                    )}
                     <Form.Item name="teacher" label="Giáo viên">
                         <TeachingStaffSelect
                             teacherType={1}
@@ -434,7 +443,12 @@ const ScheduleFilterDrawer = ({
 };
 
 const Page = () => {
-    const { containerRef: tableContainerRef, scrollY: tableScrollY } = useTableViewport();
+    const pageScrollRef = useRef<HTMLDivElement>(null);
+    const [showBackToTop, setShowBackToTop] = useState(false);
+    const { fieldPolicy, permissions, roles } = useAuthStore((state) => state.user);
+    const isAdmin = permissions.includes("*") || roles?.some((role: any) => String(role?.code || role?.name || role).toLowerCase() === "admin");
+    const hasPermission = useAuthStore(state => state.hasPermission);
+    const can = useAuthStore(state => state.can);
     const [data, setData] = useState<ScheduleDataType[]>(MOCK_SCHEDULES);
     const [filteredData, setFilteredData] = useState<ScheduleDataType[]>(MOCK_SCHEDULES);
     const [searchText, setSearchText] = useState("");
@@ -478,7 +492,13 @@ const Page = () => {
         if (initializedFromUrl.current) return;
         initializedFromUrl.current = true;
         const program = String(searchParams.get("program") || "").trim();
-        if (!program) return;
+        const hasDateFilter = Boolean(searchParams.get("from") || searchParams.get("to"));
+        const hasOtherFilter = Boolean(
+            searchParams.get("q") || searchParams.get("teacher") || searchParams.get("status")
+        );
+        // Admin được phép xem liên chương trình theo thời gian, nên URL không
+        // có `program` vẫn phải được khôi phục đầy đủ sau khi tải lại trang.
+        if (!program && (!isAdmin || (!hasDateFilter && !hasOtherFilter))) return;
         const from = dayjs(searchParams.get("from"));
         const to = dayjs(searchParams.get("to"));
         const values: ScheduleFilterValues = cleanFilterValues({
@@ -493,7 +513,8 @@ const Page = () => {
         setSearchText(String(values.keyword || ""));
         setCurrentPage(Math.max(1, Number(searchParams.get("page")) || 1));
         setHasSearched(true);
-    }, [searchParams]);
+        if (!program && isAdmin) setOpenFilterDrawer(true);
+    }, [searchParams, isAdmin]);
 
     const rowSelection = {
         selectedRowKeys,
@@ -523,12 +544,13 @@ const Page = () => {
     };
 
     const [currentPage, setCurrentPage] = useState(1);
-    const [pageSize, setPageSize] = useState(10);
+    const [pageSize, setPageSize] = useState(25);
     const [totalItems, setTotalItems] = useState(0);
     const [filterValues, setFilterValues] = useState<ScheduleFilterValues>({});
     const [submittedFilterValues, setSubmittedFilterValues] = useState<ScheduleFilterValues>({});
     const [hasSearched, setHasSearched] = useState(false);
     const [sortState, setSortState] = useState<ScheduleSortState>([]);
+    const [columnProgramFilter, setColumnProgramFilter] = useState<string | undefined>();
     const [viewMode, setViewMode] = useState<"table" | "calendar">("table");
     const [calendarMounted, setCalendarMounted] = useState(false);
     const [calendarData, setCalendarData] = useState<ScheduleDataType[]>([]);
@@ -536,6 +558,23 @@ const Page = () => {
     const calendarRef = useRef<FullCalendar>(null);
     const screens = Grid.useBreakpoint();
     const isDesktop = Boolean(screens.lg);
+
+    useEffect(() => {
+        // Content của AdminLayout đã là vùng cuộn chính. Không tạo thêm vùng
+        // cuộn ở trang này, nếu không sẽ xuất hiện hai thanh cuộn dọc.
+        const scrollContainer = pageScrollRef.current?.closest(".ant-layout-content") as HTMLElement | null;
+        const updateBackToTopVisibility = () => {
+            setShowBackToTop(Math.max(scrollContainer?.scrollTop ?? 0, window.scrollY) > 320);
+        };
+
+        scrollContainer?.addEventListener("scroll", updateBackToTopVisibility, { passive: true });
+        window.addEventListener("scroll", updateBackToTopVisibility, { passive: true });
+        updateBackToTopVisibility();
+        return () => {
+            scrollContainer?.removeEventListener("scroll", updateBackToTopVisibility);
+            window.removeEventListener("scroll", updateBackToTopVisibility);
+        };
+    }, []);
 
     const scheduleParams = useMemo<LivestreamListParams>(() => {
         if (!hasSearched) return {} as LivestreamListParams;
@@ -693,9 +732,6 @@ const Page = () => {
     }, [moduleFieldsQuery.data]);
 
     const [openFilterDrawer, setOpenFilterDrawer] = useState(false);
-    const { fieldPolicy } = useAuthStore((state) => state.user)
-    const hasPermission = useAuthStore(state => state.hasPermission);
-    const can = useAuthStore(state => state.can);
     const activeProgramCode = String(submittedFilterValues.code || "").trim() || undefined;
     const canCreateSchedule = can(PermissionKey.SCHEDULE_CREATE, activeProgramCode);
     const canEditSchedule = can(PermissionKey.SCHEDULE_EDIT, activeProgramCode);
@@ -728,7 +764,7 @@ const Page = () => {
     }, [debouncedDoSearch]);
 
     const handleScheduleFilter = (values: ScheduleFilterValues) => {
-        if (!String(values.code || "").trim()) {
+        if (!String(values.code || "").trim() && !isAdmin) {
             api.warning({ message: "Vui lòng chọn Chương trình" });
             return;
         }
@@ -1209,6 +1245,41 @@ const Page = () => {
         };
     });
 
+    // Khi admin xem lịch của nhiều chương trình, mã chương trình là ngữ cảnh
+    // bắt buộc để tránh cập nhật nhầm lịch giữa các chương trình.
+    if (isAdmin) {
+        columns.unshift({
+            title: "Chương trình",
+            dataIndex: "code",
+            key: "program_code",
+            width: 180,
+            fixed: "left",
+            filters: Array.from(new Set(
+                data.map((record) => String(record.code || '').trim()).filter(Boolean)
+            )).sort((left, right) => left.localeCompare(right, 'vi')).map((code) => ({
+                text: code,
+                value: code,
+            })),
+            filterMultiple: false,
+            filteredValue: columnProgramFilter ? [columnProgramFilter] : null,
+            onFilter: (value: React.Key | boolean, record: ScheduleDataType) => (
+                String(record.code || '') === String(value)
+            ),
+            render: (code: string, record: ScheduleDataType) => (
+                <Space direction="vertical" size={0} style={{ lineHeight: 1.25 }}>
+                    <Tag color="blue" style={{ width: "fit-content", marginInlineEnd: 0 }}>
+                        {code || "Chưa xác định"}
+                    </Tag>
+                    {record.class_name && record.class_name !== code && (
+                        <Typography.Text type="secondary" ellipsis style={{ maxWidth: 160, fontSize: 12 }}>
+                            {record.class_name}
+                        </Typography.Text>
+                    )}
+                </Space>
+            ),
+        });
+    }
+
     const progressColumnIndex = columns.findIndex((column) => column.key === "lesson_status");
     if (progressColumnIndex >= 0) {
         columns.splice(progressColumnIndex + 1, 0,
@@ -1318,16 +1389,29 @@ const Page = () => {
     }
 
     return (
-        <div style={{
+        <div ref={pageScrollRef} style={{
             display: "flex",
             flexDirection: "column",
-            height: "100%",
+            flex: viewMode === "calendar" && isDesktop ? "1 1 0" : "0 0 auto",
+            height: viewMode === "calendar" && isDesktop ? "100%" : "auto",
             minHeight: 0,
             overflowX: "hidden",
-            overflowY: isDesktop ? "hidden" : "auto",
+            overflowY: viewMode === "calendar" && isDesktop ? "hidden" : "visible",
             WebkitOverflowScrolling: "touch",
         }}>
             {contextHolder}
+            {showBackToTop && (
+                <FloatButton
+                    tooltip="Lên đầu trang"
+                    icon={<UpOutlined />}
+                    onClick={() => {
+                        const scrollContainer = pageScrollRef.current?.closest(".ant-layout-content") as HTMLElement | null;
+                        scrollContainer?.scrollTo({ top: 0, behavior: "smooth" });
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                />
+            )}
+            {viewMode === "table" && <>
             <div
                 style={{
                     border: "1px solid #d6e4ff",
@@ -1406,7 +1490,10 @@ const Page = () => {
                             <Button
                                 icon={<CalendarOutlined />}
                                 disabled={!submittedFilterValues.code}
-                                onClick={() => router.push(`/schedule/auto?program=${encodeURIComponent(String(submittedFilterValues.code))}`)}
+                                onClick={() => {
+                                    const returnTo = `/schedule${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+                                    router.push(`/schedule/auto?program=${encodeURIComponent(String(submittedFilterValues.code))}&returnTo=${encodeURIComponent(returnTo)}`);
+                                }}
                             >
                                 Tạo lịch tự động
                             </Button>
@@ -1423,6 +1510,16 @@ const Page = () => {
                                 icon={<EditOutlined />}
                                 onClick={() => {
                                     const requestedRows = data.filter((item) => selectedRowKeys.map(String).includes(String(item.id)));
+                                    const selectedPrograms = Array.from(new Set(
+                                        requestedRows.map((item) => String(item.code || "").trim()).filter(Boolean)
+                                    ));
+                                    if (selectedPrograms.length > 1) {
+                                        api.warning({
+                                            message: "Chỉ sửa hàng loạt trong một Chương trình",
+                                            description: "Hãy lọc hoặc chỉ chọn các lịch thuộc cùng một Chương trình trước khi tiếp tục.",
+                                        });
+                                        return;
+                                    }
                                     const selectedRows = requestedRows.filter(canModifySchedule);
                                     if (!selectedRows.length) {
                                         api.warning({ message: "Không có lịch học nào có thể cập nhật", description: "Lịch đã bắt đầu hoặc đã nghỉ không được chỉnh sửa." });
@@ -1435,6 +1532,7 @@ const Page = () => {
                                     const params = new URLSearchParams({
                                         ids: selectedRows.map((item) => String(item.id)).join(","),
                                         program: String(submittedFilterValues.code || ""),
+                                        returnTo: `/schedule${searchParams.toString() ? `?${searchParams.toString()}` : ""}`,
                                     });
                                     router.push(`/schedule/auto-edit?${params.toString()}`);
                                 }}
@@ -1445,8 +1543,25 @@ const Page = () => {
                     </>
                 }
             />
+            </>}
 
-            <div className="responsive-schedule-view-toolbar" style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: viewMode === "calendar" ? "space-between" : "flex-end", alignItems: "center", marginBottom: 12 }}>
+            <style>{`
+                @keyframes schedule-view-controls-enter {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                .schedule-view-controls-enter {
+                    animation: schedule-view-controls-enter 180ms ease-out;
+                }
+                @media (prefers-reduced-motion: reduce) {
+                    .schedule-view-controls-enter { animation: none; }
+                }
+            `}</style>
+            <div
+                key={viewMode}
+                className="responsive-schedule-view-toolbar schedule-view-controls-enter"
+                style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: viewMode === "calendar" ? "space-between" : "flex-end", alignItems: "center", marginBottom: 12 }}
+            >
                 {viewMode === "calendar" && (
                     <div className="responsive-calendar-legend" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1481,15 +1596,20 @@ const Page = () => {
                 form={form}
                 component={false}
                 style={{
-                    flex: isDesktop ? "1 1 0" : "0 0 auto",
-                    height: isDesktop ? undefined : "65dvh",
-                    minHeight: isDesktop ? 0 : 420,
-                    overflow: "hidden",
+                    // Bảng đi theo luồng của trang; chỉ lịch cần một khung cao cố định.
+                    flex: viewMode === "calendar" && isDesktop ? "1 1 0" : "0 0 auto",
+                    height: viewMode === "calendar" && !isDesktop ? "65dvh" : undefined,
+                    minHeight: viewMode === "calendar" ? (isDesktop ? 0 : 420) : 0,
+                    overflow: viewMode === "calendar" ? "hidden" : "visible",
                     display: "flex",
                     flexDirection: "column",
                 }}
             >
-                <div ref={tableContainerRef} style={{ flex: "1 1 0", minHeight: 0, overflow: "hidden" }}>
+                <div style={{
+                    flex: viewMode === "calendar" ? "1 1 0" : "0 0 auto",
+                    minHeight: 0,
+                    overflow: viewMode === "calendar" ? "hidden" : "visible",
+                }}>
                     {!hasSearched ? (
                         <Empty
                             image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -1515,27 +1635,51 @@ const Page = () => {
                                 inset: 0;
                                 min-height: 0;
                                 opacity: 0;
-                                transform: translateY(8px);
                                 pointer-events: none;
-                                transition:
-                                    opacity 180ms ease,
-                                    transform 180ms ease;
-                                will-change: opacity, transform;
+                                transition: opacity 180ms ease;
+                                will-change: opacity;
                             }
                             .schedule-view-pane-active {
                                 opacity: 1;
-                                transform: translateY(0);
                                 pointer-events: auto;
                                 z-index: 1;
+                            }
+                            @keyframes schedule-view-content-enter {
+                                from { opacity: 0; }
+                                to { opacity: 1; }
+                            }
+                            .schedule-view-pane-active {
+                                animation: schedule-view-content-enter 200ms ease-out;
+                            }
+                            .schedule-view-stage-table {
+                                height: auto;
+                                overflow: visible;
+                            }
+                            .schedule-view-stage-table .schedule-view-pane {
+                                position: static;
+                                display: none;
+                            }
+                            .schedule-view-stage-table .schedule-view-pane-active {
+                                display: block;
+                            }
+                            /* globals.css áp overflow-y: auto cho mọi Ant Table.
+                               Lịch học dùng thanh cuộn của AdminLayout nên không được
+                               tạo thêm scrollbar trong phần body của bảng. */
+                            .schedule-data-table .ant-table-body,
+                            .schedule-data-table .ant-table-content {
+                                max-height: none !important;
+                                overflow-y: hidden !important;
                             }
                             @media (prefers-reduced-motion: reduce) {
                                 .schedule-view-pane {
                                     transition: none;
-                                    transform: none;
+                                }
+                                .schedule-view-pane-active {
+                                    animation: none;
                                 }
                             }
                         `}</style>
-                        <div className="schedule-view-stage">
+                        <div className={`schedule-view-stage${viewMode === "table" ? " schedule-view-stage-table" : ""}`}>
                         <div
                             className={`schedule-view-pane custom-calendar-wrapper${viewMode === "calendar" ? " schedule-view-pane-active" : ""}`}
                             aria-hidden={viewMode !== "calendar"}
@@ -1626,6 +1770,7 @@ const Page = () => {
                             style={{ height: "100%", minHeight: 0 }}
                         >
                         <CustomTable<ScheduleDataType>
+                            className="schedule-data-table"
                             responsiveCards={false}
                             columns={columns}
                             dataSource={filteredData}
@@ -1636,6 +1781,7 @@ const Page = () => {
                                 pageSize: pageSize,
                                 total: totalItems,
                                 showSizeChanger: true,
+                                pageSizeOptions: ["25", "50", "100", "200", "300"],
                                 position: ["bottomRight"],
                                 showTotal: (total) => `Tổng ${total} buổi học`,
                                 onChange: (page, size) => {
@@ -1645,7 +1791,14 @@ const Page = () => {
                                     replaceScheduleUrl(submittedFilterValues, size !== pageSize ? 1 : page);
                                 }
                             }}
-                            onChange={(_, __, sorter, extra) => {
+                            onChange={(_, filters, sorter, extra) => {
+                                if (extra.action === "filter") {
+                                    const selectedProgram = filters.program_code?.[0];
+                                    // Filter cột chỉ áp dụng trên dữ liệu đang hiển thị,
+                                    // không gọi lại API hay làm gián đoạn thao tác của admin.
+                                    setColumnProgramFilter(selectedProgram ? String(selectedProgram) : undefined);
+                                    return;
+                                }
                                 if (extra.action !== "sort") return;
                                 if (!hasSearched) return;
                                 const sorterItems = (
@@ -1672,7 +1825,13 @@ const Page = () => {
                             onRow={() => ({
                                 style: { cursor: editingKey ? "default" : "pointer" },
                             })}
-                            scroll={{ x: "max-content", y: filteredData?.length > 5 ? tableScrollY : undefined }}
+                            sticky={{
+                                offsetHeader: 0,
+                                getContainer: () => (
+                                    pageScrollRef.current?.closest(".ant-layout-content") as HTMLElement | null
+                                ) ?? window,
+                            }}
+                            scroll={{ x: "max-content" }}
                         />
                         </div>
                         </div>
@@ -1686,6 +1845,7 @@ const Page = () => {
                     loading={loading}
                     programOptions={programOptions}
                     loadingPrograms={programsQuery.isLoading || programsQuery.isValidating}
+                    allowFilterWithoutProgram={Boolean(isAdmin)}
                     onSearch={handleScheduleFilter}
                     onReset={handleResetScheduleFilter}
                 />

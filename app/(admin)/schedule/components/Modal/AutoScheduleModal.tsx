@@ -125,6 +125,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     const hmoOptionsRef = useRef<Record<string, HocmaiSectionOption[]>>({});
     const hmoRequestPromises = useRef(new Map<string, Promise<HocmaiSectionOption[]>>());
 
+
     const loadHmoOptions = (lessonId: string): Promise<HocmaiSectionOption[]> => {
         if (Object.prototype.hasOwnProperty.call(hmoOptionsRef.current, lessonId)) {
             return Promise.resolve(hmoOptionsRef.current[lessonId]);
@@ -843,7 +844,10 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             {preview.length > 0 && (
                 <>
                     <Typography.Title level={5} style={{ marginTop: 16 }}>Xem trước {preview.length} lịch</Typography.Title>
-                    <Table size="small" rowKey={(_, index) => String(index)} pagination={{ pageSize: 10 }} scroll={{ x: "max-content" }} dataSource={preview} columns={[
+                    <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
+                        Hiển thị toàn bộ để kiểm tra trước khi xác nhận, không chia thành các trang.
+                    </Typography.Text>
+                    <Table size="small" rowKey={(_, index) => String(index)} pagination={false} scroll={{ x: "max-content" }} dataSource={preview} columns={[
                         { title: "Block", render: (_value, row) => Number(row.auto_schedule?.block_index ?? 0) + 1 },
                         { title: "Bài", dataIndex: "learn_number" },
                         { title: "Tên bài", dataIndex: "lesson_name" },

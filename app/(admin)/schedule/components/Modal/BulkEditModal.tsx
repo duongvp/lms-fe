@@ -25,7 +25,7 @@ import {
     message,
     type SelectProps,
 } from 'antd';
-import { EditOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { EditOutlined, CloseCircleOutlined, PlusOutlined, SyncOutlined } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import TeachingStaffSelect from '@/components/shared/TeachingStaffSelect';
 import { buildGroupedHmoOptions, hmoOptionKey, summarizeHmoOptions } from '@/helper/hmoOptions';
@@ -117,6 +117,19 @@ const sameStringArray = (left: string[] = [], right: string[] = []) => (
     [...left].sort().join('\u0000') === [...right].sort().join('\u0000')
 );
 
+const renderNamePattern = (pattern: unknown, occurrence: number) => (
+    String(pattern || '').replaceAll('{n}', String(occurrence))
+);
+
+const normalizeLessonTitle = (value: unknown) => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .toLowerCase()
+    .replace(/^bai\s*\d+\s*[:.\-–—]*\s*/, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
 const getErrorMessage = (error: unknown) => {
     if (error && typeof error === 'object') {
         const detail = (error as { detail?: { message?: unknown } }).detail;
@@ -175,6 +188,8 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     const [previewRows, setPreviewRows] = React.useState<any[]>([]);
     const [hmoOptionsByLesson, setHmoOptionsByLesson] = React.useState<Record<string, HocmaiSectionOption[]>>({});
     const [loadingHmoLessons, setLoadingHmoLessons] = React.useState<Set<string>>(new Set());
+    const [syncingHmoLessonIds, setSyncingHmoLessonIds] = React.useState(false);
+    const [hmoSyncNotes, setHmoSyncNotes] = React.useState<Record<string, { type: 'success' | 'warning'; message: string }>>({});
 
     useEffect(() => {
         if (!open) {
@@ -423,6 +438,103 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         return labels.length ? labels.join('; ') : 'Chưa mapping';
     };
 
+    const handleSyncHmoLessonIds = async () => {
+        const targetIds = (form.getFieldValue('selected_lessons') || selectedRowKeys).map(String);
+        const rows = selectedRows.filter((row) => targetIds.includes(String(row.id)));
+        if (!rows.length) {
+            message.warning('Chưa chọn lịch học để đồng bộ Lesson ID HMO');
+            return;
+        }
+
+        setSyncingHmoLessonIds(true);
+        try {
+            const optionsByLesson = new Map<string, HocmaiSectionOption[]>();
+            const contexts = lessonContexts.filter((context) => rows.some(
+                (row) => String(row.session_id || '') === context.lessonId
+            ));
+            await Promise.all(contexts.map(async (context) => {
+                const cachedOptions = hmoOptionsByLesson[context.lessonId];
+                if (cachedOptions) {
+                    optionsByLesson.set(context.lessonId, cachedOptions);
+                    return;
+                }
+                const response: any = await getHocmaiSectionsForSchedulingLesson(context.code, context.lessonId);
+                optionsByLesson.set(context.lessonId, Array.isArray(response?.data) ? response.data : []);
+            }));
+
+            const nextMappings: Record<string, string[]> = {};
+            const notes: Record<string, { type: 'success' | 'warning'; message: string }> = {};
+            let syncedCount = 0;
+            const rowsByLesson = new Map<string, any[]>();
+            rows.forEach((row) => {
+                const lessonId = String(row.session_id || '');
+                rowsByLesson.set(lessonId, [...(rowsByLesson.get(lessonId) || []), row]);
+            });
+
+            rowsByLesson.forEach((lessonRows, lessonId) => {
+                const seenOptionIds = new Set<string>();
+                const title = normalizeLessonTitle(lessonRows[0]?.lesson_name);
+                const matchedOptions = (optionsByLesson.get(lessonId) || [])
+                    .filter((option) => normalizeLessonTitle(option.lesson_name) === title)
+                    .sort((left, right) => String(left.lesson_id).localeCompare(String(right.lesson_id), 'vi', { numeric: true }))
+                    .filter((option) => {
+                        const optionId = String(option.lesson_id);
+                        if (seenOptionIds.has(optionId)) return false;
+                        seenOptionIds.add(optionId);
+                        return true;
+                    });
+                const orderedRows = [...lessonRows].sort((left, right) => dayjs(left.start_time).valueOf() - dayjs(right.start_time).valueOf());
+
+                if (matchedOptions.length === orderedRows.length && orderedRows.length > 0) {
+                    orderedRows.forEach((row, index) => {
+                        nextMappings[String(row.id)] = [hmoOptionKey(matchedOptions[index])];
+                    });
+                    syncedCount += orderedRows.length;
+                    orderedRows.forEach((row) => {
+                        notes[String(row.id)] = { type: 'success', message: `Đã gán Lesson ID theo thứ tự tăng dần: ${String(nextMappings[String(row.id)][0]).split('::').at(-1)}.` };
+                    });
+                    return;
+                }
+
+                orderedRows.forEach((row) => {
+                    notes[String(row.id)] = {
+                        type: 'warning',
+                        message: `Có ${orderedRows.length} lịch nhưng chỉ tìm thấy ${matchedOptions.length} Lesson ID trùng tên. Hệ thống không tự gán.`,
+                    };
+                });
+            });
+
+            if (configMode === 'separate') {
+                const currentConfig = form.getFieldValue('separate_config') || {};
+                form.setFieldValue('separate_config', {
+                    ...currentConfig,
+                    ...Object.fromEntries(Object.entries(nextMappings).map(([calendarId, mappingKeys]) => [
+                        calendarId,
+                        { ...(currentConfig[calendarId] || {}), hmo_mapping_keys: mappingKeys },
+                    ])),
+                });
+            } else {
+                form.setFieldsValue({
+                    config_mode: 'common',
+                    enable_mapping: true,
+                    common_hmo_mapping_keys_by_calendar: {
+                        ...(form.getFieldValue('common_hmo_mapping_keys_by_calendar') || {}),
+                        ...nextMappings,
+                    },
+                });
+            }
+            setHmoSyncNotes(notes);
+            setPreviewRows([]);
+            syncedCount
+                ? message.success(`Đã đồng bộ Lesson ID HMO cho ${syncedCount} lịch`)
+                : message.warning('Không có lịch nào đủ điều kiện tự đồng bộ; vui lòng chọn thủ công.');
+        } catch (error: any) {
+            message.error(error?.message || 'Không thể đồng bộ Lesson ID HMO');
+        } finally {
+            setSyncingHmoLessonIds(false);
+        }
+    };
+
     const handleFinish = async (values: any) => {
         try {
             setLoading(true);
@@ -491,6 +603,65 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             }
 
             const selectedIds = (values.selected_lessons || []).map(String);
+            const lessonNameByCalendarId = new Map<string, string>();
+            if (values.config_mode === 'common' && values.enable_lesson_name_pattern) {
+                const nameRules = (values.lesson_name_rules || []).map((rule: any, index: number) => {
+                    const from = Number(rule?.from_learn_number);
+                    const to = Number(rule?.to_learn_number);
+                    if (!Number.isInteger(from) || from <= 0 || !Number.isInteger(to) || to < from) {
+                        throw new Error(`Khoảng bài thứ ${index + 1} không hợp lệ`);
+                    }
+                    return {
+                        from,
+                        to,
+                        prefix: String(rule?.prefix || '').slice(0, 100),
+                        suffix: String(rule?.suffix || '').slice(0, 100),
+                    };
+                }).sort((left: any, right: any) => left.from - right.from);
+                for (let index = 1; index < nameRules.length; index += 1) {
+                    if (nameRules[index].from <= nameRules[index - 1].to) {
+                        throw new Error('Các khoảng bài áp dụng tiền tố/hậu tố không được chồng lấn');
+                    }
+                }
+                const occurrencesByLesson = new Map<string, number>();
+                selectedRows
+                    .filter((record) => selectedIds.includes(String(record.id)))
+                    .sort((left, right) => dayjs(left.start_time).valueOf() - dayjs(right.start_time).valueOf())
+                    .forEach((record) => {
+                        const lessonKey = String(record.session_id || record.learn_number || record.id);
+                        const occurrence = (occurrencesByLesson.get(lessonKey) || 0) + 1;
+                        occurrencesByLesson.set(lessonKey, occurrence);
+                        // Đồng nhất với tạo lịch tự động: buổi đầu giữ nguyên tên,
+                        // từ buổi thứ hai mới áp dụng tiền tố/hậu tố.
+                        if (occurrence > 1) {
+                            const rule = nameRules.find((item: any) => (
+                                Number(record.learn_number) >= item.from && Number(record.learn_number) <= item.to
+                            ));
+                            lessonNameByCalendarId.set(
+                                String(record.id),
+                                `${renderNamePattern(rule?.prefix ?? values.lesson_name_prefix, occurrence)}${String(record.lesson_name || '')}${renderNamePattern(rule?.suffix ?? values.lesson_name_suffix, occurrence)}`.slice(0, 400)
+                            );
+                        }
+                    });
+            }
+            if (values.config_mode === 'separate') {
+                const occurrencesByLesson = new Map<string, number>();
+                selectedRows
+                    .filter((record) => selectedIds.includes(String(record.id)))
+                    .sort((left, right) => dayjs(left.start_time).valueOf() - dayjs(right.start_time).valueOf())
+                    .forEach((record) => {
+                        const lessonKey = String(record.session_id || record.learn_number || record.id);
+                        const occurrence = (occurrencesByLesson.get(lessonKey) || 0) + 1;
+                        occurrencesByLesson.set(lessonKey, occurrence);
+                        const config = values.separate_config?.[String(record.id)] || {};
+                        if (occurrence > 1 && config.enable_lesson_name_pattern) {
+                            lessonNameByCalendarId.set(
+                                String(record.id),
+                                `${renderNamePattern(config.lesson_name_prefix, occurrence)}${String(record.lesson_name || '')}${renderNamePattern(config.lesson_name_suffix, occurrence)}`.slice(0, 400)
+                            );
+                        }
+                    });
+            }
             const changedUpdates: Array<Record<string, unknown>> = selectedIds.flatMap((id: string) => {
                 const record = selectedRows.find((item) => String(item.id) === id);
                 if (!record) return [];
@@ -508,6 +679,10 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     if (values.enable_time && nextStart && nextStart !== dayjs(record.start_time).format('HH:mm')) update.start_time = nextStart;
                     if (values.enable_time && nextEnd && nextEnd !== dayjs(record.end_time).format('HH:mm')) update.end_time = nextEnd;
                     if (values.enable_room && values.common_room && values.common_room !== record.room) update.room = values.common_room;
+                    const nextLessonName = lessonNameByCalendarId.get(id);
+                    if (nextLessonName && nextLessonName !== String(record.lesson_name || '')) {
+                        update.lesson_name = nextLessonName;
+                    }
                     if (values.enable_mapping) {
                         const nextKeys = values.common_hmo_mapping_keys_by_calendar?.[id] || [];
                         const currentKeys = normalizedMappingKeys(record.package_lesson_mappings || []);
@@ -526,6 +701,10 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     if (config.start_date && config.start_date !== dayjs(record.start_time).format('YYYY-MM-DD')) update.start_date = config.start_date;
                     if (config.start_time && config.start_time !== dayjs(record.start_time).format('HH:mm')) update.start_time = config.start_time;
                     if (config.end_time && config.end_time !== dayjs(record.end_time).format('HH:mm')) update.end_time = config.end_time;
+                    const nextLessonName = lessonNameByCalendarId.get(id);
+                    if (nextLessonName && nextLessonName !== String(record.lesson_name || '')) {
+                        update.lesson_name = nextLessonName;
+                    }
                     if ('package_lesson_mappings' in config) {
                         const nextKeys = values.separate_config?.[id]?.hmo_mapping_keys || [];
                         const currentKeys = normalizedMappingKeys(record.package_lesson_mappings || []);
@@ -564,7 +743,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     
                     return {
                         id: lessonKey,
-                        label: record?.learn_number ? `Buổi ${record.learn_number}` : `ID ${lessonKey}`,
+                        label: record?.learn_number ? `Bài ${record.learn_number}` : `ID ${lessonKey}`,
                         current_schedule: formatScheduleDateTime(record),
                         next_schedule: values.config_mode === 'separate'
                             ? `${values.separate_config?.[lessonKey]?.start_date
@@ -576,6 +755,8 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                 : record?.end_time ? dayjs(record.end_time).format('HH:mm') : '-'}`
                             : formatScheduleDateTime(record),
                         current: formatMappings(record?.package_lesson_mappings || []),
+                        current_lesson_name: record?.lesson_name || '-',
+                        next_lesson_name: (changedUpdates.find((item) => String(item.id) === String(lessonKey))?.lesson_name as string | undefined) || record?.lesson_name || '-',
                         next: isMappingUnchanged
                             ? 'Giữ nguyên'
                             : (nextKeys.length ? formatMappingKeys(nextKeys, internalLessonId) : 'Xóa toàn bộ Lesson ID'),
@@ -829,6 +1010,85 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         </Row>
                         <Divider style={{ margin: '12px 0' }} />
 
+                        <Row gutter={16} align="top" style={{ marginBottom: 8 }}>
+                            <Col span={8}>
+                                <Form.Item name="enable_lesson_name_pattern" valuePropName="checked" style={{ marginBottom: 0 }}>
+                                    <Checkbox><Text strong>Thêm tiền tố / hậu tố tên bài</Text></Checkbox>
+                                </Form.Item>
+                                <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
+                                    Buổi đầu giữ nguyên tên; từ buổi thứ hai áp dụng mẫu, giống phần tạo lịch tự động.
+                                </Text>
+                            </Col>
+                            <Col span={16}>
+                                <Form.Item noStyle dependencies={['enable_lesson_name_pattern']}>
+                                    {({ getFieldValue }) => {
+                                        const enabled = getFieldValue('enable_lesson_name_pattern');
+                                        return (
+                                            <Space wrap style={{ width: '100%', opacity: enabled ? 1 : 0.5 }}>
+                                                <Form.Item
+                                                    name="lesson_name_prefix"
+                                                    label="Tiền tố"
+                                                    rules={[{ max: 100, message: 'Tiền tố không được quá 100 ký tự' }]}
+                                                    style={{ minWidth: 220, marginBottom: 0 }}
+                                                >
+                                                    <Input disabled={!enabled} maxLength={100} placeholder="Ví dụ: [Lịch {n}] - " />
+                                                </Form.Item>
+                                                <Form.Item
+                                                    name="lesson_name_suffix"
+                                                    label="Hậu tố"
+                                                    rules={[{ max: 100, message: 'Hậu tố không được quá 100 ký tự' }]}
+                                                    style={{ minWidth: 220, marginBottom: 0 }}
+                                                >
+                                                    <Input disabled={!enabled} maxLength={100} placeholder="Ví dụ: - Lần {n}" />
+                                                </Form.Item>
+                                            </Space>
+                                        );
+                                    }}
+                                </Form.Item>
+                            </Col>
+                        </Row>
+                        <Form.Item noStyle dependencies={['enable_lesson_name_pattern']}>
+                            {({ getFieldValue }) => getFieldValue('enable_lesson_name_pattern') && (
+                                <Form.List name="lesson_name_rules">
+                                    {(fields, { add, remove }) => (
+                                        <Card size="small" title="Mẫu tên theo khoảng bài" style={{ margin: '0 0 12px 33.333%' }}>
+                                            <Text type="secondary" style={{ display: 'block', fontSize: 12, marginBottom: 12 }}>
+                                                Bài trong khoảng dùng mẫu riêng; bài ngoài khoảng dùng mẫu chung. Các khoảng không được chồng lấn.
+                                            </Text>
+                                            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                                                {fields.map((field) => (
+                                                    <Space key={field.key} align="end" wrap style={{ width: '100%' }}>
+                                                        <Form.Item name={[field.name, 'from_learn_number']} label="Từ bài" rules={[{ required: true, message: 'Nhập bài bắt đầu' }]} style={{ marginBottom: 0 }}>
+                                                            <InputNumber min={1} precision={0} style={{ width: 100 }} />
+                                                        </Form.Item>
+                                                        <Form.Item name={[field.name, 'to_learn_number']} label="Đến bài" dependencies={[["lesson_name_rules", field.name, "from_learn_number"]]} rules={[
+                                                            { required: true, message: 'Nhập bài kết thúc' },
+                                                            ({ getFieldValue }) => ({
+                                                                validator: (_, value) => Number(value) >= Number(getFieldValue(['lesson_name_rules', field.name, 'from_learn_number']))
+                                                                    ? Promise.resolve()
+                                                                    : Promise.reject(new Error('Phải lớn hơn hoặc bằng bài bắt đầu')),
+                                                            }),
+                                                        ]} style={{ marginBottom: 0 }}>
+                                                            <InputNumber min={1} precision={0} style={{ width: 100 }} />
+                                                        </Form.Item>
+                                                        <Form.Item name={[field.name, 'prefix']} label="Tiền tố" rules={[{ max: 100 }]} style={{ flex: '1 1 180px', marginBottom: 0 }}>
+                                                            <Input maxLength={100} placeholder="Ví dụ: [Lịch {n}] - " />
+                                                        </Form.Item>
+                                                        <Form.Item name={[field.name, 'suffix']} label="Hậu tố" rules={[{ max: 100 }]} style={{ flex: '1 1 180px', marginBottom: 0 }}>
+                                                            <Input maxLength={100} placeholder="Ví dụ: - Nhóm A" />
+                                                        </Form.Item>
+                                                        <Button danger type="text" onClick={() => remove(field.name)}>Xóa</Button>
+                                                    </Space>
+                                                ))}
+                                                <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({})}>Thêm khoảng bài</Button>
+                                            </Space>
+                                        </Card>
+                                    )}
+                                </Form.List>
+                            )}
+                        </Form.Item>
+                        <Divider style={{ margin: '12px 0' }} />
+
                         {/* Tùy chọn Phòng học */}
                         <Row gutter={16} align="middle" style={{ marginBottom: 8 }}>
                             <Col span={8}>
@@ -866,6 +1126,17 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                 <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
                                     Chọn riêng Lesson ID cho từng lịch. Course ID và Package ID được lấy từ bài học của lịch đó.
                                 </Text>
+                                <Button
+                                    type="primary"
+                                    ghost
+                                    size="small"
+                                    icon={<SyncOutlined spin={syncingHmoLessonIds} />}
+                                    loading={syncingHmoLessonIds}
+                                    onClick={() => void handleSyncHmoLessonIds()}
+                                    style={{ marginTop: 10 }}
+                                >
+                                    Đồng bộ Lesson ID HMO
+                                </Button>
                             </Col>
                             <Col span={16}>
                                 <Form.Item noStyle dependencies={['enable_mapping']}>
@@ -877,8 +1148,8 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                     {calendarContexts.map((context) => {
                                                         const options = hmoOptionsByLesson[context.internalLessonId] || [];
                                                         return (
+                                                            <React.Fragment key={context.calendarId}>
                                                             <Form.Item
-                                                                key={context.calendarId}
                                                                 name={['common_hmo_mapping_keys_by_calendar', context.calendarId]}
                                                                 label={context.label}
                                                                 extra={options.length
@@ -903,6 +1174,15 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                                     maxTagCount="responsive"
                                                                 />
                                                             </Form.Item>
+                                                            {hmoSyncNotes[context.calendarId] && (
+                                                                <Alert
+                                                                    showIcon
+                                                                    type={hmoSyncNotes[context.calendarId].type}
+                                                                    message={hmoSyncNotes[context.calendarId].message}
+                                                                    style={{ marginTop: -4, marginBottom: 8 }}
+                                                                />
+                                                            )}
+                                                            </React.Fragment>
                                                         );
                                                     })}
                                                     {!calendarContexts.length && (
@@ -923,6 +1203,20 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     <div>
                         {Array.isArray(selectedLessons) && selectedLessons.length > 0 ? (
                             <>
+                                <Space direction="vertical" size={4} style={{ marginBottom: 12 }}>
+                                    <Button
+                                        type="primary"
+                                        ghost
+                                        icon={<SyncOutlined spin={syncingHmoLessonIds} />}
+                                        loading={syncingHmoLessonIds}
+                                        onClick={() => void handleSyncHmoLessonIds()}
+                                    >
+                                        Đồng bộ Lesson ID HMO cho các lịch đã chọn
+                                    </Button>
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                        Chỉ tự gán khi số Lesson ID trùng tên khớp chính xác số lịch của mỗi bài.
+                                    </Text>
+                                </Space>
                                 {(selectedLessons as (string | number)[]).map((lessonKey) => (
                                     <Card
                                         key={lessonKey}
@@ -998,6 +1292,27 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                     <TeachingStaffSelect teacherType={0} mode="multiple" showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" maxTagCount="responsive" />
                                                 </Form.Item>
                                             </Col>
+                                            <Col xs={24} xl={7}>
+                                                <Form.Item name={['separate_config', lessonKey, 'enable_lesson_name_pattern']} valuePropName="checked" style={{ marginBottom: 8 }}>
+                                                    <Checkbox><Text strong>Thêm tiền tố / hậu tố tên bài</Text></Checkbox>
+                                                </Form.Item>
+                                                <Form.Item noStyle dependencies={[["separate_config", lessonKey, "enable_lesson_name_pattern"]]}>
+                                                    {({ getFieldValue }) => {
+                                                        const enabled = getFieldValue(['separate_config', lessonKey, 'enable_lesson_name_pattern']);
+                                                        return (
+                                                            <Space wrap style={{ opacity: enabled ? 1 : 0.5 }}>
+                                                                <Form.Item name={['separate_config', lessonKey, 'lesson_name_prefix']} style={{ marginBottom: 0 }} rules={[{ max: 100 }]}>
+                                                                    <Input disabled={!enabled} maxLength={100} placeholder="Tiền tố: [Lịch {n}] - " style={{ width: 220 }} />
+                                                                </Form.Item>
+                                                                <Form.Item name={['separate_config', lessonKey, 'lesson_name_suffix']} style={{ marginBottom: 0 }} rules={[{ max: 100 }]}>
+                                                                    <Input disabled={!enabled} maxLength={100} placeholder="Hậu tố: - Lần {n}" style={{ width: 190 }} />
+                                                                </Form.Item>
+                                                            </Space>
+                                                        );
+                                                    }}
+                                                </Form.Item>
+                                                <Text type="secondary" style={{ fontSize: 12 }}>Chỉ áp dụng từ buổi thứ hai của bài.</Text>
+                                            </Col>
 
                                         {(() => {
                                             const record = selectedRows.find(
@@ -1035,6 +1350,14 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                             style={{ width: '100%' }}
                                                         />
                                                     </Form.Item>
+                                                    {hmoSyncNotes[String(lessonKey)] && (
+                                                        <Alert
+                                                            showIcon
+                                                            type={hmoSyncNotes[String(lessonKey)].type}
+                                                            message={hmoSyncNotes[String(lessonKey)].message}
+                                                            style={{ marginTop: 8 }}
+                                                        />
+                                                    )}
                                                 </Col>
                                             );
                                         })()}
@@ -1097,6 +1420,8 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                 dataSource={previewRows}
                                 columns={[
                                     { title: 'Bài', dataIndex: 'label', width: 120 },
+                                    { title: 'Tên bài hiện tại', dataIndex: 'current_lesson_name', hidden: operation !== 'update' },
+                                    { title: 'Tên bài mới', dataIndex: 'next_lesson_name', hidden: operation !== 'update' },
                                     { title: 'Thời gian hiện tại', dataIndex: 'current_schedule', hidden: operation !== 'update' },
                                     { title: 'Thời gian mới', dataIndex: 'next_schedule', hidden: operation !== 'update' },
                                     { title: operation === 'update' ? 'Lesson ID hiện tại' : 'Lịch hiện tại', dataIndex: 'current' },

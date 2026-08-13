@@ -11,8 +11,10 @@ const AutoEditSchedulePage = () => {
     const { refreshSchedules } = useLmsCache();
     const requestedIds = String(searchParams.get("ids") || "").split(",").map((id) => id.trim()).filter(Boolean);
     const program = String(searchParams.get("program") || "").trim();
+    const returnToParam = String(searchParams.get("returnTo") || "");
+    const returnTo = returnToParam.startsWith("/schedule") ? returnToParam : (program ? `/schedule?program=${encodeURIComponent(program)}` : "/schedule");
 
-    const backToSchedule = () => router.push(program ? `/schedule?program=${encodeURIComponent(program)}` : "/schedule");
+    const backToSchedule = () => router.push(returnTo);
 
     if (!requestedIds.length) {
         return (

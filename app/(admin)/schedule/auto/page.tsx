@@ -10,6 +10,8 @@ const AutoSchedulePage = () => {
     const searchParams = useSearchParams();
     const { refreshSchedules } = useLmsCache();
     const programCode = String(searchParams.get("program") || "").trim();
+    const returnToParam = String(searchParams.get("returnTo") || "");
+    const returnTo = returnToParam.startsWith("/schedule") ? returnToParam : "/schedule";
 
     if (!programCode) {
         return (
@@ -17,7 +19,7 @@ const AutoSchedulePage = () => {
                 status="warning"
                 title="Chưa chọn Chương trình"
                 subTitle="Quay lại Quản lý lịch học, chọn Chương trình trong bộ lọc rồi bấm Tạo lịch tự động."
-                extra={<Button type="primary" onClick={() => router.push("/schedule")}>Quay lại Quản lý lịch học</Button>}
+                extra={<Button type="primary" onClick={() => router.push(returnTo)}>Quay lại Quản lý lịch học</Button>}
             />
         );
     }
@@ -34,7 +36,7 @@ const AutoSchedulePage = () => {
                 open
                 fullscreen
                 programCode={programCode}
-                onClose={() => router.push("/schedule")}
+                onClose={() => router.push(returnTo)}
                 onSuccess={async () => {
                     await refreshSchedules();
                     message.success("Đã tạo lịch tự động");
