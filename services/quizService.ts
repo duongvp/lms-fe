@@ -4,7 +4,7 @@ const API_BASE_URL = `${process.env.NEXT_PUBLIC_LMS_API || process.env.NEXT_PUBL
 
 export type QuizType = 1 | 2 | 3;
 export type QuizScoreType = 1 | 2;
-export type QuizStatus = "active" | "done" | "disable";
+export type QuizStatus = "done" | "disable";
 export type QuizAnswerItem = Record<string, string | boolean | number>;
 
 export interface QuizApiResponse {
@@ -67,7 +67,7 @@ export interface QuizListParams {
     limit?: number;
     code?: string;
     learn_number?: number | string;
-    quiz_type?: QuizType;
+    quiz_type?: QuizType | QuizType[];
     score_type?: QuizScoreType;
     quiz_status?: QuizStatus;
     keyword?: string;

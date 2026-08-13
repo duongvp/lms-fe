@@ -115,7 +115,7 @@ const Page = () => {
     const [secondaryChecking, setSecondaryChecking] = useState(true);
     const [secondaryPassword, setSecondaryPassword] = useState("");
     const [secondaryLoading, setSecondaryLoading] = useState(false);
-    const [api, contextHolder] = notification.useNotification();
+    const [api, contextHolder] = notification.useNotification({duration: 2.5});
 
     const replaceLessonUrl = useCallback((values: LessonFilterValues, page = 1) => {
         const params = new URLSearchParams();
@@ -367,20 +367,31 @@ const Page = () => {
     const handleSubmit = async (payload: LessonPayload) => {
         try {
             setSaving(true);
-            const sanitizedPayload = sanitizeEditablePayload(
+            const editablePayload = sanitizeEditablePayload(
                 payload,
                 FORM_FIELDS,
                 fieldPolicy,
                 LESSON_MODULE_CODE
             ) as LessonPayload;
 
-            if (Object.keys(sanitizedPayload).length === 0) {
+            if (Object.keys(editablePayload).length === 0) {
                 api.warning({
                     message: "Không có quyền",
                     description: "Không có trường nào được phép chỉnh sửa.",
                 });
                 return;
             }
+
+            // Chương trình là ngữ cảnh đã chọn ở bộ lọc, không phải field người dùng
+            // thao tác trong quyền dữ liệu. Chỉ nội dung đề cương được field-policy kiểm soát.
+            const sanitizedPayload = selectedRecord
+                ? editablePayload
+                : {
+                    ...editablePayload,
+                    grade: Number(submittedFilterValues.grade),
+                    subject_code: String(submittedFilterValues.subject_code || ""),
+                    subject_name: String(submittedFilterValues.subject || ""),
+                };
 
             if (selectedRecord) {
                 await updateLesson(selectedRecord.id, sanitizedPayload);

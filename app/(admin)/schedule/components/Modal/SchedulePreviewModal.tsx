@@ -1440,14 +1440,12 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 >
                     <Form.Item
                         name="subject_code"
-                        label="Mã môn học"
+                        hidden
                         rules={[
                             { required: true, whitespace: true, message: 'Nhập mã môn học' },
                             { max: 100, message: 'Mã môn học không được vượt quá 100 ký tự' },
                         ]}
-                    >
-                        <Input placeholder="VD: nguvan-6-2027" maxLength={100} />
-                    </Form.Item>
+                    ><Input /></Form.Item>
                     <Form.Item
                         name="lesson_name"
                         label="Tên bài học"

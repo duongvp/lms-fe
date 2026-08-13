@@ -53,11 +53,18 @@ import { buildLessonSelectOptions } from "@/app/(admin)/quizzes/quiz.utils";
 import { FormSection } from "../schedule/components/Modal/ScheduleModal";
 import TeachingStaffSelect from "@/components/shared/TeachingStaffSelect";
 import CustomTable from "@/components/ui/Table";
+import { useAuthStore } from "@/stores/authStore";
+import { PermissionKey } from "@/types/permissions";
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
 export default function RoomConfigPage() {
+  const hasPermission = useAuthStore((state) => state.hasPermission);
+  const can = useAuthStore((state) => state.can);
+  const canCreateRoomConfig = hasPermission(PermissionKey.ROOM_CONFIG_CREATE);
+  const canImportRoomConfig = hasPermission(PermissionKey.ROOM_CONFIG_IMPORT);
+  const canUpdateRoomConfig = (programCode?: string) => can(PermissionKey.ROOM_CONFIG_EDIT, programCode);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<RoomConfigRecord[]>([]);
   const [total, setTotal] = useState(0);
@@ -227,6 +234,14 @@ export default function RoomConfigPage() {
   const handleSaveSubmit = async () => {
     try {
       const values = await form.validateFields();
+      const codeVal = String(values.code || '').trim();
+      const requiredPermission = editingRecord
+        ? PermissionKey.ROOM_CONFIG_EDIT
+        : PermissionKey.ROOM_CONFIG_CREATE;
+      if (!can(requiredPermission, codeVal)) {
+        message.error('Bạn không có quyền lưu cấu hình phòng học của Chương trình này.');
+        return;
+      }
 
       let finalConfig: any = {};
       if (configTab === "json") {
@@ -250,7 +265,6 @@ export default function RoomConfigPage() {
       }
 
       setSaving(true);
-      const codeVal = String(values.code).trim();
       const learnNumberVal = Number(values.learn_number);
       // class_id = code + learn_number nối trực tiếp (ví dụ: toan-6-2027 + 14 = toan-6-202714)
       const classId = `${codeVal}${learnNumberVal}`;
@@ -534,14 +548,16 @@ export default function RoomConfigPage() {
               onClick={() => handleViewDetail(record)}
             />
           </Tooltip>
-          <Tooltip title="Chỉnh sửa cấu hình">
-            <Button
-              type="primary"
-              ghost
-              icon={<EditOutlined />}
-              onClick={() => handleOpenModal(record)}
-            />
-          </Tooltip>
+          {canUpdateRoomConfig(record.code) && (
+            <Tooltip title="Chỉnh sửa cấu hình">
+              <Button
+                type="primary"
+                ghost
+                icon={<EditOutlined />}
+                onClick={() => handleOpenModal(record)}
+              />
+            </Tooltip>
+          )}
         </Space>
       ),
     },
@@ -576,7 +592,7 @@ export default function RoomConfigPage() {
               >
                 Làm mới
               </Button>
-              <Button
+              {canImportRoomConfig && <Button
                 icon={<FileExcelOutlined />}
                 style={{ backgroundColor: "#2e7d32", color: "#fff", borderColor: "#2e7d32" }}
                 onClick={() => {
@@ -588,14 +604,14 @@ export default function RoomConfigPage() {
                 }}
               >
                 Import file
-              </Button>
-              <Button
+              </Button>}
+              {canCreateRoomConfig && <Button
                 type="primary"
                 icon={<PlusOutlined />}
                 onClick={() => handleOpenModal()}
               >
                 Thêm cấu hình mới
-              </Button>
+              </Button>}
             </Space>
           </Col>
         </Row>

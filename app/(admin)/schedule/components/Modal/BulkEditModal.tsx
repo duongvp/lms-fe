@@ -22,6 +22,7 @@ import {
     InputNumber,
     Table,
     Segmented,
+    Tooltip,
     message,
     type SelectProps,
 } from 'antd';
@@ -121,6 +122,54 @@ const renderNamePattern = (pattern: unknown, occurrence: number) => (
     String(pattern || '').replaceAll('{n}', String(occurrence))
 );
 
+const renderPreviewChange = (current: unknown, next: unknown) => {
+    const currentText = String(current || '-');
+    const nextText = String(next || '-');
+    if (currentText === nextText) return <Text>{currentText}</Text>;
+    return (
+        <Space direction="vertical" size={0} style={{ lineHeight: 1.35 }}>
+            <Text delete type="secondary">{currentText}</Text>
+            <Text strong style={{ color: '#1677ff' }}>{nextText}</Text>
+        </Space>
+    );
+};
+
+const renderMappingItems = (value: unknown, color?: string) => {
+    const text = String(value || 'Chưa mapping');
+    if (text === 'Chưa mapping' || text === 'Giữ nguyên' || text === 'Xóa toàn bộ Lesson ID') {
+        return <Text style={color ? { color } : undefined}>{text}</Text>;
+    }
+    const items = text.split('; ').filter(Boolean);
+    return (
+        <Space direction="vertical" size={2} style={{ maxWidth: 320 }}>
+            {items.map((item, index) => {
+                const [lessonId, ...nameParts] = item.split(': ');
+                const lessonName = nameParts.join(': ');
+                return (
+                    <Tooltip key={`${lessonId}-${index}`} title={lessonName || lessonId}>
+                        <Tag color={color ? 'blue' : undefined} style={{ marginInlineEnd: 0, maxWidth: '100%', whiteSpace: 'normal' }}>
+                            {lessonId}{lessonName ? ` · ${lessonName}` : ''}
+                        </Tag>
+                    </Tooltip>
+                );
+            })}
+        </Space>
+    );
+};
+
+const renderMappingPreviewChange = (current: unknown, next: unknown) => {
+    const currentText = String(current || 'Chưa mapping');
+    const nextText = String(next || 'Giữ nguyên');
+    if (currentText === 'Chưa mapping' && nextText === 'Giữ nguyên') return <Text>Chưa mapping</Text>;
+    if (currentText === nextText) return renderMappingItems(currentText);
+    return (
+        <Space direction="vertical" size={4} style={{ lineHeight: 1.35 }}>
+            <div style={{ textDecoration: 'line-through', opacity: 0.62 }}>{renderMappingItems(currentText)}</div>
+            <div>{renderMappingItems(nextText, '#1677ff')}</div>
+        </Space>
+    );
+};
+
 const normalizeLessonTitle = (value: unknown) => String(value || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -190,6 +239,15 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     const [loadingHmoLessons, setLoadingHmoLessons] = React.useState<Set<string>>(new Set());
     const [syncingHmoLessonIds, setSyncingHmoLessonIds] = React.useState(false);
     const [hmoSyncNotes, setHmoSyncNotes] = React.useState<Record<string, { type: 'success' | 'warning'; message: string }>>({});
+    const previewRef = React.useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!previewRows.length) return;
+        const frame = requestAnimationFrame(() => {
+            previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [previewRows.length]);
 
     useEffect(() => {
         if (!open) {
@@ -239,11 +297,13 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     const calendarContexts = React.useMemo(() => selectedRows
         .filter((row) => row.id !== undefined && row.id !== null)
         .map((row) => {
-            const startTime = row.start_time ? dayjs(row.start_time).format('DD/MM/YYYY HH:mm') : 'Chưa xếp giờ';
+            const scheduleTime = row.start_time && row.end_time
+                ? `${dayjs(row.start_time).format('DD/MM/YYYY HH:mm')} - ${dayjs(row.end_time).format('HH:mm')}`
+                : row.start_time ? dayjs(row.start_time).format('DD/MM/YYYY HH:mm') : 'Chưa xếp giờ';
             return {
                 calendarId: String(row.id),
                 internalLessonId: String(row.session_id || '').trim(),
-                label: `Bài ${row.learn_number || '-'}${row.lesson_name ? `: ${row.lesson_name}` : ''} · ${startTime}`,
+                label: `Bài ${row.learn_number || '-'}${row.lesson_name ? `: ${row.lesson_name}` : ''} · ${scheduleTime}`,
             };
         }), [selectedRows]);
 
@@ -310,8 +370,6 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 const firstRow = selectedRows[0];
                 const allSameTeacher = selectedRows.every((row) => teacherValue(row.teacher) === teacherValue(firstRow.teacher));
                 const allSameRoom = selectedRows.every(r => r.room === firstRow.room);
-                const allSameStartTime = selectedRows.every(r => r.start_time === firstRow.start_time);
-                const allSameEndTime = selectedRows.every(r => r.end_time === firstRow.end_time);
 
                 if (allSameTeacher) {
                     commonConfig.common_teacher = teacherValue(firstRow.teacher);
@@ -319,11 +377,13 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 if (allSameRoom) {
                     commonConfig.common_room = firstRow.room;
                 }
-                if (allSameStartTime && firstRow.start_time) {
-                    commonConfig.common_start_time = dayjs(firstRow.start_time, 'HH:mm');
+                // Cập nhật chung nhiều lịch không tự lấy giờ của một dòng bất kỳ.
+                // Chỉ khi chọn đúng một lịch mới điền cặp giờ hiện có để chỉnh nhanh.
+                if (selectedRows.length === 1 && firstRow.start_time) {
+                    commonConfig.common_start_time = dayjs(firstRow.start_time).startOf('minute');
                 }
-                if (allSameEndTime && firstRow.end_time) {
-                    commonConfig.common_end_time = dayjs(firstRow.end_time, 'HH:mm');
+                if (selectedRows.length === 1 && firstRow.end_time) {
+                    commonConfig.common_end_time = dayjs(firstRow.end_time).startOf('minute');
                 }
 
                 const firstAssistant = assistantValues(firstRow.assistant_teacher).sort().join(',');
@@ -616,6 +676,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         to,
                         prefix: String(rule?.prefix || '').slice(0, 100),
                         suffix: String(rule?.suffix || '').slice(0, 100),
+                        applyToFirstSession: Boolean(rule?.apply_to_first_session),
                     };
                 }).sort((left: any, right: any) => left.from - right.from);
                 for (let index = 1; index < nameRules.length; index += 1) {
@@ -623,6 +684,21 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         throw new Error('Các khoảng bài áp dụng tiền tố/hậu tố không được chồng lấn');
                     }
                 }
+                const selectedLearnNumbers = new Set(selectedRows
+                    .filter((record) => selectedIds.includes(String(record.id)))
+                    .map((record) => Number(record.learn_number))
+                    .filter((learnNumber) => Number.isInteger(learnNumber) && learnNumber > 0));
+                nameRules.forEach((rule: any) => {
+                    const missingLessons: number[] = [];
+                    for (let learnNumber = rule.from; learnNumber <= rule.to; learnNumber += 1) {
+                        if (!selectedLearnNumbers.has(learnNumber)) missingLessons.push(learnNumber);
+                    }
+                    if (missingLessons.length) {
+                        const displayMissing = missingLessons.slice(0, 8).join(', ');
+                        const suffix = missingLessons.length > 8 ? ` và ${missingLessons.length - 8} bài khác` : '';
+                        throw new Error(`Khoảng bài ${rule.from}–${rule.to} không khớp dữ liệu đang chọn: thiếu bài ${displayMissing}${suffix}`);
+                    }
+                });
                 const occurrencesByLesson = new Map<string, number>();
                 selectedRows
                     .filter((record) => selectedIds.includes(String(record.id)))
@@ -631,12 +707,13 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         const lessonKey = String(record.session_id || record.learn_number || record.id);
                         const occurrence = (occurrencesByLesson.get(lessonKey) || 0) + 1;
                         occurrencesByLesson.set(lessonKey, occurrence);
-                        // Đồng nhất với tạo lịch tự động: buổi đầu giữ nguyên tên,
-                        // từ buổi thứ hai mới áp dụng tiền tố/hậu tố.
-                        if (occurrence > 1) {
-                            const rule = nameRules.find((item: any) => (
-                                Number(record.learn_number) >= item.from && Number(record.learn_number) <= item.to
-                            ));
+                        const rule = nameRules.find((item: any) => (
+                            Number(record.learn_number) >= item.from && Number(record.learn_number) <= item.to
+                        ));
+                        const applyToFirstSession = rule
+                            ? rule.applyToFirstSession
+                            : Boolean(values.apply_name_pattern_to_first_session);
+                        if (occurrence > 1 || applyToFirstSession) {
                             lessonNameByCalendarId.set(
                                 String(record.id),
                                 `${renderNamePattern(rule?.prefix ?? values.lesson_name_prefix, occurrence)}${String(record.lesson_name || '')}${renderNamePattern(rule?.suffix ?? values.lesson_name_suffix, occurrence)}`.slice(0, 400)
@@ -654,7 +731,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         const occurrence = (occurrencesByLesson.get(lessonKey) || 0) + 1;
                         occurrencesByLesson.set(lessonKey, occurrence);
                         const config = values.separate_config?.[String(record.id)] || {};
-                        if (occurrence > 1 && config.enable_lesson_name_pattern) {
+                        if (config.enable_lesson_name_pattern) {
                             lessonNameByCalendarId.set(
                                 String(record.id),
                                 `${renderNamePattern(config.lesson_name_prefix, occurrence)}${String(record.lesson_name || '')}${renderNamePattern(config.lesson_name_suffix, occurrence)}`.slice(0, 400)
@@ -729,6 +806,22 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     (lessonKey) => changedIds.has(String(lessonKey))
                 ).map((lessonKey) => {
                     const record = selectedRows.find((item) => String(item.id) === String(lessonKey));
+                    const update = changedUpdates.find((item) => String(item.id) === String(lessonKey)) || {};
+                    const applyDateTimeUpdate = (source: Dayjs | null, time?: unknown, date?: unknown) => {
+                        if (!source) return null;
+                        let next = source;
+                        if (date) {
+                            const parsedDate = dayjs(String(date));
+                            if (parsedDate.isValid()) next = next.year(parsedDate.year()).month(parsedDate.month()).date(parsedDate.date());
+                        }
+                        if (time) {
+                            const [hour, minute] = String(time).split(':').map(Number);
+                            if (Number.isInteger(hour) && Number.isInteger(minute)) next = next.hour(hour).minute(minute).second(0);
+                        }
+                        return next;
+                    };
+                    const updatedStart = applyDateTimeUpdate(record?.start_time ? dayjs(record.start_time) : null, update.start_time, update.start_date);
+                    const updatedEnd = applyDateTimeUpdate(record?.end_time ? dayjs(record.end_time) : null, update.end_time, update.start_date);
                     const internalLessonId = String(record?.session_id || '');
                     const nextKeys = values.config_mode === 'separate'
                         ? values.separate_config?.[lessonKey]?.hmo_mapping_keys || []
@@ -745,18 +838,18 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         id: lessonKey,
                         label: record?.learn_number ? `Bài ${record.learn_number}` : `ID ${lessonKey}`,
                         current_schedule: formatScheduleDateTime(record),
-                        next_schedule: values.config_mode === 'separate'
-                            ? `${values.separate_config?.[lessonKey]?.start_date
-                                ? dayjs(values.separate_config[lessonKey].start_date).format('DD/MM/YYYY')
-                                : record?.start_time ? dayjs(record.start_time).format('DD/MM/YYYY') : '-'} ${values.separate_config?.[lessonKey]?.start_time
-                                ? dayjs(values.separate_config[lessonKey].start_time).format('HH:mm')
-                                : record?.start_time ? dayjs(record.start_time).format('HH:mm') : '-'} - ${values.separate_config?.[lessonKey]?.end_time
-                                ? dayjs(values.separate_config[lessonKey].end_time).format('HH:mm')
-                                : record?.end_time ? dayjs(record.end_time).format('HH:mm') : '-'}`
+                        next_schedule: updatedStart && updatedEnd
+                            ? `${updatedStart.format('DD/MM/YYYY HH:mm')} - ${updatedEnd.format('HH:mm')}`
                             : formatScheduleDateTime(record),
                         current: formatMappings(record?.package_lesson_mappings || []),
                         current_lesson_name: record?.lesson_name || '-',
-                        next_lesson_name: (changedUpdates.find((item) => String(item.id) === String(lessonKey))?.lesson_name as string | undefined) || record?.lesson_name || '-',
+                        next_lesson_name: (update.lesson_name as string | undefined) || record?.lesson_name || '-',
+                        current_teacher: teacherValue(record?.teacher) || '-',
+                        next_teacher: update.teacher !== undefined ? String(update.teacher || '-') : (teacherValue(record?.teacher) || '-'),
+                        current_assistant: assistantValues(record?.assistant_teacher).join(', ') || '-',
+                        next_assistant: update.assistant_teacher !== undefined
+                            ? assistantValues(update.assistant_teacher).join(', ') || '-'
+                            : (assistantValues(record?.assistant_teacher).join(', ') || '-'),
                         next: isMappingUnchanged
                             ? 'Giữ nguyên'
                             : (nextKeys.length ? formatMappingKeys(nextKeys, internalLessonId) : 'Xóa toàn bộ Lesson ID'),
@@ -800,6 +893,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     onClick={() => form.submit()}
                     loading={loading}
                     icon={<EditOutlined />}
+                    style={!previewRows.length ? { background: '#52c41a', borderColor: '#52c41a' } : undefined}
                 >
                     {previewRows.length
                         ? (operation === 'update' ? 'Xác nhận cập nhật' : 'Xác nhận thực hiện')
@@ -812,6 +906,15 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 form={form}
                 layout="vertical"
                 onFinish={handleFinish}
+                onFinishFailed={({ errorFields }) => {
+                    const firstError = errorFields[0];
+                    if (!firstError) return;
+                    // Ant Design tìm đúng scroll container của modal fullscreen.
+                    requestAnimationFrame(() => form.scrollToField(firstError.name, {
+                        block: 'center',
+                        behavior: 'smooth',
+                    }));
+                }}
                 onValuesChange={() => {
                     if (previewRows.length) setPreviewRows([]);
                 }}
@@ -1016,7 +1119,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                     <Checkbox><Text strong>Thêm tiền tố / hậu tố tên bài</Text></Checkbox>
                                 </Form.Item>
                                 <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
-                                    Buổi đầu giữ nguyên tên; từ buổi thứ hai áp dụng mẫu, giống phần tạo lịch tự động.
+                                    Dùng <Text code>{'{n}'}</Text> để chèn số lần diễn ra của từng bài. Ví dụ tiền tố “Lịch {'{n}'} - ” với tên “Bài 1” sẽ thành “Lịch 1 - Bài 1”. Mặc định mẫu chỉ áp dụng từ buổi thứ hai; tích chọn bên phải để áp dụng ngay từ buổi đầu.
                                 </Text>
                             </Col>
                             <Col span={16}>
@@ -1024,7 +1127,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                     {({ getFieldValue }) => {
                                         const enabled = getFieldValue('enable_lesson_name_pattern');
                                         return (
-                                            <Space wrap style={{ width: '100%', opacity: enabled ? 1 : 0.5 }}>
+                                            <Space wrap align="start" style={{ width: '100%', opacity: enabled ? 1 : 0.5 }}>
                                                 <Form.Item
                                                     name="lesson_name_prefix"
                                                     label="Tiền tố"
@@ -1041,6 +1144,9 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                 >
                                                     <Input disabled={!enabled} maxLength={100} placeholder="Ví dụ: - Lần {n}" />
                                                 </Form.Item>
+                                                <Form.Item name="apply_name_pattern_to_first_session" valuePropName="checked" style={{ marginBottom: 0, paddingTop: 30 }}>
+                                                    <Checkbox disabled={!enabled}>Áp dụng cả buổi đầu tiên</Checkbox>
+                                                </Form.Item>
                                             </Space>
                                         );
                                     }}
@@ -1053,7 +1159,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                     {(fields, { add, remove }) => (
                                         <Card size="small" title="Mẫu tên theo khoảng bài" style={{ margin: '0 0 12px 33.333%' }}>
                                             <Text type="secondary" style={{ display: 'block', fontSize: 12, marginBottom: 12 }}>
-                                                Bài trong khoảng dùng mẫu riêng; bài ngoài khoảng dùng mẫu chung. Các khoảng không được chồng lấn.
+                                                Bài trong khoảng dùng mẫu riêng và có lựa chọn áp dụng buổi đầu riêng; bài ngoài khoảng dùng mẫu chung. Các khoảng không được chồng lấn.
                                             </Text>
                                             <Space direction="vertical" size={8} style={{ width: '100%' }}>
                                                 {fields.map((field) => (
@@ -1077,10 +1183,13 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                         <Form.Item name={[field.name, 'suffix']} label="Hậu tố" rules={[{ max: 100 }]} style={{ flex: '1 1 180px', marginBottom: 0 }}>
                                                             <Input maxLength={100} placeholder="Ví dụ: - Nhóm A" />
                                                         </Form.Item>
+                                                        <Form.Item name={[field.name, 'apply_to_first_session']} valuePropName="checked" style={{ marginBottom: 0 }}>
+                                                            <Checkbox>Áp dụng buổi đầu</Checkbox>
+                                                        </Form.Item>
                                                         <Button danger type="text" onClick={() => remove(field.name)}>Xóa</Button>
                                                     </Space>
                                                 ))}
-                                                <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({})}>Thêm khoảng bài</Button>
+                                                <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ apply_to_first_session: false })}>Thêm khoảng bài</Button>
                                             </Space>
                                         </Card>
                                     )}
@@ -1293,25 +1402,26 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                 </Form.Item>
                                             </Col>
                                             <Col xs={24} xl={7}>
-                                                <Form.Item name={['separate_config', lessonKey, 'enable_lesson_name_pattern']} valuePropName="checked" style={{ marginBottom: 8 }}>
-                                                    <Checkbox><Text strong>Thêm tiền tố / hậu tố tên bài</Text></Checkbox>
-                                                </Form.Item>
                                                 <Form.Item noStyle dependencies={[["separate_config", lessonKey, "enable_lesson_name_pattern"]]}>
                                                     {({ getFieldValue }) => {
                                                         const enabled = getFieldValue(['separate_config', lessonKey, 'enable_lesson_name_pattern']);
                                                         return (
-                                                            <Space wrap style={{ opacity: enabled ? 1 : 0.5 }}>
-                                                                <Form.Item name={['separate_config', lessonKey, 'lesson_name_prefix']} style={{ marginBottom: 0 }} rules={[{ max: 100 }]}>
-                                                                    <Input disabled={!enabled} maxLength={100} placeholder="Tiền tố: [Lịch {n}] - " style={{ width: 220 }} />
+                                                            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, minHeight: 32 }}>
+                                                                <Form.Item name={['separate_config', lessonKey, 'enable_lesson_name_pattern']} valuePropName="checked" style={{ marginBottom: 0 }}>
+                                                                    <Checkbox><Text strong>Thêm tiền tố / hậu tố tên bài</Text></Checkbox>
                                                                 </Form.Item>
-                                                                <Form.Item name={['separate_config', lessonKey, 'lesson_name_suffix']} style={{ marginBottom: 0 }} rules={[{ max: 100 }]}>
-                                                                    <Input disabled={!enabled} maxLength={100} placeholder="Hậu tố: - Lần {n}" style={{ width: 190 }} />
-                                                                </Form.Item>
-                                                            </Space>
+                                                                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, opacity: enabled ? 1 : 0.5 }}>
+                                                                    <Form.Item name={['separate_config', lessonKey, 'lesson_name_prefix']} style={{ marginBottom: 0 }} rules={[{ max: 100 }]}>
+                                                                        <Input disabled={!enabled} maxLength={100} placeholder="Tiền tố: [Lịch {n}] - " style={{ width: 220 }} />
+                                                                    </Form.Item>
+                                                                    <Form.Item name={['separate_config', lessonKey, 'lesson_name_suffix']} style={{ marginBottom: 0 }} rules={[{ max: 100 }]}>
+                                                                        <Input disabled={!enabled} maxLength={100} placeholder="Hậu tố: - Lần {n}" style={{ width: 190 }} />
+                                                                    </Form.Item>
+                                                                </div>
+                                                            </div>
                                                         );
                                                     }}
                                                 </Form.Item>
-                                                <Text type="secondary" style={{ fontSize: 12 }}>Chỉ áp dụng từ buổi thứ hai của bài.</Text>
                                             </Col>
 
                                         {(() => {
@@ -1406,30 +1516,54 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     </FormSection>
                 )}
                 {previewRows.length > 0 && (
-                    <Alert
-                        type="info"
-                        showIcon
-                        style={{ marginTop: 16 }}
-                        message={operation === 'update' ? 'Xem trước Lesson ID trước khi cập nhật' : 'Xem trước thao tác hàng loạt'}
-                        description={
-                            <Table
-                                scroll={{ x: "max-content" }}
-                                size="small"
-                                pagination={false}
-                                rowKey="id"
-                                dataSource={previewRows}
-                                columns={[
-                                    { title: 'Bài', dataIndex: 'label', width: 120 },
-                                    { title: 'Tên bài hiện tại', dataIndex: 'current_lesson_name', hidden: operation !== 'update' },
-                                    { title: 'Tên bài mới', dataIndex: 'next_lesson_name', hidden: operation !== 'update' },
-                                    { title: 'Thời gian hiện tại', dataIndex: 'current_schedule', hidden: operation !== 'update' },
-                                    { title: 'Thời gian mới', dataIndex: 'next_schedule', hidden: operation !== 'update' },
-                                    { title: operation === 'update' ? 'Lesson ID hiện tại' : 'Lịch hiện tại', dataIndex: 'current' },
-                                    { title: operation === 'update' ? 'Lesson ID mới' : 'Sau thao tác', dataIndex: 'next' },
-                                ]}
-                            />
-                        }
-                    />
+                    <div ref={previewRef} style={{ scrollMarginTop: 16 }}>
+                        <Alert
+                            type="info"
+                            showIcon
+                            style={{ marginTop: 16 }}
+                            message={operation === 'update' ? 'Xem trước thay đổi trước khi cập nhật' : 'Xem trước thao tác hàng loạt'}
+                            description={
+                                <Table
+                                    scroll={{ x: "max-content" }}
+                                    size="small"
+                                    pagination={false}
+                                    rowKey="id"
+                                    dataSource={previewRows}
+                                    columns={[
+                                        { title: 'Bài', dataIndex: 'label', width: 90 },
+                                        {
+                                            title: 'Tên bài',
+                                            hidden: operation !== 'update',
+                                            render: (_, row) => renderPreviewChange(row.current_lesson_name, row.next_lesson_name),
+                                        },
+                                        {
+                                            title: 'Giáo viên',
+                                            hidden: operation !== 'update',
+                                            render: (_, row) => renderPreviewChange(row.current_teacher, row.next_teacher),
+                                        },
+                                        {
+                                            title: 'Trợ giảng',
+                                            hidden: operation !== 'update',
+                                            render: (_, row) => renderPreviewChange(row.current_assistant, row.next_assistant),
+                                        },
+                                        {
+                                            title: 'Thời gian',
+                                            hidden: operation !== 'update',
+                                            render: (_, row) => renderPreviewChange(row.current_schedule, row.next_schedule),
+                                        },
+                                        operation === 'update'
+                                            ? {
+                                                title: 'Lesson ID HMO',
+                                                width: 340,
+                                                render: (_: unknown, row: any) => renderMappingPreviewChange(row.current, row.next),
+                                            }
+                                            : { title: 'Lịch hiện tại', dataIndex: 'current' },
+                                        ...(operation === 'update' ? [] : [{ title: 'Sau thao tác', dataIndex: 'next' }]),
+                                    ]}
+                                />
+                            }
+                        />
+                    </div>
                 )}
             </Form>
         </Modal>

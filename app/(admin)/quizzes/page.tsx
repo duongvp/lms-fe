@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import type { Key } from "react";
 import { Button, Form, Modal, notification, Drawer, Select, Space, Empty, Dropdown, Spin, Tag } from "antd";
 import { DownOutlined, InfoCircleOutlined, UpOutlined, EditOutlined, ReloadOutlined, DownloadOutlined, FilterOutlined } from "@ant-design/icons";
@@ -67,7 +67,6 @@ function useDebounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
 }
 
 const QuizManagementPage = () => {
-    const router = useRouter();
     const searchParams = useSearchParams();
     const initializedFromUrl = useRef(false);
     const [form] = Form.useForm<QuizFormValues>();
@@ -78,6 +77,7 @@ const QuizManagementPage = () => {
     const [keyword, setKeyword] = useState("");
     const [filters, setFilters] = useState<QuizFilterValues>({});
     const [submittedFilters, setSubmittedFilters] = useState<QuizFilterValues>({});
+    const submittedFiltersRef = useRef<QuizFilterValues>({});
     const [submittedKeyword, setSubmittedKeyword] = useState("");
     const [hasSearched, setHasSearched] = useState(false);
     const [editing, setEditing] = useState<QuizApiResponse | null>(null);
@@ -108,8 +108,11 @@ const QuizManagementPage = () => {
         if (nextFilters.quiz_type) params.set("quiz_type", String(nextFilters.quiz_type));
         if (nextKeyword.trim()) params.set("q", nextKeyword.trim());
         if (nextPage > 1) params.set("page", String(nextPage));
-        router.replace(params.size ? `/quizzes?${params.toString()}` : "/quizzes", { scroll: false });
-    }, [router]);
+        const nextUrl = params.size ? `/quizzes?${params.toString()}` : "/quizzes";
+        // Chỉ đồng bộ URL, không điều hướng lại trang đang có state bộ lọc.
+        // Điều này cũng tránh Next ghi đè query bằng state route cũ.
+        window.history.replaceState(window.history.state, "", nextUrl);
+    }, []);
 
     useEffect(() => {
         if (initializedFromUrl.current) return;
@@ -124,15 +127,16 @@ const QuizManagementPage = () => {
         const nextFilters: QuizFilterValues = {
             code: program,
             learn_number: lesson || undefined,
-            quiz_status: ["active", "done", "disable"].includes(String(status))
+            quiz_status: ["done", "disable"].includes(String(status))
                 ? status as QuizFilterValues["quiz_status"]
                 : undefined,
             quiz_type: type
-                ? type as unknown as QuizFilterValues["quiz_type"]
+                ? type.split(",").map(Number).filter((item) => [1, 2, 3].includes(item)) as QuizFilterValues["quiz_type"]
                 : undefined,
         };
         setFilters(nextFilters);
         setSubmittedFilters(nextFilters);
+        submittedFiltersRef.current = nextFilters;
         setKeyword(nextKeyword);
         setSubmittedKeyword(nextKeyword);
         setPage(nextPage);
@@ -298,8 +302,8 @@ const QuizManagementPage = () => {
         if (!hasSearched) return;
         setSubmittedKeyword(keywordValue);
         setPage(1);
-        replaceQuizUrl(submittedFilters, keywordValue);
-    }, [hasSearched, replaceQuizUrl, submittedFilters]);
+        replaceQuizUrl(submittedFiltersRef.current, keywordValue);
+    }, [hasSearched, replaceQuizUrl]);
 
     // ✅ Debounce hàm doSearch với 500ms
     const debouncedDoSearch = useDebounce(doSearch, 500);
@@ -316,6 +320,7 @@ const QuizManagementPage = () => {
             return;
         }
         setSubmittedFilters(filters);
+        submittedFiltersRef.current = filters;
         setSubmittedKeyword(keyword);
         setHasSearched(true);
         setPage(1);
@@ -327,6 +332,7 @@ const QuizManagementPage = () => {
         setFilters({});
         setKeyword("");
         setSubmittedFilters({});
+        submittedFiltersRef.current = {};
         setSubmittedKeyword("");
         setHasSearched(false);
         setPage(1);
@@ -361,7 +367,7 @@ const QuizManagementPage = () => {
     const handleResetForm = () => {
         const values = editing
             ? recordToQuizForm(editing)
-            : INITIAL_QUIZ_FORM_VALUES;
+            : { ...INITIAL_QUIZ_FORM_VALUES, code: String(submittedFilters.code || "") };
         form.setFieldsValue(values);
         setPreview(values);
     };
@@ -740,18 +746,20 @@ const QuizManagementPage = () => {
                             ]}
                             value={
                                 filters.quiz_type !== undefined
-                                    ? String(filters.quiz_type)
+                                    ? (Array.isArray(filters.quiz_type)
+                                        ? filters.quiz_type
+                                        : String(filters.quiz_type)
                                         .split(",")
                                         .map(Number)
-                                        .filter((n) => !isNaN(n))
+                                        .filter((n) => !isNaN(n)))
                                     : undefined
                             }
                             onChange={(value) => {
                                 setFilters((prev) => ({
                                     ...prev,
                                     quiz_type: (value && value.length > 0
-                                        ? (value as number[]).join(",")
-                                        : undefined) as any,
+                                        ? value as QuizFilterValues["quiz_type"]
+                                        : undefined),
                                 }));
                             }}
                         />

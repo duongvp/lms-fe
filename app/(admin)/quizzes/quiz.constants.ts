@@ -30,7 +30,6 @@ export const SCORE_TYPE_OPTIONS: Array<{ value: QuizScoreType; label: string }> 
 ];
 
 export const STATUS_OPTIONS: Array<{ value: QuizStatus; label: string; color: string }> = [
-    { value: "active", label: "Đang hoạt động", color: "green" },
     { value: "done", label: "Đã hoàn thiện", color: "blue" },
     { value: "disable", label: "Đã vô hiệu hóa", color: "default" },
 ];
@@ -39,4 +38,5 @@ export const quizTypeLabel = (value?: number) =>
     QUIZ_TYPE_OPTIONS.find((item) => item.value === value)?.label || "Chưa xác định";
 
 export const statusMeta = (value?: string) =>
-    STATUS_OPTIONS.find((item) => item.value === value) || STATUS_OPTIONS[2];
+    // `active` là dữ liệu cũ; từ nay quy về trạng thái hoàn thiện.
+    STATUS_OPTIONS.find((item) => item.value === (value === "active" ? "done" : value)) || STATUS_OPTIONS[1];

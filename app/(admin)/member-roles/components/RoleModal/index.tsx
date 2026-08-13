@@ -673,7 +673,7 @@ const RoleModal = () => {
                                 <Alert
                                     type="info"
                                     showIcon
-                                    message="Phạm vi Chương trình này dùng chung cho tất cả quyền thao tác của vai trò. Mã Chương trình được lấy từ lessons.subject_code."
+                                    message="Phạm vi Chương trình này dùng chung cho tất cả quyền thao tác của vai trò."
                                     style={{ marginBottom: 16 }}
                                 />
                                 <div style={{ padding: 12, border: "1px solid #f0f0f0", borderRadius: 8 }}>

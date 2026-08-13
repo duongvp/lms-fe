@@ -25,11 +25,8 @@ interface LessonDataType extends LessonApiResponse {
 }
 
 export const FORM_FIELDS: ModuleField[] = [
-    { fieldCode: "grade", fieldLabel: "Khối", fieldType: "select", sortOrder: 1 },
-    { fieldCode: "subject_name", fieldLabel: "Môn học", fieldType: "select", sortOrder: 2 },
-    { fieldCode: "subject_code", fieldLabel: "Mã môn học", fieldType: "text", sortOrder: 3 },
-    { fieldCode: "learn_number", fieldLabel: "Số thứ tự bài", fieldType: "number", sortOrder: 4 },
-    { fieldCode: "lesson_name", fieldLabel: "Tên bài học", fieldType: "text", sortOrder: 5 },
+    { fieldCode: "learn_number", fieldLabel: "Số thứ tự bài", fieldType: "number", sortOrder: 1 },
+    { fieldCode: "lesson_name", fieldLabel: "Tên bài học", fieldType: "text", sortOrder: 2 },
 ];
 
 export const FIELD_LABELS = Object.fromEntries(

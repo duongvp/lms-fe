@@ -36,7 +36,6 @@ export enum PermissionKey {
     QUIZ_DELETE = 'quiz.delete',
     QUIZ_IMPORT = 'quiz.import',
     QUIZ_EXPORT = 'quiz.export',
-    QUIZ_GRADE = 'quiz.grade',
 
     TEACHER_PROFILE_VIEW = 'teacher_profile.view',
     TEACHER_PROFILE_CREATE = 'teacher_profile.create',
@@ -46,14 +45,10 @@ export enum PermissionKey {
     TEACHER_PROFILE_IMPORT = 'teacher_profile.import',
     TEACHER_PROFILE_EXPORT = 'teacher_profile.export',
 
-    CALENDAR_TEACHER_VIEW = 'calendar.teacher.view',
-    CALENDAR_TEACHER_ASSIGN = 'calendar.teacher.assign',
-    CALENDAR_TEACHER_EDIT = 'calendar.teacher.update',
-    CALENDAR_TEACHER_REMOVE = 'calendar.teacher.remove',
+    CALENDAR_TEACHER_MANAGE = 'calendar.teacher.manage',
 
     ROOM_CONFIG_VIEW = 'room_config.view',
     ROOM_CONFIG_CREATE = 'room_config.create',
     ROOM_CONFIG_EDIT = 'room_config.update',
-    ROOM_CONFIG_DELETE = 'room_config.delete',
     ROOM_CONFIG_IMPORT = 'room_config.import',
 }

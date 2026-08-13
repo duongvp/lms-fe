@@ -456,7 +456,7 @@ const Page = () => {
     const [savingKey, setSavingKey] = useState<string>("");
     const [moduleFields, setModuleFields] = useState<ModuleField[]>(DEFAULT_MODULE_FIELDS);
     const [form] = Form.useForm();
-    const [api, contextHolder] = notification.useNotification();
+    const [api, contextHolder] = notification.useNotification({ duration: 2.5 });
     const router = useRouter();
     const searchParams = useSearchParams();
     const initializedFromUrl = useRef(false);
@@ -614,10 +614,16 @@ const Page = () => {
     const assistantOptions = assistantsQuery.data ?? [];
     const programOptions = useMemo(() => {
         const rows = Array.isArray(programsQuery.data?.data) ? programsQuery.data.data : [];
-        return rows.map((program: any) => ({
-            value: String(program.code),
-            label: `${program.code}${program.subject_name ? ` · ${program.subject_name}` : ""}`,
-        }));
+        return rows.map((program: any) => {
+            const code = String(program.code ?? "").trim();
+            const subjectName = String(program.subject_name ?? "").trim();
+            return {
+                value: code,
+                // Dữ liệu cũ có thể đã lưu subject_name bằng chính mã chương trình.
+                // Không lặp lại mã trong nhãn chọn để tránh gây hiểu nhầm.
+                label: subjectName && subjectName !== code ? `${code} · ${subjectName}` : code,
+            };
+        });
     }, [programsQuery.data]);
 
     useEffect(() => {
@@ -738,7 +744,7 @@ const Page = () => {
     const canDeleteSchedule = can(PermissionKey.SCHEDULE_DELETE, activeProgramCode);
     const canImportSchedule = can(PermissionKey.SCHEDULE_IMPORT, activeProgramCode);
     const canExportSchedule = can(PermissionKey.SCHEDULE_EXPORT, activeProgramCode);
-    const canEditTeachingAssignment = can(PermissionKey.CALENDAR_TEACHER_EDIT, activeProgramCode);
+    const canEditTeachingAssignment = can(PermissionKey.CALENDAR_TEACHER_MANAGE, activeProgramCode);
 
     const isEditing = (record: ScheduleDataType) => record.key === editingKey;
 
@@ -765,7 +771,10 @@ const Page = () => {
 
     const handleScheduleFilter = (values: ScheduleFilterValues) => {
         if (!String(values.code || "").trim() && !isAdmin) {
-            api.warning({ message: "Vui lòng chọn Chương trình" });
+            api.warning({
+                message: "Vui lòng chọn Chương trình",
+                description: "Bạn cần chọn Chương trình trong bộ lọc trước khi tìm kiếm lịch học.",
+            });
             return;
         }
         const cleaned = cleanFilterValues({ ...values, keyword: searchText });
@@ -851,7 +860,10 @@ const Page = () => {
     const handleImportSchedule = async (file: File) => {
         const programCode = String(submittedFilterValues.code || "").trim();
         if (!programCode) {
-            api.warning({ message: "Vui lòng chọn Chương trình trước khi import" });
+            api.warning({
+                message: "Chưa chọn Chương trình",
+                description: "Vui lòng chọn Chương trình trong bộ lọc trước khi thực hiện import.",
+            });
             setOpenImportModal(false);
             setOpenFilterDrawer(true);
             return;
@@ -909,7 +921,10 @@ const Page = () => {
             setImporting(true);
             const programCode = String(submittedFilterValues.code || "").trim();
             if (!programCode) {
-                api.warning({ message: "Vui lòng chọn Chương trình trước khi import" });
+                api.warning({
+                    message: "Chưa chọn Chương trình",
+                    description: "Vui lòng chọn Chương trình trong bộ lọc trước khi thực hiện import.",
+                });
                 return;
             }
             const response: any = await importLivestreamMappings({
@@ -1515,18 +1530,24 @@ const Page = () => {
                                     ));
                                     if (selectedPrograms.length > 1) {
                                         api.warning({
-                                            message: "Chỉ sửa hàng loạt trong một Chương trình",
-                                            description: "Hãy lọc hoặc chỉ chọn các lịch thuộc cùng một Chương trình trước khi tiếp tục.",
+                                            message: "Nhiều Chương trình được chọn",
+                                            description: "Sửa hàng loạt chỉ áp dụng cho một Chương trình. Hãy lọc hoặc chỉ chọn các lịch cùng Chương trình trước khi tiếp tục.",
                                         });
                                         return;
                                     }
                                     const selectedRows = requestedRows.filter(canModifySchedule);
                                     if (!selectedRows.length) {
-                                        api.warning({ message: "Không có lịch học nào có thể cập nhật", description: "Lịch đã bắt đầu hoặc đã nghỉ không được chỉnh sửa." });
+                                        api.warning({
+                                            message: "Không có lịch nào được chọn",
+                                            description: "Lịch đã bắt đầu hoặc đã nghỉ không thể chỉnh sửa. Hãy chọn ít nhất một lịch chưa diễn ra.",
+                                        });
                                         return;
                                     }
                                     if (selectedRows.length < requestedRows.length) {
-                                        api.info({ message: "Đã bỏ qua lịch không thể cập nhật", description: "Chỉ mở trang chỉnh sửa cho các lịch chưa bắt đầu." });
+                                        api.info({
+                                            message: "Đã bỏ qua một số lịch",
+                                            description: "Chỉ mở trang chỉnh sửa cho các lịch chưa bắt đầu. Các lịch đã diễn ra hoặc đã nghỉ bị bỏ qua.",
+                                        });
                                     }
                                     sessionStorage.setItem("schedule:auto-edit:rows", JSON.stringify(selectedRows));
                                     const params = new URLSearchParams({

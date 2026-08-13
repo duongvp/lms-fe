@@ -111,7 +111,7 @@ const QuizFormModal = ({
                 style={{ marginTop: 16}}
             >
                 <Row gutter={14}>
-                    {canViewField("code") && <Col xs={24} md={12}>
+                    {editing && canViewField("code") && <Col xs={24} md={12}>
                         <Form.Item name="code" label="Chương trình" rules={[{ required: true, message: "Chọn Chương trình" }]}> 
                             <Select
                                 options={classOptions}
@@ -132,7 +132,8 @@ const QuizFormModal = ({
                             />
                         </Form.Item>
                     </Col>}
-                    {canViewField("learn_number") && <Col xs={16} md={8}>
+                    {!editing && <Form.Item name="code" hidden><Input /></Form.Item>}
+                    {canViewField("learn_number") && <Col xs={16} md={editing ? 8 : 16}>
                         <Form.Item name="learn_number" label="Bài học" rules={[{ required: true, message: "Chọn bài học" }]}>
                             <Select
                                 options={buildLessonSelectOptions(lessons, editing?.learn_number)}
@@ -151,21 +152,12 @@ const QuizFormModal = ({
                             />
                         </Form.Item>
                     </Col>}
-                    {canViewField("quiz_index") && <Col xs={8} md={4}>
+                    {canViewField("quiz_index") && <Col xs={8} md={editing ? 4 : 8}>
                         <Form.Item
                             name="quiz_index"
                             label="Thứ tự"
                             rules={[{ required: true, message: "Nhập thứ tự" }]}
                             validateStatus={duplicateIndexQuiz ? "warning" : undefined}
-                            help={duplicateIndexQuiz
-                                ? editing
-                                    ? `Thứ tự này đang có câu hỏi "${duplicateIndexQuiz.quiz_name}". Vui lòng chọn thứ tự khác.`
-                                    : `Thứ tự này đang có câu hỏi "${duplicateIndexQuiz.quiz_name}". Lưu tiếp sẽ ghi đè câu hỏi cũ.`
-                                : indexSuggestionLoading
-                                    ? "Đang tính thứ tự đề xuất..."
-                                    : suggestedQuizIndex
-                                    ? `Đề xuất: ${suggestedQuizIndex}`
-                                    : undefined}
                         >
                             <InputNumber
                                 min={1}
@@ -231,9 +223,11 @@ const QuizFormModal = ({
                 <Divider />
                 <Flex justify="flex-end" gap={8} wrap>
                     <Button icon={<EyeOutlined />} onClick={onPreview}>Xem trước</Button>
-                    <Button icon={<ReloadOutlined />} onClick={onReset}>
-                        {editing ? "Đặt lại" : "Làm mới"}
-                    </Button>
+                    {editing && (
+                        <Button icon={<ReloadOutlined />} onClick={onReset}>
+                            Đặt lại
+                        </Button>
+                    )}
                     <Button
                         type="primary"
                         htmlType="submit"

@@ -194,11 +194,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const [messageApi, contextHolder] = message.useMessage();
     const hasPermission = useAuthStore((state) => state.hasPermission);
     const canCreateLesson = hasPermission(PermissionKey.LESSON_CREATE);
-    const canAssignTeachingStaff = hasPermission(
-        isEdit
-            ? PermissionKey.CALENDAR_TEACHER_EDIT
-            : PermissionKey.CALENDAR_TEACHER_ASSIGN
-    );
+    const canAssignTeachingStaff = hasPermission(PermissionKey.CALENDAR_TEACHER_MANAGE);
     usePackageCoursesQuery();
     const singleLessonParams: LessonListParams | null = (
         open && !isEdit && addMode === 'single' && contextProgramCode && !usesProgramContext
@@ -429,10 +425,15 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     }) => {
         try {
             setCreatingLesson(true);
+            // Luôn lấy tên môn từ danh sách Chương trình theo mã đã chọn.
+            // Không dùng trực tiếp giá trị form vì một số luồng đặt field đó
+            // bằng mã Chương trình, dẫn tới subject_name bị lưu sai trong DB.
+            const program = lessonPrograms.find((item) => item.subject_code === subject_code);
+            const subjectName = program?.subject_name || selectedSubject;
             const response: any = await createLesson({
                 grade: Number(selectedGrade),
                 subject_code,
-                subject_name: selectedSubject,
+                subject_name: subjectName || selectedSubject || subject_code,
                 lesson_name,
             });
             const created = response?.data as LessonApiResponse | undefined;
@@ -1469,14 +1470,12 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                 >
                     <Form.Item
                         name="subject_code"
-                        label="Mã môn học"
+                        hidden
                         rules={[
                             { required: true, whitespace: true, message: 'Nhập mã môn học' },
                             { max: 100, message: 'Mã môn học không được vượt quá 100 ký tự' },
                         ]}
-                    >
-                        <Input placeholder="VD: nguvan-6-2027" maxLength={100} />
-                    </Form.Item>
+                    ><Input /></Form.Item>
                     <Form.Item
                         name="lesson_name"
                         label="Tên bài học"
