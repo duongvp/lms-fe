@@ -8,29 +8,29 @@ export const SWR_NAMESPACES = {
 } as const;
 
 export const swrKeys = {
-    lessonList: (userId: number, params: object) =>
+    lessonList: (userId: number | string, params: object) =>
         [SWR_NAMESPACES.lessons, "list", userId, params] as const,
-    lessonSubjects: (userId: number) =>
+    lessonSubjects: (userId: number | string) =>
         [SWR_NAMESPACES.lessons, "subjects", userId] as const,
-    lessonPrograms: (userId: number) =>
+    lessonPrograms: (userId: number | string) =>
         [SWR_NAMESPACES.lessons, "programs", userId] as const,
-    quizList: (userId: number, params: object) =>
+    quizList: (userId: number | string, params: object) =>
         [SWR_NAMESPACES.quizzes, "list", userId, params] as const,
-    quizClasses: (userId: number) =>
+    quizClasses: (userId: number | string) =>
         [SWR_NAMESPACES.quizzes, "classes", userId] as const,
-    quizLessons: (userId: number, code: string) =>
+    quizLessons: (userId: number | string, code: string) =>
         [SWR_NAMESPACES.quizzes, "lessons", userId, code] as const,
-    quizIndexSuggestion: (userId: number, params: object) =>
+    quizIndexSuggestion: (userId: number | string, params: object) =>
         [SWR_NAMESPACES.quizzes, "index-suggestion", userId, params] as const,
-    scheduleList: (userId: number, params: object) =>
+    scheduleList: (userId: number | string, params: object) =>
         [SWR_NAMESPACES.schedules, "list", userId, params] as const,
-    schedulePrograms: (userId: number) =>
+    schedulePrograms: (userId: number | string) =>
         [SWR_NAMESPACES.schedules, "programs", userId] as const,
-    moduleFields: (userId: number, moduleCode: string) =>
+    moduleFields: (userId: number | string, moduleCode: string) =>
         [SWR_NAMESPACES.moduleFields, userId, moduleCode] as const,
-    teachingStaff: (userId: number, teacherType: number) =>
+    teachingStaff: (userId: number | string, teacherType: number) =>
         [SWR_NAMESPACES.teachingStaff, userId, teacherType] as const,
-    packageCourses: (userId: number) =>
+    packageCourses: (userId: number | string) =>
         [SWR_NAMESPACES.packageCourses, userId] as const,
 };
 

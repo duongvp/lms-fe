@@ -9,10 +9,15 @@ import { getTeachingStaffOptions, type CanViewStreamKey } from "@/services/teach
 import { getPackageCourses } from "@/services/packageCourseService";
 import { isSWRNamespace, SWR_NAMESPACES, swrKeys } from "@/lib/swrKeys";
 
-const useUserId = () => useAuthStore((state) => state.user.userId);
+// Cache phải được tách theo phiên, không chỉ theo userId. Nếu cùng một người
+// vừa logout rồi login lại, các Select cần fetch option mới thay vì dùng entry
+// rỗng còn lại từ phiên cũ.
+const useAuthCacheScope = () => useAuthStore(
+    (state) => `${state.user.userId}:${state.authSessionVersion}`
+);
 
 export const useLessonsQuery = (params: LessonListParams | null) => {
-    const userId = useUserId();
+    const userId = useAuthCacheScope();
     return useSWR(
         params ? swrKeys.lessonList(userId, params) : null,
         () => getLessons(params!),
@@ -21,7 +26,7 @@ export const useLessonsQuery = (params: LessonListParams | null) => {
 };
 
 export const useSchedulesQuery = (params: LivestreamListParams | null) => {
-    const userId = useUserId();
+    const userId = useAuthCacheScope();
     return useSWR(
         params ? swrKeys.scheduleList(userId, params) : null,
         () => getLivestreams(params!),
@@ -30,7 +35,7 @@ export const useSchedulesQuery = (params: LivestreamListParams | null) => {
 };
 
 export const useSchedulingProgramsQuery = () => {
-    const userId = useUserId();
+    const userId = useAuthCacheScope();
     return useSWR(
         swrKeys.schedulePrograms(userId),
         getSchedulingPrograms,
@@ -39,7 +44,7 @@ export const useSchedulingProgramsQuery = () => {
 };
 
 export const useModuleFieldsQuery = (moduleCode: string) => {
-    const userId = useUserId();
+    const userId = useAuthCacheScope();
     return useSWR(
         swrKeys.moduleFields(userId, moduleCode),
         () => getModuleFields(moduleCode),
@@ -48,7 +53,7 @@ export const useModuleFieldsQuery = (moduleCode: string) => {
 };
 
 export const useTeachingStaffQuery = (teacherType: CanViewStreamKey) => {
-    const userId = useUserId();
+    const userId = useAuthCacheScope();
     return useSWR(
         swrKeys.teachingStaff(userId, teacherType),
         () => getTeachingStaffOptions(teacherType),
@@ -57,7 +62,7 @@ export const useTeachingStaffQuery = (teacherType: CanViewStreamKey) => {
 };
 
 export const usePackageCoursesQuery = (enabled = true) => {
-    const userId = useUserId();
+    const userId = useAuthCacheScope();
     return useSWR(
         enabled ? swrKeys.packageCourses(userId) : null,
         () => getPackageCourses(),

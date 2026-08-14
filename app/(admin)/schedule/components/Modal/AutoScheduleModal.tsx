@@ -383,6 +383,25 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
 
     const buildPayload = async (): Promise<AutoSchedulePayload> => {
         const values = await form.validateFields();
+        // Một số Block có thể đang nằm ở trang phân trang khác nên Form.Item
+        // của chúng không được mount tại thời điểm validateFields chạy. Kiểm
+        // tra trực tiếp toàn bộ dữ liệu để mọi buổi của mọi bài đều có GV.
+        for (const block of values.blocks || []) {
+            for (const lesson of block.lessons || []) {
+                const sessions = (lesson.sessions || []).slice(
+                    0,
+                    values.system_type === "topuni" ? 1 : undefined
+                );
+                const missingTeacherIndex = sessions.findIndex(
+                    (session: any) => !String(session.teacher || "").trim()
+                );
+                if (missingTeacherIndex >= 0) {
+                    throw new Error(
+                        `Vui lòng chọn Giáo viên cho Bài ${lesson.learn_number}, buổi ${missingTeacherIndex + 1}.`
+                    );
+                }
+            }
+        }
         return {
             program_code: programCode,
             system_type: values.system_type,
@@ -497,7 +516,11 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                         );
                                     }}
                                 </Form.Item>
-                                <Form.Item name={[field.name, "teacher"]} label="Giáo viên">
+                                <Form.Item
+                                    name={[field.name, "teacher"]}
+                                    label="Giáo viên"
+                                    rules={[{ required: true, message: "Chọn giáo viên" }]}
+                                >
                                     <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" allowClear placeholder="Chọn giáo viên" style={{ width: 220 }} />
                                 </Form.Item>
                                 <Form.Item name={[field.name, "assistant_teachers"]} label="Trợ giảng">
@@ -827,7 +850,11 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                                                                         );
                                                                                     }}
                                                                                 </Form.Item>
-                                                                                <Form.Item name={[sessionField.name, "teacher"]} label="Giáo viên">
+                                                                                <Form.Item
+                                                                                    name={[sessionField.name, "teacher"]}
+                                                                                    label="Giáo viên"
+                                                                                    rules={[{ required: true, message: "Chọn giáo viên" }]}
+                                                                                >
                                                                                     <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" allowClear placeholder="Chọn giáo viên" style={{ width: 220 }} />
                                                                                 </Form.Item>
                                                                                 <Form.Item name={[sessionField.name, "assistant_teachers"]} label="Trợ giảng">

@@ -16,6 +16,9 @@ interface AuthState {
     };
     accessToken: string | null;
     currentProgram: string | null;
+    // Không persist: mỗi lần đăng nhập là một namespace SWR mới để không dùng
+    // lại cache option đã bị xóa của phiên trước.
+    authSessionVersion: number;
     setUser: (userData: any) => void;
     clearUser: () => void;
     setAccessToken: (token: string | null) => void;
@@ -96,19 +99,28 @@ const normalizeUserData = (userData: any) => ({
         : defaultUser.programScope,
 });
 
+const nextAuthSessionVersion = (value: unknown) => (
+    Number.isFinite(Number(value)) ? Number(value) + 1 : 1
+);
+
 export const useAuthStore = create<AuthState>()(
     persist(
         (set, get) => ({
             user: defaultUser,
             accessToken: null,
             currentProgram: null,
+            authSessionVersion: 0,
 
             setUser: (userData) =>
-                set({
-                    user: normalizeUserData(userData)
-                }),
+                set((state) => ({
+                    user: normalizeUserData(userData),
+                    authSessionVersion: nextAuthSessionVersion(state.authSessionVersion),
+                })),
 
-            clearUser: () => set({ user: defaultUser }),
+            clearUser: () => set((state) => ({
+                user: defaultUser,
+                authSessionVersion: nextAuthSessionVersion(state.authSessionVersion),
+            })),
 
             setAccessToken: (token) => set({ accessToken: token }),
 
@@ -144,7 +156,12 @@ export const useAuthStore = create<AuthState>()(
                 if (typeof window !== 'undefined') {
                     sessionStorage.removeItem('lms.lessons.reauth');
                 }
-                set({ user: defaultUser, accessToken: null, currentProgram: null });
+                set((state) => ({
+                    user: defaultUser,
+                    accessToken: null,
+                    currentProgram: null,
+                    authSessionVersion: nextAuthSessionVersion(state.authSessionVersion),
+                }));
                 void mutate(() => true, undefined, { revalidate: false });
                 handleLogout();
             },

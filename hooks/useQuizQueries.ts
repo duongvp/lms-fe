@@ -12,10 +12,12 @@ import {
 } from "@/services/quizService";
 import { isSWRNamespace, SWR_NAMESPACES, swrKeys } from "@/lib/swrKeys";
 
-const useUserId = () => useAuthStore((state) => state.user.userId);
+const useAuthCacheScope = () => useAuthStore(
+    (state) => `${state.user.userId}:${state.authSessionVersion}`
+);
 
 export const useQuizzesQuery = (params: QuizListParams | null) => {
-    const userId = useUserId();
+    const userId = useAuthCacheScope();
     return useSWR(
         params ? swrKeys.quizList(userId, params) : null,
         () => getQuizzes(params!),
@@ -24,7 +26,7 @@ export const useQuizzesQuery = (params: QuizListParams | null) => {
 };
 
 export const useQuizClassesQuery = () => {
-    const userId = useUserId();
+    const userId = useAuthCacheScope();
     return useSWR(
         swrKeys.quizClasses(userId),
         getQuizClasses,
@@ -33,7 +35,7 @@ export const useQuizClassesQuery = () => {
 };
 
 export const useQuizLessonsQuery = (code?: string | null) => {
-    const userId = useUserId();
+    const userId = useAuthCacheScope();
     return useSWR(
         code ? swrKeys.quizLessons(userId, code) : null,
         () => getQuizLessons(code!),
@@ -42,7 +44,7 @@ export const useQuizLessonsQuery = (code?: string | null) => {
 };
 
 export const useQuizIndexSuggestionQuery = (params: QuizIndexSuggestionParams | null) => {
-    const userId = useUserId();
+    const userId = useAuthCacheScope();
     return useSWR(
         params ? swrKeys.quizIndexSuggestion(userId, params) : null,
         () => getQuizIndexSuggestion(params!),

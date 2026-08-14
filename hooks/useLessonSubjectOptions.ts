@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import useSWR from "swr";
 import { SUBJECT_OPTIONS } from "@/constants/subjects";
 import {
@@ -40,7 +41,9 @@ const mergeSubjectOptions = (databaseSubjects: LessonSubjectOption[]) => {
 };
 
 export const useLessonSubjectOptions = (enabled = true) => {
-    const userId = useAuthStore((state) => state.user.userId);
+    const userId = useAuthStore(
+        (state) => `${state.user.userId}:${state.authSessionVersion}`
+    );
     const { data } = useSWR(
         enabled ? swrKeys.lessonSubjects(userId) : null,
         getLessonSubjects,
@@ -55,22 +58,24 @@ export const useLessonSubjectOptions = (enabled = true) => {
                 ? responseData.subjects
                 : [];
 
-    return mergeSubjectOptions(subjects);
+    return useMemo(() => mergeSubjectOptions(subjects), [responseData]);
 };
 
 export const useLessonProgramOptions = (enabled = true) => {
-    const userId = useAuthStore((state) => state.user.userId);
+    const userId = useAuthStore(
+        (state) => `${state.user.userId}:${state.authSessionVersion}`
+    );
     const { data } = useSWR(
         enabled ? swrKeys.lessonPrograms(userId) : null,
         getLessonPrograms,
         { dedupingInterval: 5 * 60_000 }
     );
     const responseData = data?.data;
-    const programs: LessonProgramOption[] = Array.isArray(responseData)
-        ? responseData
-        : Array.isArray(responseData?.data)
-            ? responseData.data
-            : [];
-
-    return programs;
+    return useMemo<LessonProgramOption[]>(() => (
+        Array.isArray(responseData)
+            ? responseData
+            : Array.isArray(responseData?.data)
+                ? responseData.data
+                : []
+    ), [responseData]);
 };

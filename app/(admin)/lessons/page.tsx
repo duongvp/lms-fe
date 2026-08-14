@@ -32,6 +32,7 @@ import {
     updateLesson,
 } from "@/services/lessonService";
 import { useLessonsQuery, useLmsCache, useModuleFieldsQuery } from "@/hooks/useLmsQueries";
+import { useLessonProgramOptions } from "@/hooks/useLessonSubjectOptions";
 import LessonFormModal, { FORM_FIELDS } from "./components/Modal/LessonFormModal";
 import LessonActions from "./components/LessonActions";
 import LessonFilterDrawer from "./components/LessonFilterDrawer";
@@ -75,7 +76,6 @@ function useDebounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
 const Page = () => {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const initializedFromUrl = useRef(false);
     const [data, setData] = useState<LessonDataType[]>([]);
     const [saving, setSaving] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
@@ -116,6 +116,7 @@ const Page = () => {
     const [secondaryPassword, setSecondaryPassword] = useState("");
     const [secondaryLoading, setSecondaryLoading] = useState(false);
     const [api, contextHolder] = notification.useNotification({duration: 2.5});
+    const lessonPrograms = useLessonProgramOptions();
 
     const replaceLessonUrl = useCallback((values: LessonFilterValues, page = 1) => {
         const params = new URLSearchParams();
@@ -133,12 +134,17 @@ const Page = () => {
     }, [router]);
 
     useEffect(() => {
-        if (initializedFromUrl.current) return;
-        initializedFromUrl.current = true;
         const urlProgram = String(searchParams.get("program") || "").trim();
         const sharedProgram = String(useAuthStore.getState().currentProgram || "").trim();
         const program = urlProgram || sharedProgram;
         if (!program) return;
+
+        // Khi đi từ Lịch học/Câu hỏi sang, URL thường chỉ có `program`.
+        // Bổ sung thông tin ngữ cảnh từ danh sách chương trình để thao tác
+        // thêm bài học không bị coi là chưa chọn chương trình.
+        const matchedProgram = lessonPrograms.find(
+            (item) => String(item.subject_code || "").trim() === program
+        );
         useAuthStore.getState().setCurrentProgram(program);
         if (!urlProgram) {
             const params = new URLSearchParams(searchParams.toString());
@@ -151,8 +157,8 @@ const Page = () => {
         const page = Math.max(1, Number(searchParams.get("page")) || 1);
         const values = cleanFilterValues({
             subject_code: program,
-            grade: grade || undefined,
-            subject: String(searchParams.get("subject") || "").trim() || undefined,
+            grade: grade || matchedProgram?.grade || undefined,
+            subject: String(searchParams.get("subject") || "").trim() || matchedProgram?.subject_name || undefined,
             learn_number: lesson || undefined,
             keyword,
         });
@@ -161,7 +167,7 @@ const Page = () => {
         setSearchText(keyword);
         setCurrentPage(page);
         setHasSearched(true);
-    }, [router, searchParams]);
+    }, [lessonPrograms, router, searchParams]);
     const hasPermission = useAuthStore((state) => state.hasPermission);
     const can = useAuthStore((state) => state.can);
     const { fieldPolicy } = useAuthStore((state) => state.user);
@@ -357,7 +363,16 @@ const Page = () => {
     };
 
     const handleOpenCreate = () => {
-        if (!hasSearched || !submittedFilterValues.subject_code) {
+        // `submittedFilterValues` được hydrate bất đồng bộ khi vừa chuyển
+        // trang/hoàn tất xác thực cấp 2. Ưu tiên URL và shared context để nút
+        // Thêm bài học không báo sai là chưa chọn Chương trình.
+        const programCode = String(
+            submittedFilterValues.subject_code
+            || searchParams.get("program")
+            || useAuthStore.getState().currentProgram
+            || ""
+        ).trim();
+        if (!programCode) {
             api.warning({ message: "Vui lòng chọn Chương trình trước khi thêm đề cương" });
             setOpenFilterDrawer(true);
             return;
@@ -369,6 +384,18 @@ const Page = () => {
             });
             return;
         }
+        const matchedProgram = lessonPrograms.find(
+            (item) => String(item.subject_code || "").trim() === programCode
+        );
+        const programContext = cleanFilterValues({
+            ...submittedFilterValues,
+            subject_code: programCode,
+            grade: submittedFilterValues.grade ?? matchedProgram?.grade ?? undefined,
+            subject: submittedFilterValues.subject || matchedProgram?.subject_name,
+        });
+        setFilterValues(programContext);
+        setSubmittedFilterValues(programContext);
+        setHasSearched(true);
         setSelectedRecord(null);
         setOpenFormModal(true);
     };
