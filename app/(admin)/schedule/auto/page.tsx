@@ -11,7 +11,9 @@ const AutoSchedulePage = () => {
     const { refreshSchedules } = useLmsCache();
     const programCode = String(searchParams.get("program") || "").trim();
     const returnToParam = String(searchParams.get("returnTo") || "");
-    const returnTo = returnToParam.startsWith("/schedule") ? returnToParam : "/schedule";
+    const returnTo = returnToParam.startsWith("/schedule")
+        ? returnToParam
+        : (programCode ? `/schedule?program=${encodeURIComponent(programCode)}` : "/schedule");
 
     if (!programCode) {
         return (

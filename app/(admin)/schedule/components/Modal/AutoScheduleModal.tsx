@@ -2,7 +2,7 @@
 
 import { PlusOutlined, SyncOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Checkbox, DatePicker, Empty, Form, Input, InputNumber, message, Modal, Pagination, Select, Space, Spin, Table, TimePicker, Typography, type SelectProps } from "antd";
-import dayjs from "dayjs";
+import dayjs, { type Dayjs } from "dayjs";
 import {
     commitAutoSchedule,
     getProgramLessonsForScheduling,
@@ -31,6 +31,23 @@ const WEEKDAYS = [
     { value: 7, label: "Chủ nhật" },
 ];
 const BLOCKS_PER_PAGE = 3;
+
+const getEndTimeDisabledTime = (startTime?: Dayjs | null) => {
+    if (!startTime) return {};
+
+    const startHour = startTime.hour();
+    const startMinute = startTime.minute();
+    return {
+        disabledHours: () => Array.from({ length: startHour }, (_, hour) => hour),
+        disabledMinutes: (hour: number) => hour === startHour
+            ? Array.from({ length: startMinute + 1 }, (_, minute) => minute)
+            : [],
+    };
+};
+
+const isEndTimeInvalid = (startTime?: Dayjs | null, endTime?: Dayjs | null) => (
+    !!startTime && !!endTime && !endTime.isAfter(startTime)
+);
 const normalizeLessonTitle = (value: unknown) => String(value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -456,8 +473,30 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                 <Form.Item name={[field.name, "weekday"]} label={`Buổi mẫu ${index + 1}`} rules={[{ required: true, message: "Chọn thứ học" }]}>
                                     <Select style={{ width: 125 }} options={WEEKDAYS} />
                                 </Form.Item>
-                                <Form.Item name={[field.name, "start_time"]} label="Bắt đầu" rules={[{ required: true }]}><TimePicker format="HH:mm" /></Form.Item>
-                                <Form.Item name={[field.name, "end_time"]} label="Kết thúc" rules={[{ required: true }]}><TimePicker format="HH:mm" /></Form.Item>
+                                <Form.Item name={[field.name, "start_time"]} label="Bắt đầu" rules={[{ required: true }]}>
+                                    <TimePicker
+                                        format="HH:mm"
+                                        onChange={(startTime) => {
+                                            const endName = [name, field.name, "end_time"];
+                                            if (isEndTimeInvalid(startTime, form.getFieldValue(endName))) form.setFieldValue(endName, undefined);
+                                        }}
+                                    />
+                                </Form.Item>
+                                <Form.Item noStyle shouldUpdate>
+                                    {({ getFieldValue }) => {
+                                        const startTime = getFieldValue([name, field.name, "start_time"]);
+                                        return (
+                                            <Form.Item name={[field.name, "end_time"]} label="Kết thúc" rules={[{ required: true }]}>
+                                                <TimePicker
+                                                    format="HH:mm"
+                                                    disabled={!startTime}
+                                                    disabledTime={() => getEndTimeDisabledTime(startTime)}
+                                                    defaultOpenValue={startTime || undefined}
+                                                />
+                                            </Form.Item>
+                                        );
+                                    }}
+                                </Form.Item>
                                 <Form.Item name={[field.name, "teacher"]} label="Giáo viên">
                                     <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" allowClear placeholder="Chọn giáo viên" style={{ width: 220 }} />
                                 </Form.Item>
@@ -764,8 +803,30 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                                                         {sessionFields.map((sessionField, sessionIndex) => (
                                                                             <Space key={sessionField.key} align="start" wrap>
                                                                                 <Form.Item name={[sessionField.name, "weekday"]} label={`Buổi ${sessionIndex + 1}`} rules={[{ required: true }]}><Select style={{ width: 125 }} options={WEEKDAYS} /></Form.Item>
-                                                                                <Form.Item name={[sessionField.name, "start_time"]} label="Bắt đầu" rules={[{ required: true }]}><TimePicker format="HH:mm" /></Form.Item>
-                                                                                <Form.Item name={[sessionField.name, "end_time"]} label="Kết thúc" rules={[{ required: true }]}><TimePicker format="HH:mm" /></Form.Item>
+                                                                                <Form.Item name={[sessionField.name, "start_time"]} label="Bắt đầu" rules={[{ required: true }]}>
+                                                                                    <TimePicker
+                                                                                        format="HH:mm"
+                                                                                        onChange={(startTime) => {
+                                                                                            const endName = ["blocks", blockField.name, "lessons", lessonField.name, "sessions", sessionField.name, "end_time"];
+                                                                                            if (isEndTimeInvalid(startTime, form.getFieldValue(endName))) form.setFieldValue(endName, undefined);
+                                                                                        }}
+                                                                                    />
+                                                                                </Form.Item>
+                                                                                <Form.Item noStyle shouldUpdate>
+                                                                                    {({ getFieldValue }) => {
+                                                                                        const startTime = getFieldValue(["blocks", blockField.name, "lessons", lessonField.name, "sessions", sessionField.name, "start_time"]);
+                                                                                        return (
+                                                                                            <Form.Item name={[sessionField.name, "end_time"]} label="Kết thúc" rules={[{ required: true }]}>
+                                                                                                <TimePicker
+                                                                                                    format="HH:mm"
+                                                                                                    disabled={!startTime}
+                                                                                                    disabledTime={() => getEndTimeDisabledTime(startTime)}
+                                                                                                    defaultOpenValue={startTime || undefined}
+                                                                                                />
+                                                                                            </Form.Item>
+                                                                                        );
+                                                                                    }}
+                                                                                </Form.Item>
                                                                                 <Form.Item name={[sessionField.name, "teacher"]} label="Giáo viên">
                                                                                     <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" allowClear placeholder="Chọn giáo viên" style={{ width: 220 }} />
                                                                                 </Form.Item>

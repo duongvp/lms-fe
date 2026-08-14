@@ -15,10 +15,12 @@ interface AuthState {
         programScope?: { mode: 'ALL' | 'RESTRICTED' | 'DENY'; programs: string[] };
     };
     accessToken: string | null;
+    currentProgram: string | null;
     setUser: (userData: any) => void;
     clearUser: () => void;
     setAccessToken: (token: string | null) => void;
     clearAccessToken: () => void;
+    setCurrentProgram: (programCode: string | null) => void;
     logout: () => void;
     hasPermission: (permission: string) => boolean;
     can: (permission: string, programCode?: string) => boolean;
@@ -99,6 +101,7 @@ export const useAuthStore = create<AuthState>()(
         (set, get) => ({
             user: defaultUser,
             accessToken: null,
+            currentProgram: null,
 
             setUser: (userData) =>
                 set({
@@ -110,6 +113,11 @@ export const useAuthStore = create<AuthState>()(
             setAccessToken: (token) => set({ accessToken: token }),
 
             clearAccessToken: () => set({ accessToken: null }),
+
+            setCurrentProgram: (programCode) => {
+                const normalized = String(programCode || '').trim();
+                set({ currentProgram: normalized || null });
+            },
 
             hasPermission: (permission) => {
                 if (typeof window === 'undefined') return false;
@@ -136,7 +144,7 @@ export const useAuthStore = create<AuthState>()(
                 if (typeof window !== 'undefined') {
                     sessionStorage.removeItem('lms.lessons.reauth');
                 }
-                set({ user: defaultUser, accessToken: null });
+                set({ user: defaultUser, accessToken: null, currentProgram: null });
                 void mutate(() => true, undefined, { revalidate: false });
                 handleLogout();
             },
@@ -145,7 +153,10 @@ export const useAuthStore = create<AuthState>()(
             name: 'auth-storage', // key trong localStorage
             // Access token chỉ giữ trong memory; reload sẽ dùng HttpOnly refresh
             // cookie để lấy access token mới.
-            partialize: (state) => ({ user: state.user }),
+            partialize: (state) => ({
+                user: state.user,
+                currentProgram: state.currentProgram,
+            }),
             onRehydrateStorage: () => (_state, error) => {
                 if (error) {
                     console.error('Error during rehydration:', error)

@@ -87,6 +87,8 @@ interface PreviewSession {
 }
 
 interface PackageLessonMappingInput {
+    package_id?: string;
+    package_ids?: string[];
     course_id?: string;
     lesson_ids: string[];
 }
@@ -388,7 +390,9 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 lesson_name: formValues.lesson_name,
                 learn_number: Number(formValues.learn_number),
                 scheduled_count: Number(formValues.lesson_scheduled_count ?? 0),
-                package_lesson_mappings: [{ lesson_ids: [] }],
+                package_lesson_mappings: formValues.package_lesson_mappings?.length
+                    ? formValues.package_lesson_mappings
+                    : [{ lesson_ids: [] }],
                 isSkipped: false,
                 isGenerated: true,
             }]);
@@ -610,6 +614,8 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
     const normalizeSessionMappings = (session: PreviewSession) => (
         (session.package_lesson_mappings ?? [])
             .map((mapping) => ({
+                package_ids: mapping.package_ids
+                    ?? (mapping.package_id ? [mapping.package_id] : undefined),
                 course_id: String(mapping.course_id ?? '').trim(),
                 lesson_ids: (mapping.lesson_ids ?? [])
                     .map((lessonId) => String(lessonId).trim())
@@ -885,7 +891,12 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     <TimePicker
                         format="HH:mm"
                         value={record.start_time}
-                        onChange={(value) => updateSessionField(record.key, 'start_time', value)}
+                        onChange={(value) => {
+                            updateSessionField(record.key, 'start_time', value);
+                            if (value && record.end_time && !record.end_time.isAfter(value)) {
+                                updateSessionField(record.key, 'end_time', undefined);
+                            }
+                        }}
                         disabled={record.isSkipped || (isEdit && record.isEditable === false)}
                         size="small"
                         style={{ width: 88 }}
@@ -915,6 +926,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                                 ),
                             };
                         }}
+                        defaultOpenValue={record.start_time}
                         disabled={record.isSkipped || (isEdit && record.isEditable === false)}
                         size="small"
                         style={{ width: 88 }}

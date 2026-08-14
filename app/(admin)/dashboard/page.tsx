@@ -42,6 +42,7 @@ import { Column } from '@ant-design/charts';
 import dayjs, { Dayjs } from 'dayjs';
 import { DashboardOverview, getDashboardOverview } from '@/services/dashboardService';
 import { useAuthStore } from '@/stores/authStore';
+import { withProgramContext } from '@/components/layouts/AdminLayout/SideMenu';
 import { PermissionKey } from '@/types/permissions';
 import styles from './dashboard.module.css';
 
@@ -122,6 +123,7 @@ const Page: React.FC = () => {
     const router = useRouter();
     const user = useAuthStore((state) => state.user);
     const hasPermission = useAuthStore((state) => state.hasPermission);
+    const currentProgram = useAuthStore((state) => state.currentProgram);
     const [data, setData] = useState<DashboardOverview>(EMPTY_DASHBOARD);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -373,7 +375,7 @@ const Page: React.FC = () => {
                                 title="Lịch học sắp diễn ra"
                                 className={styles.panelCard}
                                 extra={hasPermission(PermissionKey.SCHEDULE_VIEW) && (
-                                    <Button type="link" onClick={() => router.push('/schedule')}>Xem tất cả <RightOutlined /></Button>
+                                    <Button type="link" onClick={() => router.push(withProgramContext('/schedule', currentProgram))}>Xem tất cả <RightOutlined /></Button>
                                 )}
                             >
                                 {data.upcomingSchedules.length ? (
@@ -407,7 +409,11 @@ const Page: React.FC = () => {
                             <Card title="Thao tác nhanh" className={styles.panelCard}>
                                 <div className={styles.quickGrid}>
                                     {quickActions.map((item) => (
-                                        <button key={item.path} className={styles.quickAction} onClick={() => router.push(item.path)}>
+                                        <button
+                                            key={item.path}
+                                            className={styles.quickAction}
+                                            onClick={() => router.push(withProgramContext(item.path, currentProgram))}
+                                        >
                                             <Avatar icon={item.icon} style={{ background: `${item.color}16`, color: item.color }} />
                                             <span><strong>{item.label}</strong><small>{item.description}</small></span>
                                             <RightOutlined />

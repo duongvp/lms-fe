@@ -101,6 +101,7 @@ const QuizManagementPage = () => {
     const replaceQuizUrl = useCallback((nextFilters: QuizFilterValues, nextKeyword = "", nextPage = 1) => {
         const params = new URLSearchParams();
         const program = String(nextFilters.code || "").trim();
+        useAuthStore.getState().setCurrentProgram(program || null);
         const lesson = nextFilters.learn_number;
         if (program) params.set("program", program);
         if (lesson !== undefined && lesson !== null) params.set("learn_number", String(lesson));
@@ -117,8 +118,16 @@ const QuizManagementPage = () => {
     useEffect(() => {
         if (initializedFromUrl.current) return;
         initializedFromUrl.current = true;
-        const program = String(searchParams.get("program") || "").trim();
+        const urlProgram = String(searchParams.get("program") || "").trim();
+        const sharedProgram = String(useAuthStore.getState().currentProgram || "").trim();
+        const program = urlProgram || sharedProgram;
         if (!program) return;
+        useAuthStore.getState().setCurrentProgram(program);
+        if (!urlProgram) {
+            const params = new URLSearchParams(searchParams.toString());
+            params.set("program", program);
+            window.history.replaceState(window.history.state, "", `/quizzes?${params.toString()}`);
+        }
         const lesson = Number(searchParams.get("learn_number") || searchParams.get("lesson"));
         const nextKeyword = String(searchParams.get("q") || "").trim();
         const nextPage = Math.max(1, Number(searchParams.get("page")) || 1);

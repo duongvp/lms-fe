@@ -1,15 +1,18 @@
 'use client';
-import { Alert, Modal, Input, Row, Col, Form, Button, Typography, Select, Radio, Checkbox, Card, TimePicker, DatePicker, message, Space, Tooltip } from 'antd';
+import { Alert, Modal, Input, Row, Col, Form, Button, Typography, Select, Radio, Checkbox, Card, TimePicker, DatePicker, message, Space, Tooltip, type SelectProps } from 'antd';
 import { CloseCircleOutlined, EyeFilled, PlusOutlined } from '@ant-design/icons';
 import React, { useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
     createLivestream,
     createLivestreamBulk,
+    getHocmaiSectionsForSchedulingLesson,
     getProgramLessonsForScheduling,
     updateLivestream,
     rescheduleLivestream
 } from '@/services/livestreamService';
+import type { HocmaiSectionOption } from '@/services/livestreamService';
+import { buildGroupedHmoOptions, summarizeHmoOptions } from '@/helper/hmoOptions';
 import SchedulePreviewModal from './SchedulePreviewModal';
 import type { ModuleField } from '@/types/fieldPolicy';
 import { resolveFieldRule } from '@/helper/fieldPolicy';
@@ -23,6 +26,36 @@ import { useLessonsQuery, useLmsCache, usePackageCoursesQuery, useSchedulesQuery
 import TeachingStaffSelect from '@/components/shared/TeachingStaffSelect';
 
 const { Text, Title } = Typography;
+
+const renderHmoSelectedTag: SelectProps['tagRender'] = ({ value, closable, onClose }) => {
+    const lessonId = String(value || '').split('::').at(-1) || String(value || '');
+    return (
+        <span className="ant-select-selection-item" style={{ marginInlineEnd: 4 }}>
+            <span className="ant-select-selection-item-content">{lessonId}</span>
+            {closable && (
+                <span
+                    className="ant-select-selection-item-remove"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={onClose}
+                >
+                    ×
+                </span>
+            )}
+        </span>
+    );
+};
+
+const hmoKeysToMappings = (keys: string[] = []) => keys
+    .map((key) => {
+        const [packageId, courseId, lessonId] = String(key).split('::');
+        if (!packageId || !courseId || !lessonId) return null;
+        return {
+            package_id: packageId,
+            course_id: courseId,
+            lesson_ids: [lessonId],
+        };
+    })
+    .filter(Boolean);
 
 export const FormSection = ({ title, children }: { title: string; children: React.ReactNode }) => {
     return (
@@ -183,6 +216,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const singleStartTime = Form.useWatch('start_time', form) as Dayjs | undefined;
     const bulkStartTime = Form.useWatch('bulk_start_time', form) as Dayjs | undefined;
     const [lessonOptions, setLessonOptions] = useState<LessonApiResponse[]>([]);
+    const [hmoOptions, setHmoOptions] = useState<HocmaiSectionOption[]>([]);
+    const [loadingHmoOptions, setLoadingHmoOptions] = useState(false);
     const [loadingProgramLessons, setLoadingProgramLessons] = useState(false);
     const [bulkLessonOptions, setBulkLessonOptions] = useState<LessonApiResponse[]>([]);
     const [quickLessonOpen, setQuickLessonOpen] = useState(false);
@@ -271,6 +306,27 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         if (usesProgramContext) return;
         setLessonOptions(singleLessonsQuery.data?.data?.data ?? []);
     }, [singleLessonsQuery.data, usesProgramContext]);
+
+    React.useEffect(() => {
+        if (!open || isEdit || addMode !== 'single' || !contextProgramCode || !selectedLessonId) {
+            setHmoOptions([]);
+            return;
+        }
+        let active = true;
+        setLoadingHmoOptions(true);
+        getHocmaiSectionsForSchedulingLesson(contextProgramCode, selectedLessonId)
+            .then((response: any) => {
+                if (active) setHmoOptions(Array.isArray(response?.data) ? response.data : []);
+            })
+            .catch((error: any) => {
+                if (active) {
+                    setHmoOptions([]);
+                    messageApi.error(error?.message || 'Không thể tải Lesson ID HMO');
+                }
+            })
+            .finally(() => active && setLoadingHmoOptions(false));
+        return () => { active = false; };
+    }, [addMode, contextProgramCode, isEdit, messageApi, open, selectedLessonId]);
 
     React.useEffect(() => {
         const rows: LessonApiResponse[] = bulkLessonsQuery.data?.data?.data ?? [];
@@ -449,6 +505,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                 learn_number: created.learn_number,
                 master_lesson_name: created.lesson_name,
                 lesson_name: created.lesson_name,
+                hmo_mapping_keys: [],
             });
             messageApi.success(`Đã tạo Bài ${created.learn_number}: ${created.lesson_name}`);
             await refreshLessons();
@@ -471,6 +528,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             finalValues.addMode = addMode;
             if (addMode === 'bulk') {
                 finalValues.bulkConfigMode = bulkConfigMode;
+            } else {
+                finalValues.package_lesson_mappings = hmoKeysToMappings(values.hmo_mapping_keys || []);
             }
         } else {
             finalValues.update_mode = updateMode;
@@ -793,6 +852,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                                 master_lesson_name: lesson?.lesson_name,
                                                                 lesson_name: lesson?.lesson_name,
                                                                 lesson_scheduled_count: scheduledCount,
+                                                                hmo_mapping_keys: [],
                                                             });
                                                         }}
                                                         notFoundContent={
@@ -874,6 +934,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                                 master_lesson_name: lesson?.lesson_name,
                                                                 lesson_name: lesson?.lesson_name,
                                                                 lesson_scheduled_count: scheduledCount,
+                                                                hmo_mapping_keys: [],
                                                             });
                                                         }}
                                                         notFoundContent={contextProgramCode && !loadingLessons ? 'Chưa có bài học' : undefined}
@@ -911,6 +972,32 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                 <Form.Item name="learn_number" hidden><Input /></Form.Item>
                                 <Form.Item name="master_lesson_name" hidden><Input /></Form.Item>
                                 <Form.Item name="lesson_scheduled_count" hidden><Input /></Form.Item>
+                                {!isEdit && <Form.Item
+                                    name="hmo_mapping_keys"
+                                    label="Lesson ID HMO"
+                                    extra={hmoOptions.length
+                                        ? `${summarizeHmoOptions(hmoOptions)} — danh sách được nhóm theo Package/Course.`
+                                        : undefined}
+                                >
+                                    <Select
+                                        mode="multiple"
+                                        allowClear
+                                        showSearch
+                                        optionFilterProp="label"
+                                        loading={loadingHmoOptions}
+                                        disabled={!selectedLessonId}
+                                        listHeight={420}
+                                        popupMatchSelectWidth={680}
+                                        placeholder={!selectedLessonId
+                                            ? 'Chọn bài học trước'
+                                            : hmoOptions.length
+                                                ? 'Chọn Lesson ID HMO'
+                                                : 'Bài chưa có Course ID hoặc HMO không có Lesson ID'}
+                                        options={buildGroupedHmoOptions(hmoOptions)}
+                                        tagRender={renderHmoSelectedTag}
+                                        maxTagCount="responsive"
+                                    />
+                                </Form.Item>}
                             </FormSection>
 
                             <FormSection title="Chi tiết thời gian">
@@ -945,6 +1032,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                 style={{ width: '100%' }}
                                                 placeholder="Nhập giờ bắt đầu trước"
                                                 disabledTime={() => getEndDisabledTime(singleStartTime)}
+                                                defaultOpenValue={singleStartTime}
                                                 disabled={!isFieldEditable('end_time') || !singleStartTime}
                                             />
                                         </Form.Item>
@@ -1207,6 +1295,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                         style={{ width: '100%' }}
                                                         placeholder="Nhập giờ bắt đầu trước"
                                                         disabledTime={() => getEndDisabledTime(bulkStartTime)}
+                                                        defaultOpenValue={bulkStartTime}
                                                         disabled={!isFieldEditable('end_time') || !bulkStartTime}
                                                     />
                                                 </Form.Item>
@@ -1265,6 +1354,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                                                 placeholder="Nhập giờ bắt đầu trước"
                                                                                 style={{ width: '100%' }}
                                                                                 disabledTime={() => getEndDisabledTime(separateStartTime)}
+                                                                                defaultOpenValue={separateStartTime}
                                                                                 disabled={!isFieldEditable('end_time') || !separateStartTime}
                                                                             />
                                                                         </Form.Item>
@@ -1388,6 +1478,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                 style={{ width: '100%' }}
                                                 placeholder="Nhập giờ bắt đầu trước"
                                                 disabledTime={() => getEndDisabledTime(newSessionStartTime)}
+                                                defaultOpenValue={newSessionStartTime}
                                                 disabled={!isFieldEditable('end_time') || !newSessionStartTime}
                                             />
                                         </Form.Item>

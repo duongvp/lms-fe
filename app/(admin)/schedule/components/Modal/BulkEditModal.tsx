@@ -32,6 +32,7 @@ import TeachingStaffSelect from '@/components/shared/TeachingStaffSelect';
 import { buildGroupedHmoOptions, hmoOptionKey, summarizeHmoOptions } from '@/helper/hmoOptions';
 import {
     getHocmaiSectionsForSchedulingLesson,
+    getProgramLessonsForScheduling,
     updateLivestreamBulk,
     type HocmaiSectionOption,
 } from '@/services/livestreamService';
@@ -65,12 +66,6 @@ const FormSection = ({ title, children }: { title: string; children: React.React
         {children}
     </fieldset>
 );
-
-const ROOM_OPTIONS = [
-    { label: "Phòng 101 - Lý Thuyết", value: "Phòng 101" },
-    { label: "Phòng 202 - Lab Máy Tính", value: "Phòng 202" },
-    { label: "Phòng Online - Zoom 01", value: "Zoom 01" },
-];
 
 const renderHmoSelectedTag: SelectProps['tagRender'] = ({ value, closable, onClose }) => {
     const lessonId = String(value || '').split('::').at(-1) || String(value || '');
@@ -239,6 +234,8 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     const [loadingHmoLessons, setLoadingHmoLessons] = React.useState<Set<string>>(new Set());
     const [syncingHmoLessonIds, setSyncingHmoLessonIds] = React.useState(false);
     const [hmoSyncNotes, setHmoSyncNotes] = React.useState<Record<string, { type: 'success' | 'warning'; message: string }>>({});
+    const [sourceLessonNames, setSourceLessonNames] = React.useState<Map<string, string>>(new Map());
+    const [loadingSourceLessonNames, setLoadingSourceLessonNames] = React.useState(false);
     const previewRef = React.useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -307,6 +304,57 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             };
         }), [selectedRows]);
 
+    // lesson_name trong calendar có thể đã được thêm tiền tố/hậu tố từ một lần
+    // cập nhật trước. Luôn lấy tên chuẩn từ bảng lessons để lần cập nhật sau
+    // thay thế hoàn toàn mẫu tên cũ, không ghép chồng các tiền tố/hậu tố.
+    useEffect(() => {
+        if (!open || !selectedRows.length) {
+            setSourceLessonNames(new Map());
+            return;
+        }
+        let active = true;
+        const programCodes = Array.from(new Set(
+            selectedRows.map((row) => String(row.code || '').trim()).filter(Boolean)
+        ));
+        setLoadingSourceLessonNames(true);
+        void Promise.all(programCodes.map(async (programCode) => {
+            const response: any = await getProgramLessonsForScheduling(programCode);
+            return {
+                programCode,
+                lessons: Array.isArray(response?.data) ? response.data : [],
+            };
+        })).then((groups) => {
+            if (!active) return;
+            const next = new Map<string, string>();
+            groups.forEach(({ programCode, lessons }) => {
+                lessons.forEach((lesson: any) => {
+                    const name = String(lesson?.lesson_name || '').trim();
+                    const id = String(lesson?.id || '').trim();
+                    const learnNumber = Number(lesson?.learn_number);
+                    if (id && name) next.set(id, name);
+                    if (Number.isInteger(learnNumber) && name) {
+                        next.set(`${programCode}::${learnNumber}`, name);
+                    }
+                });
+            });
+            setSourceLessonNames(next);
+        }).catch(() => {
+            if (active) setSourceLessonNames(new Map());
+        }).finally(() => {
+            if (active) setLoadingSourceLessonNames(false);
+        });
+        return () => { active = false; };
+    }, [open, selectedRows]);
+
+    const getSourceLessonName = React.useCallback((record: any) => {
+        const sessionId = String(record?.session_id || '').trim();
+        const byId = sessionId ? sourceLessonNames.get(sessionId) : undefined;
+        if (byId) return byId;
+        return sourceLessonNames.get(
+            `${String(record?.code || '').trim()}::${Number(record?.learn_number)}`
+        );
+    }, [sourceLessonNames]);
+
     useEffect(() => {
         if (!open) return;
         let active = true;
@@ -347,6 +395,14 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     const operation = Form.useWatch('operation', form) || 'update';
     const selectedLessons = Form.useWatch('selected_lessons', form) || selectedRowKeys;
     const commonStartTime = Form.useWatch('common_start_time', form) as Dayjs | undefined;
+    const hasSingleSelectedLesson = React.useMemo(() => {
+        const selectedIds = new Set((selectedLessons as Array<string | number>).map(String));
+        const lessonNumbers = new Set(selectedRows
+            .filter((record) => selectedIds.has(String(record.id)))
+            .map((record) => Number(record.learn_number))
+            .filter((learnNumber) => Number.isInteger(learnNumber) && learnNumber > 0));
+        return lessonNumbers.size === 1;
+    }, [selectedLessons, selectedRows]);
 
     // Tự động set giá trị mặc định khi mở Modal
     useEffect(() => {
@@ -369,13 +425,8 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             if (selectedRows.length > 0) {
                 const firstRow = selectedRows[0];
                 const allSameTeacher = selectedRows.every((row) => teacherValue(row.teacher) === teacherValue(firstRow.teacher));
-                const allSameRoom = selectedRows.every(r => r.room === firstRow.room);
-
                 if (allSameTeacher) {
                     commonConfig.common_teacher = teacherValue(firstRow.teacher);
-                }
-                if (allSameRoom) {
-                    commonConfig.common_room = firstRow.room;
                 }
                 // Cập nhật chung nhiều lịch không tự lấy giờ của một dòng bất kỳ.
                 // Chỉ khi chọn đúng một lịch mới điền cặp giờ hiện có để chỉnh nhanh.
@@ -663,9 +714,30 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             }
 
             const selectedIds = (values.selected_lessons || []).map(String);
+            const selectedLessonNumbers = new Set(selectedRows
+                .filter((record) => selectedIds.includes(String(record.id)))
+                .map((record) => Number(record.learn_number))
+                .filter((learnNumber) => Number.isInteger(learnNumber) && learnNumber > 0));
+            const isSingleLessonSelection = selectedLessonNumbers.size === 1;
             const lessonNameByCalendarId = new Map<string, string>();
+            const isChangingLessonName = values.config_mode === 'common'
+                ? Boolean(values.enable_lesson_name_pattern)
+                : selectedRows.some((record) => (
+                    selectedIds.includes(String(record.id))
+                    && values.separate_config?.[String(record.id)]?.enable_lesson_name_pattern
+                ));
+            if (isChangingLessonName && loadingSourceLessonNames) {
+                throw new Error('Đang tải tên bài học chuẩn, vui lòng thử lại sau giây lát');
+            }
+            const requireSourceLessonName = (record: any) => {
+                const name = getSourceLessonName(record);
+                if (!name) {
+                    throw new Error(`Không xác định được tên bài học chuẩn của Bài ${record?.learn_number || '-'} từ Quản lý đề cương`);
+                }
+                return name;
+            };
             if (values.config_mode === 'common' && values.enable_lesson_name_pattern) {
-                const nameRules = (values.lesson_name_rules || []).map((rule: any, index: number) => {
+                const nameRules = (isSingleLessonSelection ? [] : values.lesson_name_rules || []).map((rule: any, index: number) => {
                     const from = Number(rule?.from_learn_number);
                     const to = Number(rule?.to_learn_number);
                     if (!Number.isInteger(from) || from <= 0 || !Number.isInteger(to) || to < from) {
@@ -713,10 +785,13 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         const applyToFirstSession = rule
                             ? rule.applyToFirstSession
                             : Boolean(values.apply_name_pattern_to_first_session);
-                        if (occurrence > 1 || applyToFirstSession) {
+                        // Khi người dùng chỉ chọn một bài, thao tác này có ý
+                        // nghĩa áp dụng trực tiếp cho bài đó; không yêu cầu
+                        // thêm lựa chọn "Áp dụng cả buổi đầu tiên".
+                        if (isSingleLessonSelection || occurrence > 1 || applyToFirstSession) {
                             lessonNameByCalendarId.set(
                                 String(record.id),
-                                `${renderNamePattern(rule?.prefix ?? values.lesson_name_prefix, occurrence)}${String(record.lesson_name || '')}${renderNamePattern(rule?.suffix ?? values.lesson_name_suffix, occurrence)}`.slice(0, 400)
+                                `${renderNamePattern(rule?.prefix ?? values.lesson_name_prefix, occurrence)}${requireSourceLessonName(record)}${renderNamePattern(rule?.suffix ?? values.lesson_name_suffix, occurrence)}`.slice(0, 400)
                             );
                         }
                     });
@@ -734,7 +809,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         if (config.enable_lesson_name_pattern) {
                             lessonNameByCalendarId.set(
                                 String(record.id),
-                                `${renderNamePattern(config.lesson_name_prefix, occurrence)}${String(record.lesson_name || '')}${renderNamePattern(config.lesson_name_suffix, occurrence)}`.slice(0, 400)
+                                `${renderNamePattern(config.lesson_name_prefix, occurrence)}${requireSourceLessonName(record)}${renderNamePattern(config.lesson_name_suffix, occurrence)}`.slice(0, 400)
                             );
                         }
                     });
@@ -755,7 +830,6 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     }
                     if (values.enable_time && nextStart && nextStart !== dayjs(record.start_time).format('HH:mm')) update.start_time = nextStart;
                     if (values.enable_time && nextEnd && nextEnd !== dayjs(record.end_time).format('HH:mm')) update.end_time = nextEnd;
-                    if (values.enable_room && values.common_room && values.common_room !== record.room) update.room = values.common_room;
                     const nextLessonName = lessonNameByCalendarId.get(id);
                     if (nextLessonName && nextLessonName !== String(record.lesson_name || '')) {
                         update.lesson_name = nextLessonName;
@@ -924,7 +998,6 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     enable_teacher: true,
                     enable_assistant: false,
                     enable_time: true,
-                    enable_room: false,
                     enable_mapping: false,
                 }}
             >
@@ -1063,52 +1136,53 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                     <Checkbox><Text strong>Đổi Khung giờ</Text></Checkbox>
                                 </Form.Item>
                             </Col>
-                            <Col span={8}>
-                                <Form.Item noStyle dependencies={['enable_time']}>
-                                    {({ getFieldValue }) => {
-                                        const enabled = getFieldValue('enable_time');
-                                        return (
-                                            <Form.Item
-                                                name="common_start_time"
-                                                style={{ marginBottom: 0 }}
-                                                rules={[{ required: enabled, message: 'Chọn giờ bắt đầu' }]}
-                                            >
-                                                <TimePicker
-                                                    format="HH:mm"
-                                                    style={{ width: '100%' }}
-                                                    placeholder="Giờ bắt đầu"
-                                                    disabled={!enabled}
-                                                    onChange={(value) => revalidateOrClearEndTime('common_end_time', value)}
-                                                />
-                                            </Form.Item>
-                                        );
-                                    }}
-                                </Form.Item>
-                            </Col>
-                            <Col span={8}>
-                                <Form.Item noStyle dependencies={['enable_time']}>
-                                    {({ getFieldValue }) => {
-                                        const enabled = getFieldValue('enable_time');
-                                        return (
-                                            <Form.Item
-                                                name="common_end_time"
-                                                style={{ marginBottom: 0 }}
-                                                rules={[
-                                                    { required: enabled, message: 'Chọn giờ kết thúc' },
-                                                    { validator: validateEndTimeAfter('common_start_time') },
-                                                ]}
-                                            >
-                                                <TimePicker
-                                                    format="HH:mm"
-                                                    style={{ width: '100%' }}
-                                                    placeholder="Nhập giờ bắt đầu trước"
-                                                    disabledTime={() => getEndDisabledTime(commonStartTime)}
-                                                    disabled={!enabled || !commonStartTime}
-                                                />
-                                            </Form.Item>
-                                        );
-                                    }}
-                                </Form.Item>
+                            <Col span={16}>
+                                <Space size={8}>
+                                    <Form.Item noStyle dependencies={['enable_time']}>
+                                        {({ getFieldValue }) => {
+                                            const enabled = getFieldValue('enable_time');
+                                            return (
+                                                <Form.Item
+                                                    name="common_start_time"
+                                                    style={{ marginBottom: 0 }}
+                                                    rules={[{ required: enabled, message: 'Chọn giờ bắt đầu' }]}
+                                                >
+                                                    <TimePicker
+                                                        format="HH:mm"
+                                                        style={{ width: 140 }}
+                                                        placeholder="Giờ bắt đầu"
+                                                        disabled={!enabled}
+                                                        onChange={(value) => revalidateOrClearEndTime('common_end_time', value)}
+                                                    />
+                                                </Form.Item>
+                                            );
+                                        }}
+                                    </Form.Item>
+                                    <Form.Item noStyle dependencies={['enable_time']}>
+                                        {({ getFieldValue }) => {
+                                            const enabled = getFieldValue('enable_time');
+                                            return (
+                                                <Form.Item
+                                                    name="common_end_time"
+                                                    style={{ marginBottom: 0 }}
+                                                    rules={[
+                                                        { required: enabled, message: 'Chọn giờ kết thúc' },
+                                                        { validator: validateEndTimeAfter('common_start_time') },
+                                                    ]}
+                                                >
+                                                    <TimePicker
+                                                        format="HH:mm"
+                                                        style={{ width: 140 }}
+                                                        placeholder="Nhập giờ bắt đầu trước"
+                                                        disabledTime={() => getEndDisabledTime(commonStartTime)}
+                                                        defaultOpenValue={commonStartTime}
+                                                        disabled={!enabled || !commonStartTime}
+                                                    />
+                                                </Form.Item>
+                                            );
+                                        }}
+                                    </Form.Item>
+                                </Space>
                             </Col>
                         </Row>
                         <Divider style={{ margin: '12px 0' }} />
@@ -1119,7 +1193,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                     <Checkbox><Text strong>Thêm tiền tố / hậu tố tên bài</Text></Checkbox>
                                 </Form.Item>
                                 <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
-                                    Dùng <Text code>{'{n}'}</Text> để chèn số lần diễn ra của từng bài. Ví dụ tiền tố “Lịch {'{n}'} - ” với tên “Bài 1” sẽ thành “Lịch 1 - Bài 1”. Mặc định mẫu chỉ áp dụng từ buổi thứ hai; tích chọn bên phải để áp dụng ngay từ buổi đầu.
+                                    Dùng <Text code>{'{n}'}</Text> để chèn số lần diễn ra của từng bài. Ví dụ tiền tố “Lịch {'{n}'} - ” với tên “Bài 1” sẽ thành “Lịch 1 - Bài 1”. {!hasSingleSelectedLesson && 'Mặc định mẫu chỉ áp dụng từ buổi thứ hai; tích chọn bên phải để áp dụng ngay từ buổi đầu.'}
                                 </Text>
                             </Col>
                             <Col span={16}>
@@ -1144,9 +1218,11 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                 >
                                                     <Input disabled={!enabled} maxLength={100} placeholder="Ví dụ: - Lần {n}" />
                                                 </Form.Item>
-                                                <Form.Item name="apply_name_pattern_to_first_session" valuePropName="checked" style={{ marginBottom: 0, paddingTop: 30 }}>
-                                                    <Checkbox disabled={!enabled}>Áp dụng cả buổi đầu tiên</Checkbox>
-                                                </Form.Item>
+                                                {!hasSingleSelectedLesson && (
+                                                    <Form.Item name="apply_name_pattern_to_first_session" valuePropName="checked" style={{ marginBottom: 0, paddingTop: 30 }}>
+                                                        <Checkbox disabled={!enabled}>Áp dụng cả buổi đầu tiên</Checkbox>
+                                                    </Form.Item>
+                                                )}
                                             </Space>
                                         );
                                     }}
@@ -1154,7 +1230,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                             </Col>
                         </Row>
                         <Form.Item noStyle dependencies={['enable_lesson_name_pattern']}>
-                            {({ getFieldValue }) => getFieldValue('enable_lesson_name_pattern') && (
+                            {({ getFieldValue }) => getFieldValue('enable_lesson_name_pattern') && !hasSingleSelectedLesson && (
                                 <Form.List name="lesson_name_rules">
                                     {(fields, { add, remove }) => (
                                         <Card size="small" title="Mẫu tên theo khoảng bài" style={{ margin: '0 0 12px 33.333%' }}>
@@ -1198,35 +1274,6 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         </Form.Item>
                         <Divider style={{ margin: '12px 0' }} />
 
-                        {/* Tùy chọn Phòng học */}
-                        <Row gutter={16} align="middle" style={{ marginBottom: 8 }}>
-                            <Col span={8}>
-                                <Form.Item name="enable_room" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                    <Checkbox><Text strong>Đổi Phòng học</Text></Checkbox>
-                                </Form.Item>
-                            </Col>
-                            <Col span={16}>
-                                <Form.Item noStyle dependencies={['enable_room']}>
-                                    {({ getFieldValue }) => {
-                                        const enabled = getFieldValue('enable_room');
-                                        return (
-                                            <Form.Item
-                                                name="common_room"
-                                                style={{ marginBottom: 0 }}
-                                                rules={[{ required: enabled, message: 'Vui lòng chọn phòng học' }]}
-                                            >
-                                                <Select
-                                                    placeholder="Chọn phòng học"
-                                                    options={ROOM_OPTIONS}
-                                                    disabled={!enabled}
-                                                />
-                                            </Form.Item>
-                                        );
-                                    }}
-                                </Form.Item>
-                            </Col>
-                        </Row>
-                        <Divider style={{ margin: '12px 0' }} />
                         <Row gutter={16} align="top" style={{ marginBottom: 8 }}>
                             <Col span={8}>
                                 <Form.Item name="enable_mapping" valuePropName="checked" style={{ marginBottom: 0 }}>
@@ -1375,6 +1422,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                                     format="HH:mm"
                                                                     style={{ width: '100%' }}
                                                                     disabledTime={() => getEndDisabledTime(separateStartTime)}
+                                                                    defaultOpenValue={separateStartTime}
                                                                     disabled={!separateStartTime}
                                                                 />
                                                             </Form.Item>

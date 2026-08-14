@@ -3,11 +3,16 @@ import { logoutUser } from "@/services/authService";
 import { MenuOutlined } from "@ant-design/icons";
 import { Avatar, Button, Dropdown, Flex, Layout, Space, Menu, Grid } from "antd";
 import { MenuProps } from "antd/lib";
-import { useRouter, usePathname } from "next/navigation";
-import React from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import React, { useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { menuConfig, getActiveKeys } from "./SideMenu";
+import {
+  menuConfig,
+  getActiveKeys,
+  isProgramContextPath,
+  withProgramContext,
+} from "./SideMenu";
 
 const { Header: AntdHeader } = Layout;
 const { useBreakpoint } = Grid;
@@ -21,9 +26,24 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
   const { username } = user;
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentProgram = useAuthStore((state) => state.currentProgram);
+  const urlProgram = String(searchParams.get('program') || '').trim();
+  // Menu luôn dùng shared state mới nhất. Nếu tiếp tục ưu tiên URL của trang
+  // hiện tại, khoảng thời gian URL đang đồng bộ sau khi bấm Lọc có thể dựng
+  // link sang module khác bằng Chương trình cũ.
+  const navigationProgram = currentProgram;
   const screens = useBreakpoint();
   const isMobile = screens && !screens.xl;
   const isPhone = screens && !screens.sm;
+
+  // Deep link hoặc tab mới có `program` là nguồn ưu tiên. URL trống không xóa
+  // context, vì người dùng có thể đang đi qua Tổng quan hay module không lọc.
+  useEffect(() => {
+    if (urlProgram && isProgramContextPath(pathname)) {
+      useAuthStore.getState().setCurrentProgram(urlProgram);
+    }
+  }, [pathname, urlProgram]);
 
   const { hasPermission: _hasPermission } = useAuthStore();
 
@@ -55,7 +75,10 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
     })
     .map(item => {
       const allowedChildren = item.children?.filter(child => hasPermission(child.permission));
-      const targetPath = item.path || allowedChildren?.[0]?.path || '/dashboard';
+      const targetPath = withProgramContext(
+        item.path || allowedChildren?.[0]?.path || '/dashboard',
+        navigationProgram
+      );
       return {
         key: item.key,
         // Dùng link thật để menu chuột phải của trình duyệt có thể mở tab mới.
@@ -63,7 +86,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
         children: allowedChildren && allowedChildren.length > 0
           ? allowedChildren.map(child => ({
             key: child.key,
-            label: <Link href={child.path as string}>{child.label}</Link>,
+            label: <Link href={withProgramContext(child.path as string, navigationProgram)}>{child.label}</Link>,
           }))
           : undefined,
       };
@@ -97,7 +120,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
     }
 
     if (targetPath) {
-      router.push(targetPath);
+      router.push(withProgramContext(targetPath, navigationProgram));
     }
   };
 

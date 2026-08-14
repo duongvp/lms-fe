@@ -109,6 +109,38 @@ export const menuConfig: IMenuItem[] = [
     },
 ];
 
+// Chỉ ba trang nghiệp vụ này dùng chung bộ lọc Chương trình. Các trang khác
+// không nhận query `program`, nhưng cũng không được xóa lựa chọn trong store.
+export const PROGRAM_CONTEXT_PATHS = ["/lessons", "/quizzes", "/schedule"] as const;
+
+export const isProgramContextPath = (path: string) => {
+    const pathname = path.split("?")[0].split("#")[0];
+    return PROGRAM_CONTEXT_PATHS.some(
+        (item) => pathname === item || pathname.startsWith(`${item}/`)
+    );
+};
+
+export const withProgramContext = (path: string, programCode?: string | null) => {
+    const [pathWithoutHash, hash] = path.split("#", 2);
+    const [pathname, query = ""] = pathWithoutHash.split("?", 2);
+    const params = new URLSearchParams(query);
+
+    if (isProgramContextPath(path)) {
+        const program = String(
+            programCode === undefined
+                ? useAuthStore.getState().currentProgram || ""
+                : programCode || ""
+        ).trim();
+        if (program) params.set("program", program);
+        else params.delete("program");
+    } else {
+        params.delete("program");
+    }
+
+    const queryString = params.toString();
+    return `${pathname}${queryString ? `?${queryString}` : ""}${hash ? `#${hash}` : ""}`;
+};
+
 // Tạo menu items dựa trên quyền của user
 const getMenuItems = (
     hasPermission: (permission: string | null) => boolean
@@ -222,6 +254,7 @@ const SideMenu: React.FC<SideMenuProps> = ({ drawerOpen, onCloseDrawer }) => {
     const router = useRouter();
     const pathname = usePathname();
     const { hasPermission: _hasPermission } = useAuthStore();
+    const currentProgram = useAuthStore((state) => state.currentProgram);
     const screens = useBreakpoint();
     const isMobile = screens && !screens.xl;
 
@@ -281,7 +314,7 @@ const SideMenu: React.FC<SideMenuProps> = ({ drawerOpen, onCloseDrawer }) => {
                 });
                 return;
             }
-            router.push(path);
+            router.push(withProgramContext(path, currentProgram));
             onCloseDrawer();
         }
     };

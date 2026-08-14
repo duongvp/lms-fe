@@ -120,6 +120,7 @@ const Page = () => {
     const replaceLessonUrl = useCallback((values: LessonFilterValues, page = 1) => {
         const params = new URLSearchParams();
         const program = String(values.subject_code || "").trim();
+        useAuthStore.getState().setCurrentProgram(program || null);
         const lesson = values.learn_number;
         const keyword = String(values.keyword || "").trim();
         if (program) params.set("program", program);
@@ -134,8 +135,16 @@ const Page = () => {
     useEffect(() => {
         if (initializedFromUrl.current) return;
         initializedFromUrl.current = true;
-        const program = String(searchParams.get("program") || "").trim();
+        const urlProgram = String(searchParams.get("program") || "").trim();
+        const sharedProgram = String(useAuthStore.getState().currentProgram || "").trim();
+        const program = urlProgram || sharedProgram;
         if (!program) return;
+        useAuthStore.getState().setCurrentProgram(program);
+        if (!urlProgram) {
+            const params = new URLSearchParams(searchParams.toString());
+            params.set("program", program);
+            router.replace(`/lessons?${params.toString()}`, { scroll: false });
+        }
         const lesson = Number(searchParams.get("lesson"));
         const grade = Number(searchParams.get("grade"));
         const keyword = String(searchParams.get("q") || "").trim();
@@ -152,7 +161,7 @@ const Page = () => {
         setSearchText(keyword);
         setCurrentPage(page);
         setHasSearched(true);
-    }, [searchParams]);
+    }, [router, searchParams]);
     const hasPermission = useAuthStore((state) => state.hasPermission);
     const can = useAuthStore((state) => state.can);
     const { fieldPolicy } = useAuthStore((state) => state.user);

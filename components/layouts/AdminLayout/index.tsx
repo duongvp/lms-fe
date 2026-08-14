@@ -53,6 +53,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
       if (event.key === 'logout') {
         useAuthStore.getState().clearUser();
         useAuthStore.getState().clearAccessToken();
+        useAuthStore.getState().setCurrentProgram(null);
         localStorage.removeItem('auth-storage');
         redirectToLogin();
       }

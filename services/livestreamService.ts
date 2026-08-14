@@ -14,11 +14,14 @@ export interface LivestreamPayload {
     grade?: number;
     subject_name?: string;
     lesson_name?: string;
+    channel_name?: string;
     lesson_count?: number;
     start_time: string;
     end_time: string;
     lesson_status: number;
     package_lesson_mappings?: Array<{
+        package_id?: string;
+        package_ids?: string[];
         course_id: string;
         lesson_ids: string[];
     }>;
@@ -227,7 +230,7 @@ export interface LivestreamListParams {
     classroom?: string;
     system_type?: string;
     lesson_status?: string | number;
-    time_status?: "upcoming" | "ongoing" | "completed";
+    time_status?: "upcoming" | "ongoing" | "completed" | Array<"upcoming" | "ongoing" | "completed">;
     start_time?: string;
     end_time?: string;
     sort_by?: string;
