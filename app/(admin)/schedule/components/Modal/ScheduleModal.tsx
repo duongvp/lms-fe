@@ -1004,7 +1004,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                 <Row gutter={24}>
                                     <Col span={8}>
                                         <Form.Item label="Ngày học" name="date" rules={requiredWhenEditable('start_time', 'Nhập ngày học')}>
-                                            <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} placeholder="DD/MM/YYYY" disabled={!isFieldEditable('start_time')} />
+                                            <DatePicker format="DD/MM/YYYY" minDate={dayjs()} style={{ width: '100%' }} placeholder="DD/MM/YYYY" disabled={!isFieldEditable('start_time')} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>

@@ -31,8 +31,6 @@ import {
   EditOutlined,
   EyeOutlined,
   SearchOutlined,
-  UserOutlined,
-  TeamOutlined,
   CodeOutlined,
   FileExcelOutlined,
   SettingOutlined,
@@ -50,14 +48,29 @@ import {
 import { useQuizClassesQuery, useQuizLessonsQuery } from "@/hooks/useQuizQueries";
 import type { QuizClassOption, QuizLessonOption } from "@/services/quizService";
 import { buildLessonSelectOptions } from "@/app/(admin)/quizzes/quiz.utils";
-import { FormSection } from "../schedule/components/Modal/ScheduleModal";
-import TeachingStaffSelect from "@/components/shared/TeachingStaffSelect";
 import CustomTable from "@/components/ui/Table";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
+
+const RoomConfigFormSection = ({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) => (
+  <Card
+    size="small"
+    title={title}
+    styles={{ body: { paddingBottom: 4 } }}
+    style={{ marginBottom: 16 }}
+  >
+    {children}
+  </Card>
+);
 
 export default function RoomConfigPage() {
   const hasPermission = useAuthStore((state) => state.hasPermission);
@@ -115,19 +128,15 @@ export default function RoomConfigPage() {
     label: cls.subject_name ? `${cls.code} \u2014 ${cls.subject_name}` : cls.code,
     searchText: `${cls.code} ${cls.subject_name || ''}`.toLowerCase(),
   }));
-
-  const isFieldEditable = (fieldCode: string) => {
-    if (
-      (fieldCode === 'teacher' || fieldCode === 'assistant_teacher')
-    ) {
-      return false;
-    }
-    return true;
-  };
-
-  const requiredWhenEditable = (fieldCode: string, message: string) =>
-    isFieldEditable(fieldCode) ? [{ required: true, message }] : [];
-
+  const createProgramOptions = classSelectOptions.filter((option) => (
+    can(PermissionKey.ROOM_CONFIG_CREATE, option.value)
+  ));
+  const importProgramOptions = classSelectOptions.filter((option) => (
+    can(PermissionKey.ROOM_CONFIG_IMPORT, option.value)
+  ));
+  const formProgramOptions = editingRecord
+    ? classSelectOptions.filter((option) => option.value === editingRecord.code)
+    : createProgramOptions;
 
   // Fetch table data
   const fetchData = useCallback(async () => {
@@ -187,15 +196,6 @@ export default function RoomConfigPage() {
       form.setFieldsValue({
         code: record.code,
         learn_number: record.learn_number,
-        // Giáo viên: set username để TeachingStaffSelect hiển thị đúng giá trị
-        teacher_username: record.teacher?.username || undefined,
-        teacher_name: record.teacher?.name || '',
-        teacher_hmid: record.teacher?.student_hmid || '',
-        // Trợ giảng
-        assistant_username: record.assistant_teacher?.username || undefined,
-        assistant_name: record.assistant_teacher?.name || '',
-        assistant_hmid: record.assistant_teacher?.student_hmid || '',
-
         // Config UI fields
         cam: configObj.cam ?? false,
         evg: configObj.evg || 'evg',
@@ -222,8 +222,6 @@ export default function RoomConfigPage() {
       form.setFieldsValue({
         code: undefined,
         learn_number: 1,
-        teacher_username: undefined,
-        assistant_username: undefined,
         ...defaultConfig,
         config_json: defaultJson,
       });
@@ -266,42 +264,12 @@ export default function RoomConfigPage() {
 
       setSaving(true);
       const learnNumberVal = Number(values.learn_number);
-      // class_id = code + learn_number nối trực tiếp (ví dụ: toan-6-2027 + 14 = toan-6-202714)
-      const classId = `${codeVal}${learnNumberVal}`;
 
       const payload: SaveRoomConfigPayload = {
         code: codeVal,
         learn_number: learnNumberVal,
         config: finalConfig,
       };
-
-      // Teacher staff info (room_id = 1)
-      if (values.teacher_username && values.teacher_username.trim()) {
-        payload.teacher = {
-          username: values.teacher_username.trim(),
-          student_hmid: values.teacher_hmid ? String(values.teacher_hmid).trim() : '',
-          name: values.teacher_name ? values.teacher_name.trim() : '',
-          code: codeVal,
-          learn_number: learnNumberVal,
-          islearn: 0,
-          room_id: 1,
-          class_id: classId,
-        };
-      }
-
-      // Assistant teacher staff info (room_id = 1)
-      if (values.assistant_username && values.assistant_username.trim()) {
-        payload.assistant_teacher = {
-          username: values.assistant_username.trim(),
-          student_hmid: values.assistant_hmid ? String(values.assistant_hmid).trim() : '',
-          name: values.assistant_name ? values.assistant_name.trim() : '',
-          code: codeVal,
-          learn_number: learnNumberVal,
-          islearn: 0,
-          room_id: 1,
-          class_id: classId,
-        };
-      }
 
       const res: any = await saveRoomConfig(payload);
       if (res?.success) {
@@ -435,7 +403,6 @@ export default function RoomConfigPage() {
       dataIndex: "code",
       key: "code",
       render: (text: string) => {
-        const found = classRows.find((s) => s.code === text);
         return (
           <Space direction="vertical" size={0}>
             <Tag color="blue" style={{ fontSize: 13, padding: "2px 8px" }}>
@@ -454,43 +421,6 @@ export default function RoomConfigPage() {
       render: (val: number) => (
         <Badge count={`Bài ${val}`} style={{ backgroundColor: "#52c41a", padding: "0 8px" }} />
       ),
-    },
-    {
-      title: "Giáo viên phụ trách",
-      key: "teacher",
-      render: (record: RoomConfigRecord) => {
-        if (!record.teacher) {
-          return <Text type="secondary" style={{ fontStyle: "italic" }}>Chưa gán Giáo viên</Text>;
-        }
-        return (
-          <Space direction="vertical" size={2}>
-            <Space>
-              <UserOutlined style={{ color: "#1890ff" }} />
-              <Text>{record.teacher.name || record.teacher.username}</Text>
-            </Space>
-          </Space>
-        );
-      },
-    },
-    {
-      title: "Trợ giảng phụ trách",
-      key: "assistant_teacher",
-      render: (record: RoomConfigRecord) => {
-        if (!record.assistant_teacher) {
-          return <Text type="secondary" style={{ fontStyle: "italic" }}>Chưa gán Trợ giảng</Text>;
-        }
-        return (
-          <Space direction="vertical" size={2}>
-            <Space>
-              <TeamOutlined style={{ color: "#722ed1" }} />
-              <Text>{record.assistant_teacher.name || record.assistant_teacher.username}</Text>
-            </Space>
-            {/* {record.assistant_teacher.student_hmid && (
-              <Tag color="purple">Mã: {record.assistant_teacher.student_hmid}</Tag>
-            )} */}
-          </Space>
-        );
-      },
     },
     {
       title: "Cấu hình phòng học",
@@ -580,7 +510,7 @@ export default function RoomConfigPage() {
               Cấu hình Phòng học Trực tuyến
             </Title>
             <Text type="secondary">
-              Quản lý cấu hình phòng học livestream và tự động gán Giáo viên & Trợ giảng cho từng buổi học.
+              Quản lý cấu hình livestream cho từng bài học trong Chương trình.
             </Text>
           </Col>
           <Col>
@@ -714,7 +644,7 @@ export default function RoomConfigPage() {
             }
           }}
         >
-          <FormSection title="Thông tin buổi học">
+          <RoomConfigFormSection title="Thông tin bài học">
             <Row gutter={24}>
               <Col xs={24} md={14}>
                 <Form.Item
@@ -725,10 +655,11 @@ export default function RoomConfigPage() {
                   <Select
                     showSearch
                     placeholder="Chọn mã lớp học"
-                    options={classSelectOptions}
+                    options={formProgramOptions}
                     loading={classesQuery.isLoading || classesQuery.isValidating}
                     optionFilterProp="searchText"
                     popupMatchSelectWidth={480}
+                    disabled={Boolean(editingRecord)}
                     onChange={() => {
                       form.setFieldValue('learn_number', undefined);
                     }}
@@ -753,28 +684,6 @@ export default function RoomConfigPage() {
                 </Form.Item>
               </Col>
             </Row>
-            <Row gutter={24}>
-              <Col xs={24} md={12}>
-                <Form.Item label="Giáo viên" name="teacher_username">
-                  <TeachingStaffSelect
-                    teacherType={1}
-                    showSearch
-                    optionFilterProp="label"
-                    placeholder="Chọn giáo viên"
-                  />
-                </Form.Item>
-              </Col>
-              <Col xs={24} md={12}>
-                <Form.Item label="Trợ giảng" name="assistant_username">
-                  <TeachingStaffSelect
-                    teacherType={0}
-                    showSearch
-                    optionFilterProp="label"
-                    placeholder="Chọn trợ giảng"
-                  />
-                </Form.Item>
-              </Col>
-            </Row>
             {selectedCode && (
               <div style={{ marginBottom: 12, padding: '8px 12px', background: '#f5f5f5', borderRadius: 6, fontSize: 13 }}>
                 <Space split="|" size={16}>
@@ -788,9 +697,9 @@ export default function RoomConfigPage() {
                 </Space>
               </div>
             )}
-          </FormSection>
+          </RoomConfigFormSection>
 
-          <FormSection title="Cấu hình phòng học">
+          <RoomConfigFormSection title="Cấu hình phòng học">
             <Tabs
               activeKey={configTab}
               onChange={(key) => setConfigTab(key as "ui" | "json")}
@@ -867,7 +776,7 @@ export default function RoomConfigPage() {
                 },
               ]}
             />
-          </FormSection>
+          </RoomConfigFormSection>
         </Form>
       </Modal>
 
@@ -897,25 +806,6 @@ export default function RoomConfigPage() {
               <Paragraph>
                 <Text strong>Thời gian cập nhật: </Text>
                 {detailRecord.updated_at ? dayjs(detailRecord.updated_at).format("DD/MM/YYYY HH:mm:ss") : "-"}
-              </Paragraph>
-            </Card>
-
-            <Card size="small" title="Giáo viên & Trợ giảng phụ trách">
-              <Paragraph>
-                <Text strong>Giáo viên (room_id = 1): </Text>
-                {detailRecord.teacher ? (
-                  <Tag color="blue">{detailRecord.teacher.name || detailRecord.teacher.username} ({detailRecord.teacher.student_hmid || ""})</Tag>
-                ) : (
-                  <Text type="secondary">Chưa gán</Text>
-                )}
-              </Paragraph>
-              <Paragraph>
-                <Text strong>Trợ giảng (room_id = 2): </Text>
-                {detailRecord.assistant_teacher ? (
-                  <Tag color="purple">{detailRecord.assistant_teacher.name || detailRecord.assistant_teacher.username} ({detailRecord.assistant_teacher.student_hmid || ""})</Tag>
-                ) : (
-                  <Text type="secondary">Chưa gán</Text>
-                )}
               </Paragraph>
             </Card>
 
@@ -980,7 +870,7 @@ export default function RoomConfigPage() {
             showSearch
             placeholder="Chọn Chương trình để import"
             value={importProgramCode}
-            options={classSelectOptions}
+            options={importProgramOptions}
             optionFilterProp="searchText"
             onChange={(value) => {
               setImportProgramCode(value);
@@ -1007,7 +897,7 @@ export default function RoomConfigPage() {
                     </p>
                     <p className="ant-upload-text">Nhấp hoặc Kéo thả file Excel (.xlsx, .csv) vào đây</p>
                     <p className="ant-upload-hint">
-                      Tải file mẫu để dùng đúng các cột: <Text code>learn_number</Text>, <Text code>config</Text>. Giáo viên và trợ giảng được quản lý tại Lịch học.
+                      Tải file mẫu để dùng đúng các cột: <Text code>learn_number</Text>, <Text code>config</Text>.
                     </p>
                     <Button type="link" onClick={(event) => { event.stopPropagation(); downloadImportTemplate(); }}>
                       Tải file mẫu Excel

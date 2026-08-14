@@ -1869,6 +1869,7 @@ const Page = () => {
                                     replaceScheduleUrl(submittedFilterValues, size !== pageSize ? 1 : page);
                                 }
                             }}
+                            size="middle"
                             onChange={(_, filters, sorter, extra) => {
                                 if (extra.action === "filter") {
                                     const selectedProgram = filters.program_code?.[0];
