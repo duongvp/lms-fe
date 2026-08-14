@@ -516,11 +516,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                         );
                                     }}
                                 </Form.Item>
-                                <Form.Item
-                                    name={[field.name, "teacher"]}
-                                    label="Giáo viên"
-                                    rules={[{ required: true, message: "Chọn giáo viên" }]}
-                                >
+                                <Form.Item name={[field.name, "teacher"]} label="Giáo viên">
                                     <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" allowClear placeholder="Chọn giáo viên" style={{ width: 220 }} />
                                 </Form.Item>
                                 <Form.Item name={[field.name, "assistant_teachers"]} label="Trợ giảng">
