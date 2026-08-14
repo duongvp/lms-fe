@@ -228,7 +228,7 @@ export interface LivestreamListParams {
     code_exact?: string;
     subject?: string;
     classroom?: string;
-    system_type?: string;
+    system_type?: "topclass" | "topuni" | Array<"topclass" | "topuni">;
     lesson_status?: string | number;
     time_status?: "upcoming" | "ongoing" | "completed" | Array<"upcoming" | "ongoing" | "completed">;
     start_time?: string;

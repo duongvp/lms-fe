@@ -121,7 +121,7 @@ const Page = () => {
     const replaceLessonUrl = useCallback((values: LessonFilterValues, page = 1) => {
         const params = new URLSearchParams();
         const program = String(values.subject_code || "").trim();
-        useAuthStore.getState().setCurrentProgram(program || null);
+        if (program) useAuthStore.getState().setCurrentProgram(program);
         const lesson = values.learn_number;
         const keyword = String(values.keyword || "").trim();
         if (program) params.set("program", program);

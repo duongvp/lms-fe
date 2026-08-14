@@ -101,7 +101,7 @@ const QuizManagementPage = () => {
     const replaceQuizUrl = useCallback((nextFilters: QuizFilterValues, nextKeyword = "", nextPage = 1) => {
         const params = new URLSearchParams();
         const program = String(nextFilters.code || "").trim();
-        useAuthStore.getState().setCurrentProgram(program || null);
+        if (program) useAuthStore.getState().setCurrentProgram(program);
         const lesson = nextFilters.learn_number;
         if (program) params.set("program", program);
         if (lesson !== undefined && lesson !== null) params.set("learn_number", String(lesson));

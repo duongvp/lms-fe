@@ -142,6 +142,7 @@ interface ScheduleFilterValues {
     keyword?: string;
     code?: string;
     teacher?: string;
+    system_type?: Array<"topclass" | "topuni">;
     time_status?: Array<"upcoming" | "ongoing" | "completed">;
     date_range?: [Dayjs, Dayjs];
 }
@@ -243,6 +244,22 @@ const buildScheduleApiParams = (values: ScheduleFilterValues) => {
         start_time: date_range?.[0]?.startOf("day").format("YYYY-MM-DDTHH:mm:ss.SSS[Z]"),
         end_time: date_range?.[1]?.endOf("day").format("YYYY-MM-DDTHH:mm:ss.SSS[Z]"),
     };
+};
+
+const buildScheduleUrl = (values: ScheduleFilterValues, targetPage = 1) => {
+    const params = new URLSearchParams();
+    const program = String(values.code || "").trim();
+    const keyword = String(values.keyword || "").trim();
+    const teacher = String(values.teacher || "").trim();
+    if (program) params.set("program", program);
+    if (keyword) params.set("q", keyword);
+    if (teacher) params.set("teacher", teacher);
+    if (values.system_type?.length) params.set("system_type", values.system_type.join(","));
+    if (values.time_status?.length) params.set("status", values.time_status.join(","));
+    if (values.date_range?.[0]?.isValid()) params.set("from", values.date_range[0].format("YYYY-MM-DD"));
+    if (values.date_range?.[1]?.isValid()) params.set("to", values.date_range[1].format("YYYY-MM-DD"));
+    if (targetPage > 1) params.set("page", String(targetPage));
+    return params.size ? `/schedule?${params.toString()}` : "/schedule";
 };
 
 const lessonStatusText = (
@@ -424,6 +441,18 @@ const ScheduleFilterDrawer = ({
                             placeholder="Chọn giáo viên"
                         />
                     </Form.Item>
+                    <Form.Item name="system_type" label="Hệ thống">
+                        <Select
+                            mode="multiple"
+                            maxTagCount="responsive"
+                            allowClear
+                            placeholder="Tất cả hệ thống"
+                            options={[
+                                { value: "topclass", label: "Topclass" },
+                                { value: "topuni", label: "Topuni" },
+                            ]}
+                        />
+                    </Form.Item>
                     <Form.Item name="time_status" label="Trạng thái buổi học">
                         <Select
                             mode="multiple"
@@ -463,7 +492,6 @@ const Page = () => {
     const [api, contextHolder] = notification.useNotification({ duration: 2.5 });
     const router = useRouter();
     const searchParams = useSearchParams();
-    const initializedFromUrl = useRef(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [openImportModal, setOpenImportModal] = useState(false);
     const [importing, setImporting] = useState(false);
@@ -479,30 +507,21 @@ const Page = () => {
     const [showPageInfo, setShowPageInfo] = useState(true);
 
     const replaceScheduleUrl = useCallback((values: ScheduleFilterValues, targetPage = 1) => {
-        const params = new URLSearchParams();
         const program = String(values.code || "").trim();
-        useAuthStore.getState().setCurrentProgram(program || null);
-        const keyword = String(values.keyword || "").trim();
-        const teacher = String(values.teacher || "").trim();
-        if (program) params.set("program", program);
-        if (keyword) params.set("q", keyword);
-        if (teacher) params.set("teacher", teacher);
-        if (values.time_status?.length) params.set("status", values.time_status.join(","));
-        if (values.date_range?.[0]?.isValid()) params.set("from", values.date_range[0].format("YYYY-MM-DD"));
-        if (values.date_range?.[1]?.isValid()) params.set("to", values.date_range[1].format("YYYY-MM-DD"));
-        if (targetPage > 1) params.set("page", String(targetPage));
-        router.replace(params.size ? `/schedule?${params.toString()}` : "/schedule", { scroll: false });
+        // URL của Lịch học có thể tạm thời không có program (ví dụ Admin lọc
+        // liên chương trình). Trường hợp đó không được xóa shared context;
+        // shared program chỉ bị clear khi logout.
+        if (program) useAuthStore.getState().setCurrentProgram(program);
+        router.replace(buildScheduleUrl(values, targetPage), { scroll: false });
     }, [router]);
 
     useEffect(() => {
-        if (initializedFromUrl.current) return;
-        initializedFromUrl.current = true;
         const urlProgram = String(searchParams.get("program") || "").trim();
         const sharedProgram = String(useAuthStore.getState().currentProgram || "").trim();
         const program = urlProgram || sharedProgram;
         const hasDateFilter = Boolean(searchParams.get("from") || searchParams.get("to"));
         const hasOtherFilter = Boolean(
-            searchParams.get("q") || searchParams.get("teacher") || searchParams.get("status")
+            searchParams.get("q") || searchParams.get("teacher") || searchParams.get("system_type") || searchParams.get("status")
         );
         // Admin được phép xem liên chương trình theo thời gian, nên URL không
         // có `program` vẫn phải được khôi phục đầy đủ sau khi tải lại trang.
@@ -521,6 +540,11 @@ const Page = () => {
             code: program,
             keyword: String(searchParams.get("q") || "").trim(),
             teacher: String(searchParams.get("teacher") || "").trim(),
+            system_type: String(searchParams.get("system_type") || "")
+                .split(",")
+                .filter((system): system is "topclass" | "topuni" => (
+                    ["topclass", "topuni"].includes(system)
+                )),
             time_status: String(searchParams.get("status") || "")
                 .split(",")
                 .filter((status): status is "upcoming" | "ongoing" | "completed" => (
@@ -1558,8 +1582,11 @@ const Page = () => {
                                 icon={<CalendarOutlined />}
                                 disabled={!submittedFilterValues.code}
                                 onClick={() => {
-                                    const program = encodeURIComponent(String(submittedFilterValues.code));
-                                    router.push(`/schedule/auto?program=${program}&returnTo=${encodeURIComponent(`/schedule?program=${String(submittedFilterValues.code)}`)}`);
+                                    const params = new URLSearchParams({
+                                        program: String(submittedFilterValues.code),
+                                        returnTo: buildScheduleUrl(submittedFilterValues, currentPage),
+                                    });
+                                    router.push(`/schedule/auto?${params.toString()}`);
                                 }}
                             >
                                 Tạo lịch tự động
@@ -1605,7 +1632,7 @@ const Page = () => {
                                     const params = new URLSearchParams({
                                         ids: selectedRows.map((item) => String(item.id)).join(","),
                                         program: String(submittedFilterValues.code || ""),
-                                        returnTo: `/schedule?program=${String(submittedFilterValues.code || "")}`,
+                                        returnTo: buildScheduleUrl(submittedFilterValues, currentPage),
                                     });
                                     router.push(`/schedule/auto-edit?${params.toString()}`);
                                 }}
