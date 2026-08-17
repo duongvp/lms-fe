@@ -240,7 +240,13 @@ const LessonTable = ({
                 />
             ) : (
                 <CustomTable<LessonDataType>
-                    responsiveCards={false}
+                    responsiveCards
+                    responsiveCardTitle={(record) => (
+                        <Space size={6} wrap>
+                            <Tag color="blue">Bài {record.learn_number}</Tag>
+                            <span>{record.lesson_name || "Chưa có tên bài học"}</span>
+                        </Space>
+                    )}
                     columns={columns}
                     dataSource={data}
                     loading={loading}

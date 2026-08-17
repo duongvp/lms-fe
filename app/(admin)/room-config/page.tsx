@@ -15,7 +15,6 @@ import {
   Row,
   Col,
   Typography,
-  Upload,
   Tooltip,
   Badge,
   Tabs,
@@ -26,7 +25,6 @@ import {
 } from "antd";
 import {
   PlusOutlined,
-  UploadOutlined,
   ReloadOutlined,
   EditOutlined,
   EyeOutlined,
@@ -49,6 +47,7 @@ import { useQuizClassesQuery, useQuizLessonsQuery } from "@/hooks/useQuizQueries
 import type { QuizClassOption, QuizLessonOption } from "@/services/quizService";
 import { buildLessonSelectOptions } from "@/app/(admin)/quizzes/quiz.utils";
 import CustomTable from "@/components/ui/Table";
+import ImportFileDragger from "@/components/shared/ImportFileDragger";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
 
@@ -92,6 +91,7 @@ export default function RoomConfigPage() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importRows, setImportRows] = useState<SaveRoomConfigPayload[]>([]);
+  const [importFile, setImportFile] = useState<File>();
   const [importProgramCode, setImportProgramCode] = useState<string | undefined>();
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [importResult, setImportResult] = useState<any | null>(null);
@@ -361,7 +361,13 @@ export default function RoomConfigPage() {
       }
     };
     reader.readAsArrayBuffer(file);
-    return false;
+  };
+
+  const handleImportFileChange = (file: File | null) => {
+    setImportFile(file || undefined);
+    setImportRows([]);
+    setImportErrors([]);
+    if (file) handleFileUpload(file);
   };
 
   // Submit Import
@@ -527,6 +533,7 @@ export default function RoomConfigPage() {
                 style={{ backgroundColor: "#2e7d32", color: "#fff", borderColor: "#2e7d32" }}
                 onClick={() => {
                   setImportRows([]);
+                  setImportFile(undefined);
                   setImportProgramCode(undefined);
                   setImportErrors([]);
                   setImportResult(null);
@@ -874,6 +881,7 @@ export default function RoomConfigPage() {
             optionFilterProp="searchText"
             onChange={(value) => {
               setImportProgramCode(value);
+              setImportFile(undefined);
               setImportRows([]);
               setImportErrors([]);
             }}
@@ -887,22 +895,26 @@ export default function RoomConfigPage() {
               label: "1. Upload File Excel / CSV",
               children: (
                 <div style={{ padding: "16px 0" }}>
-                  <Upload.Dragger
-                    accept=".xlsx, .xls, .csv"
-                    beforeUpload={handleFileUpload}
-                    showUploadList={false}
+                  <ImportFileDragger
+                    file={importFile}
+                    onFileChange={handleImportFileChange}
+                    requiredHeaders={[
+                      ["learn_number", "Bài", "Buổi học", "learnNumber"],
+                      ["config", "Cấu hình"],
+                    ]}
+                    sheetNames={["Cấu hình phòng"]}
+                    maxSizeMb={5}
+                    maxRows={1000}
+                    hint="Hỗ trợ .xlsx, .csv; đúng cấu trúc file mẫu; tối đa 5 MB/1.000 dòng"
+                  />
+                  <Button
+                    type="link"
+                    icon={<FileExcelOutlined />}
+                    onClick={downloadImportTemplate}
+                    style={{ marginTop: 8, paddingInline: 0 }}
                   >
-                    <p className="ant-upload-drag-icon">
-                      <UploadOutlined style={{ fontSize: 36, color: "#1677ff" }} />
-                    </p>
-                    <p className="ant-upload-text">Nhấp hoặc Kéo thả file Excel (.xlsx, .csv) vào đây</p>
-                    <p className="ant-upload-hint">
-                      Tải file mẫu để dùng đúng các cột: <Text code>learn_number</Text>, <Text code>config</Text>.
-                    </p>
-                    <Button type="link" onClick={(event) => { event.stopPropagation(); downloadImportTemplate(); }}>
-                      Tải file mẫu Excel
-                    </Button>
-                  </Upload.Dragger>
+                    Tải file mẫu Excel
+                  </Button>
                 </div>
               ),
             },

@@ -7,7 +7,7 @@ import type { SorterResult } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
 import { notification, Alert, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, Drawer, Empty, FloatButton, Grid, Tooltip, Descriptions, Tabs, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag } from "antd";
 import type { TabsProps } from "antd";
-import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, FilterOutlined } from "@ant-design/icons";
+import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, FilterOutlined, MoreOutlined, FileExcelOutlined, FileTextOutlined } from "@ant-design/icons";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -22,9 +22,8 @@ import {
     deleteLivestream,
     downloadLivestreamImportTemplate,
     exportLivestreams,
-    importLivestreamMappings,
     importLivestreamsFile,
-    previewLivestreamMappingImport,
+    updateLivestreamsFile,
     updateLivestream,
 } from "@/services/livestreamService";
 import dayjs, { Dayjs } from "dayjs";
@@ -496,9 +495,7 @@ const Page = () => {
     const [openImportModal, setOpenImportModal] = useState(false);
     const [importing, setImporting] = useState(false);
     const [importErrors, setImportErrors] = useState<ScheduleImportError[]>([]);
-    const [importMode, setImportMode] = useState<"create" | "mapping">("create");
-    const [importMappingPreview, setImportMappingPreview] = useState<any | null>(null);
-    const [pendingMappingFile, setPendingMappingFile] = useState<File | null>(null);
+    const [importMode, setImportMode] = useState<"create" | "update">("create");
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
     const [selectedRecord, setSelectedRecord] = useState<ScheduleDataType | null>(null);
@@ -877,7 +874,7 @@ const Page = () => {
         setIsEditMode(false)
     };
 
-    // ... (giữ nguyên tất cả các hàm còn lại: handleExportSchedule, handleDownloadImportTemplate, handleImportSchedule, handleConfirmMappingImport, handleModalSuccess, edit, cancel, handleDelete, save)
+    // ... (giữ nguyên các hàm xử lý danh sách, import, cập nhật, chỉnh sửa và xóa lịch)
 
     const handleExportSchedule = async (format: "csv" | "xlsx") => {
         try {
@@ -909,46 +906,29 @@ const Page = () => {
         }
     };
 
-    const handleImportSchedule = async (file: File) => {
+    const handleImportSchedule = async (file: File | undefined, sheetUrl?: string) => {
         const programCode = String(submittedFilterValues.code || "").trim();
-        if (!programCode) {
+        if (!isAdmin && !programCode) {
             api.warning({
                 message: "Chưa chọn Chương trình",
-                description: "Vui lòng chọn Chương trình trong bộ lọc trước khi thực hiện import.",
+                description: "Tài khoản không phải Admin phải lọc đúng Chương trình trước khi import hoặc cập nhật.",
             });
             setOpenImportModal(false);
             setOpenFilterDrawer(true);
             return;
         }
-        if (importMode === "mapping") {
-            try {
-                setImporting(true);
-                setImportErrors([]);
-                setPendingMappingFile(file);
-                const response: any = await previewLivestreamMappingImport(file, programCode);
-                setImportMappingPreview(response?.data ?? null);
-            } catch (error: any) {
-                api.error({
-                    message: "Xem trước thất bại",
-                    description: error.message || "Không thể xem trước dữ liệu import.",
-                });
-            } finally {
-                setImporting(false);
-            }
-            return;
-        }
-
         try {
             setImporting(true);
             setImportErrors([]);
-            const response: any = await importLivestreamsFile(file, programCode);
-            const summary = response?.data?.summary;
+            const isUpdate = importMode === "update";
+            const response: any = isUpdate
+                ? await updateLivestreamsFile(file, programCode || undefined, sheetUrl)
+                : await importLivestreamsFile(file, programCode || undefined, sheetUrl);
             api.success({
-                message: "Import thành công",
-                description: `Đã tạo ${response?.data?.count ?? 0} lịch học${summary?.hmoRequests !== undefined
-                    ? `, kiểm tra ${summary.hmoRequests} cặp Package/Course qua HMO`
-                    : ""
-                    }.`,
+                message: isUpdate ? "Cập nhật thành công" : "Import thành công",
+                description: isUpdate
+                    ? `Đã cập nhật ${response?.data?.count ?? 0} lịch học; bỏ qua ${response?.data?.unchangedRows ?? 0} lịch không thay đổi.`
+                    : `Đã tạo ${response?.data?.count ?? 0} lịch học.`,
             });
             setOpenImportModal(false);
             setSelectedRowKeys([]);
@@ -959,45 +939,8 @@ const Page = () => {
             const errors = error?.detail?.errors;
             if (Array.isArray(errors)) setImportErrors(errors);
             api.error({
-                message: "Import thất bại",
-                description: error.message || "File import có dữ liệu không hợp lệ.",
-            });
-        } finally {
-            setImporting(false);
-        }
-    };
-
-    const handleConfirmMappingImport = async () => {
-        if (!pendingMappingFile) return;
-        try {
-            setImporting(true);
-            const programCode = String(submittedFilterValues.code || "").trim();
-            if (!programCode) {
-                api.warning({
-                    message: "Chưa chọn Chương trình",
-                    description: "Vui lòng chọn Chương trình trong bộ lọc trước khi thực hiện import.",
-                });
-                return;
-            }
-            const response: any = await importLivestreamMappings({
-                program_code: programCode,
-                updates: importMappingPreview?.updates ?? [],
-            });
-            api.success({
-                message: "Cập nhật mapping thành công",
-                description: `Đã ghi đè mapping cho ${response?.data?.updated ?? importMappingPreview?.count ?? 0} buổi học.`,
-            });
-            setOpenImportModal(false);
-            setImportMappingPreview(null);
-            setPendingMappingFile(null);
-            setSelectedRowKeys([]);
-            if (hasSearched) {
-                await refreshSchedules();
-            }
-        } catch (error: any) {
-            api.error({
-                message: "Cập nhật thất bại",
-                description: error.message || "Không thể ghi đè mapping.",
+                message: importMode === "update" ? "Cập nhật thất bại" : "Import thất bại",
+                description: error.message || "File có dữ liệu không hợp lệ.",
             });
         } finally {
             setImporting(false);
@@ -1482,6 +1425,49 @@ const Page = () => {
         });
     }
 
+    const handleOpenAutoSchedule = () => {
+        const params = new URLSearchParams({
+            program: String(submittedFilterValues.code),
+            returnTo: buildScheduleUrl(submittedFilterValues, currentPage),
+        });
+        router.push(`/schedule/auto?${params.toString()}`);
+    };
+
+    const handleOpenBulkEdit = () => {
+        const requestedRows = data.filter((item) => selectedRowKeys.map(String).includes(String(item.id)));
+        const selectedPrograms = Array.from(new Set(
+            requestedRows.map((item) => String(item.code || "").trim()).filter(Boolean)
+        ));
+        if (selectedPrograms.length > 1) {
+            api.warning({
+                message: "Nhiều Chương trình được chọn",
+                description: "Sửa hàng loạt chỉ áp dụng cho một Chương trình. Hãy lọc hoặc chỉ chọn các lịch cùng Chương trình trước khi tiếp tục.",
+            });
+            return;
+        }
+        const selectedRows = requestedRows.filter(canModifySchedule);
+        if (!selectedRows.length) {
+            api.warning({
+                message: "Không có lịch nào được chọn",
+                description: "Lịch đã bắt đầu hoặc đã nghỉ không thể chỉnh sửa. Hãy chọn ít nhất một lịch chưa diễn ra.",
+            });
+            return;
+        }
+        if (selectedRows.length < requestedRows.length) {
+            api.info({
+                message: "Đã bỏ qua một số lịch",
+                description: "Chỉ mở trang chỉnh sửa cho các lịch chưa bắt đầu. Các lịch đã diễn ra hoặc đã nghỉ bị bỏ qua.",
+            });
+        }
+        sessionStorage.setItem("schedule:auto-edit:rows", JSON.stringify(selectedRows));
+        const params = new URLSearchParams({
+            ids: selectedRows.map((item) => String(item.id)).join(","),
+            program: String(submittedFilterValues.code || ""),
+            returnTo: buildScheduleUrl(submittedFilterValues, currentPage),
+        });
+        router.push(`/schedule/auto-edit?${params.toString()}`);
+    };
+
     return (
         <div ref={pageScrollRef} style={{
             display: "flex",
@@ -1559,24 +1545,18 @@ const Page = () => {
                 handleAddBtn={canCreateSchedule ? handleAddBtn : undefined}
                 handleImportClick={(canImportSchedule || canEditSchedule) ? () => {
                     setImportErrors([]);
-                    setImportMode(canImportSchedule ? "create" : "mapping");
+                    setImportMode(canImportSchedule ? "create" : "update");
                     setOpenImportModal(true);
                 } : undefined}
                 actionClassName="schedule-action-buttons"
                 secondaryActions={
-                    <>
+                    isDesktop ? <>
                         <div className="schedule-workflow-actions">
                             {canCreateSchedule && (
                                 <Button
                                     icon={<CalendarOutlined />}
                                     disabled={!submittedFilterValues.code}
-                                    onClick={() => {
-                                        const params = new URLSearchParams({
-                                            program: String(submittedFilterValues.code),
-                                            returnTo: buildScheduleUrl(submittedFilterValues, currentPage),
-                                        });
-                                        router.push(`/schedule/auto?${params.toString()}`);
-                                    }}
+                                    onClick={handleOpenAutoSchedule}
                                 >
                                     Tạo lịch tự động
                                 </Button>
@@ -1585,40 +1565,7 @@ const Page = () => {
                                 <Button
                                     type="primary"
                                     icon={<EditOutlined />}
-                                    onClick={() => {
-                                        const requestedRows = data.filter((item) => selectedRowKeys.map(String).includes(String(item.id)));
-                                        const selectedPrograms = Array.from(new Set(
-                                            requestedRows.map((item) => String(item.code || "").trim()).filter(Boolean)
-                                        ));
-                                        if (selectedPrograms.length > 1) {
-                                            api.warning({
-                                                message: "Nhiều Chương trình được chọn",
-                                                description: "Sửa hàng loạt chỉ áp dụng cho một Chương trình. Hãy lọc hoặc chỉ chọn các lịch cùng Chương trình trước khi tiếp tục.",
-                                            });
-                                            return;
-                                        }
-                                        const selectedRows = requestedRows.filter(canModifySchedule);
-                                        if (!selectedRows.length) {
-                                            api.warning({
-                                                message: "Không có lịch nào được chọn",
-                                                description: "Lịch đã bắt đầu hoặc đã nghỉ không thể chỉnh sửa. Hãy chọn ít nhất một lịch chưa diễn ra.",
-                                            });
-                                            return;
-                                        }
-                                        if (selectedRows.length < requestedRows.length) {
-                                            api.info({
-                                                message: "Đã bỏ qua một số lịch",
-                                                description: "Chỉ mở trang chỉnh sửa cho các lịch chưa bắt đầu. Các lịch đã diễn ra hoặc đã nghỉ bị bỏ qua.",
-                                            });
-                                        }
-                                        sessionStorage.setItem("schedule:auto-edit:rows", JSON.stringify(selectedRows));
-                                        const params = new URLSearchParams({
-                                            ids: selectedRows.map((item) => String(item.id)).join(","),
-                                            program: String(submittedFilterValues.code || ""),
-                                            returnTo: buildScheduleUrl(submittedFilterValues, currentPage),
-                                        });
-                                        router.push(`/schedule/auto-edit?${params.toString()}`);
-                                    }}
+                                    onClick={handleOpenBulkEdit}
                                 >
                                     Sửa hàng loạt
                                 </Button>
@@ -1656,7 +1603,28 @@ const Page = () => {
                                 onClick={() => setOpenFilterDrawer(true)}
                             />
                         </div>
-                    </>
+                    </> : <div className="schedule-mobile-actions">
+                        <Dropdown
+                            trigger={["click"]}
+                            menu={{
+                                items: [
+                                    ...(canCreateSchedule ? [{ key: "auto", icon: <CalendarOutlined />, label: "Tạo lịch tự động", disabled: !submittedFilterValues.code }] : []),
+                                    ...(canEditSchedule ? [{ key: "bulk-edit", icon: <EditOutlined />, label: "Sửa hàng loạt" }] : []),
+                                    ...(canExportSchedule ? [{ key: "xlsx", icon: <FileExcelOutlined />, label: `Xuất Excel${selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}` }, { key: "csv", icon: <FileTextOutlined />, label: "Xuất CSV" }] : []),
+                                    { key: "reload", icon: <ReloadOutlined />, label: "Làm mới" },
+                                ],
+                                onClick: ({ key }) => {
+                                    if (key === "auto") handleOpenAutoSchedule();
+                                    if (key === "bulk-edit") handleOpenBulkEdit();
+                                    if (key === "xlsx" || key === "csv") handleExportSchedule(key);
+                                    if (key === "reload" && hasSearched) void refreshSchedules();
+                                },
+                            }}
+                        >
+                            <Button icon={<MoreOutlined />}>Thao tác khác</Button>
+                        </Dropdown>
+                        <Button icon={<FilterOutlined />} onClick={() => setOpenFilterDrawer(true)}>Lọc</Button>
+                    </div>
                 }
             />
             </>}
@@ -2016,23 +1984,17 @@ const Page = () => {
                     loading={importing}
                     errors={importErrors}
                     mode={importMode}
-                    preview={importMappingPreview}
                     allowCreateImport={canImportSchedule}
-                    allowMappingImport={canEditSchedule}
+                    allowUpdateImport={canEditSchedule}
                     onClose={() => {
                         setOpenImportModal(false);
-                        setImportMappingPreview(null);
-                        setPendingMappingFile(null);
                         setImportErrors([]);
                     }}
                     onSubmit={handleImportSchedule}
                     onModeChange={(mode) => {
                         setImportMode(mode);
-                        setImportMappingPreview(null);
-                        setPendingMappingFile(null);
                         setImportErrors([]);
                     }}
-                    onConfirmPreview={handleConfirmMappingImport}
                     onDownloadTemplate={handleDownloadImportTemplate}
                 />
             </Form>

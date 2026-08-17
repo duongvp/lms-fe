@@ -21,8 +21,8 @@ export const buildLessonSubjectCode = (
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "")
         .slice(0, 80);
-    if (!subjectSlug || !grade || !schoolYear) return "";
-    return `${subjectSlug}-${grade}-${schoolYear}`;
+    if (!subjectSlug || !schoolYear) return "";
+    return grade ? `${subjectSlug}-${grade}-${schoolYear}` : `${subjectSlug}-${schoolYear}`;
 };
 
 export const formatLessonScheduleOption = (lesson: LessonApiResponse) => {

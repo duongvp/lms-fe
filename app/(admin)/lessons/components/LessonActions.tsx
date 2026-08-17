@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, Dropdown, Radio, Space } from "antd";
+import { Alert, Button, Dropdown, Grid, Radio, Space } from "antd";
 import {
     DownloadOutlined,
     FileExcelOutlined,
@@ -11,6 +11,9 @@ import {
     ReloadOutlined,
     LinkOutlined,
     FolderAddOutlined,
+    UploadOutlined,
+    DownOutlined,
+    MoreOutlined,
 } from "@ant-design/icons";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
 import type {
@@ -29,6 +32,7 @@ interface LessonActionsProps {
     onSearch: (value: string) => Promise<void>;
     onCreate: () => void;
     onCreateProgram: () => void;
+    onImportProgram: () => void;
     onFilter: () => void;
     onImport: () => void;
     onExport: (format: LessonExportFormat, scope: LessonExportScope) => void;
@@ -51,6 +55,7 @@ const LessonActions = ({
     onSearch,
     onCreate,
     onCreateProgram,
+    onImportProgram,
     onFilter,
     onImport,
     onExport,
@@ -61,7 +66,82 @@ const LessonActions = ({
     onReload,
     onManageCourseIds,
     canManageCourseIds,
-}: LessonActionsProps) => (
+}: LessonActionsProps) => {
+    const screens = Grid.useBreakpoint();
+    const compact = !screens.md;
+    const programMenuItems = [
+        { key: "create-program", icon: <FolderAddOutlined />, label: "Tạo chương trình" },
+        { key: "import-program", icon: <UploadOutlined />, label: "Import chương trình" },
+    ];
+    const exportMenuItems = [
+        { key: "xlsx-filter", icon: <FileExcelOutlined />, label: "Excel theo bộ lọc" },
+        { key: "csv-filter", icon: <FileTextOutlined />, label: "CSV theo bộ lọc" },
+        { key: "xlsx-selected", icon: <FileExcelOutlined />, label: "Excel bản ghi đã chọn", disabled: selectedCount === 0 },
+        { key: "csv-selected", icon: <FileTextOutlined />, label: "CSV bản ghi đã chọn", disabled: selectedCount === 0 },
+        { key: "xlsx-all", icon: <FileExcelOutlined />, label: "Excel toàn bộ" },
+        { key: "csv-all", icon: <FileTextOutlined />, label: "CSV toàn bộ" },
+    ];
+    const handleProgramMenuClick = ({ key }: { key: string }) => {
+        if (key === "create-program") onCreateProgram();
+        if (key === "import-program") onImportProgram();
+    };
+    const handleExportMenuClick = ({ key }: { key: string }) => {
+        const [format, scope] = String(key).split("-") as [LessonExportFormat, LessonExportScope];
+        onExport(format, scope);
+    };
+
+    const desktopUtilityActions = (
+        <>
+            {canCreate && (
+                <Dropdown menu={{ items: programMenuItems, onClick: handleProgramMenuClick }} trigger={["click"]}>
+                    <Button icon={<FolderAddOutlined />}>Chương trình <DownOutlined /></Button>
+                </Dropdown>
+            )}
+            <Dropdown menu={{ items: exportMenuItems, onClick: handleExportMenuClick }} trigger={["click"]}>
+                <Button icon={<DownloadOutlined />}>Export</Button>
+            </Dropdown>
+            <Button icon={<ReloadOutlined />} onClick={onReload} />
+            {canEdit && (
+                <Button icon={<LinkOutlined />} disabled={!canManageCourseIds} onClick={onManageCourseIds}>
+                    Course ID theo bài
+                </Button>
+            )}
+            {canEdit && <Button icon={<UnorderedListOutlined />} onClick={onEnableReorder}>Sắp xếp thứ tự</Button>}
+        </>
+    );
+    const mobileUtilityActions = (
+        <Dropdown
+            menu={{
+                items: [
+                    ...(canCreate ? programMenuItems : []),
+                    { type: "divider" as const },
+                    ...exportMenuItems,
+                    { type: "divider" as const },
+                    { key: "reload", icon: <ReloadOutlined />, label: "Làm mới" },
+                    ...(canEdit ? [{ key: "manage-course-ids", icon: <LinkOutlined />, label: "Course ID theo bài", disabled: !canManageCourseIds }] : []),
+                    ...(canEdit ? [{ key: "reorder", icon: <UnorderedListOutlined />, label: "Sắp xếp thứ tự" }] : []),
+                ],
+                onClick: ({ key }) => {
+                    if (key === "create-program" || key === "import-program") {
+                        handleProgramMenuClick({ key });
+                    } else if (String(key).startsWith("xlsx-") || String(key).startsWith("csv-")) {
+                        handleExportMenuClick({ key: String(key) });
+                    } else if (key === "reload") {
+                        onReload();
+                    } else if (key === "manage-course-ids") {
+                        onManageCourseIds();
+                    } else if (key === "reorder") {
+                        onEnableReorder();
+                    }
+                },
+            }}
+            trigger={["click"]}
+        >
+            <Button icon={<MoreOutlined />}>Thao tác khác</Button>
+        </Dropdown>
+    );
+
+    return (
     <>
         <SearchAndActionsBar
             onSearch={onSearch}
@@ -69,51 +149,12 @@ const LessonActions = ({
             titleBtnAdd="Bài học"
             handleAddBtn={canCreate && !reorderMode ? onCreate : undefined}
             handleFilterBtn={!reorderMode ? onFilter : undefined}
+            filterLabel="Lọc"
             handleImportClick={canCreate && !reorderMode ? onImport : undefined}
             extraExportButton={
                 <>
                     {!reorderMode && (
-                        <>
-                            {canCreate && (
-                                <Button icon={<FolderAddOutlined />} onClick={onCreateProgram}>
-                                    Chương trình mới
-                                </Button>
-                            )}
-                            <Dropdown
-                                menu={{
-                                    items: [
-                                        { key: "xlsx-filter", icon: <FileExcelOutlined />, label: "Excel theo bộ lọc" },
-                                        { key: "csv-filter", icon: <FileTextOutlined />, label: "CSV theo bộ lọc" },
-                                        { key: "xlsx-selected", icon: <FileExcelOutlined />, label: "Excel bản ghi đã chọn", disabled: selectedCount === 0 },
-                                        { key: "csv-selected", icon: <FileTextOutlined />, label: "CSV bản ghi đã chọn", disabled: selectedCount === 0 },
-                                        { key: "xlsx-all", icon: <FileExcelOutlined />, label: "Excel toàn bộ" },
-                                        { key: "csv-all", icon: <FileTextOutlined />, label: "CSV toàn bộ" },
-                                    ],
-                                    onClick: ({ key }) => {
-                                        const [format, scope] = String(key).split("-") as [
-                                            LessonExportFormat,
-                                            LessonExportScope,
-                                        ];
-                                        onExport(format, scope);
-                                    },
-                                }}
-                                trigger={["click"]}
-                            >
-                                <Button icon={<DownloadOutlined />}>Export</Button>
-                            </Dropdown>
-                            <Button icon={<ReloadOutlined />} onClick={onReload} />
-                            {canEdit && (
-                                <Button icon={<LinkOutlined />} disabled={!canManageCourseIds} onClick={onManageCourseIds}>
-                                    Course ID theo bài
-                                </Button>
-                            )}
-                        </>
-                    )}
-
-                    {canEdit && !reorderMode && (
-                        <Button icon={<UnorderedListOutlined />} onClick={onEnableReorder}>
-                            Sắp xếp thứ tự
-                        </Button>
+                        compact ? mobileUtilityActions : desktopUtilityActions
                     )}
                     {reorderMode && (
                         <>
@@ -155,6 +196,7 @@ const LessonActions = ({
             />
         )}
     </>
-);
+    );
+};
 
 export default LessonActions;

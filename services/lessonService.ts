@@ -28,7 +28,7 @@ export const reauthenticateLessons = async (password: string) => {
     const token = String(response?.data?.token || "");
     if (!token) throw new Error("Backend không trả token xác thực cấp 2");
     sessionStorage.setItem(LESSON_REAUTH_STORAGE_KEY, token);
-    return response.data as { token: string; expiresInSeconds: number };
+    return response.data as { token: string; expiresInSeconds: number | null };
 };
 
 export const validateLessonReauthentication = () =>
@@ -41,7 +41,8 @@ export const validateLessonReauthentication = () =>
 
 export interface LessonApiResponse {
     id: string;
-    grade: number;
+    grade: number | null;
+    system_type: "topclass" | "topuni";
     subject_code: string;
     subject_name: string;
     learn_number: number;
@@ -73,10 +74,12 @@ export interface LessonSubjectOption {
 
 export interface LessonProgramOption extends LessonSubjectOption {
     grade?: number | null;
+    system_type?: "topclass" | "topuni" | null;
 }
 
 export interface CreateLessonProgramPayload {
-    grade: number;
+    grade?: number;
+    system_type: "topclass" | "topuni";
     subject_code: string;
     subject_name: string;
     lesson_name: string;
@@ -88,7 +91,8 @@ export interface LessonExportParams extends LessonListParams {
 }
 
 export interface LessonPayload {
-    grade: number;
+    grade?: number;
+    system_type?: "topclass" | "topuni";
     subject_code: string;
     subject_name: string;
     learn_number?: number;
@@ -101,7 +105,7 @@ export interface LessonBulkUpdatePayload {
 }
 
 export interface LessonReorderPayload {
-    grade: number;
+    grade?: number;
     subject_code: string;
     mode?: "insert" | "swap";
     ordered_ids: Array<string | number>;
@@ -244,6 +248,13 @@ export const downloadLessonTemplate = (format: "csv" | "xlsx", programCode: stri
         credentials: "include",
     }, "blob");
 
+export const downloadLessonProgramTemplate = (format: "csv" | "xlsx") =>
+    fetchInstance(`${API_BASE_URL}/program-template?format=${format}`, {
+        method: "GET",
+        headers: lessonHeaders(false),
+        credentials: "include",
+    }, "blob");
+
 export const importLessonsFile = (
     file: File,
     mode: "overwrite" | "skip",
@@ -254,6 +265,28 @@ export const importLessonsFile = (
     formData.append("mode", mode);
     formData.append("program_code", programCode);
 
+    return fetchInstance(`${API_BASE_URL}/import`, {
+        method: "POST",
+        body: formData,
+        headers: lessonHeaders(false),
+        credentials: "include",
+    });
+};
+
+export const importLessonProgramFile = (
+    file: File | undefined,
+    mode: "overwrite" | "skip",
+    program: Partial<Omit<CreateLessonProgramPayload, "lesson_name">> = {},
+    sheetUrl?: string,
+) => {
+    const formData = new FormData();
+    if (file) formData.append("file", file);
+    if (sheetUrl) formData.append("sheet_url", sheetUrl);
+    formData.append("mode", mode);
+    formData.append("create_program", "true");
+    Object.entries(program).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) formData.append(key, String(value));
+    });
     return fetchInstance(`${API_BASE_URL}/import`, {
         method: "POST",
         body: formData,

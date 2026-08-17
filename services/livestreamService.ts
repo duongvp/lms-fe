@@ -172,15 +172,33 @@ export const downloadLivestreamImportTemplate = (format: "csv" | "xlsx") =>
         credentials: "include",
     }, "blob");
 
-export const importLivestreamsFile = (file: File, programCode: string) => {
+export const importLivestreamsFile = (file?: File, programCode?: string, sheetUrl?: string) => {
     const formData = new FormData();
-    formData.append("file", file);
-    formData.append("program_code", programCode);
+    if (file) formData.append("file", file);
+    if (programCode) formData.append("program_code", programCode);
+    if (sheetUrl) formData.append("sheet_url", sheetUrl);
     return fetchInstance(`${API_BASE_URL}/import`, {
         method: "POST",
         body: formData,
         credentials: "include",
-    }, "json", 120_000);
+    }, "json", 180_000);
+};
+
+export const updateLivestreamsFile = (file?: File, programCode?: string, sheetUrl?: string) => {
+    const formData = new FormData();
+    if (file) formData.append("file", file);
+    if (programCode) formData.append("program_code", programCode);
+    if (sheetUrl) formData.append("sheet_url", sheetUrl);
+    return fetchInstance(`${API_BASE_URL}/import/update`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+    }, "json", 180_000).catch((error: any) => {
+        if (error?.status === 404 && error?.message === "Not found") {
+            throw new Error("Backend chưa nạp endpoint cập nhật lịch. Vui lòng khởi động lại lms-manage-api.");
+        }
+        throw error;
+    });
 };
 
 export const previewLivestreamMappingImport = (file: File, programCode: string) => {

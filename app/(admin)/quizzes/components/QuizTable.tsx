@@ -261,7 +261,13 @@ const QuizTable = ({
             />
         ) : (
             <CustomTable<QuizApiResponse>
-                responsiveCards={false}
+                responsiveCards
+                responsiveCardTitle={(record) => (
+                    <Space size={6} wrap>
+                        <Tag color="geekblue">Bài {record.learn_number}</Tag>
+                        <Tag color="blue">Câu {record.quiz_index}</Tag>
+                    </Space>
+                )}
                 rowKey="quiz_id"
                 columns={columns}
                 dataSource={data}

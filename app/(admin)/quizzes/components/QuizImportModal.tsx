@@ -1,11 +1,11 @@
 "use client";
 
-import { Alert, Button, Divider, Modal, Radio, Space, Typography, Upload } from "antd";
-import { CloudDownloadOutlined, InboxOutlined } from "@ant-design/icons";
+import { Alert, Button, Divider, Modal, Radio, Space, Typography } from "antd";
+import { CloudDownloadOutlined } from "@ant-design/icons";
 import type { UploadFile } from "antd/es/upload/interface";
+import ImportFileDragger from "@/components/shared/ImportFileDragger";
 
 const { Paragraph, Text } = Typography;
-const { Dragger } = Upload;
 
 interface QuizImportModalProps {
     open: boolean;
@@ -83,17 +83,25 @@ const QuizImportModal = ({
                 </Radio.Group>
             </div>
 
-            <Dragger
-                beforeUpload={() => false}
-                fileList={files}
-                onChange={({ fileList }) => onFilesChange(fileList.slice(-1))}
-                accept=".xlsx,.csv"
-                maxCount={1}
-            >
-                <p className="ant-upload-drag-icon"><InboxOutlined /></p>
-                <p className="ant-upload-text">Bước 2: Kéo file vào đây hoặc bấm để chọn</p>
-                <p className="ant-upload-hint">Chấp nhận .xlsx hoặc .csv, tối đa 5 MB và 5.000 dòng</p>
-            </Dragger>
+            <ImportFileDragger
+                file={files[0]?.originFileObj || null}
+                onFileChange={(file) => onFilesChange(file ? [{
+                    uid: `quiz-import-${file.name}-${file.lastModified}`,
+                    name: file.name,
+                    status: "done",
+                    originFileObj: file as any,
+                }] : [])}
+                maxSizeMb={5}
+                maxRows={5000}
+                requiredHeaders={[
+                    ["learn_number", "Bài học"],
+                    ["quiz_name", "Câu hỏi"],
+                    ["quiz_type", "Loại câu hỏi"],
+                ]}
+                sheetNames={["Nhập câu hỏi"]}
+                prompt="Bước 2: Kéo file vào đây hoặc bấm để chọn"
+                hint="Chấp nhận .xlsx hoặc .csv, tối đa 5 MB và 5.000 dòng"
+            />
 
             <Alert
                 type="warning"

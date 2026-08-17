@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Key } from "react";
-import { Button, Form, Modal, notification, Drawer, Select, Space, Empty, Dropdown, Spin, Tag } from "antd";
-import { DownOutlined, InfoCircleOutlined, UpOutlined, EditOutlined, ReloadOutlined, DownloadOutlined, FilterOutlined } from "@ant-design/icons";
+import { Button, Form, Modal, notification, Drawer, Select, Space, Empty, Dropdown, Spin, Tag, Grid } from "antd";
+import { DownOutlined, InfoCircleOutlined, UpOutlined, EditOutlined, ReloadOutlined, DownloadOutlined, FilterOutlined, MoreOutlined } from "@ant-design/icons";
 import type { UploadFile } from "antd/es/upload/interface";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
@@ -68,6 +68,8 @@ function useDebounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
 
 const QuizManagementPage = () => {
     const searchParams = useSearchParams();
+    const screens = Grid.useBreakpoint();
+    const compact = !screens.md;
     const initializedFromUrl = useRef(false);
     const [form] = Form.useForm<QuizFormValues>();
     const [api, contextHolder] = notification.useNotification();
@@ -813,6 +815,7 @@ const QuizManagementPage = () => {
         <SearchAndActionsBar
             onSearch={handleSearch}
             placeholder="Tìm kiếm câu hỏi..."
+            titleBtnAdd="Câu hỏi"
             handleAddBtn={canCreate ? handleOpenCreate : undefined}
             handleImportClick={canImport ? () => {
                 if (!submittedFilters.code) {
@@ -823,9 +826,28 @@ const QuizManagementPage = () => {
                 setImportFiles([]);
                 setImportOpen(true);
             } : undefined}
-            handleFilterBtn={() => setOpenFilterDrawer(true)}
-            extraExportButton={
-                <>
+            actionClassName="quiz-action-buttons"
+            secondaryActions={
+                compact ? <div className="quiz-mobile-actions">
+                    <Dropdown
+                        trigger={["click"]}
+                        menu={{
+                            items: [
+                                ...(canExport ? [{ key: "export", icon: <DownloadOutlined />, label: `Export${selectedKeys.length ? ` (${selectedKeys.length})` : ""}` }] : []),
+                                { key: "reload", icon: <ReloadOutlined />, label: "Làm mới" },
+                                ...(canEdit ? [{ key: "reorder", icon: <EditOutlined />, label: "Sắp xếp câu hỏi" }] : []),
+                            ],
+                            onClick: ({ key }) => {
+                                if (key === "export") handleExport();
+                                if (key === "reload" && (hasSearched || reorderMode)) void refreshQuizzes();
+                                if (key === "reorder") handleEnableReorder();
+                            },
+                        }}
+                    >
+                        <Button icon={<MoreOutlined />}>Thao tác khác</Button>
+                    </Dropdown>
+                    <Button icon={<FilterOutlined />} onClick={() => setOpenFilterDrawer(true)}>Lọc</Button>
+                </div> : <>
                     {canExport && (
                         <Dropdown
                             trigger={["click"]}
@@ -856,6 +878,7 @@ const QuizManagementPage = () => {
                             Sắp xếp
                         </Button>
                     )}
+                    <Button icon={<FilterOutlined />} onClick={() => setOpenFilterDrawer(true)}>Lọc</Button>
                 </>
             }
         />

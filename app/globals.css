@@ -255,6 +255,30 @@ body {
     width: 100%;
   }
 
+  .responsive-search-actions .schedule-mobile-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+  }
+
+  .schedule-mobile-actions .ant-btn,
+  .schedule-mobile-actions .ant-dropdown-trigger {
+    width: 100%;
+  }
+
+  .responsive-search-actions .quiz-mobile-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+  }
+
+  .quiz-mobile-actions .ant-btn,
+  .quiz-mobile-actions .ant-dropdown-trigger {
+    width: 100%;
+  }
+
   .responsive-page-info-header,
   .responsive-page-toolbar,
   .responsive-card-header {
@@ -413,6 +437,15 @@ body {
     max-width: 100% !important;
   }
 
+  .responsive-table-card .ant-card-head-title {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .responsive-table-card .ant-card-head-wrapper {
+    align-items: flex-start;
+  }
+
   .responsive-table-card .ant-space {
     max-width: 100%;
     flex-wrap: wrap;
@@ -481,6 +514,26 @@ body {
 }
 
 @media (max-width: 767px) {
+  .responsive-search-actions .responsive-action-buttons > .responsive-secondary-actions {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .responsive-search-actions .quiz-mobile-actions,
+  .responsive-search-actions .schedule-mobile-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+  }
+
+  .quiz-mobile-actions .ant-btn,
+  .quiz-mobile-actions .ant-dropdown-trigger,
+  .schedule-mobile-actions .ant-btn,
+  .schedule-mobile-actions .ant-dropdown-trigger {
+    width: 100%;
+  }
+
   .schedule-responsive-modal .ant-modal-title {
     padding-right: 24px;
     line-height: 1.35;

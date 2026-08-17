@@ -18,8 +18,10 @@ import {
     createLesson,
     deleteLesson,
     downloadLessonTemplate,
+    downloadLessonProgramTemplate,
     exportLessons,
     importLessonsFile,
+    importLessonProgramFile,
     hasLessonReauthToken,
     reauthenticateLessons,
     validateLessonReauthentication,
@@ -39,6 +41,7 @@ import LessonFilterDrawer from "./components/LessonFilterDrawer";
 import LessonImportModal from "./components/LessonImportModal";
 import LessonCourseMappingModal from "./components/Modal/LessonCourseMappingModal";
 import ProgramCreateModal from "./components/Modal/ProgramCreateModal";
+import ProgramImportModal from "./components/Modal/ProgramImportModal";
 import LessonTable from "./components/LessonTable";
 import {
     DEFAULT_MODULE_FIELDS,
@@ -92,6 +95,7 @@ const Page = () => {
     const [openFilterDrawer, setOpenFilterDrawer] = useState(false);
     const [openFormModal, setOpenFormModal] = useState(false);
     const [openProgramModal, setOpenProgramModal] = useState(false);
+    const [openProgramImportModal, setOpenProgramImportModal] = useState(false);
     const [openImportModal, setOpenImportModal] = useState(false);
     const [openCourseMappingModal, setOpenCourseMappingModal] = useState(false);
     const [openDetailDrawer, setOpenDetailDrawer] = useState(false);
@@ -424,7 +428,7 @@ const Page = () => {
                 ? editablePayload
                 : {
                     ...editablePayload,
-                    grade: Number(submittedFilterValues.grade),
+                    grade: submittedFilterValues.grade === undefined ? undefined : Number(submittedFilterValues.grade),
                     subject_code: String(submittedFilterValues.subject_code || ""),
                     subject_name: String(submittedFilterValues.subject || ""),
                 };
@@ -495,6 +499,37 @@ const Page = () => {
         }
     };
 
+    const handleImportProgram = async (file: File | undefined, sheetUrl?: string) => {
+        try {
+            setImporting(true);
+            const response: any = await importLessonProgramFile(file, "overwrite", {}, sheetUrl);
+            const program = response?.data?.program;
+            const nextFilters = cleanFilterValues({ grade: program.grade ?? undefined, subject_code: program.subject_code, subject: program.subject_name, keyword: "" });
+            setFilterValues(nextFilters);
+            setSubmittedFilterValues(nextFilters);
+            setHasSearched(true);
+            setCurrentPage(1);
+            setOpenProgramImportModal(false);
+            await refreshLessons();
+            api.success({ message: "Import chương trình thành công", description: `Đã xử lý ${response?.data?.total ?? 0} bài học.` });
+        } catch (error: any) {
+            const errors = error?.detail?.errors ?? [];
+            if (Array.isArray(errors)) setImportErrors(errors);
+            api.error({ message: "Import chương trình thất bại", description: error.message || "Vui lòng kiểm tra lại file và thông tin chương trình." });
+        } finally {
+            setImporting(false);
+        }
+    };
+
+    const handleDownloadProgramTemplate = async (format: "csv" | "xlsx") => {
+        try {
+            const blob = await downloadLessonProgramTemplate(format);
+            downloadBlob(blob, `program-import-template.${format}`);
+        } catch (error: any) {
+            api.error({ message: "Tải file mẫu thất bại", description: error.message || "Không thể tải file mẫu." });
+        }
+    };
+
     const handleDelete = (record: LessonDataType) => {
         Modal.confirm({
             title: "Xác nhận xóa",
@@ -556,10 +591,10 @@ const Page = () => {
     };
 
     const handleEnableReorder = () => {
-        if (!filterValues.grade || !filterValues.subject_code) {
+        if (!filterValues.subject_code) {
             api.warning({
-                message: "Cần chọn Khối và Mã môn học",
-                description: "Sắp xếp thứ tự chỉ áp dụng trong đúng một chương trình môn học.",
+                message: "Cần chọn Mã chương trình",
+                description: "Sắp xếp thứ tự chỉ áp dụng trong đúng một chương trình.",
             });
             setOpenFilterDrawer(true);
             return;
@@ -625,7 +660,7 @@ const Page = () => {
     };
 
     const handleSaveReorder = async () => {
-        if (!filterValues.grade || !filterValues.subject_code) return;
+        if (!filterValues.subject_code) return;
         if (totalItems > data.length) {
             api.warning({
                 message: "Danh sách chưa đầy đủ",
@@ -637,7 +672,7 @@ const Page = () => {
         try {
             setSavingReorder(true);
             await reorderLessons({
-                grade: Number(filterValues.grade),
+                grade: filterValues.grade === undefined ? undefined : Number(filterValues.grade),
                 subject_code: String(filterValues.subject_code),
                 mode: reorderStrategy,
                 ordered_ids: data.map((item) => item.id),
@@ -853,6 +888,10 @@ const Page = () => {
                 onSearch={handleSearch}
                 onCreate={handleOpenCreate}
                 onCreateProgram={() => setOpenProgramModal(true)}
+                onImportProgram={() => {
+                    setImportErrors([]);
+                    setOpenProgramImportModal(true);
+                }}
                 onFilter={() => setOpenFilterDrawer(true)}
                 onImport={() => {
                     setImportErrors([]);
@@ -944,6 +983,14 @@ const Page = () => {
                 loading={saving}
                 onClose={() => setOpenProgramModal(false)}
                 onSubmit={handleCreateProgram}
+            />
+            <ProgramImportModal
+                open={openProgramImportModal}
+                loading={importing}
+                onClose={() => setOpenProgramImportModal(false)}
+                onSubmit={handleImportProgram}
+                onDownloadTemplate={handleDownloadProgramTemplate}
+                errors={importErrors}
             />
             <LessonImportModal
                 open={openImportModal}

@@ -23,10 +23,13 @@ const normalizeSubjectName = (value: string) => value
     .replace(/\s+/g, "")
     .toLocaleLowerCase("vi-VN");
 
-const mergeSubjectOptions = (databaseSubjects: LessonSubjectOption[]) => {
+const mergeSubjectOptions = (
+    databaseSubjects: LessonSubjectOption[],
+    includeDefaultSubjects: boolean,
+) => {
     const merged = new Map<string, SubjectSelectOption>();
 
-    [...SUBJECT_OPTIONS, ...databaseSubjects.map((subject) => ({
+    [...(includeDefaultSubjects ? SUBJECT_OPTIONS : []), ...databaseSubjects.map((subject) => ({
         value: subject.subject_name.trim(),
         label: subject.subject_name.trim(),
         subjectCode: subject.subject_code.trim(),
@@ -40,7 +43,7 @@ const mergeSubjectOptions = (databaseSubjects: LessonSubjectOption[]) => {
     ));
 };
 
-export const useLessonSubjectOptions = (enabled = true) => {
+export const useLessonSubjectOptions = (enabled = true, includeDefaultSubjects = true) => {
     const userId = useAuthStore(
         (state) => `${state.user.userId}:${state.authSessionVersion}`
     );
@@ -58,7 +61,10 @@ export const useLessonSubjectOptions = (enabled = true) => {
                 ? responseData.subjects
                 : [];
 
-    return useMemo(() => mergeSubjectOptions(subjects), [responseData]);
+    return useMemo(
+        () => mergeSubjectOptions(subjects, includeDefaultSubjects),
+        [responseData, includeDefaultSubjects],
+    );
 };
 
 export const useLessonProgramOptions = (enabled = true) => {

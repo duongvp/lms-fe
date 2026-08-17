@@ -16,8 +16,10 @@ type Props = {
 
 const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
     const [form] = Form.useForm<CreateLessonProgramPayload & { school_year: number }>();
-    const subjectOptions = useLessonSubjectOptions();
+    // Chỉ lấy các môn đã có trong cột lessons.subject_name; người dùng vẫn có thể nhập môn mới.
+    const subjectOptions = useLessonSubjectOptions(true, false);
     const selectedGrade = Form.useWatch("grade", form);
+    const selectedSystemType = Form.useWatch("system_type", form);
     const selectedSubject = Form.useWatch("subject_name", form);
     const selectedSchoolYear = Form.useWatch("school_year", form);
 
@@ -26,14 +28,20 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
     }, [form, open]);
 
     useEffect(() => {
+        if (selectedSystemType === "topuni" && !form.getFieldValue("grade")) {
+            form.setFieldValue("grade", 12);
+        }
+    }, [form, selectedSystemType]);
+
+    useEffect(() => {
         if (!open) return;
         const generatedCode = buildLessonSubjectCode(
             form.getFieldValue("subject_name"),
-            Number(form.getFieldValue("grade")),
+            selectedSystemType === "topclass" ? Number(form.getFieldValue("grade")) : undefined,
             Number(form.getFieldValue("school_year"))
         );
         form.setFieldValue("subject_code", generatedCode || undefined);
-    }, [form, open, selectedGrade, selectedSchoolYear, selectedSubject]);
+    }, [form, open, selectedGrade, selectedSchoolYear, selectedSubject, selectedSystemType]);
 
     return (
         <Modal
@@ -60,10 +68,18 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
                 className="responsive-modal-form"
                 form={form}
                 layout="vertical"
-                initialValues={{ school_year: getSuggestedSchoolYear() }}
+                initialValues={{ school_year: getSuggestedSchoolYear(), system_type: "topclass" }}
                 onFinish={({ school_year: _schoolYear, ...values }) => onSubmit(values)}
             >
                 <Row gutter={12}>
+                    <Col xs={24} md={7}>
+                        <Form.Item name="system_type" label="Hệ thống" rules={[{ required: true }]}> 
+                            <Select options={[
+                                { value: "topclass", label: "Topclass" },
+                                { value: "topuni", label: "Topuni" },
+                            ]} />
+                        </Form.Item>
+                    </Col>
                     <Col xs={24} md={7}>
                         <Form.Item
                             name="grade"
@@ -81,8 +97,9 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
                         >
                             <Select
                                 showSearch
+                                mode="tags"
                                 optionFilterProp="label"
-                                placeholder="Chọn môn học"
+                                placeholder="Chọn hoặc nhập môn học mới"
                                 options={subjectOptions}
                             />
                         </Form.Item>
@@ -100,7 +117,7 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
                 <Form.Item
                     name="subject_code"
                     label="Mã chương trình"
-                    extra={<Typography.Text type="secondary">Tự sinh từ Môn học, Khối và Năm kết thúc; ví dụ: nguvan-6-2027. Bạn vẫn có thể sửa lại nếu cần.</Typography.Text>}
+                    extra={<Typography.Text type="secondary">Tự sinh từ môn học, {selectedSystemType === "topclass" ? "khối và " : ""}năm kết thúc. Bạn có thể nhập môn mới trực tiếp và sửa mã khi cần.</Typography.Text>}
                     rules={[
                         { required: true, whitespace: true, message: "Nhập Mã chương trình" },
                         { max: 100, message: "Mã chương trình không được quá 100 ký tự" },

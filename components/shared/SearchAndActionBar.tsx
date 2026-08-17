@@ -11,6 +11,7 @@ interface SearchAndActionsBarProps {
     onSearch: (value: string) => Promise<any>;
     handleAddBtn?: React.MouseEventHandler<HTMLElement>;
     handleFilterBtn?: React.MouseEventHandler<HTMLElement>;
+    filterLabel?: string;
     handlePrintBarcode?: () => void;
     handleDeleteProducts?: () => void;
     placeholder?: string;
@@ -33,6 +34,7 @@ export default function SearchAndActionsBar({
     secondaryActions,
     actionClassName,
     handleFilterBtn,
+    filterLabel,
     handleImportClick,
     handlePrintBarcode,
     handleDeleteProducts
@@ -109,7 +111,9 @@ export default function SearchAndActionsBar({
                             <>
                                 {extraExportButton}
                                 {handleFilterBtn && (
-                                    <Button type="default" onClick={handleFilterBtn} icon={<FilterOutlined />} />
+                                    <Button type="default" onClick={handleFilterBtn} icon={<FilterOutlined />}>
+                                        {filterLabel}
+                                    </Button>
                                 )}
                             </>
                         )}

@@ -8,14 +8,11 @@ import {
     Radio,
     Space,
     Typography,
-    Upload,
 } from 'antd';
-import { UploadOutlined } from '@ant-design/icons';
 import { ImportError } from '../types';
+import ImportFileDragger from '@/components/shared/ImportFileDragger';
 
 
-
-const { Dragger } = Upload;
 
 interface TeacherProfileImportModalProps {
     open: boolean;
@@ -78,49 +75,20 @@ const TeacherProfileImportModal = ({
                 </Radio>
             </Radio.Group>
 
-            <Dragger
-                accept=".xlsx,.csv"
-                maxCount={1}
-                beforeUpload={(file) => {
-                    onFileChange(file);
-
-                    return false;
-                }}
-                onRemove={() => {
-                    onFileChange(null);
-
-                    return true;
-                }}
-                fileList={
-                    importFile
-                        ? [
-                              {
-                                  uid: 'teacher-profile-import',
-                                  name: importFile.name,
-                                  status: 'done',
-                              },
-                          ]
-                        : []
-                }
-            >
-                <p className="ant-upload-drag-icon">
-                    <UploadOutlined />
-                </p>
-
-                <p>
-                    Chọn hoặc kéo file
-                    Excel/CSV vào đây
-                </p>
-
-                <p
-                    style={{
-                        color: '#8c8c8c',
-                    }}
-                >
-                    Tối đa 5 MB và 2.000
-                    dòng mỗi lần nhập.
-                </p>
-            </Dragger>
+            <ImportFileDragger
+                file={importFile}
+                onFileChange={onFileChange}
+                maxSizeMb={5}
+                maxRows={2000}
+                requiredHeaders={[
+                    ['username', 'Mã nhân sự (*)', 'Mã nhân sự'],
+                    ['display_name', 'Họ và tên'],
+                    ['can_view_stream_key', 'Quyền xem Stream Key (1: Giáo viên, 0: Trợ giảng)'],
+                    ['status', 'Trạng thái (1: Hoạt động, 0: Ngừng hoạt động)'],
+                ]}
+                prompt="Chọn hoặc kéo file Excel/CSV vào đây"
+                hint="Tối đa 5 MB và 2.000 dòng mỗi lần nhập"
+            />
 
             {importErrors.length > 0 && (
                 <Alert

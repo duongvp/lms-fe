@@ -10,15 +10,13 @@ import {
     Space,
     Table,
     Typography,
-    Upload,
 } from "antd";
 import {
     FileExcelOutlined,
     FileTextOutlined,
-    InboxOutlined,
     UploadOutlined,
 } from "@ant-design/icons";
-import type { UploadFile } from "antd/es/upload/interface";
+import ImportFileDragger from "@/components/shared/ImportFileDragger";
 import type {
     LessonImportError,
     LessonImportMode,
@@ -44,16 +42,14 @@ const LessonImportModal = ({
     onSubmit,
     onDownloadTemplate,
 }: LessonImportModalProps) => {
-    const [fileList, setFileList] = useState<UploadFile[]>([]);
+    const [selectedFile, setSelectedFile] = useState<File>();
     const [importMode, setImportMode] = useState<LessonImportMode>("overwrite");
 
     useEffect(() => {
         if (!open) return;
-        setFileList([]);
+        setSelectedFile(undefined);
         setImportMode("overwrite");
     }, [open]);
-
-    const selectedFile = fileList[0]?.originFileObj;
 
     return (
         <Modal
@@ -125,19 +121,17 @@ const LessonImportModal = ({
                     </div>
                 </Flex>
 
-                <Upload.Dragger
-                    accept=".xlsx,.csv"
-                    maxCount={1}
-                    fileList={fileList}
-                    beforeUpload={() => false}
-                    onChange={({ fileList: nextFileList }) => setFileList(nextFileList.slice(-1))}
-                    onRemove={() => setFileList([])}
-                    style={{ paddingBlock: 4 }}
-                >
-                    <p className="ant-upload-drag-icon"><InboxOutlined /></p>
-                    <p className="ant-upload-text">Kéo file vào đây hoặc bấm để chọn file</p>
-                    <p className="ant-upload-hint">Hỗ trợ định dạng .xlsx và .csv</p>
-                </Upload.Dragger>
+                <ImportFileDragger
+                    file={selectedFile}
+                    onFileChange={(file) => setSelectedFile(file || undefined)}
+                    maxSizeMb={10}
+                    maxRows={500}
+                    requiredHeaders={[
+                        ["learn_number", "Số thứ tự bài"],
+                        ["lesson_name", "Tên bài học"],
+                        ["status", "Trạng thái"],
+                    ]}
+                />
 
                 {errors.length > 0 && (
                     <section style={{ marginTop: 16 }}>

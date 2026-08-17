@@ -34,7 +34,7 @@ export const FIELD_LABELS = Object.fromEntries(
 );
 
 const toLessonPayload = (values: any): LessonPayload => ({
-    grade: Number(values.grade),
+    grade: values.grade === undefined || values.grade === null ? undefined : Number(values.grade),
     subject_code: String(values.subject_code).trim(),
     subject_name: String(values.subject_name).trim(),
     lesson_name: String(values.lesson_name).trim(),

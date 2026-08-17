@@ -1,7 +1,7 @@
 // components/QuizActionsBar.tsx
 "use client";
 
-import { Button, Input, Space, Tooltip } from "antd";
+import { Button, Dropdown, Grid, Input, Space, Tooltip } from "antd";
 import {
     PlusOutlined,
     ImportOutlined,
@@ -12,6 +12,7 @@ import {
     CheckOutlined,
     CloseOutlined,
     SearchOutlined,
+    MoreOutlined,
 } from "@ant-design/icons";
 
 interface QuizActionsBarProps {
@@ -53,6 +54,9 @@ const QuizActionsBar = ({
     onSaveReorder,
     onRefresh,
 }: QuizActionsBarProps) => {
+    const screens = Grid.useBreakpoint();
+    const compact = !screens.md;
+
     if (reorderMode) {
         return (
             <div
@@ -84,6 +88,41 @@ const QuizActionsBar = ({
                         Hủy
                     </Button>
                 </Space>
+            </div>
+        );
+    }
+
+    if (compact) {
+        return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+                <Input.Search
+                    placeholder="Tìm kiếm câu hỏi..."
+                    allowClear
+                    onSearch={onSearch}
+                    prefix={<SearchOutlined />}
+                />
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+                    {canCreate && <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>Thêm câu hỏi</Button>}
+                    {canImport && <Button type="primary" icon={<ImportOutlined />} onClick={onImport}>Import</Button>}
+                    <Dropdown
+                        menu={{
+                            items: [
+                                ...(canExport ? [{ key: "export", icon: <ExportOutlined />, label: `Export${selectedCount > 0 ? ` (${selectedCount})` : ""}` }] : []),
+                                { key: "refresh", icon: <ReloadOutlined />, label: "Làm mới" },
+                                ...(canEdit ? [{ key: "reorder", icon: <SwapOutlined />, label: "Sắp xếp câu hỏi" }] : []),
+                            ],
+                            onClick: ({ key }) => {
+                                if (key === "export") onExport();
+                                if (key === "refresh") onRefresh();
+                                if (key === "reorder") onEnableReorder();
+                            },
+                        }}
+                        trigger={["click"]}
+                    >
+                        <Button icon={<MoreOutlined />}>Thao tác khác</Button>
+                    </Dropdown>
+                    <Button icon={<FilterOutlined />} onClick={onFilter}>Lọc</Button>
+                </div>
             </div>
         );
     }
