@@ -1202,6 +1202,9 @@ const Page = () => {
             title: fieldCode === "lesson_status" ? "Tiến độ" : (field.fieldLabel || fieldCode),
             dataIndex: fieldCode,
             key: fieldCode,
+            className: ["learn_number", "lesson_name"].includes(fieldCode)
+                ? "responsive-card-hidden"
+                : undefined,
             width:
                 fieldCode === "lesson_name" ? 250
                     : fieldCode === "lesson_document" ? 280
@@ -1337,6 +1340,7 @@ const Page = () => {
             title: "Chương trình",
             dataIndex: "code",
             key: "program_code",
+            className: "responsive-card-hidden",
             width: 180,
             fixed: "left",
             filters: Array.from(new Set(
@@ -1558,88 +1562,100 @@ const Page = () => {
                     setImportMode(canImportSchedule ? "create" : "mapping");
                     setOpenImportModal(true);
                 } : undefined}
-                handleFilterBtn={() => setOpenFilterDrawer(true)}
-                extraExportButton={
+                actionClassName="schedule-action-buttons"
+                secondaryActions={
                     <>
-                        {canExportSchedule && (
-                            <Dropdown
-                                trigger={["click"]}
-                                menu={{
-                                    items: [
-                                        { key: "xlsx", label: "Xuất Excel (.xlsx)" },
-                                        { key: "csv", label: "Xuất CSV (.csv)" },
-                                    ],
-                                    onClick: ({ key }) => handleExportSchedule(key as "csv" | "xlsx"),
-                                }}
-                            >
-                                <Button icon={<DownloadOutlined />}>
-                                    Export{selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}
+                        <div className="schedule-workflow-actions">
+                            {canCreateSchedule && (
+                                <Button
+                                    icon={<CalendarOutlined />}
+                                    disabled={!submittedFilterValues.code}
+                                    onClick={() => {
+                                        const params = new URLSearchParams({
+                                            program: String(submittedFilterValues.code),
+                                            returnTo: buildScheduleUrl(submittedFilterValues, currentPage),
+                                        });
+                                        router.push(`/schedule/auto?${params.toString()}`);
+                                    }}
+                                >
+                                    Tạo lịch tự động
                                 </Button>
-                            </Dropdown>
-                        )}
-                        {canCreateSchedule && (
+                            )}
+                            {canEditSchedule && (
+                                <Button
+                                    type="primary"
+                                    icon={<EditOutlined />}
+                                    onClick={() => {
+                                        const requestedRows = data.filter((item) => selectedRowKeys.map(String).includes(String(item.id)));
+                                        const selectedPrograms = Array.from(new Set(
+                                            requestedRows.map((item) => String(item.code || "").trim()).filter(Boolean)
+                                        ));
+                                        if (selectedPrograms.length > 1) {
+                                            api.warning({
+                                                message: "Nhiều Chương trình được chọn",
+                                                description: "Sửa hàng loạt chỉ áp dụng cho một Chương trình. Hãy lọc hoặc chỉ chọn các lịch cùng Chương trình trước khi tiếp tục.",
+                                            });
+                                            return;
+                                        }
+                                        const selectedRows = requestedRows.filter(canModifySchedule);
+                                        if (!selectedRows.length) {
+                                            api.warning({
+                                                message: "Không có lịch nào được chọn",
+                                                description: "Lịch đã bắt đầu hoặc đã nghỉ không thể chỉnh sửa. Hãy chọn ít nhất một lịch chưa diễn ra.",
+                                            });
+                                            return;
+                                        }
+                                        if (selectedRows.length < requestedRows.length) {
+                                            api.info({
+                                                message: "Đã bỏ qua một số lịch",
+                                                description: "Chỉ mở trang chỉnh sửa cho các lịch chưa bắt đầu. Các lịch đã diễn ra hoặc đã nghỉ bị bỏ qua.",
+                                            });
+                                        }
+                                        sessionStorage.setItem("schedule:auto-edit:rows", JSON.stringify(selectedRows));
+                                        const params = new URLSearchParams({
+                                            ids: selectedRows.map((item) => String(item.id)).join(","),
+                                            program: String(submittedFilterValues.code || ""),
+                                            returnTo: buildScheduleUrl(submittedFilterValues, currentPage),
+                                        });
+                                        router.push(`/schedule/auto-edit?${params.toString()}`);
+                                    }}
+                                >
+                                    Sửa hàng loạt
+                                </Button>
+                            )}
+                        </div>
+                        <div className="schedule-utility-actions">
+                            {canExportSchedule && (
+                                <Dropdown
+                                    trigger={["click"]}
+                                    menu={{
+                                        items: [
+                                            { key: "xlsx", label: "Xuất Excel (.xlsx)" },
+                                            { key: "csv", label: "Xuất CSV (.csv)" },
+                                        ],
+                                        onClick: ({ key }) => handleExportSchedule(key as "csv" | "xlsx"),
+                                    }}
+                                >
+                                    <Button icon={<DownloadOutlined />}>
+                                        Export{selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}
+                                    </Button>
+                                </Dropdown>
+                            )}
                             <Button
-                                icon={<CalendarOutlined />}
-                                disabled={!submittedFilterValues.code}
+                                aria-label="Làm mới danh sách"
+                                title="Làm mới danh sách"
+                                icon={<ReloadOutlined />}
                                 onClick={() => {
-                                    const params = new URLSearchParams({
-                                        program: String(submittedFilterValues.code),
-                                        returnTo: buildScheduleUrl(submittedFilterValues, currentPage),
-                                    });
-                                    router.push(`/schedule/auto?${params.toString()}`);
+                                    if (hasSearched) void refreshSchedules();
                                 }}
-                            >
-                                Tạo lịch tự động
-                            </Button>
-                        )}
-                        <Button
-                            icon={<ReloadOutlined />}
-                            onClick={() => {
-                                if (hasSearched) void refreshSchedules();
-                            }}
-                        />
-                        {canEditSchedule && (
+                            />
                             <Button
-                                type="primary"
-                                icon={<EditOutlined />}
-                                onClick={() => {
-                                    const requestedRows = data.filter((item) => selectedRowKeys.map(String).includes(String(item.id)));
-                                    const selectedPrograms = Array.from(new Set(
-                                        requestedRows.map((item) => String(item.code || "").trim()).filter(Boolean)
-                                    ));
-                                    if (selectedPrograms.length > 1) {
-                                        api.warning({
-                                            message: "Nhiều Chương trình được chọn",
-                                            description: "Sửa hàng loạt chỉ áp dụng cho một Chương trình. Hãy lọc hoặc chỉ chọn các lịch cùng Chương trình trước khi tiếp tục.",
-                                        });
-                                        return;
-                                    }
-                                    const selectedRows = requestedRows.filter(canModifySchedule);
-                                    if (!selectedRows.length) {
-                                        api.warning({
-                                            message: "Không có lịch nào được chọn",
-                                            description: "Lịch đã bắt đầu hoặc đã nghỉ không thể chỉnh sửa. Hãy chọn ít nhất một lịch chưa diễn ra.",
-                                        });
-                                        return;
-                                    }
-                                    if (selectedRows.length < requestedRows.length) {
-                                        api.info({
-                                            message: "Đã bỏ qua một số lịch",
-                                            description: "Chỉ mở trang chỉnh sửa cho các lịch chưa bắt đầu. Các lịch đã diễn ra hoặc đã nghỉ bị bỏ qua.",
-                                        });
-                                    }
-                                    sessionStorage.setItem("schedule:auto-edit:rows", JSON.stringify(selectedRows));
-                                    const params = new URLSearchParams({
-                                        ids: selectedRows.map((item) => String(item.id)).join(","),
-                                        program: String(submittedFilterValues.code || ""),
-                                        returnTo: buildScheduleUrl(submittedFilterValues, currentPage),
-                                    });
-                                    router.push(`/schedule/auto-edit?${params.toString()}`);
-                                }}
-                            >
-                                Sửa hàng loạt
-                            </Button>
-                        )}
+                                aria-label="Lọc lịch học"
+                                title="Lọc lịch học"
+                                icon={<FilterOutlined />}
+                                onClick={() => setOpenFilterDrawer(true)}
+                            />
+                        </div>
                     </>
                 }
             />
@@ -1876,7 +1892,14 @@ const Page = () => {
                         >
                         <CustomTable<ScheduleDataType>
                             className="schedule-data-table"
-                            responsiveCards={false}
+                            responsiveCardTitle={(record) => (
+                                <Space size={6} style={{ maxWidth: "100%" }}>
+                                    {record.code && <Tag color="blue" style={{ marginInlineEnd: 0 }}>{record.code}</Tag>}
+                                    <Typography.Text strong ellipsis style={{ maxWidth: 190 }}>
+                                        Bài {record.learn_number || "-"}{record.lesson_name ? ` · ${record.lesson_name}` : ""}
+                                    </Typography.Text>
+                                </Space>
+                            )}
                             columns={columns}
                             dataSource={filteredData}
                             loading={loading}

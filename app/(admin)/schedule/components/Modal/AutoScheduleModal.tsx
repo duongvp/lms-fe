@@ -57,6 +57,23 @@ const normalizeLessonTitle = (value: unknown) => String(value || "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 
+const renderLessonNamePattern = (pattern: unknown, occurrence: number) => (
+    String(pattern || "").replaceAll("{n}", String(occurrence))
+);
+
+const getCalendarLessonName = (lesson: any, occurrence: number, values: any) => {
+    const masterLessonName = String(lesson.lesson_name || "");
+    if (!values.customize_lesson_names || occurrence <= 1) return masterLessonName;
+
+    const lessonRule = (values.lesson_name_rules || []).find((rule: any) => (
+        Number(lesson.learn_number) >= Number(rule?.from_learn_number)
+        && Number(lesson.learn_number) <= Number(rule?.to_learn_number)
+    ));
+    const prefix = lessonRule?.prefix ?? values.lesson_name_prefix;
+    const suffix = lessonRule?.suffix ?? values.lesson_name_suffix;
+    return `${renderLessonNamePattern(prefix, occurrence)}${masterLessonName}${renderLessonNamePattern(suffix, occurrence)}`.slice(0, 400);
+};
+
 const sortHmoOptionsByLessonId = (left: HocmaiSectionOption, right: HocmaiSectionOption) => (
     String(left.lesson_id).localeCompare(String(right.lesson_id), "vi", { numeric: true })
 );
@@ -138,6 +155,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     const [loadingHmoLessonIds, setLoadingHmoLessonIds] = useState<Set<string>>(new Set());
     const [syncingHmoLessonIds, setSyncingHmoLessonIds] = useState(false);
     const [hmoSyncNotes, setHmoSyncNotes] = useState<Record<string, { type: "success" | "warning"; message: string }>>({});
+    const hmoSyncNameSource = Form.useWatch("hmo_sync_name_source", form) || "lesson";
     const requestedHmoLessonIds = useRef(new Set<string>());
     const hmoOptionsRef = useRef<Record<string, HocmaiSectionOption[]>>({});
     const hmoRequestPromises = useRef(new Map<string, Promise<HocmaiSectionOption[]>>());
@@ -295,6 +313,9 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     const handleSyncHmoLessonIds = async () => {
         const blocks = form.getFieldValue("blocks") || [];
         const blockLessons = blocks.flatMap((block: any) => block.lessons || []);
+        const syncNameSource = form.getFieldValue("hmo_sync_name_source") === "calendar"
+            ? "calendar"
+            : "lesson";
         if (!blockLessons.length) {
             message.warning("Chưa có bài học để đồng bộ Lesson ID HMO");
             return;
@@ -316,15 +337,16 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             }));
 
             let syncedCount = 0;
+            let syncedSessionCount = 0;
             const notes: Record<string, { type: "success" | "warning"; message: string }> = {};
+            const formValues = form.getFieldsValue();
             const nextBlocks = blocks.map((block: any) => ({
                 ...block,
                 lessons: (block.lessons || []).map((lesson: any) => {
                     const lessonId = String(lesson.session_id || "");
                     const lessonTitle = normalizeLessonTitle(lesson.lesson_name);
                     const seenLessonIds = new Set<string>();
-                    const matchedOptions = (optionsByLesson.get(lessonId) || [])
-                        .filter((option) => normalizeLessonTitle(option.lesson_name) === lessonTitle)
+                    const availableOptions = [...(optionsByLesson.get(lessonId) || [])]
                         .sort(sortHmoOptionsByLessonId)
                         .filter((option) => {
                             const key = String(option.lesson_id);
@@ -332,6 +354,9 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                             seenLessonIds.add(key);
                             return true;
                         });
+                    const matchedOptions = availableOptions.filter(
+                        (option) => normalizeLessonTitle(option.lesson_name) === lessonTitle
+                    );
                     const sessions = lesson.sessions || [];
 
                     if (failedLessonIds.has(lessonId)) {
@@ -342,8 +367,53 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                         return lesson;
                     }
 
+                    if (syncNameSource === "calendar") {
+                        const claimedMappingKeys = new Set<string>();
+                        const syncErrors: string[] = [];
+                        let assignedCount = 0;
+                        const nextSessions = sessions.map((session: any, sessionIndex: number) => {
+                            const calendarLessonName = getCalendarLessonName(lesson, sessionIndex + 1, formValues);
+                            const sessionMatches = availableOptions
+                                .filter((option) => normalizeLessonTitle(option.lesson_name) === normalizeLessonTitle(calendarLessonName));
+
+                            if (!normalizeLessonTitle(calendarLessonName)) {
+                                syncErrors.push(`buổi ${sessionIndex + 1} chưa có tên lịch`);
+                                return session;
+                            }
+                            if (sessionMatches.length !== 1) {
+                                syncErrors.push(sessionMatches.length
+                                    ? `buổi ${sessionIndex + 1} có ${sessionMatches.length} Lesson ID trùng tên`
+                                    : `buổi ${sessionIndex + 1} không có Lesson ID trùng tên`);
+                                return session;
+                            }
+
+                            const mappingKey = hmoOptionKey(sessionMatches[0]);
+                            if (claimedMappingKeys.has(mappingKey)) {
+                                syncErrors.push(`Lesson ID ${sessionMatches[0].lesson_id} bị trùng giữa các lịch`);
+                                return session;
+                            }
+                            claimedMappingKeys.add(mappingKey);
+                            assignedCount += 1;
+                            syncedSessionCount += 1;
+                            return { ...session, hmo_mapping_keys: [mappingKey] };
+                        });
+
+                        if (assignedCount > 0) syncedCount += 1;
+                        notes[lessonId] = syncErrors.length
+                            ? {
+                                type: "warning",
+                                message: `Đã gán ${assignedCount}/${sessions.length} lịch theo tên lịch học. ${syncErrors.join("; ")}.`,
+                            }
+                            : {
+                                type: "success",
+                                message: `Đã gán ${assignedCount} Lesson ID HMO theo tên từng lịch, không dùng thứ tự tăng dần.`,
+                            };
+                        return { ...lesson, sessions: nextSessions };
+                    }
+
                     if (matchedOptions.length === sessions.length && sessions.length > 0) {
                         syncedCount += 1;
+                        syncedSessionCount += sessions.length;
                         notes[lessonId] = {
                             type: "success",
                             message: `Đã gán ${sessions.length} Lesson ID theo thứ tự tăng dần: ${matchedOptions.map((option) => option.lesson_id).join(", ")}.`,
@@ -372,7 +442,9 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             setPreview([]);
             setPayload(null);
             if (syncedCount) {
-                message.success(`Đã đồng bộ Lesson ID HMO cho ${syncedCount}/${blockLessons.length} bài`);
+                message.success(syncNameSource === "calendar"
+                    ? `Đã đồng bộ Lesson ID HMO theo tên lịch học cho ${syncedSessionCount} lịch`
+                    : `Đã đồng bộ Lesson ID HMO cho ${syncedCount}/${blockLessons.length} bài`);
             } else {
                 message.warning("Không có bài nào đủ điều kiện tự đồng bộ Lesson ID HMO");
             }
@@ -569,6 +641,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                         strategy: "interleaved",
                         start_date: dayjs(),
                         customize_lesson_names: false,
+                        hmo_sync_name_source: "lesson",
                         lesson_name_prefix: "[Lịch {n}] - ",
                         lesson_name_suffix: "",
                         lesson_name_rules: [],
@@ -768,20 +841,30 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                     )}
 
                     {!!remainingCount && (
-                        <Space wrap align="center" style={{ width: "100%", marginBottom: 12 }}>
-                            <Button
-                                type="primary"
-                                ghost
-                                icon={<SyncOutlined spin={syncingHmoLessonIds} />}
-                                loading={syncingHmoLessonIds}
-                                onClick={() => void handleSyncHmoLessonIds()}
-                            >
-                                Đồng bộ Lesson ID HMO
-                            </Button>
-                            <Typography.Text type="secondary">
-                                Khớp theo tên bài, sắp Lesson ID tăng dần và gán lần lượt từ lịch trên xuống dưới. Chỉ tự gán khi số Lesson ID bằng đúng số lịch của bài.
+                        <div className="auto-schedule-sync-controls" style={{ width: "100%", marginBottom: 12 }}>
+                            <Space wrap align="end">
+                                <Form.Item name="hmo_sync_name_source" label="Đồng bộ theo" style={{ marginBottom: 0, minWidth: 280 }}>
+                                    <Select options={[
+                                        { value: "calendar", label: "Tên lịch học (calendar)" },
+                                        { value: "lesson", label: "Tên bài học (lessons)" },
+                                    ]} />
+                                </Form.Item>
+                                <Button
+                                    type="primary"
+                                    ghost
+                                    icon={<SyncOutlined spin={syncingHmoLessonIds} />}
+                                    loading={syncingHmoLessonIds}
+                                    onClick={() => void handleSyncHmoLessonIds()}
+                                >
+                                    Đồng bộ Lesson ID HMO
+                                </Button>
+                            </Space>
+                            <Typography.Text type="secondary" style={{ display: "block", marginTop: 6 }}>
+                                {hmoSyncNameSource === "calendar"
+                                    ? "Theo tên lịch học: hệ thống lấy tên hiển thị của từng buổi sắp tạo (bao gồm tiền tố, hậu tố và số thứ tự nếu có), rồi chỉ gán khi tìm thấy đúng một Lesson ID HMO cùng tên."
+                                    : "Theo tên bài học: hệ thống dùng tên bài trong Quản lý đề cương, sắp Lesson ID HMO theo thứ tự tăng dần và gán lần lượt. Chỉ tự gán khi số Lesson ID khớp với số buổi của bài."}
                             </Typography.Text>
-                        </Space>
+                        </div>
                     )}
 
                     <Form.List name="blocks">
@@ -931,17 +1014,36 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                     <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
                         Hiển thị toàn bộ để kiểm tra trước khi xác nhận, không chia thành các trang.
                     </Typography.Text>
-                    <Table size="small" rowKey={(_, index) => String(index)} pagination={false} scroll={{ x: "max-content" }} dataSource={preview} columns={[
-                        { title: "Block", render: (_value, row) => Number(row.auto_schedule?.block_index ?? 0) + 1 },
-                        { title: "Bài", dataIndex: "learn_number" },
-                        { title: "Tên bài", dataIndex: "lesson_name" },
-                        { title: "Lesson ID", render: (_value, row) => previewLessonIds(row) },
-                        { title: "Giáo viên", dataIndex: "teacher", render: (value) => value || "-" },
-                        { title: "Trợ giảng", dataIndex: "assistant_teacher", render: (value) => value || "-" },
-                        { title: "Thứ", dataIndex: "start_time", render: (value) => previewWeekdayLabel(value) },
-                        { title: "Bắt đầu", dataIndex: "start_time", render: (value) => dayjs(String(value).replace(/Z$/, "")).format("DD/MM/YYYY HH:mm") },
-                        { title: "Kết thúc", dataIndex: "end_time", render: (value) => dayjs(String(value).replace(/Z$/, "")).format("DD/MM/YYYY HH:mm") },
-                    ]} />
+                    <div className="auto-schedule-preview-desktop">
+                        <Table size="small" rowKey={(_, index) => String(index)} pagination={false} scroll={{ x: "max-content" }} dataSource={preview} columns={[
+                            { title: "Block", render: (_value, row) => Number(row.auto_schedule?.block_index ?? 0) + 1 },
+                            { title: "Bài", dataIndex: "learn_number" },
+                            { title: "Tên bài", dataIndex: "lesson_name" },
+                            { title: "Lesson ID", render: (_value, row) => previewLessonIds(row) },
+                            { title: "Giáo viên", dataIndex: "teacher", render: (value) => value || "-" },
+                            { title: "Trợ giảng", dataIndex: "assistant_teacher", render: (value) => value || "-" },
+                            { title: "Thứ", dataIndex: "start_time", render: (value) => previewWeekdayLabel(value) },
+                            { title: "Bắt đầu", dataIndex: "start_time", render: (value) => dayjs(String(value).replace(/Z$/, "")).format("DD/MM/YYYY HH:mm") },
+                            { title: "Kết thúc", dataIndex: "end_time", render: (value) => dayjs(String(value).replace(/Z$/, "")).format("DD/MM/YYYY HH:mm") },
+                        ]} />
+                    </div>
+                    <div className="auto-schedule-preview-mobile">
+                        {preview.map((row, index) => (
+                            <Card
+                                key={`${row.id || row.start_time}-${index}`}
+                                size="small"
+                                title={<Typography.Text strong>{row.lesson_name || `Bài ${row.learn_number}`}</Typography.Text>}
+                                extra={<Typography.Text type="secondary">Bài {row.learn_number} · Block {Number(row.auto_schedule?.block_index ?? 0) + 1}</Typography.Text>}
+                            >
+                                <Space direction="vertical" size={6} style={{ width: "100%" }}>
+                                    <Typography.Text><Typography.Text type="secondary">Thời gian: </Typography.Text>{previewWeekdayLabel(row.start_time)} · {dayjs(String(row.start_time).replace(/Z$/, "")).format("DD/MM/YYYY HH:mm")} – {dayjs(String(row.end_time).replace(/Z$/, "")).format("HH:mm")}</Typography.Text>
+                                    <Typography.Text><Typography.Text type="secondary">Lesson ID HMO: </Typography.Text>{previewLessonIds(row)}</Typography.Text>
+                                    <Typography.Text><Typography.Text type="secondary">Giáo viên: </Typography.Text>{row.teacher || "-"}</Typography.Text>
+                                    <Typography.Text><Typography.Text type="secondary">Trợ giảng: </Typography.Text>{row.assistant_teacher || "-"}</Typography.Text>
+                                </Space>
+                            </Card>
+                        ))}
+                    </div>
                 </>
             )}
         </Modal>

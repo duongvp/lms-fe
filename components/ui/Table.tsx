@@ -24,6 +24,8 @@ interface CustomTableProps<T extends object> extends TableProps<T> {
   dataSource: T[];
   /** Có thể tắt card responsive cho bảng có layout đặc thù. */
   responsiveCards?: boolean;
+  /** Tiêu đề ngắn gọn hiển thị trên mỗi thẻ ở màn hình nhỏ. */
+  responsiveCardTitle?: (record: T, index: number) => React.ReactNode;
 }
 
 const flattenColumns = <T extends object,>(columns: ColumnsType<T>): any[] => (
@@ -55,6 +57,7 @@ function CustomTable<T extends object>({
   columns,
   dataSource,
   responsiveCards = true,
+  responsiveCardTitle,
   pagination,
   rowSelection,
   expandable,
@@ -217,9 +220,11 @@ function CustomTable<T extends object>({
                         onClick={(event) => event.stopPropagation()}
                         onChange={(event) => updateSelection(key, record, event.target.checked)}
                       >
-                        <Typography.Text strong>Bản ghi {Number((current - 1) * pageSize) + index + 1}</Typography.Text>
+                        {responsiveCardTitle?.(record, index) || (
+                          <Typography.Text strong>Bản ghi {Number((current - 1) * pageSize) + index + 1}</Typography.Text>
+                        )}
                       </Checkbox>
-                    ) : undefined}
+                    ) : responsiveCardTitle?.(record, index)}
                   >
                     <div style={{
                       display: "grid",

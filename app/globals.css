@@ -207,6 +207,54 @@ body {
     text-align: center;
   }
 
+  .responsive-search-actions .schedule-action-buttons {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px !important;
+  }
+
+  .responsive-search-actions .schedule-action-buttons > .ant-btn {
+    width: 100%;
+  }
+
+  .responsive-search-actions .schedule-action-buttons > .responsive-secondary-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .responsive-search-actions .schedule-workflow-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .schedule-workflow-actions > :only-child {
+    grid-column: 1 / -1;
+  }
+
+  .schedule-workflow-actions .ant-btn {
+    width: 100%;
+  }
+
+  .responsive-search-actions .schedule-utility-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px 44px;
+    gap: 8px;
+  }
+
+  .schedule-utility-actions > * {
+    min-width: 0;
+  }
+
+  .schedule-utility-actions .ant-btn,
+  .schedule-utility-actions .ant-dropdown-trigger {
+    width: 100%;
+  }
+
   .responsive-page-info-header,
   .responsive-page-toolbar,
   .responsive-card-header {
@@ -305,6 +353,36 @@ body {
   .custom-calendar-wrapper .fc .fc-toolbar-title {
     font-size: 1.1rem;
   }
+
+  .custom-calendar-wrapper .fc .fc-toolbar-chunk:nth-child(1) {
+    order: 2;
+    width: 100%;
+  }
+
+  .custom-calendar-wrapper .fc .fc-toolbar-chunk:nth-child(2) {
+    order: 1;
+  }
+
+  .custom-calendar-wrapper .fc .fc-toolbar-chunk:nth-child(3) {
+    order: 3;
+    width: 100%;
+  }
+
+  .custom-calendar-wrapper .fc .fc-button-group {
+    display: flex;
+    width: 100%;
+  }
+
+  .custom-calendar-wrapper .fc .fc-button {
+    flex: 1;
+    min-height: 40px;
+  }
+
+  .custom-calendar-wrapper .fc .fc-scroller {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+  }
 }
 
 @media (min-width: 576px) and (max-width: 1199px) {
@@ -345,6 +423,21 @@ body {
     max-width: 100%;
     height: auto;
   }
+
+  /* Trang Lịch học đã nằm trong vùng cuộn của AdminLayout. Không tạo thêm
+     vùng cuộn lồng nhau cho danh sách thẻ, vì thao tác vuốt trên mobile có thể
+     bị giữ lại ở vùng này và khiến người dùng không cuộn được toàn bộ trang. */
+  .schedule-data-table .responsive-table-spin.ant-spin-nested-loading,
+  .schedule-data-table .responsive-table-spin > .ant-spin-container,
+  .schedule-data-table .responsive-table-scroll {
+    height: auto !important;
+    min-height: 0;
+  }
+
+  .schedule-data-table .responsive-table-scroll {
+    overflow: visible !important;
+    overscroll-behavior-y: auto;
+  }
 }
 
 @media (max-width: 991px) {
@@ -373,6 +466,18 @@ body {
   .responsive-schedule-form .ant-space-wrap > .ant-space-item {
     min-width: 0;
   }
+}
+
+.auto-schedule-preview-mobile {
+  display: none;
+}
+
+.schedule-action-buttons .responsive-secondary-actions,
+.schedule-workflow-actions,
+.schedule-utility-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 @media (max-width: 767px) {
@@ -404,11 +509,66 @@ body {
     position: sticky;
     bottom: 0;
     z-index: 2;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
     margin-inline: -14px;
     margin-bottom: -14px;
     padding: 10px 14px;
     border-top: 1px solid #f0f0f0;
     background: #fff;
+  }
+
+  .schedule-responsive-modal .ant-modal-footer .ant-btn {
+    width: 100%;
+    min-height: 44px;
+    margin-inline-start: 0 !important;
+  }
+
+  .auto-schedule-sync-controls .ant-space {
+    display: flex;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px !important;
+    width: 100%;
+  }
+
+  .auto-schedule-sync-controls .ant-space-item,
+  .auto-schedule-sync-controls .ant-form-item {
+    width: 100%;
+  }
+
+  .auto-schedule-sync-controls .ant-btn {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .auto-schedule-sync-controls .ant-typography {
+    line-height: 1.55;
+  }
+
+  .auto-schedule-preview-desktop {
+    display: none;
+  }
+
+  .auto-schedule-preview-mobile {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .auto-schedule-preview-mobile .ant-card-head {
+    min-height: 0;
+    padding: 10px 12px;
+  }
+
+  .auto-schedule-preview-mobile .ant-card-head-title,
+  .auto-schedule-preview-mobile .ant-card-extra {
+    white-space: normal;
+  }
+
+  .auto-schedule-preview-mobile .ant-card-body {
+    padding: 12px;
   }
 
   .responsive-mapping-grid {

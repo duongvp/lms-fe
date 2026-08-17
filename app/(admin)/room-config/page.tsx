@@ -426,7 +426,7 @@ export default function RoomConfigPage() {
       title: "Cấu hình phòng học",
       key: "config",
       ellipsis: true,
-      render: (record: RoomConfigRecord) => {
+      render: (_value: unknown, record: RoomConfigRecord) => {
         const config = record.config || {};
         return (
           <Space direction="vertical" size={2}>
@@ -453,7 +453,7 @@ export default function RoomConfigPage() {
       title: "Cập nhật lần cuối",
       key: "updated",
       width: 170,
-      render: (record: RoomConfigRecord) => (
+      render: (_value: unknown, record: RoomConfigRecord) => (
         <Space direction="vertical" size={0}>
           <Text type="secondary" style={{ fontSize: 12 }}>
             {record.updated_by || "Hệ thống"}
@@ -469,7 +469,7 @@ export default function RoomConfigPage() {
       key: "action",
       width: 130,
       align: "center" as const,
-      render: (record: RoomConfigRecord) => (
+      render: (_value: unknown, record: RoomConfigRecord) => (
         <Space>
           <Tooltip title="Xem chi tiết cấu hình">
             <Button

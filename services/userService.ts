@@ -2,7 +2,7 @@
 
 import { fetchInstance } from "@/ultils/fetchInstance";
 
-const API_BASE_URL = `${process.env.NEXT_PUBLIC_LMS_API || process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://localhost:5000"}/api/users`;
+const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://localhost:5000"}/api/users`;
 
 // ---------- Interface ----------
 export interface RoleInfo {

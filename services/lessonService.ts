@@ -1,6 +1,6 @@
 import { fetchInstance } from "@/ultils/fetchInstance";
 
-const API_BASE_URL = `${process.env.NEXT_PUBLIC_LMS_API || process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://localhost:5000"}/api/lessons`;
+const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://localhost:5000"}/api/lessons`;
 const LESSON_REAUTH_STORAGE_KEY = "lms.lessons.reauth";
 
 const getLessonReauthToken = () => (

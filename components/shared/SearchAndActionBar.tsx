@@ -16,6 +16,8 @@ interface SearchAndActionsBarProps {
     placeholder?: string;
     extraButtons?: React.ReactNode;
     extraExportButton?: React.ReactNode;
+    secondaryActions?: React.ReactNode;
+    actionClassName?: string;
     handleImportClick?: React.MouseEventHandler<HTMLElement>;
 }
 
@@ -28,6 +30,8 @@ export default function SearchAndActionsBar({
     placeholder = 'Tìm kiếm...',
     extraButtons,
     extraExportButton,
+    secondaryActions,
+    actionClassName,
     handleFilterBtn,
     handleImportClick,
     handlePrintBarcode,
@@ -69,7 +73,7 @@ export default function SearchAndActionsBar({
                     justify='end'
                     style={{ gap: 8 }} // dùng style thay vì prop gap nếu cần độ tương thích cao
                 >
-                    <Flex className="responsive-action-buttons" wrap="wrap" justify={compact ? "start" : "end"} gap={8}>
+                    <Flex className={`responsive-action-buttons ${actionClassName || ''}`.trim()} wrap="wrap" justify={compact ? "start" : "end"} gap={8}>
                         {
                             (handlePrintBarcode || handleDeleteProducts) && (
                                 <Dropdown menu={{ items: menu.props.items, onClick: menu.props.onClick }} trigger={['click']}>
@@ -97,10 +101,17 @@ export default function SearchAndActionsBar({
                             </Button>
                         )}
 
-                        {extraExportButton}
-
-                        {handleFilterBtn && (
-                            <Button type="default" onClick={handleFilterBtn} icon={<FilterOutlined />} />
+                        {secondaryActions ? (
+                            <div className="responsive-secondary-actions">
+                                {secondaryActions}
+                            </div>
+                        ) : (
+                            <>
+                                {extraExportButton}
+                                {handleFilterBtn && (
+                                    <Button type="default" onClick={handleFilterBtn} icon={<FilterOutlined />} />
+                                )}
+                            </>
                         )}
                     </Flex>
                 </Flex>

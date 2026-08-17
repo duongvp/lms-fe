@@ -1,6 +1,6 @@
 import { fetchInstance } from "@/ultils/fetchInstance";
 
-const API_BASE_URL = `${process.env.NEXT_PUBLIC_LMS_API || process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://localhost:5000"}/api/package-courses`;
+const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://localhost:5000"}/api/package-courses`;
 
 export interface PackageCourseOption {
     package_id: string;
