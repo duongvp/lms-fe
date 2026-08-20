@@ -100,6 +100,10 @@ const QuizManagementPage = () => {
     const [showPageInfo, setShowPageInfo] = useState(true);
     const [openFilterDrawer, setOpenFilterDrawer] = useState(false);
 
+    useEffect(() => {
+        setShowPageInfo(window.localStorage.getItem('lms:page-info:quizzes') !== 'hidden');
+    }, []);
+
     const replaceQuizUrl = useCallback((nextFilters: QuizFilterValues, nextKeyword = "", nextPage = 1) => {
         const params = new URLSearchParams();
         const program = String(nextFilters.code || "").trim();
@@ -797,7 +801,11 @@ const QuizManagementPage = () => {
                     type="link"
                     size="small"
                     icon={showPageInfo ? <UpOutlined /> : <DownOutlined />}
-                    onClick={() => setShowPageInfo((value) => !value)}
+                    onClick={() => setShowPageInfo((value) => {
+                        const next = !value;
+                        window.localStorage.setItem('lms:page-info:quizzes', next ? 'visible' : 'hidden');
+                        return next;
+                    })}
                 >
                     {showPageInfo ? "Ẩn thông tin" : "Hiện thông tin"}
                 </Button>
@@ -847,7 +855,7 @@ const QuizManagementPage = () => {
                         <Button icon={<MoreOutlined />}>Thao tác khác</Button>
                     </Dropdown>
                     <Button icon={<FilterOutlined />} onClick={() => setOpenFilterDrawer(true)}>Lọc</Button>
-                </div> : <>
+                </div> : <Space>
                     {canExport && (
                         <Dropdown
                             trigger={["click"]}
@@ -879,7 +887,7 @@ const QuizManagementPage = () => {
                         </Button>
                     )}
                     <Button icon={<FilterOutlined />} onClick={() => setOpenFilterDrawer(true)}>Lọc</Button>
-                </>
+                </Space>
             }
         />
 

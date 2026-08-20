@@ -288,7 +288,7 @@ const CopyScheduleModal: React.FC<CopyScheduleModalProps> = ({
                     </Col>
                     <Col xs={24} md={12}>
                         <Form.Item name="teacher" label="Giáo viên" rules={[{ required: true, message: 'Chọn giáo viên' }]}>
-                            <TeachingStaffSelect teacherType={1} showSearch optionFilterProp="label" placeholder="Chọn giáo viên" />
+                            <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" showSearch optionFilterProp="label" placeholder="Chọn giáo viên" />
                         </Form.Item>
                     </Col>
                     <Col xs={24} md={12}>

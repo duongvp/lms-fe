@@ -54,7 +54,7 @@ const TeacherProfileFormModal = ({
                 preserve={false}
             >
                 <Form.Item
-                    label="Mã nhân sự"
+                    label="Tên đăng nhập"
                     name="username"
                     rules={[
                         ...(fixedTeacherType === 1 ? [{ required: true, whitespace: true, message: 'Nhập họ và tên giáo viên' }] : []),
@@ -62,7 +62,7 @@ const TeacherProfileFormModal = ({
                             required: !editing,
                             whitespace: true,
                             message:
-                                'Nhập mã nhân sự',
+                                'Nhập Tên đăng nhập',
                         },
                         {
                             max: 120,
@@ -73,7 +73,7 @@ const TeacherProfileFormModal = ({
                             pattern:
                                 /^[a-zA-Z0-9._@-]+$/,
                             message:
-                                'Mã nhân sự chứa ký tự không hợp lệ',
+                                'Tên đăng nhập chứa ký tự không hợp lệ',
                         },
                     ]}
                 >

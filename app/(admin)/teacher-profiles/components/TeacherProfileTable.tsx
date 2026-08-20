@@ -115,6 +115,7 @@ const TeacherProfileTable = ({
                 pagination={{
                     ...pagination,
                     showSizeChanger: true,
+                    showTotal: (total) => `Tổng số: ${total} nhân sự`,
                     onChange: (
                         page,
                         pageSize
@@ -130,7 +131,7 @@ const TeacherProfileTable = ({
                 }}
                 columns={[
                 {
-                    title: 'Mã nhân sự',
+                    title: 'Tên đăng nhập',
                     dataIndex: 'username',
                     width: 180,
                 },

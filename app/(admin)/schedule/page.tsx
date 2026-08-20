@@ -5,7 +5,7 @@ import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import type { SorterResult } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
-import { notification, Alert, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, Drawer, Empty, FloatButton, Grid, Tooltip, Descriptions, Tabs, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag } from "antd";
+import { notification, Alert, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, Drawer, Empty, FloatButton, Grid, Tooltip, Descriptions, Tabs, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress } from "antd";
 import type { TabsProps } from "antd";
 import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, FilterOutlined, MoreOutlined, FileExcelOutlined, FileTextOutlined } from "@ant-design/icons";
 import FullCalendar from "@fullcalendar/react";
@@ -23,6 +23,7 @@ import {
     downloadLivestreamImportTemplate,
     exportLivestreams,
     importLivestreamsFile,
+    syncMissingTeachingUsers,
     updateLivestreamsFile,
     updateLivestream,
 } from "@/services/livestreamService";
@@ -491,6 +492,9 @@ const Page = () => {
     const [api, contextHolder] = notification.useNotification({ duration: 2.5 });
     const router = useRouter();
     const searchParams = useSearchParams();
+    // Bảo vệ lựa chọn chương trình vừa gửi khỏi callback debounce/URL cũ.
+    const filterRevisionRef = useRef(0);
+    const requestedProgramRef = useRef<string | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [openImportModal, setOpenImportModal] = useState(false);
     const [importing, setImporting] = useState(false);
@@ -502,27 +506,49 @@ const Page = () => {
     const [copySource, setCopySource] = useState<ScheduleDataType | null>(null);
     const [isEditMode, setIsEditMode] = useState(false);
     const [showPageInfo, setShowPageInfo] = useState(true);
+    const [syncingTeachingUsers, setSyncingTeachingUsers] = useState(false);
+
+    useEffect(() => {
+        setShowPageInfo(window.localStorage.getItem('lms:page-info:schedule') !== 'hidden');
+    }, []);
+    const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+    const [syncProgress, setSyncProgress] = useState<{ current: number; total: number; created: number; failed: number; errors: Array<{ calendar_id: number; message: string }> } | null>(null);
 
     const replaceScheduleUrl = useCallback((values: ScheduleFilterValues, targetPage = 1) => {
         const program = String(values.code || "").trim();
-        // URL của Lịch học có thể tạm thời không có program (ví dụ Admin lọc
-        // liên chương trình). Trường hợp đó không được xóa shared context;
-        // shared program chỉ bị clear khi logout.
+        requestedProgramRef.current = program;
         if (program) useAuthStore.getState().setCurrentProgram(program);
+        // Admin bỏ chọn chương trình là thao tác chủ động chuyển sang ngữ cảnh
+        // liên chương trình; cũng phải xoá shared context để trang Câu hỏi và
+        // các trang khác không nhận lại mã chương trình cũ.
+        else if (isAdmin) useAuthStore.getState().setCurrentProgram(null);
         router.replace(buildScheduleUrl(values, targetPage), { scroll: false });
-    }, [router]);
+    }, [isAdmin, router]);
 
     useEffect(() => {
         const urlProgram = String(searchParams.get("program") || "").trim();
+        // router.replace chạy bất đồng bộ. Trong lúc chờ URL mới, bỏ qua một
+        // URL cũ để nó không ghi đè program người dùng vừa chọn.
+        if (
+            requestedProgramRef.current !== null
+            && urlProgram !== requestedProgramRef.current
+        ) return;
+        requestedProgramRef.current = null;
         const sharedProgram = String(useAuthStore.getState().currentProgram || "").trim();
-        const program = urlProgram || sharedProgram;
+        // Admin có thể chủ động bỏ chọn chương trình để lọc liên chương trình.
+        // Không fallback về sharedProgram ở trường hợp này, nếu không mã cũ sẽ
+        // bị tự thêm lại sau khi URL/state được đồng bộ.
+        const program = urlProgram || (isAdmin ? "" : sharedProgram);
         const hasDateFilter = Boolean(searchParams.get("from") || searchParams.get("to"));
         const hasOtherFilter = Boolean(
             searchParams.get("q") || searchParams.get("teacher") || searchParams.get("system_type") || searchParams.get("status")
         );
         // Admin được phép xem liên chương trình theo thời gian, nên URL không
         // có `program` vẫn phải được khôi phục đầy đủ sau khi tải lại trang.
-        if (!program && (!isAdmin || (!hasDateFilter && !hasOtherFilter))) return;
+        if (!program && (!isAdmin || (!hasDateFilter && !hasOtherFilter))) {
+            setOpenFilterDrawer(true);
+            return;
+        }
         if (program) {
             useAuthStore.getState().setCurrentProgram(program);
             if (!urlProgram) {
@@ -554,7 +580,6 @@ const Page = () => {
         setSearchText(String(values.keyword || ""));
         setCurrentPage(Math.max(1, Number(searchParams.get("page")) || 1));
         setHasSearched(true);
-        if (!program && isAdmin) setOpenFilterDrawer(true);
     }, [searchParams, isAdmin, router]);
 
     const rowSelection = {
@@ -798,8 +823,8 @@ const Page = () => {
     const isEditing = (record: ScheduleDataType) => record.key === editingKey;
 
     // ✅ Hàm thực sự submit search (được debounce)
-    const doSearch = useCallback((keyword: string) => {
-        if (!hasSearched) return;
+    const doSearch = useCallback((keyword: string, revision: number) => {
+        if (!hasSearched || revision !== filterRevisionRef.current) return;
         const nextValues = cleanFilterValues({ ...submittedFilterValues, keyword });
         setSubmittedFilterValues(nextValues);
         setCurrentPage(1);
@@ -815,10 +840,12 @@ const Page = () => {
         setFilterValues((prev) => cleanFilterValues({ ...prev, keyword: value }));
         setCurrentPage(1);
 
-        debouncedDoSearch(value);
+        debouncedDoSearch(value, filterRevisionRef.current);
     }, [debouncedDoSearch]);
 
     const handleScheduleFilter = (values: ScheduleFilterValues) => {
+        // Hủy hiệu lực mọi lần tìm kiếm keyword đang debounce với bộ lọc cũ.
+        filterRevisionRef.current += 1;
         if (!String(values.code || "").trim() && !isAdmin) {
             api.warning({
                 message: "Vui lòng chọn Chương trình",
@@ -836,6 +863,7 @@ const Page = () => {
     };
 
     const handleResetScheduleFilter = () => {
+        filterRevisionRef.current += 1;
         const cleaned = cleanFilterValues({ keyword: "" });
         setSearchText("");
         setFilterValues(cleaned);
@@ -892,6 +920,67 @@ const Page = () => {
                 description: error.message || "Không thể xuất lịch học.",
             });
         }
+    };
+
+    const handleSyncMissingTeachingUsers = () => {
+        const targetIds = selectedRowKeys.map(String).map(Number).filter(id => !isNaN(id));
+        if (targetIds.length === 0) {
+            api.warning({
+                message: "Chưa chọn lịch",
+                description: "Vui lòng chọn ít nhất 1 lịch để quét user nhân sự.",
+            });
+            return;
+        }
+
+        Modal.confirm({
+            title: "Quét user giáo viên và trợ giảng",
+            content: `Hệ thống sẽ quét ${targetIds.length} lịch đã chọn và chỉ thêm các user nhân sự còn thiếu. Lịch học và user đã có sẽ không bị thay đổi.`,
+            okText: "Bắt đầu quét",
+            cancelText: "Hủy",
+            onOk: async () => {
+                setSyncingTeachingUsers(true);
+                setSyncProgress({ current: 0, total: targetIds.length, created: 0, failed: 0, errors: [] });
+                setIsSyncModalOpen(true);
+                try {
+                    let totalCreated = 0;
+                    let totalFailed = 0;
+                    let totalScanned = 0;
+                    const allErrors: Array<{ calendar_id: number; message: string }> = [];
+                    const chunkSize = 10;
+                    for (let i = 0; i < targetIds.length; i += chunkSize) {
+                        const chunk = targetIds.slice(i, i + chunkSize);
+                        const response: any = await syncMissingTeachingUsers(chunk);
+                        const result = response?.data ?? response ?? {};
+                        totalScanned += Number(result.scanned ?? 0);
+                        totalCreated += Number(result.created ?? 0);
+                        totalFailed += Number(result.failed ?? 0);
+                        if (Array.isArray(result.errors)) {
+                            allErrors.push(...result.errors);
+                        }
+
+                        setSyncProgress({
+                            current: Math.min(i + chunkSize, targetIds.length),
+                            total: targetIds.length,
+                            created: totalCreated,
+                            failed: totalFailed,
+                            errors: allErrors
+                        });
+                    }
+                    api.success({
+                        message: "Đã quét user nhân sự",
+                        description: `Đã quét ${totalScanned} lịch, tạo ${totalCreated} user mới${totalFailed ? `; ${totalFailed} lịch chưa xử lý được` : ''}.`,
+                        duration: 6,
+                    });
+                } catch (error: any) {
+                    api.error({
+                        message: "Quét user nhân sự thất bại",
+                        description: error?.message || "Không thể hoàn tất quét dữ liệu.",
+                    });
+                } finally {
+                    setSyncingTeachingUsers(false);
+                }
+            },
+        });
     };
 
     const handleDownloadImportTemplate = async (format: "csv" | "xlsx") => {
@@ -1177,6 +1266,7 @@ const Page = () => {
                             >
                                 <TeachingStaffSelect
                                     teacherType={1}
+                                    teacherValueMode="displayName"
                                     size="small"
                                     showSearch
                                     optionFilterProp="label"
@@ -1492,141 +1582,154 @@ const Page = () => {
                 />
             )}
             {viewMode === "table" && <>
-            <div
-                style={{
-                    border: "1px solid #d6e4ff",
-                    background: "#f6fbff",
-                    borderRadius: 8,
-                    padding: showPageInfo ? "10px 12px" : "8px 12px",
-                    marginBottom: 10,
-                }}
-            >
-                <div className="responsive-page-info-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                        <InfoCircleOutlined style={{ color: "#1677ff", fontSize: 16 }} />
-                        <span style={{ fontWeight: 600 }}>Quản lý lịch học</span>
-                    </div>
-                    <Button
-                        type="link"
-                        size="small"
-                        icon={showPageInfo ? <UpOutlined /> : <DownOutlined />}
-                        onClick={() => setShowPageInfo((value) => !value)}
-                    >
-                        {showPageInfo ? "Ẩn thông tin" : "Hiện thông tin"}
-                    </Button>
-                </div>
                 <div
                     style={{
-                        display: "grid",
-                        gridTemplateRows: showPageInfo ? "1fr" : "0fr",
-                        transition: "grid-template-rows 0.3s ease-in-out",
-                        overflow: "hidden",
+                        border: "1px solid #d6e4ff",
+                        background: "#f6fbff",
+                        borderRadius: 8,
+                        padding: showPageInfo ? "10px 12px" : "8px 12px",
+                        marginBottom: 10,
                     }}
                 >
-                    <div style={{ minHeight: 0 }}>
-                        <div
-                            style={{
-                                marginTop: 6,
-                                paddingLeft: 24,
-                                color: "rgba(0, 0, 0, 0.72)",
-                                lineHeight: 1.55
-                            }}
+                    <div className="responsive-page-info-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                            <InfoCircleOutlined style={{ color: "#1677ff", fontSize: 16 }} />
+                            <span style={{ fontWeight: 600 }}>Quản lý lịch học</span>
+                        </div>
+                        <Button
+                            type="link"
+                            size="small"
+                            icon={showPageInfo ? <UpOutlined /> : <DownOutlined />}
+                            onClick={() => setShowPageInfo((value) => {
+                                const next = !value;
+                                window.localStorage.setItem('lms:page-info:schedule', next ? 'visible' : 'hidden');
+                                return next;
+                            })}
                         >
-                            Theo dõi các buổi học theo lớp, giáo viên và khung giờ. Bạn có thể thêm lịch,
-                            dời lịch, nghỉ học, sửa nhanh từng dòng hoặc sửa hàng loạt những buổi chưa diễn ra.
+                            {showPageInfo ? "Ẩn thông tin" : "Hiện thông tin"}
+                        </Button>
+                    </div>
+                    <div
+                        style={{
+                            display: "grid",
+                            gridTemplateRows: showPageInfo ? "1fr" : "0fr",
+                            transition: "grid-template-rows 0.3s ease-in-out",
+                            overflow: "hidden",
+                        }}
+                    >
+                        <div style={{ minHeight: 0 }}>
+                            <div
+                                style={{
+                                    marginTop: 6,
+                                    paddingLeft: 24,
+                                    color: "rgba(0, 0, 0, 0.72)",
+                                    lineHeight: 1.55
+                                }}
+                            >
+                                Theo dõi các buổi học theo lớp, giáo viên và khung giờ. Bạn có thể thêm lịch,
+                                dời lịch, nghỉ học, sửa nhanh từng dòng hoặc sửa hàng loạt những buổi chưa diễn ra.
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <SearchAndActionsBar
-                onSearch={handleSearch}
-                placeholder="Tìm kiếm theo khóa học, bài học, giáo viên, phòng học..."
-                handleAddBtn={canCreateSchedule ? handleAddBtn : undefined}
-                handleImportClick={(canImportSchedule || canEditSchedule) ? () => {
-                    setImportErrors([]);
-                    setImportMode(canImportSchedule ? "create" : "update");
-                    setOpenImportModal(true);
-                } : undefined}
-                actionClassName="schedule-action-buttons"
-                secondaryActions={
-                    isDesktop ? <>
-                        <div className="schedule-workflow-actions">
-                            {canCreateSchedule && (
-                                <Button
-                                    icon={<CalendarOutlined />}
-                                    disabled={!submittedFilterValues.code}
-                                    onClick={handleOpenAutoSchedule}
-                                >
-                                    Tạo lịch tự động
-                                </Button>
-                            )}
-                            {canEditSchedule && (
-                                <Button
-                                    type="primary"
-                                    icon={<EditOutlined />}
-                                    onClick={handleOpenBulkEdit}
-                                >
-                                    Sửa hàng loạt
-                                </Button>
-                            )}
-                        </div>
-                        <div className="schedule-utility-actions">
-                            {canExportSchedule && (
-                                <Dropdown
-                                    trigger={["click"]}
-                                    menu={{
-                                        items: [
-                                            { key: "xlsx", label: "Xuất Excel (.xlsx)" },
-                                            { key: "csv", label: "Xuất CSV (.csv)" },
-                                        ],
-                                        onClick: ({ key }) => handleExportSchedule(key as "csv" | "xlsx"),
-                                    }}
-                                >
-                                    <Button icon={<DownloadOutlined />}>
-                                        Export{selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}
+                <SearchAndActionsBar
+                    onSearch={handleSearch}
+                    placeholder="Tìm kiếm theo chương trình, bài học, giáo viên, phòng học..."
+                    handleAddBtn={canCreateSchedule ? handleAddBtn : undefined}
+                    handleImportClick={(canImportSchedule || canEditSchedule) ? () => {
+                        setImportErrors([]);
+                        setImportMode(canImportSchedule ? "create" : "update");
+                        setOpenImportModal(true);
+                    } : undefined}
+                    actionClassName="schedule-action-buttons"
+                    secondaryActions={
+                        isDesktop ? <>
+                            <div className="schedule-workflow-actions">
+                                {canCreateSchedule && (
+                                    <Button
+                                        icon={<CalendarOutlined />}
+                                        disabled={!submittedFilterValues.code}
+                                        onClick={handleOpenAutoSchedule}
+                                    >
+                                        Tạo lịch tự động
                                     </Button>
-                                </Dropdown>
-                            )}
-                            <Button
-                                aria-label="Làm mới danh sách"
-                                title="Làm mới danh sách"
-                                icon={<ReloadOutlined />}
-                                onClick={() => {
-                                    if (hasSearched) void refreshSchedules();
+                                )}
+                                {canEditSchedule && (
+                                    <Button
+                                        type="primary"
+                                        icon={<EditOutlined />}
+                                        onClick={handleOpenBulkEdit}
+                                    >
+                                        Sửa hàng loạt
+                                    </Button>
+                                )}
+                            </div>
+                            <div className="schedule-utility-actions">
+                                <Button
+                                    icon={<ReloadOutlined />}
+                                    loading={syncingTeachingUsers}
+                                    onClick={handleSyncMissingTeachingUsers}
+                                >
+                                    Quét user nhân sự
+                                </Button>
+                                {canExportSchedule && (
+                                    <Dropdown
+                                        trigger={["click"]}
+                                        menu={{
+                                            items: [
+                                                { key: "xlsx", label: "Xuất Excel (.xlsx)" },
+                                                { key: "csv", label: "Xuất CSV (.csv)" },
+                                            ],
+                                            onClick: ({ key }) => handleExportSchedule(key as "csv" | "xlsx"),
+                                        }}
+                                    >
+                                        <Button icon={<DownloadOutlined />}>
+                                            Export{selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}
+                                        </Button>
+                                    </Dropdown>
+                                )}
+                                <Button
+                                    aria-label="Làm mới danh sách"
+                                    title="Làm mới danh sách"
+                                    icon={<ReloadOutlined />}
+                                    onClick={() => {
+                                        if (hasSearched) void refreshSchedules();
+                                    }}
+                                />
+                                <Button
+                                    aria-label="Lọc lịch học"
+                                    title="Lọc lịch học"
+                                    icon={<FilterOutlined />}
+                                    onClick={() => setOpenFilterDrawer(true)}
+                                />
+                            </div>
+                        </> : <div className="schedule-mobile-actions">
+                            <Dropdown
+                                trigger={["click"]}
+                                menu={{
+                                    items: [
+                                        ...(canCreateSchedule ? [{ key: "auto", icon: <CalendarOutlined />, label: "Tạo lịch tự động", disabled: !submittedFilterValues.code }] : []),
+                                        ...(canEditSchedule ? [{ key: "bulk-edit", icon: <EditOutlined />, label: "Sửa hàng loạt" }] : []),
+                                        { key: "sync-teaching-users", icon: <ReloadOutlined />, label: "Quét user nhân sự" },
+                                        ...(canExportSchedule ? [{ key: "xlsx", icon: <FileExcelOutlined />, label: `Xuất Excel${selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}` }, { key: "csv", icon: <FileTextOutlined />, label: "Xuất CSV" }] : []),
+                                        { key: "reload", icon: <ReloadOutlined />, label: "Làm mới" },
+                                    ],
+                                    onClick: ({ key }) => {
+                                        if (key === "auto") handleOpenAutoSchedule();
+                                        if (key === "bulk-edit") handleOpenBulkEdit();
+                                        if (key === "sync-teaching-users") handleSyncMissingTeachingUsers();
+                                        if (key === "xlsx" || key === "csv") handleExportSchedule(key);
+                                        if (key === "reload" && hasSearched) void refreshSchedules();
+                                    },
                                 }}
-                            />
-                            <Button
-                                aria-label="Lọc lịch học"
-                                title="Lọc lịch học"
-                                icon={<FilterOutlined />}
-                                onClick={() => setOpenFilterDrawer(true)}
-                            />
+                            >
+                                <Button icon={<MoreOutlined />}>Thao tác khác</Button>
+                            </Dropdown>
+                            <Button icon={<FilterOutlined />} onClick={() => setOpenFilterDrawer(true)}>Lọc</Button>
                         </div>
-                    </> : <div className="schedule-mobile-actions">
-                        <Dropdown
-                            trigger={["click"]}
-                            menu={{
-                                items: [
-                                    ...(canCreateSchedule ? [{ key: "auto", icon: <CalendarOutlined />, label: "Tạo lịch tự động", disabled: !submittedFilterValues.code }] : []),
-                                    ...(canEditSchedule ? [{ key: "bulk-edit", icon: <EditOutlined />, label: "Sửa hàng loạt" }] : []),
-                                    ...(canExportSchedule ? [{ key: "xlsx", icon: <FileExcelOutlined />, label: `Xuất Excel${selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}` }, { key: "csv", icon: <FileTextOutlined />, label: "Xuất CSV" }] : []),
-                                    { key: "reload", icon: <ReloadOutlined />, label: "Làm mới" },
-                                ],
-                                onClick: ({ key }) => {
-                                    if (key === "auto") handleOpenAutoSchedule();
-                                    if (key === "bulk-edit") handleOpenBulkEdit();
-                                    if (key === "xlsx" || key === "csv") handleExportSchedule(key);
-                                    if (key === "reload" && hasSearched) void refreshSchedules();
-                                },
-                            }}
-                        >
-                            <Button icon={<MoreOutlined />}>Thao tác khác</Button>
-                        </Dropdown>
-                        <Button icon={<FilterOutlined />} onClick={() => setOpenFilterDrawer(true)}>Lọc</Button>
-                    </div>
-                }
-            />
+                    }
+                />
             </>}
 
             <style>{`
@@ -1707,7 +1810,7 @@ const Page = () => {
                         />
                     ) : (
                         <>
-                        <style>{`
+                            <style>{`
                             .schedule-view-stage {
                                 position: relative;
                                 height: 100%;
@@ -1763,13 +1866,13 @@ const Page = () => {
                                 }
                             }
                         `}</style>
-                        <div className={`schedule-view-stage${viewMode === "table" ? " schedule-view-stage-table" : ""}`}>
-                        <div
-                            className={`schedule-view-pane custom-calendar-wrapper${viewMode === "calendar" ? " schedule-view-pane-active" : ""}`}
-                            aria-hidden={viewMode !== "calendar"}
-                            style={{ height: "100%", padding: "16px", background: "#fff", borderRadius: "8px" }}
-                        >
-                            <style>{`
+                            <div className={`schedule-view-stage${viewMode === "table" ? " schedule-view-stage-table" : ""}`}>
+                                <div
+                                    className={`schedule-view-pane custom-calendar-wrapper${viewMode === "calendar" ? " schedule-view-pane-active" : ""}`}
+                                    aria-hidden={viewMode !== "calendar"}
+                                    style={{ height: "100%", padding: "16px", background: "#fff", borderRadius: "8px" }}
+                                >
+                                    <style>{`
                                 .custom-calendar-wrapper .fc {
                                     font-family: inherit;
                                 }
@@ -1833,105 +1936,105 @@ const Page = () => {
                                     background-color: #ffffff;
                                 }
                             `}</style>
-                            {calendarMounted && <FullCalendar
-                                ref={calendarRef}
-                                plugins={CALENDAR_PLUGINS}
-                                initialView={isDesktop ? "timeGridWeek" : "timeGridDay"}
-                                locale={viLocale}
-                                headerToolbar={calendarHeaderToolbar}
-                                events={calendarEvents}
-                                eventContent={renderCalendarEvent}
-                                eventClick={handleCalendarEventClick}
-                                // Khi admin xem nhiều chương trình, các lịch trùng giờ có
-                                // thể rất dày. Giới hạn stack để event còn đủ rộng để đọc;
-                                // các lịch còn lại nằm trong liên kết "+ thêm" của FullCalendar.
-                                eventMaxStack={isAdmin && !activeProgramCode ? 3 : undefined}
-                                moreLinkClick="popover"
-                                height="100%"
-                                allDaySlot={false}
-                                slotMinTime="06:00:00"
-                                slotMaxTime="23:00:00"
-                            />}
-                        </div>
-                        <div
-                            className={`schedule-view-pane${viewMode === "table" ? " schedule-view-pane-active" : ""}`}
-                            aria-hidden={viewMode !== "table"}
-                            style={{ height: "100%", minHeight: 0 }}
-                        >
-                        <CustomTable<ScheduleDataType>
-                            className="schedule-data-table"
-                            responsiveCardTitle={(record) => (
-                                <Space size={6} style={{ maxWidth: "100%" }}>
-                                    {record.code && <Tag color="blue" style={{ marginInlineEnd: 0 }}>{record.code}</Tag>}
-                                    <Typography.Text strong ellipsis style={{ maxWidth: 190 }}>
-                                        Bài {record.learn_number || "-"}{record.lesson_name ? ` · ${record.lesson_name}` : ""}
-                                    </Typography.Text>
-                                </Space>
-                            )}
-                            columns={columns}
-                            dataSource={filteredData}
-                            loading={loading}
-                            rowSelection={rowSelection}
-                            pagination={{
-                                current: currentPage,
-                                pageSize: pageSize,
-                                total: totalItems,
-                                showSizeChanger: true,
-                                pageSizeOptions: ["25", "50", "100", "200", "300"],
-                                position: ["bottomRight"],
-                                showTotal: (total) => `Tổng ${total} buổi học`,
-                                onChange: (page, size) => {
-                                    if (!hasSearched) return;
-                                    setCurrentPage(page);
-                                    setPageSize(size);
-                                    replaceScheduleUrl(submittedFilterValues, size !== pageSize ? 1 : page);
-                                }
-                            }}
-                            size="middle"
-                            onChange={(_, filters, sorter, extra) => {
-                                if (extra.action === "filter") {
-                                    const selectedProgram = filters.program_code?.[0];
-                                    // Filter cột chỉ áp dụng trên dữ liệu đang hiển thị,
-                                    // không gọi lại API hay làm gián đoạn thao tác của admin.
-                                    setColumnProgramFilter(selectedProgram ? String(selectedProgram) : undefined);
-                                    return;
-                                }
-                                if (extra.action !== "sort") return;
-                                if (!hasSearched) return;
-                                const sorterItems = (
-                                    Array.isArray(sorter) ? sorter : [sorter]
-                                ) as SorterResult<ScheduleDataType>[];
-                                setSortState(
-                                    sorterItems
-                                        .filter((item) => item.field && item.order)
-                                        .map((item) => ({
-                                            field: String(item.field),
-                                            order: item.order as "ascend" | "descend",
-                                        }))
-                                );
-                                setCurrentPage(1);
-                                replaceScheduleUrl(submittedFilterValues);
-                            }}
-                            expandable={{
-                                expandedRowRender: (record) => <ScheduleDetailRow record={record} />,
-                                expandedRowKeys,
-                                onExpandedRowsChange: (keys) => setExpandedRowKeys([...keys]),
-                                expandRowByClick: true,
-                                columnWidth: 32,
-                            }}
-                            onRow={() => ({
-                                style: { cursor: editingKey ? "default" : "pointer" },
-                            })}
-                            sticky={{
-                                offsetHeader: 0,
-                                getContainer: () => (
-                                    pageScrollRef.current?.closest(".ant-layout-content") as HTMLElement | null
-                                ) ?? window,
-                            }}
-                            scroll={{ x: "max-content" }}
-                        />
-                        </div>
-                        </div>
+                                    {calendarMounted && <FullCalendar
+                                        ref={calendarRef}
+                                        plugins={CALENDAR_PLUGINS}
+                                        initialView={isDesktop ? "timeGridWeek" : "timeGridDay"}
+                                        locale={viLocale}
+                                        headerToolbar={calendarHeaderToolbar}
+                                        events={calendarEvents}
+                                        eventContent={renderCalendarEvent}
+                                        eventClick={handleCalendarEventClick}
+                                        // Khi admin xem nhiều chương trình, các lịch trùng giờ có
+                                        // thể rất dày. Giới hạn stack để event còn đủ rộng để đọc;
+                                        // các lịch còn lại nằm trong liên kết "+ thêm" của FullCalendar.
+                                        eventMaxStack={isAdmin && !activeProgramCode ? 3 : undefined}
+                                        moreLinkClick="popover"
+                                        height="100%"
+                                        allDaySlot={false}
+                                        slotMinTime="06:00:00"
+                                        slotMaxTime="23:00:00"
+                                    />}
+                                </div>
+                                <div
+                                    className={`schedule-view-pane${viewMode === "table" ? " schedule-view-pane-active" : ""}`}
+                                    aria-hidden={viewMode !== "table"}
+                                    style={{ height: "100%", minHeight: 0 }}
+                                >
+                                    <CustomTable<ScheduleDataType>
+                                        className="schedule-data-table"
+                                        responsiveCardTitle={(record) => (
+                                            <Space size={6} style={{ maxWidth: "100%" }}>
+                                                {record.code && <Tag color="blue" style={{ marginInlineEnd: 0 }}>{record.code}</Tag>}
+                                                <Typography.Text strong ellipsis style={{ maxWidth: 190 }}>
+                                                    Bài {record.learn_number || "-"}{record.lesson_name ? ` · ${record.lesson_name}` : ""}
+                                                </Typography.Text>
+                                            </Space>
+                                        )}
+                                        columns={columns}
+                                        dataSource={filteredData}
+                                        loading={loading}
+                                        rowSelection={rowSelection}
+                                        pagination={{
+                                            current: currentPage,
+                                            pageSize: pageSize,
+                                            total: totalItems,
+                                            showSizeChanger: true,
+                                            pageSizeOptions: ["25", "50", "100", "200", "300"],
+                                            position: ["bottomRight"],
+                                            showTotal: (total) => `Tổng ${total} buổi học`,
+                                            onChange: (page, size) => {
+                                                if (!hasSearched) return;
+                                                setCurrentPage(page);
+                                                setPageSize(size);
+                                                replaceScheduleUrl(submittedFilterValues, size !== pageSize ? 1 : page);
+                                            }
+                                        }}
+                                        size="middle"
+                                        onChange={(_, filters, sorter, extra) => {
+                                            if (extra.action === "filter") {
+                                                const selectedProgram = filters.program_code?.[0];
+                                                // Filter cột chỉ áp dụng trên dữ liệu đang hiển thị,
+                                                // không gọi lại API hay làm gián đoạn thao tác của admin.
+                                                setColumnProgramFilter(selectedProgram ? String(selectedProgram) : undefined);
+                                                return;
+                                            }
+                                            if (extra.action !== "sort") return;
+                                            if (!hasSearched) return;
+                                            const sorterItems = (
+                                                Array.isArray(sorter) ? sorter : [sorter]
+                                            ) as SorterResult<ScheduleDataType>[];
+                                            setSortState(
+                                                sorterItems
+                                                    .filter((item) => item.field && item.order)
+                                                    .map((item) => ({
+                                                        field: String(item.field),
+                                                        order: item.order as "ascend" | "descend",
+                                                    }))
+                                            );
+                                            setCurrentPage(1);
+                                            replaceScheduleUrl(submittedFilterValues);
+                                        }}
+                                        expandable={{
+                                            expandedRowRender: (record) => <ScheduleDetailRow record={record} />,
+                                            expandedRowKeys,
+                                            onExpandedRowsChange: (keys) => setExpandedRowKeys([...keys]),
+                                            expandRowByClick: true,
+                                            columnWidth: 32,
+                                        }}
+                                        onRow={() => ({
+                                            style: { cursor: editingKey ? "default" : "pointer" },
+                                        })}
+                                        sticky={{
+                                            offsetHeader: 0,
+                                            getContainer: () => (
+                                                pageScrollRef.current?.closest(".ant-layout-content") as HTMLElement | null
+                                            ) ?? window,
+                                        }}
+                                        scroll={{ x: "max-content" }}
+                                    />
+                                </div>
+                            </div>
                         </>
                     )}
                 </div>
@@ -1997,6 +2100,56 @@ const Page = () => {
                     }}
                     onDownloadTemplate={handleDownloadImportTemplate}
                 />
+                <Modal
+                    title="Tiến trình quét user nhân sự"
+                    open={isSyncModalOpen}
+                    footer={
+                        <Button
+                            type="primary"
+                            onClick={() => setIsSyncModalOpen(false)}
+                            disabled={syncingTeachingUsers}
+                        >
+                            Đóng
+                        </Button>
+                    }
+                    closable={!syncingTeachingUsers}
+                    maskClosable={!syncingTeachingUsers}
+                    onCancel={() => {
+                        if (!syncingTeachingUsers) setIsSyncModalOpen(false);
+                    }}
+                >
+                    {syncProgress && (
+                        <div style={{ padding: '20px 0', textAlign: 'center' }}>
+                            <Progress
+                                type="circle"
+                                percent={Math.round((syncProgress.current / syncProgress.total) * 100)}
+                                status={syncProgress.current === syncProgress.total ? "success" : "active"}
+                            />
+                            <div style={{ marginTop: 24, textAlign: 'left', background: '#f5f5f5', padding: '12px 16px', borderRadius: 8 }}>
+                                <Typography.Text strong>Trạng thái chi tiết:</Typography.Text>
+                                <br />
+                                <Typography.Text>Đã quét: {syncProgress.current} / {syncProgress.total} lịch</Typography.Text>
+                                <br />
+                                <Typography.Text type="success">Đã tạo mới: {syncProgress.created} user</Typography.Text>
+                                {syncProgress.failed > 0 && (
+                                    <>
+                                        <br />
+                                        <Typography.Text type="danger">Lỗi: {syncProgress.failed} lịch</Typography.Text>
+                                        <div style={{ maxHeight: 200, overflowY: 'auto', marginTop: 8, padding: 8, background: '#fff', border: '1px solid #d9d9d9', borderRadius: 4 }}>
+                                            <ul style={{ margin: 0, paddingLeft: 20 }}>
+                                                {syncProgress.errors.map((err, idx) => (
+                                                    <li key={idx} style={{ fontSize: 13, marginBottom: 4 }}>
+                                                        <Typography.Text type="danger">Lịch ID {err.calendar_id}: {err.message}</Typography.Text>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </Modal>
             </Form>
         </div>
     );

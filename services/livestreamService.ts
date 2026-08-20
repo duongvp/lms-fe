@@ -302,6 +302,14 @@ export const updateLivestream = (id: string, payload: any) =>
         credentials: "include",
     });
 
+export const syncMissingTeachingUsers = (ids?: number[]) =>
+    fetchInstance(`${API_BASE_URL}/sync-missing-teaching-users`, {
+        method: "POST",
+        body: JSON.stringify({ ids }),
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+    }, "json", 120_000);
+
 export const rescheduleLivestream = (id: string, payload: any) =>
     fetchInstance(`${API_BASE_URL}/${id}/reschedule`, {
         method: "PUT",
@@ -350,7 +358,7 @@ export const toLivestreamPayload = (values: any): LivestreamPayload => {
         teacher: payload.teacher,
         assistant_teacher: serializeAssistantTeachers(payload.assistant_teacher),
         learn_number: Number(payload.learn_number ?? 1),
-        // Internal lesson record only. HMO lesson_id (section ID) is carried
+        // Internal lesson record only. HMO lesson_id is carried
         // by package_lesson_mappings and must never be used as session_id.
         session_id: payload.session_id,
         grade: payload.grade,
@@ -433,12 +441,18 @@ export const toRescheduleLivestreamPayload = (values: any): any => {
         return {
             mode: "cancel",
             reason: String(payload.change_reason || payload.reason || "").trim(),
+            canceled_lesson_name_prefix: payload.canceled_lesson_name_prefix,
+            canceled_lesson_name_suffix: payload.canceled_lesson_name_suffix,
         };
     }
 
     return {
         mode,
         reason: String(payload.change_reason || payload.reason || "").trim(),
+        canceled_lesson_name_prefix: payload.canceled_lesson_name_prefix,
+        canceled_lesson_name_suffix: payload.canceled_lesson_name_suffix,
+        new_lesson_name_prefix: payload.new_lesson_name_prefix,
+        new_lesson_name_suffix: payload.new_lesson_name_suffix,
         new_session: {
             teacher: payload.new_session?.teacher,
             assistant_teacher: serializeAssistantTeachers(

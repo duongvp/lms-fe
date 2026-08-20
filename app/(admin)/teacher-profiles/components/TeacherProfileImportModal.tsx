@@ -8,7 +8,9 @@ import {
     Radio,
     Space,
     Typography,
+    Dropdown,
 } from 'antd';
+import { FileExcelOutlined } from '@ant-design/icons';
 import { ImportError } from '../types';
 import ImportFileDragger from '@/components/shared/ImportFileDragger';
 
@@ -32,6 +34,7 @@ interface TeacherProfileImportModalProps {
 
     onSubmit: () => Promise<void>;
     onClose: () => void;
+    onDownloadTemplate: (format: 'xlsx' | 'csv') => Promise<void>;
 }
 
 const TeacherProfileImportModal = ({
@@ -44,6 +47,7 @@ const TeacherProfileImportModal = ({
     onFileChange,
     onSubmit,
     onClose,
+    onDownloadTemplate,
 }: TeacherProfileImportModalProps) => {
     return (
         <Modal
@@ -67,13 +71,39 @@ const TeacherProfileImportModal = ({
                 }}
             >
                 <Radio value="skip">
-                    Bỏ qua mã đã tồn tại
+                    Bỏ qua Tên đăng nhập đã tồn tại
                 </Radio>
 
                 <Radio value="overwrite">
-                    Cập nhật mã đã tồn tại
+                    Cập nhật Tên đăng nhập đã tồn tại
                 </Radio>
             </Radio.Group>
+            
+            <Dropdown
+                menu={{
+                    items: [
+                        {
+                            key: 'xlsx',
+                            label: 'File mẫu Excel',
+                        },
+                        {
+                            key: 'csv',
+                            label: 'File mẫu CSV',
+                        },
+                    ],
+                    onClick: ({ key }) =>
+                        void onDownloadTemplate(
+                            key as 'xlsx' | 'csv'
+                        ),
+                }}
+            >
+                <Button
+                    icon={<FileExcelOutlined />}
+                    style={{ marginBottom: 16, marginLeft: 16 }}
+                >
+                    Tải file mẫu
+                </Button>
+            </Dropdown>
 
             <ImportFileDragger
                 file={importFile}
@@ -81,7 +111,7 @@ const TeacherProfileImportModal = ({
                 maxSizeMb={5}
                 maxRows={2000}
                 requiredHeaders={[
-                    ['username', 'Mã nhân sự (*)', 'Mã nhân sự'],
+                    ['username', 'Tên đăng nhập (*)', 'Tên đăng nhập'],
                     ['display_name', 'Họ và tên'],
                     ['can_view_stream_key', 'Quyền xem Stream Key (1: Giáo viên, 0: Trợ giảng)'],
                     ['status', 'Trạng thái (1: Hoạt động, 0: Ngừng hoạt động)'],

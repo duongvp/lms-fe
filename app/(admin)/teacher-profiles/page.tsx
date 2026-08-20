@@ -627,9 +627,6 @@ const TeacherProfilesPage = () => {
                 canCreate={canCreate}
                 onOpenImport={openImport}
                 onCreate={openCreate}
-                onDownloadTemplate={
-                    handleTemplate
-                }
                 onExport={
                     handleExport
                 }
@@ -724,6 +721,9 @@ const TeacherProfilesPage = () => {
                 }
                 onClose={
                     closeImport
+                }
+                onDownloadTemplate={
+                    handleTemplate
                 }
             />
         </div>

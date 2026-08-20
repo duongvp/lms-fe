@@ -110,6 +110,13 @@ const DAYS_OPTIONS = [
     { label: 'Chủ Nhật', value: 1 },
 ];
 
+// API trả thời gian lịch dưới dạng wall-clock; giữ nguyên giờ hiển thị khi
+// dùng làm giờ mặc định cho buổi học bù, không chuyển theo timezone browser.
+const parseCalendarWallTime = (value: unknown): Dayjs | undefined => {
+    const parsed = dayjs(String(value ?? '').replace(/Z$/, ''));
+    return parsed.isValid() ? parsed.startOf('minute') : undefined;
+};
+
 const getScheduleSubmitError = (error: any) => {
     const detailErrors = error?.detail?.errors;
     if (Array.isArray(detailErrors) && detailErrors.length > 0) {
@@ -198,7 +205,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const selectedProgram = lessonPrograms.find((program) => program.subject_code === programCode);
 
     // For Update
-    const [updateMode, setUpdateMode] = useState<"current" | "makeup" | "following" | "cancel">("following");
+    const [updateMode, setUpdateMode] = useState<"current" | "makeup" | "following" | "cancel">("makeup");
 
     const selectedDays = Form.useWatch('days_of_week', form) || [];
     const selectedGrade = Form.useWatch('grade', form);
@@ -369,66 +376,91 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const requiredWhenEditable = (fieldCode: string, message: string) =>
         isFieldEditable(fieldCode) ? [{ required: true, message }] : [];
 
-    const newSessionMinDate = updateMode === 'following'
-        ? courseEndDate?.startOf('day')
-        : initialData?.start_time
-            ? dayjs(initialData.start_time).startOf('day')
-            : undefined;
+    // Lịch bù có thể sớm hơn buổi nghỉ nhưng không thể nằm trong quá khứ.
+    // Dời chuỗi vẫn phải tôn trọng ngày cuối khóa nếu ngày đó muộn hơn hôm nay.
+    const today = dayjs().startOf('day');
+    const followingMinDate = courseEndDate?.startOf('day');
+    const newSessionMinDate = updateMode === 'following' && followingMinDate?.isAfter(today)
+        ? followingMinDate
+        : today;
 
     const validateNewSessionDate = (_: unknown, selectedDate?: Dayjs | null) => {
         if (!selectedDate || !newSessionMinDate) return Promise.resolve();
         return selectedDate.startOf('day').isBefore(newSessionMinDate)
-            ? Promise.reject(new Error(
-                updateMode === 'following'
-                    ? 'Ngày buổi mới không được trước ngày kết thúc khóa'
-                    : 'Ngày học bù không được trước ngày của buổi học hiện tại'
-            ))
+            ? Promise.reject(new Error('Ngày buổi mới không được trước ngày kết thúc khóa'))
             : Promise.resolve();
     };
 
     const validateNewSessionEndTime = (_: unknown, endTime?: Dayjs | null) => {
         const startTime = form.getFieldValue(['new_session', 'start_time']) as Dayjs | undefined;
+        if (newSessionDate?.isSame(dayjs(), 'day') && endTime) {
+            const now = dayjs();
+            const endMinutes = endTime.hour() * 60 + endTime.minute();
+            const nowMinutes = now.hour() * 60 + now.minute();
+            if (endMinutes <= nowMinutes) {
+                return Promise.reject(new Error(`Giờ kết thúc phải sau thời gian hiện tại ${now.format('HH:mm')}`));
+            }
+        }
         return isEndAfterStart(startTime, endTime)
             ? Promise.resolve()
             : Promise.reject(new Error('Thời gian kết thúc phải sau thời gian bắt đầu'));
     };
 
     const validateNewSessionStartTime = (_: unknown, startTime?: Dayjs | null) => {
-        if (
-            updateMode !== 'following'
-            || !newSessionDate
-            || !startTime
-            || !courseLastStartTime
-            || !newSessionDate.isSame(courseLastStartTime, 'day')
-        ) return Promise.resolve();
-
+        if (!newSessionDate || !startTime) return Promise.resolve();
         const selectedMinutes = startTime.hour() * 60 + startTime.minute();
-        const lastStartMinutes = courseLastStartTime.hour() * 60 + courseLastStartTime.minute();
-        return selectedMinutes > lastStartMinutes
-            ? Promise.resolve()
-            : Promise.reject(new Error(
-                `Giờ bắt đầu phải sau ${courseLastStartTime.format('HH:mm')} của buổi cuối khóa`
-            ));
+        if (newSessionDate.isSame(dayjs(), 'day')) {
+            const now = dayjs();
+            const nowMinutes = now.hour() * 60 + now.minute();
+            if (selectedMinutes <= nowMinutes) {
+                return Promise.reject(new Error(`Giờ bắt đầu phải sau thời gian hiện tại ${now.format('HH:mm')}`));
+            }
+        }
+        if (
+            updateMode === 'following'
+            && courseLastStartTime
+            && newSessionDate.isSame(courseLastStartTime, 'day')
+        ) {
+            const lastStartMinutes = courseLastStartTime.hour() * 60 + courseLastStartTime.minute();
+            if (selectedMinutes <= lastStartMinutes) {
+                return Promise.reject(new Error(
+                    `Giờ bắt đầu phải sau ${courseLastStartTime.format('HH:mm')} của buổi cuối khóa`
+                ));
+            }
+        }
+        return Promise.resolve();
     };
 
     const getNewSessionStartDisabledTime = () => {
+        if (!newSessionDate) return {};
+        const thresholds: Dayjs[] = [];
+        if (newSessionDate.isSame(dayjs(), 'day')) thresholds.push(dayjs());
         if (
-            updateMode !== 'following'
-            || !newSessionDate
-            || !courseLastStartTime
-            || !newSessionDate.isSame(courseLastStartTime, 'day')
-        ) return {};
+            updateMode === 'following'
+            && courseLastStartTime
+            && newSessionDate.isSame(courseLastStartTime, 'day')
+        ) thresholds.push(courseLastStartTime);
+        if (!thresholds.length) return {};
 
-        const lastHour = courseLastStartTime.hour();
-        const lastMinute = courseLastStartTime.minute();
+        const minimum = thresholds.reduce((latest, value) => value.isAfter(latest) ? value : latest);
+        const minimumHour = minimum.hour();
+        const minimumMinute = minimum.minute();
         return {
-            disabledHours: () => Array.from({ length: lastHour }, (_, hour) => hour),
+            disabledHours: () => Array.from({ length: minimumHour }, (_, hour) => hour),
             disabledMinutes: (selectedHour: number) => (
-                selectedHour === lastHour
-                    ? Array.from({ length: lastMinute + 1 }, (_, minute) => minute)
+                selectedHour === minimumHour
+                    ? Array.from({ length: minimumMinute + 1 }, (_, minute) => minute)
                     : []
             ),
         };
+    };
+
+    const getNewSessionEndMinimum = () => {
+        const thresholds = [newSessionStartTime].filter((value): value is Dayjs => Boolean(value));
+        if (newSessionDate?.isSame(dayjs(), 'day')) thresholds.push(dayjs());
+        return thresholds.length
+            ? thresholds.reduce((latest, value) => value.isAfter(latest) ? value : latest)
+            : undefined;
     };
 
     const validateEndTimeAfter = (startFieldName: string | (string | number)[], message = 'Thời gian kết thúc phải sau thời gian bắt đầu') => (
@@ -580,6 +612,33 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         }
     };
 
+    const renderChangeReason = () => (
+        <FormSection title="Lý do thay đổi">
+            <Form.Item
+                label="Lý do"
+                name="change_reason"
+                rules={[
+                    {
+                        required: true,
+                        whitespace: true,
+                        message: "Vui lòng nhập lý do thay đổi lịch học",
+                    },
+                    {
+                        max: 500,
+                        message: "Lý do không được vượt quá 500 ký tự",
+                    },
+                ]}
+            >
+                <Input.TextArea
+                    rows={3}
+                    maxLength={500}
+                    showCount
+                    placeholder="Nhập lý do nghỉ học, tạo lịch bù hoặc dời chuỗi..."
+                />
+            </Form.Item>
+        </FormSection>
+    );
+
 
     React.useEffect(() => {
         if (open) {
@@ -592,26 +651,37 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                         .filter(Boolean),
                     new_session: {
                         ...(initialData?.new_session || {}),
+                        // Modal mở mặc định ở chế độ tạo lịch bù: giữ giờ cũ
+                        // của buổi đang nghỉ, còn ngày học bù vẫn do người dùng chọn.
+                        start_time: parseCalendarWallTime(initialData?.start_time),
+                        end_time: parseCalendarWallTime(initialData?.end_time),
                         teacher: initialData?.teacher,
                         assistant_teacher: String(initialData?.assistant_teacher || '')
                             .split(',')
                             .map((username) => username.trim())
                             .filter(Boolean),
                     },
-                    update_mode: 'following',
+                    update_mode: 'makeup',
+                    canceled_lesson_name_prefix: '[Nghỉ] ',
+                    canceled_lesson_name_suffix: '',
+                    new_lesson_name_prefix: '[Học Bù] ',
+                    new_lesson_name_suffix: '',
                 });
-                setUpdateMode("following");
+                setUpdateMode("makeup");
             } else {
                 form.resetFields();
                 setAddMode("single");
                 setBulkConfigMode("common");
                 if (programCode) {
                     const inferredGrade = Number(String(programCode).match(/-(\d{1,2})-/)?.[1]) || undefined;
+                    const programSystemType = selectedProgram?.system_type || 'topclass';
                     form.setFieldsValue({
                         grade: selectedProgram?.grade || inferredGrade,
                         subject_name: selectedProgram?.subject_name || String(programCode),
                         subject_code: String(programCode),
                         class_code: String(programCode),
+                        system_type: programSystemType,
+                        bulk_system_type: programSystemType,
                     });
                 }
             }
@@ -630,14 +700,6 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         setCourseLastStartTime(lastStart);
         setCourseCadenceDays(cadenceDays);
 
-        if (
-            updateMode === 'following'
-            && lastStart
-            && cadenceDays
-            && !form.getFieldValue(['new_session', 'date'])
-        ) {
-            form.setFieldValue(['new_session', 'date'], lastStart.add(cadenceDays, 'day'));
-        }
     }, [courseEndQuery.data, form, updateMode]);
 
     return (
@@ -698,11 +760,24 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                 const nextMode = e.target.value as typeof updateMode;
                                 setUpdateMode(nextMode);
                                 form.setFieldValue('update_mode', nextMode);
-                                if (nextMode === 'following' && courseLastStartTime && courseCadenceDays) {
-                                    form.setFieldValue(
-                                        ['new_session', 'date'],
-                                        courseLastStartTime.add(courseCadenceDays, 'day')
-                                    );
+                                if (nextMode === 'following') {
+                                    form.setFieldsValue({
+                                        new_session: {
+                                            date: undefined,
+                                            start_time: undefined,
+                                            end_time: undefined,
+                                            teacher: form.getFieldValue(['new_session', 'teacher']) || initialData?.teacher,
+                                        },
+                                    });
+                                }
+                                if (nextMode === 'makeup') {
+                                    form.setFieldsValue({
+                                        new_session: {
+                                            start_time: parseCalendarWallTime(initialData?.start_time),
+                                            end_time: parseCalendarWallTime(initialData?.end_time),
+                                            teacher: form.getFieldValue(['new_session', 'teacher']) || initialData?.teacher,
+                                        },
+                                    });
                                 }
                             }}
                             buttonStyle="solid"
@@ -714,34 +789,22 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                     </div>
                 )}
 
-                <Form className="responsive-modal-form responsive-schedule-form" layout="vertical" form={form} onFinish={handleFinish}>
+                <Form
+                    className="responsive-modal-form responsive-schedule-form"
+                    layout="vertical"
+                    form={form}
+                    onFinish={handleFinish}
+                    onFinishFailed={({ errorFields }) => {
+                        const firstError = errorFields[0];
+                        if (!firstError) return;
+                        requestAnimationFrame(() => form.scrollToField(firstError.name, {
+                            block: 'center',
+                            behavior: 'smooth',
+                        }));
+                    }}
+                >
 
-                    {isEdit && (
-                        <FormSection title="Lý do thay đổi">
-                            <Form.Item
-                                label="Lý do"
-                                name="change_reason"
-                                rules={[
-                                    {
-                                        required: true,
-                                        whitespace: true,
-                                        message: "Vui lòng nhập lý do thay đổi lịch học",
-                                    },
-                                    {
-                                        max: 500,
-                                        message: "Lý do không được vượt quá 500 ký tự",
-                                    },
-                                ]}
-                            >
-                                <Input.TextArea
-                                    rows={3}
-                                    maxLength={500}
-                                    showCount
-                                    placeholder="Nhập lý do nghỉ học, tạo lịch bù hoặc dời chuỗi..."
-                                />
-                            </Form.Item>
-                        </FormSection>
-                    )}
+                    {isEdit && updateMode !== 'makeup' && updateMode !== 'following' && renderChangeReason()}
 
                     {/* Form fields for Single Add and Current Update */}
                     {((!isEdit && addMode === 'single') || (isEdit && updateMode === 'current')) && (
@@ -1030,7 +1093,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             <TimePicker
                                                 format="HH:mm"
                                                 style={{ width: '100%' }}
-                                                placeholder="Nhập giờ bắt đầu trước"
+                                                placeholder="HH:mm"
                                                 disabledTime={() => getEndDisabledTime(singleStartTime)}
                                                 defaultOpenValue={singleStartTime}
                                                 disabled={!isFieldEditable('end_time') || !singleStartTime}
@@ -1044,7 +1107,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                 <Row gutter={24}>
                                     <Col span={8}>
                                         <Form.Item label="Giáo viên" name="teacher" rules={requiredWhenEditable('teacher', 'Chọn giáo viên')}>
-                                            <TeachingStaffSelect teacherType={1} showSearch optionFilterProp="label" placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
+                                            <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" showSearch optionFilterProp="label" placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
@@ -1060,13 +1123,19 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                         </Form.Item>
                                     </Col>
                                     <Col span={8}>
-                                        <Form.Item label="Hệ thống" name="system_type" rules={[{ required: true, message: 'Chọn hệ thống' }]}>
+                                        <Form.Item
+                                            label="Hệ thống"
+                                            name="system_type"
+                                            rules={[{ required: true, message: 'Chọn hệ thống' }]}
+                                            tooltip={usesProgramContext ? `Hệ thống được xác định tự động từ Chương trình ${programCode}` : undefined}
+                                        >
                                             <Select
                                                 options={[
                                                     { value: 'topclass', label: 'topclass' },
                                                     { value: 'topuni', label: 'topuni' },
                                                 ]}
                                                 placeholder="Chọn hệ thống"
+                                                disabled={usesProgramContext}
                                             />
                                         </Form.Item>
                                     </Col>
@@ -1132,13 +1201,19 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                 </Row>
                                 <Row gutter={24}>
                                     <Col span={24}>
-                                        <Form.Item label="Hệ thống" name="bulk_system_type" rules={[{ required: true, message: 'Chọn hệ thống' }]}>
+                                        <Form.Item
+                                            label="Hệ thống"
+                                            name="bulk_system_type"
+                                            rules={[{ required: true, message: 'Chọn hệ thống' }]}
+                                            tooltip={usesProgramContext ? `Hệ thống được xác định tự động từ Chương trình ${programCode}` : undefined}
+                                        >
                                             <Select
                                                 options={[
                                                     { value: 'topclass', label: 'topclass' },
                                                     { value: 'topuni', label: 'topuni' },
                                                 ]}
                                                 placeholder="Chọn hệ thống"
+                                                disabled={usesProgramContext}
                                             />
                                         </Form.Item>
                                     </Col>
@@ -1270,7 +1345,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             </Text>
                                         </div>
                                         <Row gutter={24}>
-                                            <Col span={12}>
+                                            <Col flex="180px">
                                                 <Form.Item label="Giờ bắt đầu" name="bulk_start_time" rules={requiredWhenEditable('start_time', 'Nhập giờ bắt đầu')}>
                                                     <TimePicker
                                                         format="HH:mm"
@@ -1281,7 +1356,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                     />
                                                 </Form.Item>
                                             </Col>
-                                            <Col span={12}>
+                                            <Col flex="180px">
                                                 <Form.Item
                                                     label="Giờ kết thúc"
                                                     name="bulk_end_time"
@@ -1293,7 +1368,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                     <TimePicker
                                                         format="HH:mm"
                                                         style={{ width: '100%' }}
-                                                        placeholder="Nhập giờ bắt đầu trước"
+                                                        placeholder="HH:mm"
                                                         disabledTime={() => getEndDisabledTime(bulkStartTime)}
                                                         defaultOpenValue={bulkStartTime}
                                                         disabled={!isFieldEditable('end_time') || !bulkStartTime}
@@ -1302,7 +1377,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             </Col>
                                             <Col span={12}>
                                                 <Form.Item label="Giáo viên" name="bulk_teacher" rules={requiredWhenEditable('teacher', 'Chọn giáo viên')}>
-                                                    <TeachingStaffSelect teacherType={1} showSearch optionFilterProp="label" placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
+                                                    <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" showSearch optionFilterProp="label" placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
                                                 </Form.Item>
                                             </Col>
                                             <Col span={12}>
@@ -1351,7 +1426,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                                         >
                                                                             <TimePicker
                                                                                 format="HH:mm"
-                                                                                placeholder="Nhập giờ bắt đầu trước"
+                                                                                placeholder="HH:mm"
                                                                                 style={{ width: '100%' }}
                                                                                 disabledTime={() => getEndDisabledTime(separateStartTime)}
                                                                                 defaultOpenValue={separateStartTime}
@@ -1364,7 +1439,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                         </Col>
                                                         <Col span={4}>
                                                             <Form.Item name={['separate_config', dayValue, 'teacher']} rules={requiredWhenEditable('teacher', 'Chọn giáo viên')} style={{ marginBottom: 8 }}>
-                                                                <TeachingStaffSelect teacherType={1} showSearch optionFilterProp="label" placeholder="Giáo viên" disabled={!isFieldEditable('teacher')} />
+                                                                <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" showSearch optionFilterProp="label" placeholder="Giáo viên" disabled={!isFieldEditable('teacher')} />
                                                             </Form.Item>
                                                         </Col>
                                                         <Col span={4}>
@@ -1391,7 +1466,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                             <FormSection title="Thông tin buổi học sẽ nghỉ">
                                 <Row gutter={24}>
                                     <Col span={12}>
-                                        <Form.Item label="Mã khóa học">
+                                        <Form.Item label="Chương trình">
                                             <Input disabled value={initialData?.code || initialData?.class_code || '---'} />
                                         </Form.Item>
                                     </Col>
@@ -1408,6 +1483,50 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             : 'Lưu ý: Hành động này sẽ đánh dấu buổi học hiện tại là Nghỉ học và tạo thêm một buổi học bù cho cùng bài học. Các buổi sau không bị thay đổi.'}
                                     </Text>
                                 </div>
+                            </FormSection>
+
+                            <FormSection title="Tên bài hiển thị sau khi dời lịch">
+                                <Row gutter={24}>
+                                    <Col span={12}>
+                                        <Text strong>Buổi nghỉ</Text>
+                                        <Row gutter={12} style={{ marginTop: 8 }}>
+                                            <Col flex="180px">
+                                                <Form.Item label="Tiền tố" name="canceled_lesson_name_prefix">
+                                                    <Input placeholder="[Nghỉ] " maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
+                                                </Form.Item>
+                                            </Col>
+                                            <Col flex="180px">
+                                                <Form.Item label="Hậu tố" name="canceled_lesson_name_suffix">
+                                                    <Input placeholder="Để trống nếu không dùng" maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
+                                                </Form.Item>
+                                            </Col>
+                                        </Row>
+                                    </Col>
+                                    {updateMode === 'makeup' ? (
+                                        <Col span={12}>
+                                            <Text strong>Buổi học bù</Text>
+                                            <Row gutter={12} style={{ marginTop: 8 }}>
+                                                <Col flex="180px">
+                                                    <Form.Item label="Tiền tố" name="new_lesson_name_prefix">
+                                                        <Input placeholder="[Học Bù] " maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
+                                                    </Form.Item>
+                                                </Col>
+                                                <Col flex="180px">
+                                                    <Form.Item label="Hậu tố" name="new_lesson_name_suffix">
+                                                        <Input placeholder="Để trống nếu không dùng" maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
+                                                    </Form.Item>
+                                                </Col>
+                                            </Row>
+                                        </Col>
+                                    ) : (
+                                        <Col span={12}>
+                                            <Text strong>Buổi mới cuối khóa</Text>
+                                            <div style={{ marginTop: 8, color: '#8c8c8c' }}>
+                                                Giữ nguyên tên bài vì đây là bài cuối của chuỗi được chuyển tiếp.
+                                            </div>
+                                        </Col>
+                                    )}
+                                </Row>
                             </FormSection>
 
                             <FormSection title={updateMode === 'following' ? 'Thông tin buổi mới ở cuối khóa' : 'Thông tin buổi học bù'}>
@@ -1439,7 +1558,10 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                 disabled={!isFieldEditable('start_time')}
                                                 onChange={() => {
                                                     void form
-                                                        .validateFields([['new_session', 'start_time']])
+                                                        .validateFields([
+                                                            ['new_session', 'start_time'],
+                                                            ['new_session', 'end_time'],
+                                                        ])
                                                         .catch(() => undefined);
                                                 }}
                                             />
@@ -1476,19 +1598,19 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             <TimePicker
                                                 format="HH:mm"
                                                 style={{ width: '100%' }}
-                                                placeholder="Nhập giờ bắt đầu trước"
-                                                disabledTime={() => getEndDisabledTime(newSessionStartTime)}
+                                                placeholder="HH:mm"
+                                                disabledTime={() => getEndDisabledTime(getNewSessionEndMinimum())}
                                                 defaultOpenValue={newSessionStartTime}
                                                 disabled={!isFieldEditable('end_time') || !newSessionStartTime}
                                             />
                                         </Form.Item>
                                     </Col>
-                                    <Col span={12}>
+                                    <Col flex="180px">
                                         <Form.Item label="Giáo viên dạy bù" name={['new_session', 'teacher']} rules={requiredWhenEditable('teacher', 'Chọn giáo viên')}>
-                                            <TeachingStaffSelect teacherType={1} showSearch optionFilterProp="label" placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
+                                            <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" showSearch optionFilterProp="label" placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
                                         </Form.Item>
                                     </Col>
-                                    <Col span={12}>
+                                    <Col flex="180px">
                                         <Form.Item label="Trợ giảng" name={['new_session', 'assistant_teacher']}>
                                             <TeachingStaffSelect teacherType={0} mode="multiple" showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" disabled={!isFieldEditable('assistant_teacher')} />
                                         </Form.Item>
@@ -1500,6 +1622,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                     </Col> */}
                                 </Row>
                             </FormSection>
+                            {renderChangeReason()}
                         </>
                     )}
 
@@ -1512,6 +1635,21 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                         Lưu ý: Hành động này chỉ đánh dấu buổi học hiện tại là Nghỉ/Hủy. Sẽ không dời đề cương và không ảnh hưởng đến các buổi học sau.
                                     </Text>
                                 </div>
+                            </FormSection>
+
+                            <FormSection title="Tên bài hiển thị khi nghỉ">
+                                <Row gutter={24}>
+                                    <Col flex="180px">
+                                        <Form.Item label="Tiền tố" name="canceled_lesson_name_prefix">
+                                            <Input placeholder="[Nghỉ] " maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
+                                        </Form.Item>
+                                    </Col>
+                                    <Col flex="180px">
+                                        <Form.Item label="Hậu tố" name="canceled_lesson_name_suffix">
+                                            <Input placeholder="Để trống nếu không dùng" maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
+                                        </Form.Item>
+                                    </Col>
+                                </Row>
                             </FormSection>
                         </>
                     )}

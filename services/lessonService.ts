@@ -209,7 +209,7 @@ export const updateLesson = (id: string | number, payload: Partial<LessonPayload
         body: JSON.stringify(payload),
         headers: lessonHeaders(),
         credentials: "include",
-    });
+    }, "json", 120_000);
 
 export const bulkUpdateLessons = (payload: LessonBulkUpdatePayload) =>
     fetchInstance(`${API_BASE_URL}/bulk`, {

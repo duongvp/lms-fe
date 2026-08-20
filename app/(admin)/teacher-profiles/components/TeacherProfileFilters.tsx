@@ -1,7 +1,7 @@
 'use client';
 
 import CustomSearchInput from '@/components/ui/Inputs/CustomSearchInput';
-import { Flex, Input, Select } from 'antd';
+import { Flex, Input, Select, Button } from 'antd';
 
 interface TeacherProfileFiltersProps {
     search: string;
@@ -33,15 +33,11 @@ const TeacherProfileFilters = ({
         >
             <Input.Search
                 allowClear
-                placeholder="Tìm mã nhân sự hoặc họ tên"
+                placeholder="Tìm Tên đăng nhập hoặc họ tên"
                 style={{ width: 320 }}
                 value={search}
                 onSearch={onSearchChange}
-                onChange={(event) => {
-                    if (!event.target.value) {
-                        onSearchChange('');
-                    }
-                }}
+                onChange={(event) => onSearchChange(event.target.value)}
             />
 
             <Select
@@ -79,6 +75,16 @@ const TeacherProfileFilters = ({
                     },
                 ]}
             />
+
+            <Button
+                onClick={() => {
+                    onSearchChange('');
+                    onTeacherTypeChange(undefined);
+                    onStatusChange(undefined);
+                }}
+            >
+                Xóa bộ lọc
+            </Button>
         </Flex>
     );
 };

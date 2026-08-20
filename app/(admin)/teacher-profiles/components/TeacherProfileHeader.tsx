@@ -22,9 +22,6 @@ interface TeacherProfileHeaderProps {
     canCreate: boolean;
     onOpenImport: () => void;
     onCreate: () => void;
-    onDownloadTemplate: (
-        format: 'xlsx' | 'csv'
-    ) => Promise<void>;
     onExport: (
         format: 'xlsx' | 'csv'
     ) => Promise<void>;
@@ -36,7 +33,6 @@ const TeacherProfileHeader = ({
     canCreate,
     onOpenImport,
     onCreate,
-    onDownloadTemplate,
     onExport,
 }: TeacherProfileHeaderProps) => {
     return (
@@ -58,35 +54,6 @@ const TeacherProfileHeader = ({
             <Space className="responsive-action-buttons" wrap>
                 {canImport && (
                     <>
-                        <Dropdown
-                            menu={{
-                                items: [
-                                    {
-                                        key: 'xlsx',
-                                        label: 'File mẫu Excel',
-                                    },
-                                    {
-                                        key: 'csv',
-                                        label: 'File mẫu CSV',
-                                    },
-                                ],
-                                onClick: ({ key }) =>
-                                    void onDownloadTemplate(
-                                        key as
-                                            | 'xlsx'
-                                            | 'csv'
-                                    ),
-                            }}
-                        >
-                            <Button
-                                icon={
-                                    <FileExcelOutlined />
-                                }
-                            >
-                                Tải file mẫu
-                            </Button>
-                        </Dropdown>
-
                         <Button
                             icon={
                                 <UploadOutlined />

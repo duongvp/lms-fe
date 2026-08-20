@@ -97,6 +97,15 @@ const parseAssistantTeachers = (value: unknown): string[] => (
     Array.isArray(value) ? value : String(value ?? '').split(',')
 ).map((item) => String(item).trim()).filter(Boolean);
 
+const formatRescheduledLessonName = (
+    lessonName: unknown,
+    prefix: unknown,
+    suffix: unknown,
+    defaultPrefix: string,
+) => `${String(prefix ?? defaultPrefix)}${String(lessonName ?? '').trim()}${String(suffix ?? '')}`
+    .trim()
+    .slice(0, 400);
+
 const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
     open,
     onClose,
@@ -122,6 +131,13 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
     const canCreateLesson = hasPermission(PermissionKey.LESSON_CREATE);
     const isBulkCreate = !isEdit && formValues?.addMode === 'bulk';
     const isFollowingPreview = isEdit && formValues?.update_mode === 'following';
+    const isMakeupPreview = isEdit && formValues?.update_mode === 'makeup';
+    const canceledLessonPreviewName = formatRescheduledLessonName(
+        initialData?.lesson_name,
+        formValues?.canceled_lesson_name_prefix,
+        formValues?.canceled_lesson_name_suffix,
+        '[Nghỉ] ',
+    );
     const [loadingFollowingPreview, setLoadingFollowingPreview] = useState(false);
     const [followingPreviewError, setFollowingPreviewError] = useState<string | null>(null);
     const packageCoursesQuery = usePackageCoursesQuery();
@@ -190,12 +206,24 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
         teacher: formValues.new_session?.teacher,
         assistant_teacher: parseAssistantTeachers(formValues.new_session?.assistant_teacher),
         learn_number: Number(sourceSession?.learn_number),
-        lesson_name: sourceSession?.lesson_name || undefined,
+        lesson_name: isFollowingPreview
+            ? sourceSession?.lesson_name || undefined
+            : formatRescheduledLessonName(
+                sourceSession?.lesson_name,
+                formValues?.new_lesson_name_prefix,
+                formValues?.new_lesson_name_suffix,
+                '[Học Bù] ',
+            ),
         isSkipped: false,
         isGenerated: true,
         isEditable: true,
         preview_action: isFollowingPreview ? 'create' : undefined,
-    }), [formValues?.new_session, isFollowingPreview]);
+    }), [
+        formValues?.new_lesson_name_prefix,
+        formValues?.new_lesson_name_suffix,
+        formValues?.new_session,
+        isFollowingPreview,
+    ]);
 
     const buildFollowingPreviewSessions = React.useCallback((
         calendarRows: any[]
@@ -418,6 +446,23 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 isSkipped: false,
                 isGenerated: true,
                 isEditable: true,
+            }]);
+        } else if (isEdit && formValues.update_mode === 'cancel') {
+            setFollowingPreviewError(null);
+            setSessions([{
+                key: `cancel_${initialData?.id ?? 'current'}`,
+                index: 1,
+                date: toPreviewDate(initialData, 'start_time'),
+                start_time: toPreviewDate(initialData, 'start_time'),
+                end_time: toPreviewDate(initialData, 'end_time'),
+                teacher: initialData?.teacher || '',
+                assistant_teacher: parseAssistantTeachers(initialData?.assistant_teacher),
+                lesson_name: initialData?.lesson_name || undefined,
+                learn_number: Number(initialData?.learn_number),
+                isSkipped: false,
+                isGenerated: false,
+                isEditable: false,
+                preview_action: 'cancel',
             }]);
         } else {
             setFollowingPreviewError(null);
@@ -874,12 +919,17 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
             dataIndex: 'date',
             width: 120,
             render: (value: Dayjs, record: PreviewSession) => (
-                <Space direction="vertical" size={0}>
-                    <Text delete={record.isSkipped}>{value?.format('DD/MM/YYYY')}</Text>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                        {value?.day() === 0 ? 'Chủ Nhật' : `Thứ ${value?.day() + 1}`}
-                    </Text>
-                </Space>
+                <Text delete={record.isSkipped}>{value?.format('DD/MM/YYYY')}</Text>
+            ),
+        },
+        {
+            title: 'Thứ',
+            key: 'weekday',
+            width: 90,
+            render: (_: unknown, record: PreviewSession) => (
+                <Text delete={record.isSkipped}>
+                    {record.date?.day() === 0 ? 'Chủ Nhật' : `Thứ ${record.date?.day() + 1}`}
+                </Text>
             ),
         },
         {
@@ -942,6 +992,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
             render: (value: string, record: PreviewSession) => (
                 <TeachingStaffSelect
                     teacherType={1}
+                    teacherValueMode="displayName"
                     value={value}
                     onChange={(nextValue) => updateSessionField(record.key, 'teacher', nextValue)}
                     disabled={record.isSkipped || (isEdit && record.isEditable === false)}
@@ -995,7 +1046,12 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 width: 330,
                 render: (_: any, record: PreviewSession) => {
                     if (record.preview_action === 'cancel') {
-                        return <Text type="danger">Nghỉ học, bỏ trống đề cương</Text>;
+                        return (
+                            <Space direction="vertical" size={0}>
+                                <Text type="danger">Nghỉ học</Text>
+                                <Text>{canceledLessonPreviewName || '-'}</Text>
+                            </Space>
+                        );
                     }
 
                     return (
@@ -1233,6 +1289,21 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                             followingPreviewError
                                 ? followingPreviewError
                                 : 'Danh sách bên dưới hiển thị tuần tự lịch sau khi lưu: buổi hiện tại nghỉ học, các buổi sau nhận đề cương của buổi liền trước, và buổi mới ở cuối khóa nhận đề cương cuối cùng.'
+                        }
+                        style={{ marginBottom: 16 }}
+                    />
+                )}
+
+                {isMakeupPreview && (
+                    <Alert
+                        type="info"
+                        showIcon
+                        message="Tên bài sau khi lưu"
+                        description={
+                            <Space direction="vertical" size={2}>
+                                <span>Buổi nghỉ: {canceledLessonPreviewName || '-'}</span>
+                                <span>Buổi học bù: {sessions[0]?.lesson_name || '-'}</span>
+                            </Space>
                         }
                         style={{ marginBottom: 16 }}
                     />

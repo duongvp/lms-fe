@@ -24,9 +24,10 @@ import {
     Segmented,
     Tooltip,
     message,
+    Progress,
     type SelectProps,
 } from 'antd';
-import { EditOutlined, CloseCircleOutlined, PlusOutlined, SyncOutlined } from '@ant-design/icons';
+import { EditOutlined, CloseCircleOutlined, PlusOutlined, SyncOutlined, CalendarOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import TeachingStaffSelect from '@/components/shared/TeachingStaffSelect';
 import { buildGroupedHmoOptions, hmoOptionKey, summarizeHmoOptions } from '@/helper/hmoOptions';
@@ -38,6 +39,13 @@ import {
 } from '@/services/livestreamService';
 
 const { Text, Title } = Typography;
+
+type SubmitProgress = {
+    total: number;
+    completed: number;
+    percent: number;
+    message: string;
+};
 
 const FormSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
     <fieldset
@@ -117,6 +125,21 @@ const renderNamePattern = (pattern: unknown, occurrence: number) => (
     String(pattern || '').replaceAll('{n}', String(occurrence))
 );
 
+const DEFAULT_CANCELED_LESSON_PREFIX = '[Nghỉ] ';
+const DEFAULT_MAKEUP_LESSON_PREFIX = '[Học Bù] ';
+
+const formatRescheduledLessonName = (
+    lessonName: unknown,
+    prefix: unknown,
+    suffix: unknown,
+) => `${String(prefix ?? '')}${String(lessonName ?? '').trim()}${String(suffix ?? '')}`.trim();
+
+const formatWeekday = (value: unknown) => {
+    const date = dayjs(value as string | number | Date | Dayjs | null | undefined);
+    if (!date.isValid()) return '-';
+    return date.day() === 0 ? 'Chủ Nhật' : `Thứ ${date.day() + 1}`;
+};
+
 const renderPreviewChange = (current: unknown, next: unknown) => {
     const currentText = String(current || '-');
     const nextText = String(next || '-');
@@ -174,6 +197,33 @@ const normalizeLessonTitle = (value: unknown) => String(value || '')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 
+const uniqueHmoOptions = (options: HocmaiSectionOption[]) => Array.from(new Map(
+    options.map((option) => [hmoOptionKey(option), option])
+).values());
+
+const hmoTitleMatchesByCourse = (
+    options: HocmaiSectionOption[],
+    normalizedTitle: string
+) => {
+    const matches = new Map<string, Map<string, HocmaiSectionOption[]>>();
+    uniqueHmoOptions(options).forEach((option) => {
+        if (normalizeLessonTitle(option.lesson_name) !== normalizedTitle) return;
+        const byLessonId = matches.get(String(option.course_id)) || new Map<string, HocmaiSectionOption[]>();
+        const lessonId = String(option.lesson_id);
+        byLessonId.set(lessonId, [...(byLessonId.get(lessonId) || []), option]);
+        matches.set(String(option.course_id), byLessonId);
+    });
+    return matches;
+};
+
+const hmoCourseIds = (options: HocmaiSectionOption[]) => Array.from(new Set(
+    uniqueHmoOptions(options).map((option) => String(option.course_id))
+));
+
+const courseMatchSummary = (courseIds: string[], matches: Map<string, Map<string, HocmaiSectionOption[]>>) => (
+    courseIds.map((courseId) => `Course ${courseId}: ${matches.get(courseId)?.size || 0} Lesson ID`).join('; ')
+);
+
 const getErrorMessage = (error: unknown) => {
     if (error && typeof error === 'object') {
         const detail = (error as { detail?: { message?: unknown } }).detail;
@@ -227,6 +277,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
 }) => {
     const [form] = Form.useForm();
     const [loading, setLoading] = React.useState(false);
+    const [submitProgress, setSubmitProgress] = React.useState<SubmitProgress | null>(null);
     const [selectedRows, setSelectedRows] = React.useState<any[]>([]);
     const [selectedRowKeys, setSelectedRowKeys] = React.useState<React.Key[]>([]);
     const [previewRows, setPreviewRows] = React.useState<any[]>([]);
@@ -234,8 +285,14 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     const [loadingHmoLessons, setLoadingHmoLessons] = React.useState<Set<string>>(new Set());
     const [syncingHmoLessonIds, setSyncingHmoLessonIds] = React.useState(false);
     const [hmoSyncNotes, setHmoSyncNotes] = React.useState<Record<string, { type: 'success' | 'warning'; message: string }>>({});
+    // setFieldValue không đánh dấu field là touched. Lưu riêng các lịch được
+    // đồng bộ tự động để chúng vẫn được đưa vào payload preview/submit.
+    const [autoSyncedSeparateMappingIds, setAutoSyncedSeparateMappingIds] = React.useState<Set<string>>(new Set());
     const [sourceLessonNames, setSourceLessonNames] = React.useState<Map<string, string>>(new Map());
     const [loadingSourceLessonNames, setLoadingSourceLessonNames] = React.useState(false);
+    const [autoFillStartDate, setAutoFillStartDate] = React.useState<Dayjs | null>(null);
+    const [autoFillWeekdays, setAutoFillWeekdays] = React.useState<number[]>([]);
+    const [autoFillHolidays, setAutoFillHolidays] = React.useState<string>("");
     const previewRef = React.useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -245,6 +302,21 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         });
         return () => cancelAnimationFrame(frame);
     }, [previewRows.length]);
+
+    // Bulk update được commit trong một transaction nên backend không thể báo
+    // từng dòng đã hoàn tất trước khi commit. Thanh này tiến dần để thể hiện
+    // request vẫn đang chạy, nhưng dừng ở 92% cho tới khi có kết quả thật.
+    useEffect(() => {
+        if (!submitProgress || submitProgress.completed > 0) return;
+        const timer = window.setInterval(() => {
+            setSubmitProgress((current) => {
+                if (!current || current.completed > 0 || current.percent >= 92) return current;
+                const increment = current.percent < 55 ? 4 : current.percent < 78 ? 2 : 1;
+                return { ...current, percent: Math.min(92, current.percent + increment) };
+            });
+        }, 650);
+        return () => window.clearInterval(timer);
+    }, [submitProgress?.completed, submitProgress?.total]);
 
     useEffect(() => {
         if (!open) {
@@ -410,7 +482,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             const separateConfig: Record<string, any> = {};
             selectedRows.forEach((row) => {
                 const hmoMappingKeys = normalizedMappingKeys(row.package_lesson_mappings || []);
-                
+
                 separateConfig[row.id] = {
                     start_date: row.start_time ? dayjs(row.start_time) : undefined,
                     start_time: row.start_time ? dayjs(row.start_time).startOf('minute') : undefined,
@@ -441,7 +513,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 const allSameAssistant = selectedRows.every((row) => (
                     assistantValues(row.assistant_teacher).sort().join(',') === firstAssistant
                 ));
-                
+
                 if (allSameAssistant) {
                     commonConfig.common_assistant_teacher = assistantValues(firstRow.assistant_teacher);
                 }
@@ -465,6 +537,10 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 operation: 'update',
                 config_mode: 'common',
                 hmo_sync_name_source: 'lesson',
+                canceled_lesson_name_prefix: DEFAULT_CANCELED_LESSON_PREFIX,
+                canceled_lesson_name_suffix: '',
+                new_lesson_name_prefix: DEFAULT_MAKEUP_LESSON_PREFIX,
+                new_lesson_name_suffix: '',
                 selected_lessons: selectedRowKeys,
                 separate_config: separateConfig,
                 ...commonConfig,
@@ -473,9 +549,62 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         }
     }, [open, selectedRowKeys, selectedRows, form, lessonContexts, calendarContexts]);
 
+    const handleAutoFillDates = () => {
+        if (!autoFillStartDate) {
+            message.warning("Vui lòng chọn ngày bắt đầu.");
+            return;
+        }
+        if (!autoFillWeekdays.length) {
+            message.warning("Vui lòng chọn ít nhất 1 thứ trong tuần.");
+            return;
+        }
+        const holidayList = autoFillHolidays.split(',').map(d => d.trim()).filter(Boolean);
+        const validHolidays: Dayjs[] = [];
+        for (const d of holidayList) {
+            const parsed = dayjs(d, "DD/MM/YYYY", true);
+            if (!parsed.isValid()) {
+                message.error(`Ngày nghỉ ${d} không hợp lệ. Dùng định dạng DD/MM/YYYY`);
+                return;
+            }
+            validHolidays.push(parsed.startOf('day'));
+        }
+
+        let currentDate = autoFillStartDate.clone().startOf('day');
+        const newDates: Record<string, Dayjs> = {};
+        const selectedKeys = Array.isArray(selectedLessons) ? selectedLessons : [];
+
+        const keysToProcess = [...selectedKeys];
+
+        for (const key of keysToProcess) {
+            let attempts = 0;
+            while (attempts < 365) {
+                const isHoliday = validHolidays.some(h => h.isSame(currentDate, 'day'));
+                const currentDayNum = currentDate.day() === 0 ? 7 : currentDate.day();
+                const isMatchWeekday = autoFillWeekdays.includes(currentDayNum);
+                if (!isHoliday && isMatchWeekday) {
+                    newDates[String(key)] = currentDate.clone();
+                    currentDate = currentDate.add(1, 'day');
+                    break;
+                }
+                currentDate = currentDate.add(1, 'day');
+                attempts++;
+            }
+        }
+
+        const currentConfig = form.getFieldValue('separate_config') || {};
+        for (const key of keysToProcess) {
+            const strKey = String(key);
+            if (!currentConfig[strKey]) currentConfig[strKey] = {};
+            currentConfig[strKey].start_date = newDates[strKey];
+        }
+        form.setFieldValue('separate_config', { ...currentConfig });
+        message.success("Đã điền tự động ngày học.");
+    };
+
     const handleClose = () => {
         form.resetFields();
         setPreviewRows([]);
+        setAutoSyncedSeparateMappingIds(new Set());
         onClose();
     };
 
@@ -556,6 +685,9 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         const syncNameSource = form.getFieldValue('hmo_sync_name_source') === 'calendar'
             ? 'calendar'
             : 'lesson';
+        const syncModeLabel = configMode === 'common'
+            ? 'Dùng chung cho tất cả lịch'
+            : 'Cấu hình riêng từng lịch';
         if (!rows.length) {
             message.warning('Chưa chọn lịch học để đồng bộ Lesson ID HMO');
             return;
@@ -591,24 +723,22 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             });
 
             rowsByLesson.forEach((lessonRows, lessonId) => {
-                const seenOptionIds = new Set<string>();
-                const availableOptions = [...(optionsByLesson.get(lessonId) || [])]
+                // Một Lesson nội bộ có thể thuộc nhiều Course HMO. Chỉ coi là
+                // trùng khi cùng Course có nhiều Lesson ID cùng tên; trùng tên
+                // ở Course khác là mapping hợp lệ và phải được gán đồng thời.
+                const availableOptions = uniqueHmoOptions(optionsByLesson.get(lessonId) || [])
                     .sort((left, right) => String(left.lesson_id).localeCompare(String(right.lesson_id), 'vi', { numeric: true }))
-                    .filter((option) => {
-                        const optionId = String(option.lesson_id);
-                        if (seenOptionIds.has(optionId)) return false;
-                        seenOptionIds.add(optionId);
-                        return true;
-                    });
+                const courseIds = hmoCourseIds(availableOptions);
                 const orderedRows = [...lessonRows].sort((left, right) => dayjs(left.start_time).valueOf() - dayjs(right.start_time).valueOf());
 
                 if (syncNameSource === 'calendar') {
-                    const claimedMappingKeys = new Set<string>();
+                    const claimedCourseLessonIds = new Set<string>();
                     orderedRows.forEach((row) => {
                         const title = normalizeLessonTitle(row.lesson_name);
-                        const matchedOptions = availableOptions.filter((option) => (
-                            normalizeLessonTitle(option.lesson_name) === title
-                        ));
+                        const matchesByCourse = hmoTitleMatchesByCourse(availableOptions, title);
+                        const matchedCourseIds = courseIds.filter(
+                            (courseId) => matchesByCourse.get(courseId)?.size === 1
+                        );
 
                         if (!title) {
                             notes[String(row.id)] = {
@@ -617,30 +747,35 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                             };
                             return;
                         }
-                        if (matchedOptions.length !== 1) {
+                        if (!matchedCourseIds.length) {
                             notes[String(row.id)] = {
                                 type: 'warning',
-                                message: matchedOptions.length
-                                    ? `Tìm thấy ${matchedOptions.length} Lesson ID HMO trùng tên lịch “${row.lesson_name}”. Hệ thống không tự gán.`
-                                    : `Không tìm thấy Lesson ID HMO trùng tên lịch “${row.lesson_name}”.`,
+                                message: `Không thể tự gán Lesson ID HMO cho “${row.lesson_name}”: ${courseMatchSummary(courseIds, matchesByCourse)}. Mỗi Course cần đúng 1 Lesson ID trùng tên.`,
                             };
                             return;
                         }
 
-                        const mappingKey = hmoOptionKey(matchedOptions[0]);
-                        if (claimedMappingKeys.has(mappingKey)) {
+                        const selectedOptions = matchedCourseIds.flatMap((courseId) => (
+                            Array.from(matchesByCourse.get(courseId)!.values())[0]
+                        ));
+                        const selectedCourseLessonIds = matchedCourseIds.map((courseId) => (
+                            `${courseId}::${Array.from(matchesByCourse.get(courseId)!.keys())[0]}`
+                        ));
+                        if (selectedCourseLessonIds.some((identity) => claimedCourseLessonIds.has(identity))) {
                             notes[String(row.id)] = {
                                 type: 'warning',
-                                message: `Lesson ID HMO ${matchedOptions[0].lesson_id} đã trùng với một lịch khác; hệ thống không tự gán.`,
+                                message: 'Lesson ID HMO đã được dùng cho một lịch khác trong cùng Course; hệ thống không tự gán.',
                             };
                             return;
                         }
-                        claimedMappingKeys.add(mappingKey);
-                        nextMappings[String(row.id)] = [mappingKey];
+                        selectedCourseLessonIds.forEach((identity) => claimedCourseLessonIds.add(identity));
+                        nextMappings[String(row.id)] = selectedOptions.map(hmoOptionKey);
                         syncedCount += 1;
                         notes[String(row.id)] = {
-                            type: 'success',
-                            message: `Đã gán Lesson ID HMO ${matchedOptions[0].lesson_id} theo tên lịch.`,
+                            type: matchedCourseIds.length === courseIds.length ? 'success' : 'warning',
+                            message: matchedCourseIds.length === courseIds.length
+                                ? `Đã gán Lesson ID HMO theo tên lịch trong ${courseIds.length} Course.`
+                                : `Đã gán Lesson ID HMO trong ${matchedCourseIds.length}/${courseIds.length} Course. Chưa gán: ${courseMatchSummary(courseIds.filter((courseId) => !matchedCourseIds.includes(courseId)), matchesByCourse)}.`,
                         };
                     });
                     return;
@@ -648,9 +783,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
 
                 const sourceLessonName = getSourceLessonName(lessonRows[0]);
                 const title = normalizeLessonTitle(sourceLessonName);
-                const matchedOptions = availableOptions.filter((option) => (
-                    normalizeLessonTitle(option.lesson_name) === title
-                ));
+                const matchesByCourse = hmoTitleMatchesByCourse(availableOptions, title);
 
                 if (!title) {
                     orderedRows.forEach((row) => {
@@ -662,13 +795,26 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     return;
                 }
 
-                if (matchedOptions.length === orderedRows.length && orderedRows.length > 0) {
+                const matchedCourseIds = courseIds.filter(
+                    (courseId) => matchesByCourse.get(courseId)?.size === orderedRows.length
+                );
+                if (matchedCourseIds.length > 0 && orderedRows.length > 0) {
                     orderedRows.forEach((row, index) => {
-                        nextMappings[String(row.id)] = [hmoOptionKey(matchedOptions[index])];
+                        nextMappings[String(row.id)] = matchedCourseIds.flatMap((courseId) => {
+                            const byLessonId = matchesByCourse.get(courseId)!;
+                            const lessonId = Array.from(byLessonId.keys())
+                                .sort((left, right) => left.localeCompare(right, 'vi', { numeric: true }))[index];
+                            return byLessonId.get(lessonId)!.map(hmoOptionKey);
+                        });
                     });
                     syncedCount += orderedRows.length;
                     orderedRows.forEach((row) => {
-                        notes[String(row.id)] = { type: 'success', message: `Đã gán Lesson ID theo thứ tự tăng dần: ${String(nextMappings[String(row.id)][0]).split('::').at(-1)}.` };
+                        notes[String(row.id)] = {
+                            type: matchedCourseIds.length === courseIds.length ? 'success' : 'warning',
+                            message: matchedCourseIds.length === courseIds.length
+                                ? `Đã gán ${nextMappings[String(row.id)].length} Lesson ID HMO cho lịch này theo thứ tự các lịch của cùng bài.`
+                                : `Đã gán Lesson ID cho ${matchedCourseIds.length}/${courseIds.length} Course. Chưa gán: ${courseMatchSummary(courseIds.filter((courseId) => !matchedCourseIds.includes(courseId)), matchesByCourse)}.`,
+                        };
                     });
                     return;
                 }
@@ -676,7 +822,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 orderedRows.forEach((row) => {
                     notes[String(row.id)] = {
                         type: 'warning',
-                        message: `Có ${orderedRows.length} lịch nhưng chỉ tìm thấy ${matchedOptions.length} Lesson ID trùng tên bài học “${sourceLessonName}”. Hệ thống không tự gán.`,
+                        message: `Có ${orderedRows.length} lịch. Đối chiếu theo từng Course cho “${sourceLessonName}”: ${courseMatchSummary(courseIds, matchesByCourse)}. Mỗi Course cần đúng ${orderedRows.length} Lesson ID.`,
                     };
                 });
             });
@@ -690,6 +836,10 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         { ...(currentConfig[calendarId] || {}), hmo_mapping_keys: mappingKeys },
                     ])),
                 });
+                setAutoSyncedSeparateMappingIds((current) => new Set([
+                    ...current,
+                    ...Object.keys(nextMappings),
+                ]));
             } else {
                 form.setFieldsValue({
                     config_mode: 'common',
@@ -700,7 +850,15 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     },
                 });
             }
-            setHmoSyncNotes(notes);
+            setHmoSyncNotes(Object.fromEntries(
+                Object.entries(notes).map(([calendarId, note]) => [
+                    calendarId,
+                    {
+                        ...note,
+                        message: `Kết quả đồng bộ ở tab “${syncModeLabel}”: ${note.message}`,
+                    },
+                ])
+            ));
             setPreviewRows([]);
             syncedCount
                 ? message.success(`Đã đồng bộ Lesson ID HMO cho ${syncedCount} lịch`)
@@ -728,6 +886,17 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         const currentText = currentStart && currentEnd
                             ? `${currentStart.format('DD/MM/YYYY HH:mm')} - ${currentEnd.format('HH:mm')}`
                             : 'Không xác định';
+                        const sourceLessonName = String(record?.lesson_name || '').trim() || '(Chưa có tên bài)';
+                        const canceledLessonName = formatRescheduledLessonName(
+                            sourceLessonName,
+                            values.canceled_lesson_name_prefix || DEFAULT_CANCELED_LESSON_PREFIX,
+                            values.canceled_lesson_name_suffix,
+                        );
+                        const makeupLessonName = formatRescheduledLessonName(
+                            sourceLessonName,
+                            values.new_lesson_name_prefix || DEFAULT_MAKEUP_LESSON_PREFIX,
+                            values.new_lesson_name_suffix,
+                        );
                         const nextText = values.operation === 'cancel'
                             ? 'Nghỉ học, không tạo lịch thay thế'
                             : currentStart && currentEnd
@@ -738,19 +907,49 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                             label: record?.learn_number ? `Bài ${record.learn_number}` : `ID ${calendarId}`,
                             current: currentText,
                             next: nextText,
+                            current_lesson_name: sourceLessonName,
+                            next_lesson_name: values.operation === 'cancel'
+                                ? canceledLessonName
+                                : `Buổi nghỉ: ${canceledLessonName}\nBuổi học bù: ${makeupLessonName}`,
                         };
                     }));
                     return;
                 }
                 const targetIds = (values.selected_lessons || []).map(String);
-                await updateLivestreamBulk({
+                setSubmitProgress({
+                    total: targetIds.length,
+                    completed: 0,
+                    percent: 6,
+                    message: `Hệ thống đang cập nhật ${targetIds.length} lịch học...`,
+                });
+                const response = await updateLivestreamBulk({
                     ids: targetIds,
                     operation: values.operation,
                     reason: String(values.reason || '').trim(),
                     offset_days: values.operation === 'makeup' ? Number(values.offset_days) : undefined,
+                    canceled_lesson_name_prefix: values.canceled_lesson_name_prefix,
+                    canceled_lesson_name_suffix: values.canceled_lesson_name_suffix,
+                    new_lesson_name_prefix: values.operation === 'makeup' ? values.new_lesson_name_prefix : undefined,
+                    new_lesson_name_suffix: values.operation === 'makeup' ? values.new_lesson_name_suffix : undefined,
+                });
+                const committedCount = Array.isArray(response?.data)
+                    ? response.data.length
+                    : Number(response?.data?.count) || targetIds.length;
+                setSubmitProgress({
+                    total: targetIds.length,
+                    completed: committedCount,
+                    percent: 96,
+                    message: 'Đã lưu thay đổi. Đang tải lại danh sách lịch học...',
                 });
                 sessionStorage.removeItem("schedule:auto-edit:rows");
                 await onSuccess();
+                setSubmitProgress({
+                    total: targetIds.length,
+                    completed: committedCount,
+                    percent: 100,
+                    message: 'Đã hoàn tất cập nhật lịch học.',
+                });
+                await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
                 handleClose();
                 return;
             }
@@ -771,7 +970,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         start_date: config.start_date ? dayjs(config.start_date).format('YYYY-MM-DD') : undefined,
                         start_time: config.start_time ? dayjs(config.start_time).format('HH:mm') : undefined,
                         end_time: config.end_time ? dayjs(config.end_time).format('HH:mm') : undefined,
-                        ...(mappingTouched
+                        ...(mappingTouched || autoSyncedSeparateMappingIds.has(String(key))
                             ? { package_lesson_mappings: mappingKeysToPayload(config.hmo_mapping_keys) }
                             : {}),
                     };
@@ -968,12 +1167,13 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         : values.common_hmo_mapping_keys_by_calendar?.[lessonKey] || [];
                     const isMappingUnchanged = values.config_mode === 'common'
                         ? !values.enable_mapping
-                        : !form.isFieldTouched([
-                            'separate_config',
-                            String(lessonKey),
-                            'hmo_mapping_keys',
-                        ]);
-                    
+                        : !autoSyncedSeparateMappingIds.has(String(lessonKey))
+                            && !form.isFieldTouched([
+                                'separate_config',
+                                String(lessonKey),
+                                'hmo_mapping_keys',
+                            ]);
+
                     return {
                         id: lessonKey,
                         label: record?.learn_number ? `Bài ${record.learn_number}` : `ID ${lessonKey}`,
@@ -981,6 +1181,8 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         next_schedule: updatedStart && updatedEnd
                             ? `${updatedStart.format('DD/MM/YYYY HH:mm')} - ${updatedEnd.format('HH:mm')}`
                             : formatScheduleDateTime(record),
+                        current_weekday: formatWeekday(record?.start_time),
+                        next_weekday: formatWeekday(updatedStart ?? record?.start_time),
                         current: formatMappings(record?.package_lesson_mappings || []),
                         current_lesson_name: record?.lesson_name || '-',
                         next_lesson_name: (update.lesson_name as string | undefined) || record?.lesson_name || '-',
@@ -999,9 +1201,35 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             }
 
             const targetIds = changedUpdates.map((item) => String(item.id));
-            await updateLivestreamBulk({ ids: targetIds, config_mode: 'separate', update_data: changedUpdates });
+            setSubmitProgress({
+                total: targetIds.length,
+                completed: 0,
+                percent: 6,
+                    message: `Hệ thống đang cập nhật ${targetIds.length} lịch học...`,
+            });
+            const response = await updateLivestreamBulk({
+                ids: targetIds,
+                config_mode: 'separate',
+                update_data: changedUpdates,
+            });
+            const committedCount = Array.isArray(response?.data)
+                ? response.data.length
+                : Number(response?.data?.count) || targetIds.length;
+            setSubmitProgress({
+                total: targetIds.length,
+                completed: committedCount,
+                percent: 96,
+                message: 'Đã lưu thay đổi. Đang tải lại danh sách lịch học...',
+            });
             sessionStorage.removeItem("schedule:auto-edit:rows");
             await onSuccess();
+            setSubmitProgress({
+                total: targetIds.length,
+                completed: committedCount,
+                percent: 100,
+                message: 'Đã hoàn tất cập nhật lịch học.',
+            });
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
             handleClose();
         } catch (err) {
             console.error("Lỗi cập nhật hàng loạt:", err);
@@ -1011,20 +1239,31 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             });
         } finally {
             setLoading(false);
+            setSubmitProgress(null);
         }
     };
 
     return (
+        <>
         <Modal
             rootClassName="schedule-responsive-modal"
-            title="Cập Nhật Lịch Học Hàng Loạt"
+            title={
+                <Space size={8} align="center">
+                    <span>Cập Nhật Lịch Học Hàng Loạt</span>
+                    <Tag color="blue" style={{ marginRight: 0, fontWeight: 500 }}>
+                        {selectedRowKeys.length} lịch học đã chọn
+                    </Tag>
+                </Space>
+            }
             open={open}
-            onCancel={handleClose}
+            onCancel={loading ? undefined : handleClose}
+            closable={!loading}
+            maskClosable={!loading}
             width={fullscreen ? "100%" : 1100}
             style={fullscreen ? { top: 0, maxWidth: "none", paddingBottom: 0 } : undefined}
             styles={fullscreen ? { content: { height: "100dvh", display: "flex", flexDirection: "column" }, body: { flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden" } } : undefined}
             footer={[
-                <Button key="cancel" onClick={handleClose} icon={<CloseCircleOutlined />}>
+                <Button key="cancel" onClick={handleClose} icon={<CloseCircleOutlined />} disabled={loading}>
                     Hủy
                 </Button>,
                 <Button
@@ -1055,8 +1294,14 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         behavior: 'smooth',
                     }));
                 }}
-                onValuesChange={() => {
+                onValuesChange={(changedValues) => {
                     if (previewRows.length) setPreviewRows([]);
+                    // Ghi chú chỉ mô tả lần đồng bộ ở tab hiện tại. Khi đổi
+                    // chế độ, mapping vẫn được giữ trong form nhưng không
+                    // hiển thị lại kết quả của tab trước để tránh gây nhiễu.
+                    if (Object.prototype.hasOwnProperty.call(changedValues, 'config_mode')) {
+                        setHmoSyncNotes({});
+                    }
                 }}
                 initialValues={{
                     operation: 'update',
@@ -1065,23 +1310,12 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     enable_assistant: false,
                     enable_time: true,
                     enable_mapping: false,
+                    canceled_lesson_name_prefix: DEFAULT_CANCELED_LESSON_PREFIX,
+                    canceled_lesson_name_suffix: '',
+                    new_lesson_name_prefix: DEFAULT_MAKEUP_LESSON_PREFIX,
+                    new_lesson_name_suffix: '',
                 }}
             >
-                {/* Banner thông tin phạm vi áp dụng */}
-                <Alert
-                    type="info"
-                    showIcon
-                    message={
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                            <Text>Thay đổi chỉ áp dụng cho các dòng đã tích chọn.</Text>
-                            <Tag color="blue" style={{ marginRight: 0, fontWeight: 500 }}>
-                                {selectedRowKeys.length} lịch học đã chọn
-                            </Tag>
-                        </div>
-                    }
-                    style={{ marginBottom: 20 }}
-                />
-
                 <Form.Item
                     name="selected_lessons"
                     hidden
@@ -1112,507 +1346,565 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
 
                 {operation === 'update' && (
                     <>
-                {/* Chọn chế độ cấu hình */}
-                <div className="responsive-config-mode" style={{ marginBottom: 24, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16, background: '#f8f9fa', padding: '12px 16px', borderRadius: 8, border: '1px solid #f0f0f0' }}>
-                    <Text strong style={{ whiteSpace: 'nowrap', color: '#595959' }}>Cách cấu hình:</Text>
-                    <Form.Item name="config_mode" style={{ marginBottom: 0 }}>
-                        <Segmented
-                            options={[
-                                { label: 'Dùng chung cho tất cả lịch', value: 'common' },
-                                { label: 'Cấu hình riêng từng lịch', value: 'separate' }
-                            ]}
-                            size="middle"
-                        />
-                    </Form.Item>
-                    <Text type="secondary" style={{ fontSize: 13 }}>
-                        {configMode === 'common' ? 'Áp dụng các trường đã chọn cho toàn bộ lịch.' : 'Tùy chỉnh độc lập từng lịch.'}
-                    </Text>
-                </div>
-
-                {/* CHẾ ĐỘ 1: CẤU HÌNH CHUNG */}
-                {configMode === 'common' && (
-                    <Card size="small" style={{borderRadius: 8, border: '1px solid #e8e8e8', padding: '8px 12px' }}>
-                        <div style={{ marginBottom: 16, padding: '4px 4px 0 4px' }}>
-                            <Text type="secondary" style={{ fontSize: '12.5px', fontStyle: 'italic', display: 'block' }}>
-                                * Chỉ những thông tin được tích chọn mới được cập nhật ghi đè. Các thông tin không tích chọn sẽ giữ nguyên giá trị cũ.
+                        {/* Chọn chế độ cấu hình */}
+                        <div className="responsive-config-mode" style={{ marginBottom: 24, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16, background: '#f8f9fa', padding: '12px 16px', borderRadius: 8, border: '1px solid #f0f0f0' }}>
+                            <Text strong style={{ whiteSpace: 'nowrap', color: '#595959' }}>Cách cấu hình:</Text>
+                            <Form.Item name="config_mode" style={{ marginBottom: 0 }}>
+                                <Segmented
+                                    options={[
+                                        { label: 'Dùng chung cho tất cả lịch', value: 'common' },
+                                        { label: 'Cấu hình riêng từng lịch', value: 'separate' }
+                                    ]}
+                                    size="middle"
+                                />
+                            </Form.Item>
+                            <Text type="secondary" style={{ fontSize: 13 }}>
+                                {configMode === 'common' ? 'Áp dụng các trường đã chọn cho toàn bộ lịch.' : 'Tùy chỉnh độc lập từng lịch.'}
                             </Text>
                         </div>
 
-                        {/* Tùy chọn Giáo viên */}
-                        <Row gutter={16} align="middle" style={{ marginBottom: 16, marginTop: 8 }}>
-                            <Col span={8}>
-                                <Form.Item name="enable_teacher" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                    <Checkbox><Text strong>Đổi Giáo viên</Text></Checkbox>
-                                </Form.Item>
-                            </Col>
-                            <Col span={16}>
-                                <Form.Item noStyle dependencies={['enable_teacher']}>
-                                    {({ getFieldValue }) => {
-                                        const enabled = getFieldValue('enable_teacher');
-                                        return (
-                                            <Form.Item
-                                                name="common_teacher"
-                                                style={{ marginBottom: 0 }}
-                                                rules={[{ required: enabled, message: 'Vui lòng chọn giáo viên mới' }]}
-                                            >
-                                                <TeachingStaffSelect
-                                                    teacherType={1}
-                                                    placeholder="Chọn giáo viên mới"
-                                                    disabled={!enabled}
-                                                />
+                        {/* CHẾ ĐỘ 1: CẤU HÌNH CHUNG */}
+                        {configMode === 'common' && (
+                            <Card size="small" style={{ borderRadius: 8, border: '1px solid #e8e8e8', padding: '8px 12px' }}>
+                                <div style={{ marginBottom: 16, padding: '4px 4px 0 4px' }}>
+                                    <Text type="secondary" style={{ fontSize: '12.5px', fontStyle: 'italic', display: 'block' }}>
+                                        * Chỉ những thông tin được tích chọn mới được cập nhật ghi đè. Các thông tin không tích chọn sẽ giữ nguyên giá trị cũ.
+                                    </Text>
+                                </div>
+
+                                {/* Tùy chọn Giáo viên */}
+                                <Row gutter={16} align="middle" style={{ marginBottom: 16, marginTop: 8 }}>
+                                    <Col span={8}>
+                                        <Form.Item name="enable_teacher" valuePropName="checked" style={{ marginBottom: 0 }}>
+                                            <Checkbox><Text strong>Đổi Giáo viên</Text></Checkbox>
+                                        </Form.Item>
+                                    </Col>
+                                    <Col span={16}>
+                                        <Form.Item noStyle dependencies={['enable_teacher']}>
+                                            {({ getFieldValue }) => {
+                                                const enabled = getFieldValue('enable_teacher');
+                                                return (
+                                                    <Form.Item
+                                                        name="common_teacher"
+                                                        style={{ marginBottom: 0 }}
+                                                        rules={[{ required: enabled, message: 'Vui lòng chọn giáo viên mới' }]}
+                                                    >
+                                                        <TeachingStaffSelect
+                                                            teacherType={1}
+                                                            teacherValueMode="displayName"
+                                                            placeholder="Chọn giáo viên mới"
+                                                            disabled={!enabled}
+                                                        />
+                                                    </Form.Item>
+                                                );
+                                            }}
+                                        </Form.Item>
+                                    </Col>
+                                </Row>
+
+                                <Divider style={{ margin: '12px 0' }} />
+
+                                <Row gutter={16} align="middle" style={{ marginBottom: 16 }}>
+                                    <Col span={8}>
+                                        <Form.Item name="enable_assistant" valuePropName="checked" style={{ marginBottom: 0 }}>
+                                            <Checkbox><Text strong>Đổi Trợ giảng</Text></Checkbox>
+                                        </Form.Item>
+                                    </Col>
+                                    <Col span={16}>
+                                        <Form.Item noStyle dependencies={['enable_assistant']}>
+                                            {({ getFieldValue }) => (
+                                                <Form.Item name="common_assistant_teacher" style={{ marginBottom: 0 }}>
+                                                    <TeachingStaffSelect
+                                                        teacherType={0}
+                                                        mode="multiple"
+                                                        showSearch
+                                                        optionFilterProp="label"
+                                                        placeholder="Chọn trợ giảng (có thể để trống để gỡ)"
+                                                        disabled={!getFieldValue('enable_assistant')}
+                                                    />
+                                                </Form.Item>
+                                            )}
+                                        </Form.Item>
+                                    </Col>
+                                </Row>
+
+                                <Divider style={{ margin: '12px 0' }} />
+
+                                {/* Tùy chọn Khung giờ */}
+                                <Row gutter={16} align="middle" style={{ marginBottom: 16 }}>
+                                    <Col span={8}>
+                                        <Form.Item name="enable_time" valuePropName="checked" style={{ marginBottom: 0 }}>
+                                            <Checkbox><Text strong>Đổi Khung giờ</Text></Checkbox>
+                                        </Form.Item>
+                                    </Col>
+                                    <Col span={16}>
+                                        <Space size={8}>
+                                            <Form.Item noStyle dependencies={['enable_time']}>
+                                                {({ getFieldValue }) => {
+                                                    const enabled = getFieldValue('enable_time');
+                                                    return (
+                                                        <Form.Item
+                                                            name="common_start_time"
+                                                            style={{ marginBottom: 0 }}
+                                                            rules={[{ required: enabled, message: 'Chọn giờ bắt đầu' }]}
+                                                        >
+                                                            <TimePicker
+                                                                format="HH:mm"
+                                                                style={{ width: 140 }}
+                                                                placeholder="Giờ bắt đầu"
+                                                                disabled={!enabled}
+                                                                onChange={(value) => revalidateOrClearEndTime('common_end_time', value)}
+                                                            />
+                                                        </Form.Item>
+                                                    );
+                                                }}
                                             </Form.Item>
-                                        );
-                                    }}
-                                </Form.Item>
-                            </Col>
-                        </Row>
+                                            <Form.Item noStyle dependencies={['enable_time']}>
+                                                {({ getFieldValue }) => {
+                                                    const enabled = getFieldValue('enable_time');
+                                                    return (
+                                                        <Form.Item
+                                                            name="common_end_time"
+                                                            style={{ marginBottom: 0 }}
+                                                            rules={[
+                                                                { required: enabled, message: 'Chọn giờ kết thúc' },
+                                                                { validator: validateEndTimeAfter('common_start_time') },
+                                                            ]}
+                                                        >
+                                                            <TimePicker
+                                                                format="HH:mm"
+                                                                style={{ width: 140 }}
+                                                                placeholder="Giờ kết thúc"
+                                                                disabledTime={() => getEndDisabledTime(commonStartTime)}
+                                                                defaultOpenValue={commonStartTime}
+                                                                disabled={!enabled || !commonStartTime}
+                                                            />
+                                                        </Form.Item>
+                                                    );
+                                                }}
+                                            </Form.Item>
+                                        </Space>
+                                    </Col>
+                                </Row>
+                                <Divider style={{ margin: '12px 0' }} />
 
-                        <Divider style={{ margin: '12px 0' }} />
-
-                        <Row gutter={16} align="middle" style={{ marginBottom: 16 }}>
-                            <Col span={8}>
-                                <Form.Item name="enable_assistant" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                    <Checkbox><Text strong>Đổi Trợ giảng</Text></Checkbox>
+                                <Row gutter={16} align="top" style={{ marginBottom: 8 }}>
+                                    <Col span={8}>
+                                        <Form.Item name="enable_lesson_name_pattern" valuePropName="checked" style={{ marginBottom: 0 }}>
+                                            <Checkbox><Text strong>Thêm tiền tố / hậu tố tên bài</Text></Checkbox>
+                                        </Form.Item>
+                                        <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
+                                            Dùng <Text code>{'{n}'}</Text> để chèn số lần diễn ra của từng bài. Ví dụ tiền tố “Lịch {'{n}'} - ” với tên “Bài 1” sẽ thành “Lịch 1 - Bài 1”. {!hasSingleSelectedLesson && 'Mặc định mẫu chỉ áp dụng từ buổi thứ hai; tích chọn bên phải để áp dụng ngay từ buổi đầu.'}
+                                        </Text>
+                                    </Col>
+                                    <Col span={16}>
+                                        <Form.Item noStyle dependencies={['enable_lesson_name_pattern']}>
+                                            {({ getFieldValue }) => {
+                                                const enabled = getFieldValue('enable_lesson_name_pattern');
+                                                return (
+                                                    <Space wrap align="start" style={{ width: '100%', opacity: enabled ? 1 : 0.5 }}>
+                                                        <Form.Item
+                                                            name="lesson_name_prefix"
+                                                            label="Tiền tố"
+                                                            rules={[{ max: 100, message: 'Tiền tố không được quá 100 ký tự' }]}
+                                                            style={{ minWidth: 220, marginBottom: 0 }}
+                                                        >
+                                                            <Input disabled={!enabled} maxLength={100} placeholder="Ví dụ: [Lịch {n}] - " />
+                                                        </Form.Item>
+                                                        <Form.Item
+                                                            name="lesson_name_suffix"
+                                                            label="Hậu tố"
+                                                            rules={[{ max: 100, message: 'Hậu tố không được quá 100 ký tự' }]}
+                                                            style={{ minWidth: 220, marginBottom: 0 }}
+                                                        >
+                                                            <Input disabled={!enabled} maxLength={100} placeholder="Ví dụ: - Lần {n}" />
+                                                        </Form.Item>
+                                                        {!hasSingleSelectedLesson && (
+                                                            <Form.Item name="apply_name_pattern_to_first_session" valuePropName="checked" style={{ marginBottom: 0, paddingTop: 30 }}>
+                                                                <Checkbox disabled={!enabled}>Áp dụng cả buổi đầu tiên</Checkbox>
+                                                            </Form.Item>
+                                                        )}
+                                                    </Space>
+                                                );
+                                            }}
+                                        </Form.Item>
+                                    </Col>
+                                </Row>
+                                <Form.Item noStyle dependencies={['enable_lesson_name_pattern']}>
+                                    {({ getFieldValue }) => getFieldValue('enable_lesson_name_pattern') && !hasSingleSelectedLesson && (
+                                        <Form.List name="lesson_name_rules">
+                                            {(fields, { add, remove }) => (
+                                                <Card size="small" title="Mẫu tên theo khoảng bài" style={{ margin: '0 0 12px 33.333%' }}>
+                                                    <Text type="secondary" style={{ display: 'block', fontSize: 12, marginBottom: 12 }}>
+                                                        Bài trong khoảng dùng mẫu riêng và có lựa chọn áp dụng buổi đầu riêng; bài ngoài khoảng dùng mẫu chung. Các khoảng không được chồng lấn.
+                                                    </Text>
+                                                    <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                                                        {fields.map((field) => (
+                                                            <Space key={field.key} align="end" wrap style={{ width: '100%' }}>
+                                                                <Form.Item name={[field.name, 'from_learn_number']} label="Từ bài" rules={[{ required: true, message: 'Nhập bài bắt đầu' }]} style={{ marginBottom: 0 }}>
+                                                                    <InputNumber min={1} precision={0} style={{ width: 100 }} />
+                                                                </Form.Item>
+                                                                <Form.Item name={[field.name, 'to_learn_number']} label="Đến bài" dependencies={[["lesson_name_rules", field.name, "from_learn_number"]]} rules={[
+                                                                    { required: true, message: 'Nhập bài kết thúc' },
+                                                                    ({ getFieldValue }) => ({
+                                                                        validator: (_, value) => Number(value) >= Number(getFieldValue(['lesson_name_rules', field.name, 'from_learn_number']))
+                                                                            ? Promise.resolve()
+                                                                            : Promise.reject(new Error('Phải lớn hơn hoặc bằng bài bắt đầu')),
+                                                                    }),
+                                                                ]} style={{ marginBottom: 0 }}>
+                                                                    <InputNumber min={1} precision={0} style={{ width: 100 }} />
+                                                                </Form.Item>
+                                                                <Form.Item name={[field.name, 'prefix']} label="Tiền tố" rules={[{ max: 100 }]} style={{ flex: '1 1 180px', marginBottom: 0 }}>
+                                                                    <Input maxLength={100} placeholder="Ví dụ: [Lịch {n}] - " />
+                                                                </Form.Item>
+                                                                <Form.Item name={[field.name, 'suffix']} label="Hậu tố" rules={[{ max: 100 }]} style={{ flex: '1 1 180px', marginBottom: 0 }}>
+                                                                    <Input maxLength={100} placeholder="Ví dụ: - Nhóm A" />
+                                                                </Form.Item>
+                                                                <Form.Item name={[field.name, 'apply_to_first_session']} valuePropName="checked" style={{ marginBottom: 0 }}>
+                                                                    <Checkbox>Áp dụng buổi đầu</Checkbox>
+                                                                </Form.Item>
+                                                                <Button danger type="text" onClick={() => remove(field.name)}>Xóa</Button>
+                                                            </Space>
+                                                        ))}
+                                                        <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ apply_to_first_session: false })}>Thêm khoảng bài</Button>
+                                                    </Space>
+                                                </Card>
+                                            )}
+                                        </Form.List>
+                                    )}
                                 </Form.Item>
-                            </Col>
-                            <Col span={16}>
-                                <Form.Item noStyle dependencies={['enable_assistant']}>
-                                    {({ getFieldValue }) => (
-                                        <Form.Item name="common_assistant_teacher" style={{ marginBottom: 0 }}>
-                                            <TeachingStaffSelect
-                                                teacherType={0}
-                                                mode="multiple"
-                                                showSearch
-                                                optionFilterProp="label"
-                                                placeholder="Chọn trợ giảng (có thể để trống để gỡ)"
-                                                disabled={!getFieldValue('enable_assistant')}
+                                <Divider style={{ margin: '12px 0' }} />
+
+                                <Row gutter={16} align="top" style={{ marginBottom: 8 }}>
+                                    <Col span={8}>
+                                        <Form.Item name="enable_mapping" valuePropName="checked" style={{ marginBottom: 0 }}>
+                                            <Checkbox><Text strong>Đổi Lesson ID HMO</Text></Checkbox>
+                                        </Form.Item>
+                                        <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
+                                            Chọn riêng Lesson ID cho từng lịch. Course ID và Package ID được lấy từ bài học của lịch đó.
+                                        </Text>
+                                        <Form.Item name="hmo_sync_name_source" label="Đồng bộ theo" style={{ margin: '10px 0 0' }}>
+                                            <Select
+                                                options={[
+                                                    { value: 'calendar', label: 'Tên lịch học (calendar)' },
+                                                    { value: 'lesson', label: 'Tên bài học (lessons)' },
+                                                ]}
                                             />
                                         </Form.Item>
-                                    )}
-                                </Form.Item>
-                            </Col>
-                        </Row>
-
-                        <Divider style={{ margin: '12px 0' }} />
-
-                        {/* Tùy chọn Khung giờ */}
-                        <Row gutter={16} align="middle" style={{ marginBottom: 16 }}>
-                            <Col span={8}>
-                                <Form.Item name="enable_time" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                    <Checkbox><Text strong>Đổi Khung giờ</Text></Checkbox>
-                                </Form.Item>
-                            </Col>
-                            <Col span={16}>
-                                <Space size={8}>
-                                    <Form.Item noStyle dependencies={['enable_time']}>
-                                        {({ getFieldValue }) => {
-                                            const enabled = getFieldValue('enable_time');
-                                            return (
-                                                <Form.Item
-                                                    name="common_start_time"
-                                                    style={{ marginBottom: 0 }}
-                                                    rules={[{ required: enabled, message: 'Chọn giờ bắt đầu' }]}
-                                                >
-                                                    <TimePicker
-                                                        format="HH:mm"
-                                                        style={{ width: 140 }}
-                                                        placeholder="Giờ bắt đầu"
-                                                        disabled={!enabled}
-                                                        onChange={(value) => revalidateOrClearEndTime('common_end_time', value)}
-                                                    />
-                                                </Form.Item>
-                                            );
-                                        }}
-                                    </Form.Item>
-                                    <Form.Item noStyle dependencies={['enable_time']}>
-                                        {({ getFieldValue }) => {
-                                            const enabled = getFieldValue('enable_time');
-                                            return (
-                                                <Form.Item
-                                                    name="common_end_time"
-                                                    style={{ marginBottom: 0 }}
-                                                    rules={[
-                                                        { required: enabled, message: 'Chọn giờ kết thúc' },
-                                                        { validator: validateEndTimeAfter('common_start_time') },
-                                                    ]}
-                                                >
-                                                    <TimePicker
-                                                        format="HH:mm"
-                                                        style={{ width: 140 }}
-                                                        placeholder="Nhập giờ bắt đầu trước"
-                                                        disabledTime={() => getEndDisabledTime(commonStartTime)}
-                                                        defaultOpenValue={commonStartTime}
-                                                        disabled={!enabled || !commonStartTime}
-                                                    />
-                                                </Form.Item>
-                                            );
-                                        }}
-                                    </Form.Item>
-                                </Space>
-                            </Col>
-                        </Row>
-                        <Divider style={{ margin: '12px 0' }} />
-
-                        <Row gutter={16} align="top" style={{ marginBottom: 8 }}>
-                            <Col span={8}>
-                                <Form.Item name="enable_lesson_name_pattern" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                    <Checkbox><Text strong>Thêm tiền tố / hậu tố tên bài</Text></Checkbox>
-                                </Form.Item>
-                                <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
-                                    Dùng <Text code>{'{n}'}</Text> để chèn số lần diễn ra của từng bài. Ví dụ tiền tố “Lịch {'{n}'} - ” với tên “Bài 1” sẽ thành “Lịch 1 - Bài 1”. {!hasSingleSelectedLesson && 'Mặc định mẫu chỉ áp dụng từ buổi thứ hai; tích chọn bên phải để áp dụng ngay từ buổi đầu.'}
-                                </Text>
-                            </Col>
-                            <Col span={16}>
-                                <Form.Item noStyle dependencies={['enable_lesson_name_pattern']}>
-                                    {({ getFieldValue }) => {
-                                        const enabled = getFieldValue('enable_lesson_name_pattern');
-                                        return (
-                                            <Space wrap align="start" style={{ width: '100%', opacity: enabled ? 1 : 0.5 }}>
-                                                <Form.Item
-                                                    name="lesson_name_prefix"
-                                                    label="Tiền tố"
-                                                    rules={[{ max: 100, message: 'Tiền tố không được quá 100 ký tự' }]}
-                                                    style={{ minWidth: 220, marginBottom: 0 }}
-                                                >
-                                                    <Input disabled={!enabled} maxLength={100} placeholder="Ví dụ: [Lịch {n}] - " />
-                                                </Form.Item>
-                                                <Form.Item
-                                                    name="lesson_name_suffix"
-                                                    label="Hậu tố"
-                                                    rules={[{ max: 100, message: 'Hậu tố không được quá 100 ký tự' }]}
-                                                    style={{ minWidth: 220, marginBottom: 0 }}
-                                                >
-                                                    <Input disabled={!enabled} maxLength={100} placeholder="Ví dụ: - Lần {n}" />
-                                                </Form.Item>
-                                                {!hasSingleSelectedLesson && (
-                                                    <Form.Item name="apply_name_pattern_to_first_session" valuePropName="checked" style={{ marginBottom: 0, paddingTop: 30 }}>
-                                                        <Checkbox disabled={!enabled}>Áp dụng cả buổi đầu tiên</Checkbox>
-                                                    </Form.Item>
-                                                )}
-                                            </Space>
-                                        );
-                                    }}
-                                </Form.Item>
-                            </Col>
-                        </Row>
-                        <Form.Item noStyle dependencies={['enable_lesson_name_pattern']}>
-                            {({ getFieldValue }) => getFieldValue('enable_lesson_name_pattern') && !hasSingleSelectedLesson && (
-                                <Form.List name="lesson_name_rules">
-                                    {(fields, { add, remove }) => (
-                                        <Card size="small" title="Mẫu tên theo khoảng bài" style={{ margin: '0 0 12px 33.333%' }}>
-                                            <Text type="secondary" style={{ display: 'block', fontSize: 12, marginBottom: 12 }}>
-                                                Bài trong khoảng dùng mẫu riêng và có lựa chọn áp dụng buổi đầu riêng; bài ngoài khoảng dùng mẫu chung. Các khoảng không được chồng lấn.
-                                            </Text>
-                                            <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                                                {fields.map((field) => (
-                                                    <Space key={field.key} align="end" wrap style={{ width: '100%' }}>
-                                                        <Form.Item name={[field.name, 'from_learn_number']} label="Từ bài" rules={[{ required: true, message: 'Nhập bài bắt đầu' }]} style={{ marginBottom: 0 }}>
-                                                            <InputNumber min={1} precision={0} style={{ width: 100 }} />
-                                                        </Form.Item>
-                                                        <Form.Item name={[field.name, 'to_learn_number']} label="Đến bài" dependencies={[["lesson_name_rules", field.name, "from_learn_number"]]} rules={[
-                                                            { required: true, message: 'Nhập bài kết thúc' },
-                                                            ({ getFieldValue }) => ({
-                                                                validator: (_, value) => Number(value) >= Number(getFieldValue(['lesson_name_rules', field.name, 'from_learn_number']))
-                                                                    ? Promise.resolve()
-                                                                    : Promise.reject(new Error('Phải lớn hơn hoặc bằng bài bắt đầu')),
-                                                            }),
-                                                        ]} style={{ marginBottom: 0 }}>
-                                                            <InputNumber min={1} precision={0} style={{ width: 100 }} />
-                                                        </Form.Item>
-                                                        <Form.Item name={[field.name, 'prefix']} label="Tiền tố" rules={[{ max: 100 }]} style={{ flex: '1 1 180px', marginBottom: 0 }}>
-                                                            <Input maxLength={100} placeholder="Ví dụ: [Lịch {n}] - " />
-                                                        </Form.Item>
-                                                        <Form.Item name={[field.name, 'suffix']} label="Hậu tố" rules={[{ max: 100 }]} style={{ flex: '1 1 180px', marginBottom: 0 }}>
-                                                            <Input maxLength={100} placeholder="Ví dụ: - Nhóm A" />
-                                                        </Form.Item>
-                                                        <Form.Item name={[field.name, 'apply_to_first_session']} valuePropName="checked" style={{ marginBottom: 0 }}>
-                                                            <Checkbox>Áp dụng buổi đầu</Checkbox>
-                                                        </Form.Item>
-                                                        <Button danger type="text" onClick={() => remove(field.name)}>Xóa</Button>
-                                                    </Space>
-                                                ))}
-                                                <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ apply_to_first_session: false })}>Thêm khoảng bài</Button>
-                                            </Space>
-                                        </Card>
-                                    )}
-                                </Form.List>
-                            )}
-                        </Form.Item>
-                        <Divider style={{ margin: '12px 0' }} />
-
-                        <Row gutter={16} align="top" style={{ marginBottom: 8 }}>
-                            <Col span={8}>
-                                <Form.Item name="enable_mapping" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                    <Checkbox><Text strong>Đổi Lesson ID HMO</Text></Checkbox>
-                                </Form.Item>
-                                <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
-                                    Chọn riêng Lesson ID cho từng lịch. Course ID và Package ID được lấy từ bài học của lịch đó.
-                                </Text>
-                                <Form.Item name="hmo_sync_name_source" label="Đồng bộ theo" style={{ margin: '10px 0 0' }}>
-                                    <Select
-                                        options={[
-                                            { value: 'calendar', label: 'Tên lịch học (calendar)' },
-                                            { value: 'lesson', label: 'Tên bài học (lessons)' },
-                                        ]}
-                                    />
-                                </Form.Item>
-                                <Text type="secondary" style={{ display: 'block', fontSize: 12 }}>
-                                    Theo tên lịch sẽ so khớp từng lịch với Lesson ID HMO cùng tên, không gán lần lượt theo thứ tự tăng dần.
-                                </Text>
-                                <Button
-                                    type="primary"
-                                    ghost
-                                    size="small"
-                                    icon={<SyncOutlined spin={syncingHmoLessonIds} />}
-                                    loading={syncingHmoLessonIds}
-                                    onClick={() => void handleSyncHmoLessonIds()}
-                                    style={{ marginTop: 10 }}
-                                >
-                                    Đồng bộ Lesson ID HMO
-                                </Button>
-                            </Col>
-                            <Col span={16}>
-                                <Form.Item noStyle dependencies={['enable_mapping']}>
-                                    {({ getFieldValue }) => {
-                                        const enabled = getFieldValue('enable_mapping');
-                                        return (
-                                            <div style={{ opacity: enabled ? 1 : 0.5, pointerEvents: enabled ? 'auto' : 'none' }}>
-                                                <Space direction="vertical" style={{ width: '100%' }}>
-                                                    {calendarContexts.map((context) => {
-                                                        const options = hmoOptionsByLesson[context.internalLessonId] || [];
-                                                        return (
-                                                            <React.Fragment key={context.calendarId}>
-                                                            <Form.Item
-                                                                name={['common_hmo_mapping_keys_by_calendar', context.calendarId]}
-                                                                label={context.label}
-                                                                extra={options.length
-                                                                    ? `${summarizeHmoOptions(options)} — danh sách được nhóm theo Package/Course.`
-                                                                    : undefined}
-                                                                style={{ marginBottom: 8 }}
-                                                            >
-                                                                <Select
-                                                                    mode="multiple"
-                                                                    allowClear
-                                                                    showSearch
-                                                                    optionFilterProp="label"
-                                                                    loading={loadingHmoLessons.has(context.internalLessonId)}
-                                                                    disabled={!enabled}
-                                                                    listHeight={420}
-                                                                    popupMatchSelectWidth={680}
-                                                                    placeholder={options.length
-                                                                        ? 'Chọn Lesson ID HMO'
-                                                                        : 'Bài chưa có Course ID hoặc HMO không có Lesson ID'}
-                                                                    options={buildGroupedHmoOptions(options)}
-                                                                    tagRender={renderHmoSelectedTag}
-                                                                    maxTagCount="responsive"
-                                                                />
-                                                            </Form.Item>
-                                                            {hmoSyncNotes[context.calendarId] && (
-                                                                <Alert
-                                                                    showIcon
-                                                                    type={hmoSyncNotes[context.calendarId].type}
-                                                                    message={hmoSyncNotes[context.calendarId].message}
-                                                                    style={{ marginTop: -4, marginBottom: 8 }}
-                                                                />
+                                        <Text type="secondary" style={{ display: 'block', fontSize: 12 }}>
+                                            Theo tên lịch sẽ so khớp từng lịch với Lesson ID HMO cùng tên, không gán lần lượt theo thứ tự tăng dần.
+                                        </Text>
+                                        <Button
+                                            type="primary"
+                                            ghost
+                                            size="small"
+                                            icon={<SyncOutlined spin={syncingHmoLessonIds} />}
+                                            loading={syncingHmoLessonIds}
+                                            onClick={() => void handleSyncHmoLessonIds()}
+                                            style={{ marginTop: 10 }}
+                                        >
+                                            Đồng bộ Lesson ID HMO
+                                        </Button>
+                                    </Col>
+                                    <Col span={16}>
+                                        <Form.Item noStyle dependencies={['enable_mapping']}>
+                                            {({ getFieldValue }) => {
+                                                const enabled = getFieldValue('enable_mapping');
+                                                return (
+                                                    <div style={{ opacity: enabled ? 1 : 0.5, pointerEvents: enabled ? 'auto' : 'none' }}>
+                                                        <Space direction="vertical" style={{ width: '100%' }}>
+                                                            {calendarContexts.map((context) => {
+                                                                const options = hmoOptionsByLesson[context.internalLessonId] || [];
+                                                                return (
+                                                                    <React.Fragment key={context.calendarId}>
+                                                                        <Form.Item
+                                                                            name={['common_hmo_mapping_keys_by_calendar', context.calendarId]}
+                                                                            label={context.label}
+                                                                            extra={options.length
+                                                                                ? `${summarizeHmoOptions(options)} — danh sách được nhóm theo Package/Course.`
+                                                                                : undefined}
+                                                                            style={{ marginBottom: 8 }}
+                                                                        >
+                                                                            <Select
+                                                                                mode="multiple"
+                                                                                allowClear
+                                                                                showSearch
+                                                                                optionFilterProp="label"
+                                                                                loading={loadingHmoLessons.has(context.internalLessonId)}
+                                                                                disabled={!enabled}
+                                                                                listHeight={420}
+                                                                                popupMatchSelectWidth={680}
+                                                                                placeholder={options.length
+                                                                                    ? 'Chọn Lesson ID HMO'
+                                                                                    : 'Bài chưa có Course ID hoặc HMO không có Lesson ID'}
+                                                                                options={buildGroupedHmoOptions(options)}
+                                                                                tagRender={renderHmoSelectedTag}
+                                                                                maxTagCount="responsive"
+                                                                            />
+                                                                        </Form.Item>
+                                                                        {hmoSyncNotes[context.calendarId] && (
+                                                                            <Alert
+                                                                                showIcon
+                                                                                type={hmoSyncNotes[context.calendarId].type}
+                                                                                message={hmoSyncNotes[context.calendarId].message}
+                                                                                style={{ marginTop: -4, marginBottom: 8 }}
+                                                                            />
+                                                                        )}
+                                                                    </React.Fragment>
+                                                                );
+                                                            })}
+                                                            {!calendarContexts.length && (
+                                                                <Alert type="warning" showIcon message="Lịch đã chọn chưa gắn bài học nội bộ" />
                                                             )}
-                                                            </React.Fragment>
-                                                        );
-                                                    })}
-                                                    {!calendarContexts.length && (
-                                                        <Alert type="warning" showIcon message="Lịch đã chọn chưa gắn bài học nội bộ" />
-                                                    )}
-                                                </Space>
-                                            </div>
-                                        );
-                                    }}
-                                </Form.Item>
-                            </Col>
-                        </Row>
-                    </Card>
-                )}
+                                                        </Space>
+                                                    </div>
+                                                );
+                                            }}
+                                        </Form.Item>
+                                    </Col>
+                                </Row>
+                            </Card>
+                        )}
 
-                {/* CHẾ ĐỘ 2: CẤU HÌNH RIÊNG CHO TỪNG LỊCH */}
-                {configMode === 'separate' && (
-                    <div>
-                        {Array.isArray(selectedLessons) && selectedLessons.length > 0 ? (
-                            <>
-                                <Space direction="vertical" size={4} style={{ marginBottom: 12 }}>
-                                    <Form.Item name="hmo_sync_name_source" label="Đồng bộ theo" style={{ marginBottom: 0, minWidth: 280 }}>
-                                        <Select
-                                            options={[
-                                                { value: 'calendar', label: 'Tên lịch học (calendar)' },
-                                                { value: 'lesson', label: 'Tên bài học (lessons)' },
-                                            ]}
-                                        />
-                                    </Form.Item>
-                                    <Button
-                                        type="primary"
-                                        ghost
-                                        icon={<SyncOutlined spin={syncingHmoLessonIds} />}
-                                        loading={syncingHmoLessonIds}
-                                        onClick={() => void handleSyncHmoLessonIds()}
-                                    >
-                                        Đồng bộ Lesson ID HMO cho các lịch đã chọn
-                                    </Button>
-                                    <Text type="secondary" style={{ fontSize: 12 }}>
-                                        Theo tên lịch: so khớp từng lịch với Lesson ID HMO cùng tên. Theo tên bài học: chỉ tự gán khi số Lesson ID trùng tên khớp chính xác số lịch của mỗi bài.
-                                    </Text>
-                                </Space>
-                                {(selectedLessons as (string | number)[]).map((lessonKey) => (
-                                    <Card
-                                        key={lessonKey}
-                                        size="small"
-                                        title={<Text style={{fontSize: 14 }}>
-                                            {calendarContexts.find((item) => item.calendarId === String(lessonKey))?.label || `Lịch ${lessonKey}`}
-                                        </Text>}
-                                        style={{ marginBottom: 16, borderRadius: 8, border: '1px solid #e8e8e8' }}
-                                        headStyle={{ borderBottom: '1px solid #e8e8e8', padding: '10px 16px' }}
-                                        bodyStyle={{ padding: '16px' }}
-                                    >
-                                        <Row gutter={[16, 16]} align="top">
-                                            <Col xs={24} md={8} xl={3}>
-                                                <Form.Item
-                                                    label={<Text>Ngày học</Text>}
-                                                    name={['separate_config', lessonKey, 'start_date']}
-                                                    style={{ marginBottom: 0 }}
-                                                >
-                                                    <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
-                                                </Form.Item>
-                                            </Col>
-                                            <Col xs={12} md={8} xl={2}>
-                                                <Form.Item
-                                                label={<Text>Bắt đầu</Text>}
-                                                    name={['separate_config', lessonKey, 'start_time']}
-                                                    style={{ marginBottom: 0 }}
-                                                >
-                                                    <TimePicker
-                                                        format="HH:mm"
-                                                        style={{ width: '100%' }}
-                                                        onChange={(value) => revalidateOrClearEndTime(['separate_config', lessonKey, 'end_time'], value)}
+                        {/* CHẾ ĐỘ 2: CẤU HÌNH RIÊNG CHO TỪNG LỊCH */}
+                        {configMode === 'separate' && (
+                            <div>
+                                {Array.isArray(selectedLessons) && selectedLessons.length > 0 ? (
+                                    <>
+                                        <div style={{ marginBottom: 16 }}>
+                                            <Space wrap size={16} align="end">
+                                                <Form.Item name="hmo_sync_name_source" label="Đồng bộ theo" style={{ marginBottom: 0 }}>
+                                                    <Select
+                                                        style={{ width: 220 }}
+                                                        options={[
+                                                            { value: 'calendar', label: 'Tên lịch học (calendar)' },
+                                                            { value: 'lesson', label: 'Tên bài học (lessons)' },
+                                                        ]}
                                                     />
                                                 </Form.Item>
-                                            </Col>
-                                            <Col xs={12} md={8} xl={2}>
-                                                <Form.Item noStyle dependencies={[['separate_config', lessonKey, 'start_time']]}>
-                                                    {({ getFieldValue }) => {
-                                                        const separateStartTime = getFieldValue(['separate_config', lessonKey, 'start_time']) as Dayjs | undefined;
-                                                        return (
-                                                            <Form.Item
-                                                label={<Text>Kết thúc</Text>}
-                                                                name={['separate_config', lessonKey, 'end_time']}
-                                                                style={{ marginBottom: 0 }}
-                                                                rules={[{ validator: validateEndTimeAfter(['separate_config', lessonKey, 'start_time']) }]}
-                                                            >
-                                                                <TimePicker
-                                                                    format="HH:mm"
-                                                                    style={{ width: '100%' }}
-                                                                    disabledTime={() => getEndDisabledTime(separateStartTime)}
-                                                                    defaultOpenValue={separateStartTime}
-                                                                    disabled={!separateStartTime}
-                                                                />
-                                                            </Form.Item>
-                                                        );
-                                                    }}
-                                                </Form.Item>
-                                            </Col>
-
-                                            <Col xs={24} md={12} xl={4}>
-                                                <Form.Item
-                                                    label={<Text>Giáo viên</Text>}
-                                                    name={['separate_config', lessonKey, 'teacher']}
-                                                    style={{ marginBottom: 0 }}
+                                                <Button
+                                                    type="primary"
+                                                    ghost
+                                                    icon={<SyncOutlined spin={syncingHmoLessonIds} />}
+                                                    loading={syncingHmoLessonIds}
+                                                    onClick={() => void handleSyncHmoLessonIds()}
                                                 >
-                                                    <TeachingStaffSelect teacherType={1} showSearch optionFilterProp="label" placeholder="Chọn giáo viên" />
-                                                </Form.Item>
-                                            </Col>
-                                            <Col xs={24} md={12} xl={6}>
-                                                <Form.Item
-                                                    label={<Text>Trợ giảng</Text>}
-                                                    name={['separate_config', lessonKey, 'assistant_teacher']}
-                                                    style={{ marginBottom: 0 }}
-                                                >
-                                                    <TeachingStaffSelect teacherType={0} mode="multiple" showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" maxTagCount="responsive" />
-                                                </Form.Item>
-                                            </Col>
-                                            <Col xs={24} xl={7}>
-                                                <Form.Item noStyle dependencies={[["separate_config", lessonKey, "enable_lesson_name_pattern"]]}>
-                                                    {({ getFieldValue }) => {
-                                                        const enabled = getFieldValue(['separate_config', lessonKey, 'enable_lesson_name_pattern']);
-                                                        return (
-                                                            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, minHeight: 32 }}>
-                                                                <Form.Item name={['separate_config', lessonKey, 'enable_lesson_name_pattern']} valuePropName="checked" style={{ marginBottom: 0 }}>
-                                                                    <Checkbox><Text strong>Thêm tiền tố / hậu tố tên bài</Text></Checkbox>
-                                                                </Form.Item>
-                                                                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, opacity: enabled ? 1 : 0.5 }}>
-                                                                    <Form.Item name={['separate_config', lessonKey, 'lesson_name_prefix']} style={{ marginBottom: 0 }} rules={[{ max: 100 }]}>
-                                                                        <Input disabled={!enabled} maxLength={100} placeholder="Tiền tố: [Lịch {n}] - " style={{ width: 220 }} />
-                                                                    </Form.Item>
-                                                                    <Form.Item name={['separate_config', lessonKey, 'lesson_name_suffix']} style={{ marginBottom: 0 }} rules={[{ max: 100 }]}>
-                                                                        <Input disabled={!enabled} maxLength={100} placeholder="Hậu tố: - Lần {n}" style={{ width: 190 }} />
-                                                                    </Form.Item>
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    }}
-                                                </Form.Item>
-                                            </Col>
-
-                                        {(() => {
-                                            const record = selectedRows.find(
-                                                (item) => String(item.id) === String(lessonKey)
-                                            );
-                                            const internalLessonId = String(record?.session_id || '');
-                                            const options = hmoOptionsByLesson[internalLessonId] || [];
-                                            return (
-                                                <Col xs={24} xl={7}>
-                                                    <Form.Item
-                                                        label={<Text>Lesson ID HMO</Text>}
-                                                        name={['separate_config', lessonKey, 'hmo_mapping_keys']}
-                                                        extra={options.length
-                                                            ? `${summarizeHmoOptions(options)} — danh sách được nhóm theo Package/Course.`
-                                                            : undefined}
-                                                        style={{ marginBottom: 0 }}
-                                                    >
-                                                        <Select
-                                                            mode="multiple"
-                                                            allowClear
-                                                            showSearch
-                                                            optionFilterProp="label"
-                                                            loading={loadingHmoLessons.has(internalLessonId)}
-                                                            disabled={!internalLessonId}
-                                                            listHeight={420}
-                                                            popupMatchSelectWidth={680}
-                                                            placeholder={!internalLessonId
-                                                                ? 'Lịch chưa gắn bài học'
-                                                                : options.length
-                                                                    ? 'Chọn Lesson ID HMO'
-                                                                    : 'Bài chưa có Course ID / HMO không có Lesson ID'}
-                                                            options={buildGroupedHmoOptions(options)}
-                                                            tagRender={renderHmoSelectedTag}
-                                                            maxTagCount="responsive"
-                                                            style={{ width: '100%' }}
-                                                        />
-                                                    </Form.Item>
-                                                    {hmoSyncNotes[String(lessonKey)] && (
-                                                        <Alert
-                                                            showIcon
-                                                            type={hmoSyncNotes[String(lessonKey)].type}
-                                                            message={hmoSyncNotes[String(lessonKey)].message}
-                                                            style={{ marginTop: 8 }}
-                                                        />
-                                                    )}
+                                                    Đồng bộ Lesson ID HMO
+                                                </Button>
+                                            </Space>
+                                            <div style={{ marginTop: 4 }}>
+                                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                                    Theo tên lịch: so khớp từng lịch với Lesson ID HMO cùng tên. Theo tên bài học: chỉ tự gán khi số Lesson ID trùng tên khớp chính xác số lịch của mỗi bài.
+                                                </Text>
+                                            </div>
+                                        </div>
+                                        <div style={{ padding: '16px 20px', backgroundColor: '#f0f5ff', border: '1px solid #adc6ff', borderRadius: 8, marginBottom: 24, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
+                                                <CalendarOutlined style={{ fontSize: 18, color: '#1677ff', marginRight: 8 }} />
+                                                <Text strong style={{ fontSize: 15, color: '#1677ff' }}>Công cụ tự động điền ngày học</Text>
+                                            </div>
+                                            <Row gutter={[24, 16]} align="bottom">
+                                                <Col xs={24} md={8} xl={5}>
+                                                    <div style={{ marginBottom: 8 }}><Text strong style={{ fontSize: 13 }}>Ngày bắt đầu</Text></div>
+                                                    <DatePicker
+                                                        format="DD/MM/YYYY"
+                                                        style={{ width: '100%' }}
+                                                        value={autoFillStartDate}
+                                                        onChange={setAutoFillStartDate}
+                                                        placeholder="Chọn ngày bắt đầu"
+                                                    />
                                                 </Col>
-                                            );
-                                        })()}
-                                        </Row>
-                                    </Card>
-                                ))}
-                            </>
-                        ) : (
-                            <Text type="secondary">Vui lòng chọn ít nhất 1 lịch học từ Bảng ở trên.</Text>
+                                                <Col xs={24} md={16} xl={10}>
+                                                    <div style={{ marginBottom: 8 }}><Text strong style={{ fontSize: 13 }}>Lịch học hàng tuần</Text></div>
+                                                    <Checkbox.Group
+                                                        options={[
+                                                            { label: 'T2', value: 1 },
+                                                            { label: 'T3', value: 2 },
+                                                            { label: 'T4', value: 3 },
+                                                            { label: 'T5', value: 4 },
+                                                            { label: 'T6', value: 5 },
+                                                            { label: 'T7', value: 6 },
+                                                            { label: 'CN', value: 7 },
+                                                        ]}
+                                                        value={autoFillWeekdays}
+                                                        onChange={checked => setAutoFillWeekdays(checked as number[])}
+                                                    />
+                                                </Col>
+                                                <Col xs={24} xl={6}>
+                                                    <div style={{ marginBottom: 8 }}>
+                                                        <Text strong style={{ fontSize: 13 }}>Ngày nghỉ</Text>{' '}
+                                                        <Text type="secondary" style={{ fontSize: 12 }}>(Cách nhau dấu phẩy)</Text>
+                                                    </div>
+                                                    <Input
+                                                        placeholder="VD: 30/04/2027, 01/05/2027"
+                                                        value={autoFillHolidays}
+                                                        onChange={e => setAutoFillHolidays(e.target.value)}
+                                                    />
+                                                </Col>
+                                                <Col xs={24} xl={3} style={{ textAlign: 'right' }}>
+                                                    <Button type="primary" onClick={handleAutoFillDates} style={{ width: '100%' }}>Áp dụng</Button>
+                                                </Col>
+                                            </Row>
+                                        </div>
+                                        {(selectedLessons as (string | number)[]).map((lessonKey) => (
+                                            <Card
+                                                key={lessonKey}
+                                                size="small"
+                                                title={<Text style={{ fontSize: 14 }}>
+                                                    {calendarContexts.find((item) => item.calendarId === String(lessonKey))?.label || `Lịch ${lessonKey}`}
+                                                </Text>}
+                                                style={{ marginBottom: 16, borderRadius: 8, border: '1px solid #e8e8e8' }}
+                                                headStyle={{ borderBottom: '1px solid #e8e8e8', padding: '10px 16px' }}
+                                                bodyStyle={{ padding: '16px' }}
+                                            >
+                                                <Row gutter={[16, 16]} align="top">
+                                                    <Col xs={24} md={8} xl={3}>
+                                                        <Form.Item
+                                                            label={<Text>Ngày học</Text>}
+                                                            name={['separate_config', lessonKey, 'start_date']}
+                                                            style={{ marginBottom: 0 }}
+                                                        >
+                                                            <DatePicker format="dddd - DD/MM/YYYY" style={{ width: '100%' }} />
+                                                        </Form.Item>
+                                                    </Col>
+                                                    <Col xs={12} md={8} xl={2}>
+                                                        <Form.Item
+                                                            label={<Text>Bắt đầu</Text>}
+                                                            name={['separate_config', lessonKey, 'start_time']}
+                                                            style={{ marginBottom: 0 }}
+                                                        >
+                                                            <TimePicker
+                                                                format="HH:mm"
+                                                                style={{ width: '100%' }}
+                                                                onChange={(value) => revalidateOrClearEndTime(['separate_config', lessonKey, 'end_time'], value)}
+                                                            />
+                                                        </Form.Item>
+                                                    </Col>
+                                                    <Col xs={12} md={8} xl={2}>
+                                                        <Form.Item noStyle dependencies={[['separate_config', lessonKey, 'start_time']]}>
+                                                            {({ getFieldValue }) => {
+                                                                const separateStartTime = getFieldValue(['separate_config', lessonKey, 'start_time']) as Dayjs | undefined;
+                                                                return (
+                                                                    <Form.Item
+                                                                        label={<Text>Kết thúc</Text>}
+                                                                        name={['separate_config', lessonKey, 'end_time']}
+                                                                        style={{ marginBottom: 0 }}
+                                                                        rules={[{ validator: validateEndTimeAfter(['separate_config', lessonKey, 'start_time']) }]}
+                                                                    >
+                                                                        <TimePicker
+                                                                            format="HH:mm"
+                                                                            style={{ width: '100%' }}
+                                                                            disabledTime={() => getEndDisabledTime(separateStartTime)}
+                                                                            defaultOpenValue={separateStartTime}
+                                                                            disabled={!separateStartTime}
+                                                                        />
+                                                                    </Form.Item>
+                                                                );
+                                                            }}
+                                                        </Form.Item>
+                                                    </Col>
+
+                                                    <Col xs={24} md={12} xl={4}>
+                                                        <Form.Item
+                                                            label={<Text>Giáo viên</Text>}
+                                                            name={['separate_config', lessonKey, 'teacher']}
+                                                            style={{ marginBottom: 0 }}
+                                                        >
+                                                            <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" showSearch optionFilterProp="label" placeholder="Chọn giáo viên" />
+                                                        </Form.Item>
+                                                    </Col>
+                                                    <Col xs={24} md={12} xl={6}>
+                                                        <Form.Item
+                                                            label={<Text>Trợ giảng</Text>}
+                                                            name={['separate_config', lessonKey, 'assistant_teacher']}
+                                                            style={{ marginBottom: 0 }}
+                                                        >
+                                                            <TeachingStaffSelect teacherType={0} mode="multiple" showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" maxTagCount="responsive" />
+                                                        </Form.Item>
+                                                    </Col>
+                                                    <Col xs={24} xl={8} style={{ order: 3 }}>
+                                                        <Form.Item noStyle dependencies={[["separate_config", lessonKey, "enable_lesson_name_pattern"]]}>
+                                                            {({ getFieldValue }) => {
+                                                                const enabled = getFieldValue(['separate_config', lessonKey, 'enable_lesson_name_pattern']);
+                                                                return (
+                                                                    <Form.Item
+                                                                        label={
+                                                                            <Form.Item name={['separate_config', lessonKey, 'enable_lesson_name_pattern']} valuePropName="checked" noStyle>
+                                                                                <Checkbox><Text>Thêm tiền tố / hậu tố tên bài</Text></Checkbox>
+                                                                            </Form.Item>
+                                                                        }
+                                                                        style={{ marginBottom: 0 }}
+                                                                    >
+                                                                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, opacity: enabled ? 1 : 0.5 }}>
+                                                                            <Form.Item name={['separate_config', lessonKey, 'lesson_name_prefix']} style={{ marginBottom: 0 }} rules={[{ max: 100 }]}>
+                                                                                <Input disabled={!enabled} maxLength={100} placeholder="Tiền tố: [Lịch {n}] - " style={{ width: 220 }} />
+                                                                            </Form.Item>
+                                                                            <Form.Item name={['separate_config', lessonKey, 'lesson_name_suffix']} style={{ marginBottom: 0 }} rules={[{ max: 100 }]}>
+                                                                                <Input disabled={!enabled} maxLength={100} placeholder="Hậu tố: - Lần {n}" style={{ width: 190 }} />
+                                                                            </Form.Item>
+                                                                        </div>
+                                                                    </Form.Item>
+                                                                );
+                                                            }}
+                                                        </Form.Item>
+                                                    </Col>
+
+                                                    {(() => {
+                                                        const record = selectedRows.find(
+                                                            (item) => String(item.id) === String(lessonKey)
+                                                        );
+                                                        const internalLessonId = String(record?.session_id || '');
+                                                        const options = hmoOptionsByLesson[internalLessonId] || [];
+                                                        return (
+                                                                    <Col xs={24} xl={16} style={{ order: 2 }}>
+                                                                        <Form.Item
+                                                                    label={<Text>Lesson ID HMO</Text>}
+                                                                    name={['separate_config', lessonKey, 'hmo_mapping_keys']}
+                                                                    extra={options.length
+                                                                        ? `${summarizeHmoOptions(options)} — danh sách được nhóm theo Package/Course.`
+                                                                        : undefined}
+                                                                    style={{ marginBottom: 0 }}
+                                                                >
+                                                                    <Select
+                                                                        mode="multiple"
+                                                                        allowClear
+                                                                        showSearch
+                                                                        optionFilterProp="label"
+                                                                        loading={loadingHmoLessons.has(internalLessonId)}
+                                                                        disabled={!internalLessonId}
+                                                                        listHeight={420}
+                                                                        popupMatchSelectWidth={680}
+                                                                        placeholder={!internalLessonId
+                                                                            ? 'Lịch chưa gắn bài học'
+                                                                            : options.length
+                                                                                ? 'Chọn Lesson ID HMO'
+                                                                                : 'Bài chưa có Course ID / HMO không có Lesson ID'}
+                                                                        options={buildGroupedHmoOptions(options)}
+                                                                        tagRender={renderHmoSelectedTag}
+                                                                        maxTagCount="responsive"
+                                                                        style={{ width: '100%' }}
+                                                                    />
+                                                                </Form.Item>
+                                                                {hmoSyncNotes[String(lessonKey)] && (
+                                                                    <Alert
+                                                                        showIcon
+                                                                        type={hmoSyncNotes[String(lessonKey)].type}
+                                                                        message={hmoSyncNotes[String(lessonKey)].message}
+                                                                        style={{ marginTop: 8 }}
+                                                                    />
+                                                                )}
+                                                            </Col>
+                                                        );
+                                                    })()}
+                                                </Row>
+                                            </Card>
+                                        ))}
+                                    </>
+                                ) : (
+                                    <Text type="secondary">Vui lòng chọn ít nhất 1 lịch học từ Bảng ở trên.</Text>
+                                )}
+                            </div>
                         )}
-                    </div>
-                )}
                     </>
                 )}
 
@@ -1636,6 +1928,45 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                 <InputNumber min={1} max={3650} precision={0} style={{ width: 220 }} addonAfter="ngày" />
                             </Form.Item>
                         )}
+
+                        <Divider orientation="left" plain style={{ margin: '8px 0 16px' }}>
+                            Tên bài hiển thị sau thao tác
+                        </Divider>
+                        <Row gutter={24}>
+                            <Col flex={operation === 'makeup' ? '420px' : '100%'}>
+                                <Text strong>Buổi nghỉ</Text>
+                                <Row gutter={12} style={{ marginTop: 8 }}>
+                                    <Col flex="180px">
+                                        <Form.Item label="Tiền tố" name="canceled_lesson_name_prefix">
+                                            <Input placeholder="[Nghỉ] " maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
+                                        </Form.Item>
+                                    </Col>
+                                    <Col flex="180px">
+                                        <Form.Item label="Hậu tố" name="canceled_lesson_name_suffix">
+                                            <Input placeholder="Để trống nếu không dùng" maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
+                                        </Form.Item>
+                                    </Col>
+                                </Row>
+                            </Col>
+                            {operation === 'makeup' && (
+                                <Col flex="420px">
+                                    <Text strong>Buổi học bù</Text>
+                                    <Row gutter={12} style={{ marginTop: 8 }}>
+                                        <Col flex="180px">
+                                            <Form.Item label="Tiền tố" name="new_lesson_name_prefix">
+                                                <Input placeholder="[Học Bù] " maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
+                                            </Form.Item>
+                                        </Col>
+                                        <Col flex="180px">
+                                            <Form.Item label="Hậu tố" name="new_lesson_name_suffix">
+                                                <Input placeholder="Để trống nếu không dùng" maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
+                                            </Form.Item>
+                                        </Col>
+                                    </Row>
+                                </Col>
+                            )}
+                        </Row>
+
                         <Form.Item
                             name="reason"
                             label="Lý do thay đổi"
@@ -1670,6 +2001,13 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                             render: (_, row) => renderPreviewChange(row.current_lesson_name, row.next_lesson_name),
                                         },
                                         {
+                                            title: 'Tên bài sau thao tác',
+                                            hidden: operation === 'update',
+                                            render: (_, row) => (
+                                                <div style={{ whiteSpace: 'pre-line' }}>{row.next_lesson_name}</div>
+                                            ),
+                                        },
+                                        {
                                             title: 'Giáo viên',
                                             hidden: operation !== 'update',
                                             render: (_, row) => renderPreviewChange(row.current_teacher, row.next_teacher),
@@ -1678,6 +2016,12 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                             title: 'Trợ giảng',
                                             hidden: operation !== 'update',
                                             render: (_, row) => renderPreviewChange(row.current_assistant, row.next_assistant),
+                                        },
+                                        {
+                                            title: 'Thứ',
+                                            width: 100,
+                                            hidden: operation !== 'update',
+                                            render: (_, row) => renderPreviewChange(row.current_weekday, row.next_weekday),
                                         },
                                         {
                                             title: 'Thời gian',
@@ -1700,6 +2044,45 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 )}
             </Form>
         </Modal>
+        <Modal
+            title="Tiến trình xử lý lịch học"
+            open={Boolean(submitProgress)}
+            footer={null}
+            closable={false}
+            maskClosable={false}
+            keyboard={false}
+            width={520}
+            zIndex={1200}
+        >
+            {submitProgress && (
+                <div style={{ padding: '20px 4px 8px' }}>
+                    <Text strong style={{ display: 'block', marginBottom: 12 }}>
+                        {submitProgress.message}
+                    </Text>
+                    <Progress
+                        percent={submitProgress.percent}
+                        status={submitProgress.percent === 100 ? 'success' : 'active'}
+                        size="default"
+                    />
+                    <div style={{ marginTop: 12, padding: '12px 16px', borderRadius: 8, background: '#f5f5f5' }}>
+                        {submitProgress.completed > 0 ? (
+                            <Text strong>
+                                Đã xử lý {submitProgress.completed}/{submitProgress.total} lịch học
+                            </Text>
+                        ) : (
+                            <>
+                                <Text>Đang xử lý: {submitProgress.total} lịch học</Text>
+                                <br />
+                                <Text type="secondary">
+                                    Vui lòng chờ trong giây lát. Hệ thống sẽ tự động lưu toàn bộ thay đổi khi hoàn tất.
+                                </Text>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
+        </Modal>
+        </>
     );
 };
 

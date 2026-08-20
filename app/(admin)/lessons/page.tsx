@@ -112,6 +112,10 @@ const Page = () => {
     const [importErrors, setImportErrors] = useState<LessonImportError[]>([]);
     const [dragRowKey, setDragRowKey] = useState<React.Key | null>(null);
     const [showPageInfo, setShowPageInfo] = useState(true);
+
+    useEffect(() => {
+        setShowPageInfo(window.localStorage.getItem('lms:page-info:lessons') !== 'hidden');
+    }, []);
     // Dùng token sẵn có ngay khi quay lại trang để tránh nháy trạng thái chưa xác thực.
     // API vẫn kiểm tra token và sẽ khóa lại nếu token đã hết hạn.
     const [secondaryUnlocked, setSecondaryUnlocked] = useState(() => hasLessonReauthToken());
@@ -434,7 +438,15 @@ const Page = () => {
                 };
 
             if (selectedRecord) {
-                await updateLesson(selectedRecord.id, sanitizedPayload);
+                const response: any = await updateLesson(selectedRecord.id, sanitizedPayload);
+                const updatedLesson = response?.data;
+                if (updatedLesson) {
+                    setData((current) => current.map((item) => (
+                        String(item.id) === String(selectedRecord.id)
+                            ? { ...item, ...updatedLesson, key: String(item.id) }
+                            : item
+                    )));
+                }
                 api.success({
                     message: "Cập nhật thành công",
                     description: "Đã cập nhật nội dung bài học.",
@@ -450,7 +462,13 @@ const Page = () => {
             setOpenFormModal(false);
             setSelectedRecord(null);
             if (hasSearched) {
-                await refreshLessons();
+                if (selectedRecord) {
+                    // Dữ liệu vừa sửa đã được cập nhật ngay trên bảng. Tải lại
+                    // chạy nền để lỗi mạng không bị hiểu nhầm là lỗi lưu bài.
+                    void refreshLessons().catch(() => undefined);
+                } else {
+                    await refreshLessons();
+                }
             }
         } catch (error: any) {
             api.error({
@@ -467,9 +485,9 @@ const Page = () => {
             setSaving(true);
             const response: any = await createLessonProgram({
                 ...payload,
-                subject_code: payload.subject_code.trim(),
-                subject_name: payload.subject_name.trim(),
-                lesson_name: payload.lesson_name.trim(),
+                subject_code: String(payload.subject_code || "").trim(),
+                subject_name: String(payload.subject_name || "").trim(),
+                lesson_name: String(payload.lesson_name || "").trim(),
             });
             const program = response?.data;
             const nextFilters = cleanFilterValues({
@@ -575,11 +593,22 @@ const Page = () => {
         }
         try {
             setSavingInlineName(true);
-            await updateLesson(editingLessonId, { lesson_name: lessonName });
+            const response: any = await updateLesson(editingLessonId, { lesson_name: lessonName });
+            const updatedLesson = response?.data;
+            setData((current) => current.map((item) => (
+                String(item.id) === String(editingLessonId)
+                    ? {
+                        ...item,
+                        ...(updatedLesson || {}),
+                        lesson_name: String(updatedLesson?.lesson_name || lessonName),
+                        key: String(item.id),
+                    }
+                    : item
+            )));
             api.success({ message: "Đã cập nhật tên bài học" });
             setEditingLessonId(null);
             setEditingLessonName("");
-            if (hasSearched) await refreshLessons();
+            if (hasSearched) void refreshLessons().catch(() => undefined);
         } catch (error: any) {
             api.error({
                 message: "Cập nhật thất bại",
@@ -830,21 +859,25 @@ const Page = () => {
                                 Chương trình: {submittedFilterValues.subject_code}{submittedFilterValues.subject ? ` — ${submittedFilterValues.subject}` : ""}
                             </Tag>
                         )}
-                        <Button
-                            size="small"
-                            type={secondaryUnlocked ? "default" : "primary"}
-                            onClick={() => setSecondaryPromptOpen(true)}
-                            loading={secondaryChecking}
-                            disabled={secondaryChecking}
-                        >
-                            {secondaryChecking ? "Đang kiểm tra" : secondaryUnlocked ? "Xác thực lại" : "Xác thực cấp 2"}
-                        </Button>
+                        {!secondaryUnlocked && !secondaryChecking && (
+                            <Button
+                                size="small"
+                                type="primary"
+                                onClick={() => setSecondaryPromptOpen(true)}
+                            >
+                                Xác thực cấp 2
+                            </Button>
+                        )}
                     </div>
                     <Button
                         type="link"
                         size="small"
                         icon={showPageInfo ? <UpOutlined /> : <DownOutlined />}
-                        onClick={() => setShowPageInfo((value) => !value)}
+                        onClick={() => setShowPageInfo((value) => {
+                            const next = !value;
+                            window.localStorage.setItem('lms:page-info:lessons', next ? 'visible' : 'hidden');
+                            return next;
+                        })}
                     >
                         {showPageInfo ? "Ẩn thông tin" : "Hiện thông tin"}
                     </Button>

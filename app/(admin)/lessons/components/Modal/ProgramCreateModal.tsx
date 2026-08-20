@@ -14,6 +14,10 @@ type Props = {
     onSubmit: (payload: CreateLessonProgramPayload) => Promise<void>;
 };
 
+const normalizeSubjectName = (value: unknown) => String(
+    Array.isArray(value) ? value.at(-1) : value ?? ""
+).trim();
+
 const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
     const [form] = Form.useForm<CreateLessonProgramPayload & { school_year: number }>();
     // Chỉ lấy các môn đã có trong cột lessons.subject_name; người dùng vẫn có thể nhập môn mới.
@@ -36,7 +40,7 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
     useEffect(() => {
         if (!open) return;
         const generatedCode = buildLessonSubjectCode(
-            form.getFieldValue("subject_name"),
+            normalizeSubjectName(form.getFieldValue("subject_name")),
             selectedSystemType === "topclass" ? Number(form.getFieldValue("grade")) : undefined,
             Number(form.getFieldValue("school_year"))
         );
@@ -69,7 +73,10 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
                 form={form}
                 layout="vertical"
                 initialValues={{ school_year: getSuggestedSchoolYear(), system_type: "topclass" }}
-                onFinish={({ school_year: _schoolYear, ...values }) => onSubmit(values)}
+                onFinish={({ school_year: _schoolYear, subject_name, ...values }) => onSubmit({
+                    ...values,
+                    subject_name: normalizeSubjectName(subject_name),
+                })}
             >
                 <Row gutter={12}>
                     <Col xs={24} md={7}>
@@ -98,6 +105,7 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
                             <Select
                                 showSearch
                                 mode="tags"
+                                maxCount={1}
                                 optionFilterProp="label"
                                 placeholder="Chọn hoặc nhập môn học mới"
                                 options={subjectOptions}

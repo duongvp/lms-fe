@@ -14,6 +14,7 @@ import {
     Alert,
     Skeleton,
     Select,
+    TableProps,
 } from "antd";
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
@@ -308,6 +309,48 @@ const RoleModal = () => {
         return checkedCount > 0 && checkedCount < itemData.actions.length;
     };
 
+    const setModuleFieldPermissions = (
+        moduleCode: string,
+        fieldCodes: string[],
+        permission: 'visible' | 'editable',
+        checked: boolean,
+    ) => {
+        setFieldPolicy((prev) => {
+            const modulePolicy = prev[moduleCode] || {
+                visible_fields: [],
+                editable_fields: [],
+            };
+            const fieldCodeSet = new Set(fieldCodes);
+            let visibleFields = modulePolicy.visible_fields.filter(Boolean);
+            let editableFields = modulePolicy.editable_fields.filter(Boolean);
+
+            if (permission === 'visible') {
+                visibleFields = checked
+                    ? Array.from(new Set([...visibleFields, ...fieldCodes]))
+                    : visibleFields.filter((fieldCode) => !fieldCodeSet.has(fieldCode));
+                // Không cho phép một field có quyền sửa nhưng không có quyền xem.
+                if (!checked) {
+                    editableFields = editableFields.filter((fieldCode) => !fieldCodeSet.has(fieldCode));
+                }
+            } else {
+                editableFields = checked
+                    ? Array.from(new Set([...editableFields, ...fieldCodes]))
+                    : editableFields.filter((fieldCode) => !fieldCodeSet.has(fieldCode));
+                if (checked) {
+                    visibleFields = Array.from(new Set([...visibleFields, ...fieldCodes]));
+                }
+            }
+
+            return {
+                ...prev,
+                [moduleCode]: {
+                    visible_fields: visibleFields,
+                    editable_fields: editableFields,
+                },
+            };
+        });
+    };
+
     // Khi modal mở với role có sẵn (edit), load dữ liệu role
     useEffect(() => {
         if (
@@ -555,15 +598,40 @@ const RoleModal = () => {
                                             ...f,
                                             key: f.fieldCode,
                                         }));
-                                        const columns = [
+                                        const fieldCodes = dataSource.map((field) => field.fieldCode);
+                                        const visibleFields = fieldPolicy[module.code]?.visible_fields || [];
+                                        const editableFields = fieldPolicy[module.code]?.editable_fields || [];
+                                        const visibleCount = fieldCodes.filter((fieldCode) => visibleFields.includes(fieldCode)).length;
+                                        const editableCount = fieldCodes.filter((fieldCode) => editableFields.includes(fieldCode)).length;
+                                        const isAllVisible = fieldCodes.length > 0 && visibleCount === fieldCodes.length;
+                                        const isAllEditable = fieldCodes.length > 0 && editableCount === fieldCodes.length;
+                                        const columns: TableProps<any>['columns'] = [
                                             {
                                                 title: "Trường dữ liệu",
                                                 dataIndex: "fieldLabel",
                                                 key: "fieldLabel",
                                             },
                                             {
-                                                title: "Xem",
+                                                title: (
+                                                    <div style={{ lineHeight: 1.4, textAlign: 'center' }}>
+                                                        <div>Xem</div>
+                                                        <Checkbox
+                                                            aria-label="Chọn tất cả quyền xem"
+                                                            checked={isAllVisible}
+                                                            indeterminate={visibleCount > 0 && !isAllVisible}
+                                                            onChange={(event) => setModuleFieldPermissions(
+                                                                module.code,
+                                                                fieldCodes,
+                                                                'visible',
+                                                                event.target.checked,
+                                                            )}
+                                                        />
+                                                        <div style={{ fontSize: 12 }}>Tất cả</div>
+                                                    </div>
+                                                ),
                                                 key: "view",
+                                                align: "center",
+                                                width: 100,
                                                 render: (_: any, record: any) => {
                                                     const isChecked =
                                                         fieldPolicy[module.code]?.visible_fields?.includes(
@@ -609,8 +677,26 @@ const RoleModal = () => {
                                                 },
                                             },
                                             {
-                                                title: "Sửa",
+                                                title: (
+                                                    <div style={{ lineHeight: 1.4, textAlign: 'center' }}>
+                                                        <div>Sửa</div>
+                                                        <Checkbox
+                                                            aria-label="Chọn tất cả quyền sửa"
+                                                            checked={isAllEditable}
+                                                            indeterminate={editableCount > 0 && !isAllEditable}
+                                                            onChange={(event) => setModuleFieldPermissions(
+                                                                module.code,
+                                                                fieldCodes,
+                                                                'editable',
+                                                                event.target.checked,
+                                                            )}
+                                                        />
+                                                        <div style={{ fontSize: 12 }}>Tất cả</div>
+                                                    </div>
+                                                ),
                                                 key: "edit",
+                                                align: "center",
+                                                width: 100,
                                                 render: (_: any, record: any) => {
                                                     const isChecked =
                                                         fieldPolicy[module.code]?.editable_fields?.includes(
