@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Alert, Button, Col, DatePicker, Form, message, Modal, Row, Select, Tag, TimePicker, type SelectProps } from 'antd';
+import { Alert, Button, Col, DatePicker, Form, message, Modal, Row, Tag, TimePicker } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import TeachingStaffSelect from '@/components/shared/TeachingStaffSelect';
+import HmoMappingSelect from '@/components/shared/HmoMappingSelect';
 import { combineDateTime } from '@/helper/convertDate';
 import { createLivestream, getHocmaiSectionsForSchedulingLesson, type HocmaiSectionOption } from '@/services/livestreamService';
 import { buildGroupedHmoOptions, summarizeHmoOptions } from '@/helper/hmoOptions';
@@ -61,22 +62,6 @@ const formatSourceScheduleTime = (startTime?: string, endTime?: string) => {
     return start.isSame(end, 'day')
         ? `${start.format('DD/MM/YYYY HH:mm')} – ${end.format('HH:mm')}`
         : `${start.format('DD/MM/YYYY HH:mm')} – ${end.format('DD/MM/YYYY HH:mm')}`;
-};
-
-const renderHmoSelectedTag: SelectProps['tagRender'] = ({ value, closable, onClose }) => {
-    const lessonId = String(value || '').split('::').at(-1) || String(value || '');
-    return (
-        <span className="ant-select-selection-item" style={{ marginInlineEnd: 4 }}>
-            <span className="ant-select-selection-item-content">{lessonId}</span>
-            {closable && (
-                <span
-                    className="ant-select-selection-item-remove"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={onClose}
-                >×</span>
-            )}
-        </span>
-    );
 };
 
 const CopyScheduleModal: React.FC<CopyScheduleModalProps> = ({
@@ -310,8 +295,7 @@ const CopyScheduleModal: React.FC<CopyScheduleModalProps> = ({
                                 ? `${summarizeHmoOptions(hmoOptions)} — mapping cũ đã được chọn sẵn và có thể thay đổi.`
                                 : undefined}
                         >
-                            <Select
-                                mode="multiple"
+                            <HmoMappingSelect
                                 allowClear
                                 showSearch
                                 optionFilterProp="label"
@@ -325,8 +309,6 @@ const CopyScheduleModal: React.FC<CopyScheduleModalProps> = ({
                                         ? 'Chọn Lesson ID HMO'
                                         : 'Bài chưa có Course ID hoặc HMO không có Lesson ID'}
                                 options={buildGroupedHmoOptions(hmoOptions)}
-                                tagRender={renderHmoSelectedTag}
-                                maxTagCount="responsive"
                             />
                         </Form.Item>
                     </Col>

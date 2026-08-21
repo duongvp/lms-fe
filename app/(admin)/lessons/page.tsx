@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button, Input, Modal, notification, Spin, Tag } from "antd";
 import { DownOutlined, InfoCircleOutlined, UpOutlined } from "@ant-design/icons";
@@ -111,10 +111,28 @@ const Page = () => {
     const [importing, setImporting] = useState(false);
     const [importErrors, setImportErrors] = useState<LessonImportError[]>([]);
     const [dragRowKey, setDragRowKey] = useState<React.Key | null>(null);
-    const [showPageInfo, setShowPageInfo] = useState(true);
+    // Khởi tạo thu gọn để không chớp phần hướng dẫn trước khi đọc thiết lập
+    // localStorage. Nếu người dùng chọn hiển thị, effect bên dưới sẽ mở ra.
+    const [showPageInfo, setShowPageInfo] = useState(false);
+    const [pageInfoReady, setPageInfoReady] = useState(false);
 
-    useEffect(() => {
+    // Đồng bộ trước khi browser vẽ frame đầu tiên; đồng thời giữ transition
+    // tắt cho lần đồng bộ này để trạng thái đã lưu không bị animate.
+    useLayoutEffect(() => {
         setShowPageInfo(window.localStorage.getItem('lms:page-info:lessons') !== 'hidden');
+    }, []);
+    useEffect(() => {
+        // Chờ một frame đã được vẽ với transition = none trước khi bật lại
+        // animation. Nếu bật ngay trong effect, React có thể gộp với cập nhật
+        // state phía trên và vẫn tạo hiệu ứng đóng → mở.
+        let secondFrame = 0;
+        const firstFrame = window.requestAnimationFrame(() => {
+            secondFrame = window.requestAnimationFrame(() => setPageInfoReady(true));
+        });
+        return () => {
+            window.cancelAnimationFrame(firstFrame);
+            if (secondFrame) window.cancelAnimationFrame(secondFrame);
+        };
     }, []);
     // Dùng token sẵn có ngay khi quay lại trang để tránh nháy trạng thái chưa xác thực.
     // API vẫn kiểm tra token và sẽ khóa lại nếu token đã hết hạn.
@@ -147,12 +165,9 @@ const Page = () => {
         const program = urlProgram || sharedProgram;
         if (!program) return;
 
-        // Khi đi từ Lịch học/Câu hỏi sang, URL thường chỉ có `program`.
-        // Bổ sung thông tin ngữ cảnh từ danh sách chương trình để thao tác
-        // thêm bài học không bị coi là chưa chọn chương trình.
-        const matchedProgram = lessonPrograms.find(
-            (item) => String(item.subject_code || "").trim() === program
-        );
+        // `program` là điều kiện định danh duy nhất. Không tự thêm `subject`
+        // từ options: lịch legacy có thể lưu "Toán 9" trong khi đề cương là
+        // "Toán", dẫn đến request thứ hai trả về rỗng dù subject_code đúng.
         useAuthStore.getState().setCurrentProgram(program);
         if (!urlProgram) {
             const params = new URLSearchParams(searchParams.toString());
@@ -165,8 +180,8 @@ const Page = () => {
         const page = Math.max(1, Number(searchParams.get("page")) || 1);
         const values = cleanFilterValues({
             subject_code: program,
-            grade: grade || matchedProgram?.grade || undefined,
-            subject: String(searchParams.get("subject") || "").trim() || matchedProgram?.subject_name || undefined,
+            grade: grade || undefined,
+            subject: String(searchParams.get("subject") || "").trim() || undefined,
             learn_number: lesson || undefined,
             keyword,
         });
@@ -175,7 +190,7 @@ const Page = () => {
         setSearchText(keyword);
         setCurrentPage(page);
         setHasSearched(true);
-    }, [lessonPrograms, router, searchParams]);
+    }, [router, searchParams]);
     const hasPermission = useAuthStore((state) => state.hasPermission);
     const can = useAuthStore((state) => state.can);
     const { fieldPolicy } = useAuthStore((state) => state.user);
@@ -274,14 +289,20 @@ const Page = () => {
             return;
         }
 
-        const response: any = lessonsQuery.data;
-        if (!response?.data) return;
-        const list = response.data.data ?? [];
+        const payload: any = lessonsQuery.data?.data;
+        // API hiện trả `{ data: { total, data: [...] } }`, nhưng các phiên bản
+        // backend trước đó từng trả mảng trực tiếp trong `data`. Chuẩn hoá tại
+        // đây để bảng không rỗng khi response hợp lệ nhưng khác một lớp bọc.
+        const list = Array.isArray(payload)
+            ? payload
+            : Array.isArray(payload?.data)
+                ? payload.data
+                : [];
         setData(list.map((item: LessonApiResponse) => ({
             ...item,
             key: String(item.id),
         })));
-        setTotalItems(response.data.total ?? 0);
+        setTotalItems(Number(payload?.total ?? list.length));
     }, [lessonsQuery.data, hasSearched]);
 
     useEffect(() => {
@@ -886,7 +907,7 @@ const Page = () => {
                     style={{
                         display: "grid",
                         gridTemplateRows: showPageInfo ? "1fr" : "0fr",
-                        transition: "grid-template-rows 0.3s ease-in-out",
+                        transition: pageInfoReady ? "grid-template-rows 0.3s ease-in-out" : "none",
                         overflow: "hidden",
                     }}
                 >

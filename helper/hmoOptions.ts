@@ -5,6 +5,11 @@ export const hmoOptionKey = (option: HocmaiSectionOption) => (
     `${option.package_id}::${option.course_id}::${option.lesson_id}`
 );
 
+export const hmoLessonIdFromMappingKey = (value: unknown) => {
+    const text = String(value || "");
+    return text.split("::").at(-1) || text;
+};
+
 const compareIds = (left: string, right: string) => (
     left.localeCompare(right, "vi", { numeric: true })
 );
@@ -42,7 +47,18 @@ export const buildGroupedHmoOptions = (
 };
 
 export const summarizeHmoOptions = (source: HocmaiSectionOption[]) => {
-    const uniqueOptions = new Set(source.map(hmoOptionKey)).size;
+    const uniqueMappings = new Set(source.map(hmoOptionKey)).size;
+    const uniqueLessonIds = new Set(source.map((option) => String(option.lesson_id))).size;
     const pairs = new Set(source.map((option) => `${option.package_id}::${option.course_id}`)).size;
-    return `${uniqueOptions} Lesson ID từ ${pairs} Package/Course`;
+    return uniqueMappings === uniqueLessonIds
+        ? `${uniqueLessonIds} Lesson ID từ ${pairs} Package/Course`
+        : `${uniqueLessonIds} Lesson ID (${uniqueMappings} mapping) từ ${pairs} Package/Course`;
+};
+
+export const summarizeSelectedHmoMappings = (keys: string[] = []) => {
+    const uniqueMappings = Array.from(new Set(keys.map(String).filter(Boolean)));
+    const uniqueLessonIds = new Set(uniqueMappings.map(hmoLessonIdFromMappingKey)).size;
+    return uniqueMappings.length === uniqueLessonIds
+        ? `${uniqueLessonIds} Lesson ID HMO`
+        : `${uniqueLessonIds} Lesson ID HMO (${uniqueMappings.length} mapping Package/Course)`;
 };

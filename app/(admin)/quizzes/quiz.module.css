@@ -27,6 +27,7 @@
     overflow: hidden;
     transition: grid-template-rows .3s ease-in-out;
 }
+.pageInfoBodyInitial { transition: none; }
 .pageInfoBody > div { min-height: 0; }
 .pageInfoBody p {
     margin: 6px 0 0;

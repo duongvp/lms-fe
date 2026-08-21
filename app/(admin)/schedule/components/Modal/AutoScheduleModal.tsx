@@ -1,7 +1,7 @@
 "use client";
 
 import { PlusOutlined, SyncOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Checkbox, DatePicker, Empty, Form, Input, InputNumber, message, Modal, Progress, Select, Space, Spin, Table, TimePicker, Typography, type SelectProps } from "antd";
+import { Alert, Button, Card, Checkbox, DatePicker, Empty, Form, Input, InputNumber, message, Modal, Progress, Select, Space, Spin, Table, TimePicker, Typography } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import {
     commitAutoSchedule,
@@ -14,6 +14,7 @@ import {
 } from "@/services/livestreamService";
 import { useEffect, useRef, useState } from "react";
 import TeachingStaffSelect from "@/components/shared/TeachingStaffSelect";
+import HmoMappingSelect from "@/components/shared/HmoMappingSelect";
 import { buildGroupedHmoOptions, hmoOptionKey, summarizeHmoOptions } from "@/helper/hmoOptions";
 import { useLessonProgramOptions } from "@/hooks/useLessonSubjectOptions";
 
@@ -128,16 +129,6 @@ const previewLessonIds = (row: any) => {
         .map((lessonId: unknown) => String(lessonId).trim())
         .filter(Boolean);
     return Array.from(new Set(lessonIds)).join(", ") || row.auto_schedule?.hmo_section_id || "-";
-};
-
-const renderHmoSelectedTag: SelectProps["tagRender"] = ({ value, closable, onClose }) => {
-    const lessonId = String(value || "").split("::").at(-1) || String(value || "");
-    return (
-        <span className="ant-select-selection-item" style={{ marginInlineEnd: 4 }}>
-            <span className="ant-select-selection-item-content">{lessonId}</span>
-            {closable && <span className="ant-select-selection-item-remove" onMouseDown={(event) => event.preventDefault()} onClick={onClose}>×</span>}
-        </span>
-    );
 };
 
 const buildSessions = (position: number) => [
@@ -540,7 +531,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                             }
                             : {
                                 type: "success",
-                                message: `Đã gán ${assignedCount} Lesson ID HMO theo tên từng lịch, không dùng thứ tự tăng dần.`,
+                                message: `Đã gán Lesson ID HMO theo tên cho ${assignedCount} lịch, không dùng thứ tự tăng dần.`,
                             };
                         return { ...lesson, sessions: nextSessions };
                     }
@@ -1168,8 +1159,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                                                                 </Form.Item>
                                                                                 <Form.Item name={[sessionField.name, "hmo_mapping_keys"]} label="Lesson ID HMO">
                                                                                     <Space direction="vertical" size={2} style={{ width: 520, maxWidth: "100%" }}>
-                                                                                        <Select
-                                                                                            mode="multiple"
+                                                                                        <HmoMappingSelect
                                                                                             allowClear
                                                                                             showSearch
                                                                                             loading={loadingHmoLessonIds.has(lessonId)}
@@ -1180,9 +1170,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                                                                                 ? "Chọn Lesson ID từ HMO"
                                                                                                 : "Bài chưa có Course ID hoặc HMO không có Lesson ID"}
                                                                                             options={buildGroupedHmoOptions(outlineOptions)}
-                                                                                            tagRender={renderHmoSelectedTag}
                                                                                             optionFilterProp="label"
-                                                                                            maxTagCount="responsive"
                                                                                         />
                                                                                         {!!outlineOptions.length && (
                                                                                             <Typography.Text type="secondary" style={{ fontSize: 12 }}>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Key } from "react";
 import { Button, Form, Modal, notification, Drawer, Select, Space, Empty, Dropdown, Spin, Tag, Grid } from "antd";
@@ -97,11 +97,29 @@ const QuizManagementPage = () => {
     const [reorderRows, setReorderRows] = useState<QuizApiResponse[]>([]);
     const [dragRowKey, setDragRowKey] = useState<Key | null>(null);
     const [savingReorder, setSavingReorder] = useState(false);
-    const [showPageInfo, setShowPageInfo] = useState(true);
+    // Khởi tạo thu gọn để không chớp phần hướng dẫn trước khi đọc thiết lập
+    // localStorage. Nếu người dùng chọn hiển thị, effect bên dưới sẽ mở ra.
+    const [showPageInfo, setShowPageInfo] = useState(false);
+    const [pageInfoReady, setPageInfoReady] = useState(false);
     const [openFilterDrawer, setOpenFilterDrawer] = useState(false);
 
-    useEffect(() => {
+    // Đồng bộ trước khi browser vẽ frame đầu tiên; đồng thời giữ transition
+    // tắt cho lần đồng bộ này để trạng thái đã lưu không bị animate.
+    useLayoutEffect(() => {
         setShowPageInfo(window.localStorage.getItem('lms:page-info:quizzes') !== 'hidden');
+    }, []);
+    useEffect(() => {
+        // Chờ một frame đã được vẽ với transition = none trước khi bật lại
+        // animation. Nếu bật ngay trong effect, React có thể gộp với cập nhật
+        // state phía trên và vẫn tạo hiệu ứng đóng → mở.
+        let secondFrame = 0;
+        const firstFrame = window.requestAnimationFrame(() => {
+            secondFrame = window.requestAnimationFrame(() => setPageInfoReady(true));
+        });
+        return () => {
+            window.cancelAnimationFrame(firstFrame);
+            if (secondFrame) window.cancelAnimationFrame(secondFrame);
+        };
     }, []);
 
     const replaceQuizUrl = useCallback((nextFilters: QuizFilterValues, nextKeyword = "", nextPage = 1) => {
@@ -810,7 +828,10 @@ const QuizManagementPage = () => {
                     {showPageInfo ? "Ẩn thông tin" : "Hiện thông tin"}
                 </Button>
             </div>
-            <div className={styles.pageInfoBody} style={{ gridTemplateRows: showPageInfo ? "1fr" : "0fr" }}>
+            <div
+                className={`${styles.pageInfoBody} ${pageInfoReady ? "" : styles.pageInfoBodyInitial}`}
+                style={{ gridTemplateRows: showPageInfo ? "1fr" : "0fr" }}
+            >
                 <div>
                     <p>
                         Tạo và quản lý ngân hàng câu hỏi theo Chương trình và bài học. Dùng bộ lọc để tìm nhanh,

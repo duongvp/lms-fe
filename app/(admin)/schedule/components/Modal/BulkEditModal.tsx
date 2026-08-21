@@ -25,12 +25,17 @@ import {
     Tooltip,
     message,
     Progress,
-    type SelectProps,
 } from 'antd';
 import { EditOutlined, CloseCircleOutlined, PlusOutlined, SyncOutlined, CalendarOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import TeachingStaffSelect from '@/components/shared/TeachingStaffSelect';
-import { buildGroupedHmoOptions, hmoOptionKey, summarizeHmoOptions } from '@/helper/hmoOptions';
+import HmoMappingSelect from '@/components/shared/HmoMappingSelect';
+import {
+    buildGroupedHmoOptions,
+    hmoOptionKey,
+    summarizeHmoOptions,
+    summarizeSelectedHmoMappings,
+} from '@/helper/hmoOptions';
 import {
     getHocmaiSectionsForSchedulingLesson,
     getProgramLessonsForScheduling,
@@ -74,24 +79,6 @@ const FormSection = ({ title, children }: { title: string; children: React.React
         {children}
     </fieldset>
 );
-
-const renderHmoSelectedTag: SelectProps['tagRender'] = ({ value, closable, onClose }) => {
-    const lessonId = String(value || '').split('::').at(-1) || String(value || '');
-    return (
-        <span className="ant-select-selection-item" style={{ marginInlineEnd: 4 }}>
-            <span className="ant-select-selection-item-content">{lessonId}</span>
-            {closable && (
-                <span
-                    className="ant-select-selection-item-remove"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={onClose}
-                >
-                    ×
-                </span>
-            )}
-        </span>
-    );
-};
 
 const mappingKeyFromCalendarMapping = (mapping: any) => (
     `${String(mapping?.package_id || mapping?.package_ids?.[0] || '')}::${String(mapping?.course_id || '')}::${String(mapping?.lesson_id || mapping?.lesson_ids?.[0] || '')}`
@@ -652,11 +639,18 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         .filter(Boolean);
 
     const formatMappings = (mappings: any[] = []) => {
-        const rows = mappings.flatMap((mapping) => {
+        const lessonIds = mappings.flatMap((mapping) => {
             const lessonIds = mapping.lesson_ids ?? (mapping.lesson_id ? [mapping.lesson_id] : []);
-            return lessonIds.map((lessonId: string) => `Lesson ${lessonId}`);
+            return lessonIds.map((lessonId: string) => String(lessonId));
         });
-        return rows.length ? rows.join('; ') : 'Chưa mapping';
+        if (!lessonIds.length) return 'Chưa mapping';
+        const counts = new Map<string, number>();
+        lessonIds.forEach((lessonId) => {
+            counts.set(lessonId, (counts.get(lessonId) || 0) + 1);
+        });
+        return Array.from(counts.entries()).map(([lessonId, count]) => (
+            `Lesson ${lessonId}${count > 1 ? ` (${count} mapping Package/Course)` : ''}`
+        )).join('; ');
     };
 
     const formatScheduleDateTime = (record: any) => (
@@ -669,12 +663,21 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         const optionByKey = new Map(
             (hmoOptionsByLesson[lessonId] || []).map((option) => [hmoOptionKey(option), option])
         );
-        const labels = keys.map((key) => {
+        const grouped = new Map<string, { names: Set<string>; count: number }>();
+        keys.forEach((key) => {
             const option = optionByKey.get(key);
             const externalLessonId = option?.lesson_id || String(key).split('::')[2];
-            return option?.lesson_name
-                ? `Lesson ${externalLessonId}: ${option.lesson_name}`
-                : `Lesson ${externalLessonId}`;
+            const current = grouped.get(String(externalLessonId)) || { names: new Set<string>(), count: 0 };
+            if (option?.lesson_name) current.names.add(option.lesson_name);
+            current.count += 1;
+            grouped.set(String(externalLessonId), current);
+        });
+        const labels = Array.from(grouped.entries()).map(([externalLessonId, detail]) => {
+            const names = Array.from(detail.names);
+            const mappingSummary = detail.count > 1
+                ? ` (${detail.count} mapping Package/Course)`
+                : '';
+            return `Lesson ${externalLessonId}${names.length ? `: ${names.join(' / ')}` : ''}${mappingSummary}`;
         });
         return labels.length ? labels.join('; ') : 'Chưa mapping';
     };
@@ -812,7 +815,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         notes[String(row.id)] = {
                             type: matchedCourseIds.length === courseIds.length ? 'success' : 'warning',
                             message: matchedCourseIds.length === courseIds.length
-                                ? `Đã gán ${nextMappings[String(row.id)].length} Lesson ID HMO cho lịch này theo thứ tự các lịch của cùng bài.`
+                                ? `Đã gán ${summarizeSelectedHmoMappings(nextMappings[String(row.id)])} cho lịch này theo thứ tự các lịch của cùng bài.`
                                 : `Đã gán Lesson ID cho ${matchedCourseIds.length}/${courseIds.length} Course. Chưa gán: ${courseMatchSummary(courseIds.filter((courseId) => !matchedCourseIds.includes(courseId)), matchesByCourse)}.`,
                         };
                     });
@@ -1625,8 +1628,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                                                 : undefined}
                                                                             style={{ marginBottom: 8 }}
                                                                         >
-                                                                            <Select
-                                                                                mode="multiple"
+                                                                            <HmoMappingSelect
                                                                                 allowClear
                                                                                 showSearch
                                                                                 optionFilterProp="label"
@@ -1638,8 +1640,6 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                                                     ? 'Chọn Lesson ID HMO'
                                                                                     : 'Bài chưa có Course ID hoặc HMO không có Lesson ID'}
                                                                                 options={buildGroupedHmoOptions(options)}
-                                                                                tagRender={renderHmoSelectedTag}
-                                                                                maxTagCount="responsive"
                                                                             />
                                                                         </Form.Item>
                                                                         {hmoSyncNotes[context.calendarId] && (
@@ -1865,8 +1865,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                                         : undefined}
                                                                     style={{ marginBottom: 0 }}
                                                                 >
-                                                                    <Select
-                                                                        mode="multiple"
+                                                                    <HmoMappingSelect
                                                                         allowClear
                                                                         showSearch
                                                                         optionFilterProp="label"
@@ -1880,8 +1879,6 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                                                 ? 'Chọn Lesson ID HMO'
                                                                                 : 'Bài chưa có Course ID / HMO không có Lesson ID'}
                                                                         options={buildGroupedHmoOptions(options)}
-                                                                        tagRender={renderHmoSelectedTag}
-                                                                        maxTagCount="responsive"
                                                                         style={{ width: '100%' }}
                                                                     />
                                                                 </Form.Item>
@@ -2083,7 +2080,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             )}
         </Modal>
         </>
-    );
+    );  
 };
 
 export default BulkEditModal;

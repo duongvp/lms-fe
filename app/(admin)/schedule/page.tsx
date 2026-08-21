@@ -1,11 +1,11 @@
 "use client";
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import type { SorterResult } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
-import { notification, Alert, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, Drawer, Empty, FloatButton, Grid, Tooltip, Descriptions, Tabs, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress } from "antd";
+import { notification, Alert, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, TimePicker, Drawer, Empty, FloatButton, Grid, Tooltip, Descriptions, Tabs, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress } from "antd";
 import type { TabsProps } from "antd";
 import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, FilterOutlined, MoreOutlined, FileExcelOutlined, FileTextOutlined } from "@ant-design/icons";
 import FullCalendar from "@fullcalendar/react";
@@ -182,6 +182,11 @@ const HIDDEN_SCHEDULE_LIST_FIELDS = new Set([
 const MOCK_SCHEDULES: ScheduleDataType[] = [];
 const CALENDAR_PLUGINS = [dayGridPlugin, timeGridPlugin, interactionPlugin];
 const parseCalendarWallTime = (value: unknown) => dayjs(String(value || "").replace(/Z$/, ""));
+const LIVE_WEEKDAY_LABELS = ["Chủ Nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
+const liveWeekdayLabel = (value: unknown) => {
+    const date = parseCalendarWallTime(value);
+    return date.isValid() ? LIVE_WEEKDAY_LABELS[date.day()] : "-";
+};
 
 const mapScheduleRows = (rows: any[]): ScheduleDataType[] => rows.map((item: any) => ({
     ...item,
@@ -227,6 +232,16 @@ const cleanFilterValues = (values: ScheduleFilterValues): ScheduleFilterValues =
     const cleaned: ScheduleFilterValues = {};
 
     Object.entries(values).forEach(([key, value]) => {
+        // RangePicker có thể trả về null hoặc mảng [null, null] sau khi người
+        // dùng bấm xoá. Chỉ giữ khoảng ngày khi có đủ hai ngày hợp lệ, để URL
+        // không giữ lại from/to của lần lọc trước.
+        if (key === "date_range") {
+            const [from, to] = Array.isArray(value) ? value : [];
+            if (dayjs.isDayjs(from) && from.isValid() && dayjs.isDayjs(to) && to.isValid()) {
+                cleaned.date_range = [from, to];
+            }
+            return;
+        }
         if (value === undefined || value === null || value === "") return;
         if (Array.isArray(value) && value.length === 0) return;
         (cleaned as any)[key] = typeof value === "string" ? value.trim() : value;
@@ -247,17 +262,23 @@ const buildScheduleApiParams = (values: ScheduleFilterValues) => {
 };
 
 const buildScheduleUrl = (values: ScheduleFilterValues, targetPage = 1) => {
+    // Đây là lớp bảo vệ cuối cùng trước khi ghi URL. Không phụ thuộc việc
+    // caller đã làm sạch form hay chưa, nên thao tác clear ở bất kỳ filter nào
+    // cũng không thể giữ lại params của lần tìm kiếm trước.
+    const cleaned = cleanFilterValues(values);
     const params = new URLSearchParams();
-    const program = String(values.code || "").trim();
-    const keyword = String(values.keyword || "").trim();
-    const teacher = String(values.teacher || "").trim();
+    const program = String(cleaned.code || "").trim();
+    const keyword = String(cleaned.keyword || "").trim();
+    const teacher = String(cleaned.teacher || "").trim();
     if (program) params.set("program", program);
     if (keyword) params.set("q", keyword);
     if (teacher) params.set("teacher", teacher);
-    if (values.system_type?.length) params.set("system_type", values.system_type.join(","));
-    if (values.time_status?.length) params.set("status", values.time_status.join(","));
-    if (values.date_range?.[0]?.isValid()) params.set("from", values.date_range[0].format("YYYY-MM-DD"));
-    if (values.date_range?.[1]?.isValid()) params.set("to", values.date_range[1].format("YYYY-MM-DD"));
+    if (cleaned.system_type?.length) params.set("system_type", cleaned.system_type.join(","));
+    if (cleaned.time_status?.length) params.set("status", cleaned.time_status.join(","));
+    if (cleaned.date_range?.[0]?.isValid() && cleaned.date_range[1]?.isValid()) {
+        params.set("from", cleaned.date_range[0].format("YYYY-MM-DD"));
+        params.set("to", cleaned.date_range[1].format("YYYY-MM-DD"));
+    }
     if (targetPage > 1) params.set("page", String(targetPage));
     return params.size ? `/schedule?${params.toString()}` : "/schedule";
 };
@@ -466,7 +487,16 @@ const ScheduleFilterDrawer = ({
                             ]}
                         />
                     </Form.Item>
-                    <Form.Item name="date_range" label="Khoảng ngày">
+                    <Form.Item
+                        name="date_range"
+                        label="Khoảng ngày"
+                        normalize={(value) => {
+                            const [from, to] = Array.isArray(value) ? value : [];
+                            return dayjs.isDayjs(from) && from.isValid() && dayjs.isDayjs(to) && to.isValid()
+                                ? [from, to]
+                                : undefined;
+                        }}
+                    >
                         <RangePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
                     </Form.Item>
                 </Form>
@@ -492,9 +522,10 @@ const Page = () => {
     const [api, contextHolder] = notification.useNotification({ duration: 2.5 });
     const router = useRouter();
     const searchParams = useSearchParams();
-    // Bảo vệ lựa chọn chương trình vừa gửi khỏi callback debounce/URL cũ.
+    // router.replace là bất đồng bộ. Lưu cả URL đích (không chỉ program) để
+    // searchParams cũ không ghi đè những điều kiện lọc người dùng vừa chọn.
     const filterRevisionRef = useRef(0);
-    const requestedProgramRef = useRef<string | null>(null);
+    const pendingScheduleUrlRef = useRef<string | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [openImportModal, setOpenImportModal] = useState(false);
     const [importing, setImporting] = useState(false);
@@ -505,35 +536,58 @@ const Page = () => {
     const [selectedRecord, setSelectedRecord] = useState<ScheduleDataType | null>(null);
     const [copySource, setCopySource] = useState<ScheduleDataType | null>(null);
     const [isEditMode, setIsEditMode] = useState(false);
-    const [showPageInfo, setShowPageInfo] = useState(true);
+    // Khởi tạo thu gọn để không chớp phần hướng dẫn trước khi đọc thiết lập
+    // localStorage. Nếu người dùng chọn hiển thị, effect bên dưới sẽ mở ra.
+    const [showPageInfo, setShowPageInfo] = useState(false);
+    const [pageInfoReady, setPageInfoReady] = useState(false);
     const [syncingTeachingUsers, setSyncingTeachingUsers] = useState(false);
 
-    useEffect(() => {
+    // Đồng bộ trước khi browser vẽ frame đầu tiên; đồng thời giữ transition
+    // tắt cho lần đồng bộ này để trạng thái đã lưu không bị animate.
+    useLayoutEffect(() => {
         setShowPageInfo(window.localStorage.getItem('lms:page-info:schedule') !== 'hidden');
+    }, []);
+    useEffect(() => {
+        // Chờ một frame đã được vẽ với transition = none trước khi bật lại
+        // animation. Nếu bật ngay trong effect, React có thể gộp với cập nhật
+        // state phía trên và vẫn tạo hiệu ứng đóng → mở.
+        let secondFrame = 0;
+        const firstFrame = window.requestAnimationFrame(() => {
+            secondFrame = window.requestAnimationFrame(() => setPageInfoReady(true));
+        });
+        return () => {
+            window.cancelAnimationFrame(firstFrame);
+            if (secondFrame) window.cancelAnimationFrame(secondFrame);
+        };
     }, []);
     const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
     const [syncProgress, setSyncProgress] = useState<{ current: number; total: number; created: number; failed: number; errors: Array<{ calendar_id: number; message: string }> } | null>(null);
 
     const replaceScheduleUrl = useCallback((values: ScheduleFilterValues, targetPage = 1) => {
         const program = String(values.code || "").trim();
-        requestedProgramRef.current = program;
+        const nextUrl = buildScheduleUrl(values, targetPage);
+        pendingScheduleUrlRef.current = nextUrl;
         if (program) useAuthStore.getState().setCurrentProgram(program);
         // Admin bỏ chọn chương trình là thao tác chủ động chuyển sang ngữ cảnh
         // liên chương trình; cũng phải xoá shared context để trang Câu hỏi và
         // các trang khác không nhận lại mã chương trình cũ.
         else if (isAdmin) useAuthStore.getState().setCurrentProgram(null);
-        router.replace(buildScheduleUrl(values, targetPage), { scroll: false });
+        router.replace(nextUrl, { scroll: false });
     }, [isAdmin, router]);
 
     useEffect(() => {
         const urlProgram = String(searchParams.get("program") || "").trim();
-        // router.replace chạy bất đồng bộ. Trong lúc chờ URL mới, bỏ qua một
-        // URL cũ để nó không ghi đè program người dùng vừa chọn.
+        const currentUrl = searchParams.size
+            ? `/schedule?${searchParams.toString()}`
+            : "/schedule";
+        // Trong lúc Next.js chưa áp dụng router.replace mới nhất, hook vẫn có
+        // thể trả về params của URL trước đó. Không đồng bộ URL cũ ngược lại
+        // vào state form, vì như vậy các filter vừa chọn sẽ bị mất.
         if (
-            requestedProgramRef.current !== null
-            && urlProgram !== requestedProgramRef.current
+            pendingScheduleUrlRef.current !== null
+            && currentUrl !== pendingScheduleUrlRef.current
         ) return;
-        requestedProgramRef.current = null;
+        pendingScheduleUrlRef.current = null;
         const sharedProgram = String(useAuthStore.getState().currentProgram || "").trim();
         // Admin có thể chủ động bỏ chọn chương trình để lọc liên chương trình.
         // Không fallback về sharedProgram ở trường hợp này, nếu không mã cũ sẽ
@@ -554,7 +608,9 @@ const Page = () => {
             if (!urlProgram) {
                 const params = new URLSearchParams(searchParams.toString());
                 params.set("program", program);
-                router.replace(`/schedule?${params.toString()}`, { scroll: false });
+                const nextUrl = `/schedule?${params.toString()}`;
+                pendingScheduleUrlRef.current = nextUrl;
+                router.replace(nextUrl, { scroll: false });
             }
         }
         const from = dayjs(searchParams.get("from"));
@@ -1196,6 +1252,9 @@ const Page = () => {
         (item) =>
             item.field.fieldCode !== "id"
             && item.field.fieldCode !== "lesson_document"
+            // Hai thời điểm này được gộp thành ba cột đọc nhanh: Thứ, Ngày live
+            // và Khung giờ. Vẫn giữ nguyên dữ liệu start_time/end_time khi lưu.
+            && !["start_time", "end_time"].includes(item.field.fieldCode)
             && !HIDDEN_SCHEDULE_LIST_FIELDS.has(item.field.fieldCode)
             && (item.visible || item.editable)
     );
@@ -1366,10 +1425,109 @@ const Page = () => {
         };
     });
 
+    const liveTimeColumns: ColumnsType<ScheduleDataType> = [
+        {
+            title: "Thứ",
+            key: "live_weekday",
+            dataIndex: "start_time",
+            width: 92,
+            fixed: "left",
+            render: (value: unknown) => liveWeekdayLabel(value),
+        },
+        {
+            title: "Ngày live",
+            dataIndex: "start_time",
+            key: "live_date",
+            width: 118,
+            fixed: "left",
+            sorter: { multiple: visibleFieldPermissions.length + 2 },
+            sortOrder: sortState.find((item) => item.field === "start_time")?.order,
+            render: (value: unknown, record: ScheduleDataType) => {
+                if (isEditing(record) && editableFieldCodes.includes("start_time")) {
+                    return (
+                        <Form.Item noStyle shouldUpdate>
+                            {() => {
+                                const start = form.getFieldValue("start_time") as Dayjs | null;
+                                const end = form.getFieldValue("end_time") as Dayjs | null;
+                                return (
+                                    <DatePicker
+                                        size="small"
+                                        value={start}
+                                        format="DD/MM/YYYY"
+                                        placeholder="DD/MM/YYYY"
+                                        style={{ width: "100%" }}
+                                        onChange={(date) => {
+                                            if (!date) return;
+                                            const keepTime = (current: Dayjs | null) => current
+                                                ? date.hour(current.hour()).minute(current.minute()).second(0).millisecond(0)
+                                                : date.startOf("day");
+                                            form.setFieldsValue({
+                                                start_time: keepTime(start),
+                                                end_time: keepTime(end),
+                                            });
+                                        }}
+                                    />
+                                );
+                            }}
+                        </Form.Item>
+                    );
+                }
+                const date = parseCalendarWallTime(value);
+                return date.isValid() ? date.format("DD/MM/YYYY") : "-";
+            },
+        },
+        {
+            title: "Khung giờ",
+            key: "live_time_range",
+            width: 132,
+            fixed: "left",
+            render: (_: unknown, record: ScheduleDataType) => {
+                const canEditStart = editableFieldCodes.includes("start_time");
+                const canEditEnd = editableFieldCodes.includes("end_time");
+                if (isEditing(record) && (canEditStart || canEditEnd)) {
+                    return (
+                        <Space size={4} wrap={false}>
+                            {canEditStart ? (
+                                <Form.Item name="start_time" noStyle rules={[{ required: true, message: "Nhập thời gian bắt đầu" }]}>
+                                    <TimePicker size="small" format="HH:mm" style={{ width: 68 }} />
+                                </Form.Item>
+                            ) : null}
+                            <span>-</span>
+                            {canEditEnd ? (
+                                <Form.Item
+                                    name="end_time"
+                                    noStyle
+                                    dependencies={["start_time"]}
+                                    rules={[
+                                        { required: true, message: "Nhập thời gian kết thúc" },
+                                        {
+                                            validator: (_rule: unknown, value: Dayjs | null) => {
+                                                const startTime = form.getFieldValue("start_time") as Dayjs | null;
+                                                if (!value || !startTime || value.isAfter(startTime)) return Promise.resolve();
+                                                return Promise.reject(new Error("Giờ kết thúc phải sau giờ bắt đầu"));
+                                            },
+                                        },
+                                    ]}
+                                >
+                                    <TimePicker size="small" format="HH:mm" style={{ width: 68 }} />
+                                </Form.Item>
+                            ) : null}
+                        </Space>
+                    );
+                }
+                const start = parseCalendarWallTime(record.start_time);
+                const end = parseCalendarWallTime(record.end_time);
+                if (!start.isValid() && !end.isValid()) return "-";
+                return `${start.isValid() ? start.format("HH:mm") : "--:--"} - ${end.isValid() ? end.format("HH:mm") : "--:--"}`;
+            },
+        },
+    ];
+    columns.unshift(...liveTimeColumns);
+
     // Khi admin xem lịch của nhiều chương trình, mã chương trình là ngữ cảnh
     // bắt buộc để tránh cập nhật nhầm lịch giữa các chương trình.
     if (isAdmin) {
-        columns.unshift({
+        columns.splice(liveTimeColumns.length, 0, {
             title: "Chương trình",
             dataIndex: "code",
             key: "program_code",
@@ -1613,7 +1771,7 @@ const Page = () => {
                         style={{
                             display: "grid",
                             gridTemplateRows: showPageInfo ? "1fr" : "0fr",
-                            transition: "grid-template-rows 0.3s ease-in-out",
+                            transition: pageInfoReady ? "grid-template-rows 0.3s ease-in-out" : "none",
                             overflow: "hidden",
                         }}
                     >
