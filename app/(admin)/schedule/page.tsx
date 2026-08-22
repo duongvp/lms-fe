@@ -5,9 +5,8 @@ import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import type { SorterResult } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
-import { notification, Alert, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, TimePicker, Drawer, Empty, FloatButton, Grid, Tooltip, Descriptions, Tabs, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress } from "antd";
-import type { TabsProps } from "antd";
-import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, FilterOutlined, MoreOutlined, FileExcelOutlined, FileTextOutlined } from "@ant-design/icons";
+import { notification, Alert, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, TimePicker, Drawer, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress } from "antd";
+import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, FilterOutlined, MoreOutlined, FileExcelOutlined, FileTextOutlined, ApartmentOutlined } from "@ant-design/icons";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -16,6 +15,7 @@ import viLocale from "@fullcalendar/core/locales/vi";
 import ScheduleModal from "./components/Modal/ScheduleModal";
 import CopyScheduleModal from "./components/Modal/CopyScheduleModal";
 import ScheduleImportModal, { type ScheduleImportError } from "./components/Modal/ScheduleImportModal";
+import ClassroomAssignmentModal from "./components/Modal/ClassroomAssignmentModal";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
 import {
@@ -316,53 +316,52 @@ const canModifySchedule = (record: ScheduleDataType) => {
 };
 
 const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
-    const rows = [
-        { label: "Chương trình", value: record.code || "-" },
-        { label: "Tên lớp", value: record.class_name || "-" },
-        { label: "Bài học", value: record.lesson_name || "-" },
-        { label: "Bài học", value: record.learn_number ?? "-" },
-        { label: "Môn học", value: record.subject || "-" },
-        { label: "Giáo viên", value: record.teacher || "-" },
-        {
-            label: "Bắt đầu",
-            value: record.start_time ? dayjs(record.start_time).format("DD/MM/YYYY HH:mm") : "-",
-        },
-        {
-            label: "Kết thúc",
-            value: record.end_time ? dayjs(record.end_time).format("DD/MM/YYYY HH:mm") : "-",
-        },
-        { label: "Phòng/Kênh học", value: record.room || "-" },
-        { label: "Hệ thống", value: record.system_type || "-" },
-        { label: "Trạng thái", value: Number(record.lesson_status) === 1 ? "Nghỉ học" : lessonStatusText(record.start_time, record.end_time) },
-        ...(Number(record.lesson_status) === 1
-            ? [{ label: "Lý do nghỉ", value: record.cancel_reason || "Chưa có lý do" }]
-            : []),
-        { label: "Link học", value: record.lesson_link || "-" },
-    ];
+    const isCancelled = Number(record.lesson_status) === 1;
+    const status = isCancelled ? "Nghỉ học" : lessonStatusText(record.start_time, record.end_time);
+    const statusColor = isCancelled ? "error" : status === "Đã kết thúc" ? "success" : status === "Đang diễn ra" ? "warning" : "processing";
+    const date = record.start_time ? dayjs(record.start_time).format("DD/MM/YYYY") : "-";
+    const time = record.start_time && record.end_time
+        ? `${dayjs(record.start_time).format("HH:mm")} – ${dayjs(record.end_time).format("HH:mm")}`
+        : "Chưa có thời gian";
+    const DetailItem = ({ label, children }: { label: string; children: React.ReactNode }) => (
+        <div style={{ minWidth: 0 }}>
+            <Typography.Text type="secondary" style={{ display: "block", fontSize: 12, marginBottom: 3 }}>
+                {label}
+            </Typography.Text>
+            <div style={{ overflowWrap: "anywhere", lineHeight: 1.5 }}>{children || "-"}</div>
+        </div>
+    );
 
-    const items: TabsProps["items"] = [
-        {
-            key: "info",
-            label: "Thông tin chi tiết",
-            children: (
-                <div style={{ padding: "8px 24px 24px", backgroundColor: "#fafafa" }}>
-                    <Descriptions
-                        bordered
-                        size="small"
-                        column={{ xxl: 3, xl: 3, lg: 2, md: 2, sm: 1, xs: 1 }}
-                    >
-                        {rows.map((item) => (
-                            <Descriptions.Item key={item.label} label={item.label}>
-                                {item.value}
-                            </Descriptions.Item>
-                        ))}
-                    </Descriptions>
-                </div>
-            ),
-        },
-    ];
+    return (
+        <div style={{ padding: "4px 8px 8px" }}>
+            <div style={{ padding: "4px 0 18px", borderBottom: "1px solid #f0f0f0", marginBottom: 18 }}>
+                <Space direction="vertical" size={6} style={{ width: "100%" }}>
+                    <Typography.Text type="secondary">Bài {record.learn_number ?? "-"}</Typography.Text>
+                    <Typography.Title level={4} style={{ margin: 0, lineHeight: 1.4 }}>
+                        {record.lesson_name || "Chưa có tên bài học"}
+                    </Typography.Title>
+                    <Space size={[8, 8]} wrap>
+                        <Tag color="blue">{date} · {time}</Tag>
+                        <Tag color={statusColor}>{status}</Tag>
+                    </Space>
+                </Space>
+            </div>
 
-    return <Tabs defaultActiveKey="info" items={items} />;
+            <Row gutter={[32, 18]}>
+                <Col xs={24} sm={12}><DetailItem label="Chương trình"><Tag color="blue">{record.code || "-"}</Tag></DetailItem></Col>
+                <Col xs={24} sm={12}><DetailItem label="Hệ thống">{record.system_type || "-"}</DetailItem></Col>
+                <Col xs={24} sm={12}><DetailItem label="Lớp học">{record.class_name || "-"}</DetailItem></Col>
+                <Col xs={24} sm={12}><DetailItem label="Môn học">{record.subject || "-"}</DetailItem></Col>
+                <Col xs={24} sm={12}><DetailItem label="Giáo viên">{record.teacher || "-"}</DetailItem></Col>
+                <Col xs={24} sm={12}><DetailItem label="Trợ giảng">{record.assistant_teacher || "-"}</DetailItem></Col>
+                <Col xs={24} sm={12}><DetailItem label="Phòng/Kênh học">{record.room || "-"}</DetailItem></Col>
+                <Col xs={24} sm={12}><DetailItem label="Link học">
+                    {record.lesson_link ? <Typography.Link href={record.lesson_link} target="_blank" rel="noreferrer">Mở liên kết buổi học</Typography.Link> : "-"}
+                </DetailItem></Col>
+                {isCancelled && <Col span={24}><DetailItem label="Lý do nghỉ">{record.cancel_reason || "Chưa có lý do"}</DetailItem></Col>}
+            </Row>
+        </div>
+    );
 };
 
 // ✅ Hook debounce
@@ -505,6 +504,139 @@ const ScheduleFilterDrawer = ({
     );
 };
 
+const ScheduleInlineFilters = ({
+    value,
+    loading,
+    onSearch,
+    onReset,
+    programOptions,
+    loadingPrograms,
+    allowFilterWithoutProgram,
+}: {
+    value: ScheduleFilterValues;
+    loading: boolean;
+    onSearch: (values: ScheduleFilterValues) => void;
+    onReset: () => void;
+    programOptions: Array<{ value: string; label: string }>;
+    loadingPrograms: boolean;
+    allowFilterWithoutProgram: boolean;
+}) => {
+    const [filterForm] = Form.useForm();
+
+    useEffect(() => {
+        filterForm.resetFields();
+        filterForm.setFieldsValue(value);
+    }, [filterForm, value]);
+
+    return (
+        <div
+            className="schedule-inline-filters"
+            style={{
+                marginBottom: 14,
+                padding: "12px 16px 4px",
+                border: "1px solid #e8e8e8",
+                borderRadius: 8,
+                background: "#fafafa",
+            }}
+        >
+            <Form
+                form={filterForm}
+                layout="vertical"
+                onFinish={(values) => onSearch(cleanFilterValues(values))}
+            >
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", gap: "0 12px" }}>
+                    <Form.Item
+                        name="code"
+                        label="Chương trình"
+                        style={{ flex: "1 1 250px", minWidth: 220, marginBottom: 10 }}
+                        rules={allowFilterWithoutProgram ? [] : [{ required: true, message: "Chọn Chương trình" }]}
+                    >
+                        <Select
+                            allowClear={allowFilterWithoutProgram}
+                            showSearch
+                            loading={loadingPrograms}
+                            options={programOptions}
+                            optionFilterProp="label"
+                            placeholder={allowFilterWithoutProgram ? "Tất cả Chương trình" : "Chọn Chương trình"}
+                            notFoundContent={loadingPrograms ? "Đang tải..." : "Không có Chương trình"}
+                        />
+                    </Form.Item>
+                    <Form.Item name="teacher" label="Giáo viên" style={{ flex: "1 1 210px", minWidth: 190, marginBottom: 10 }}>
+                        <TeachingStaffSelect
+                            teacherType={1}
+                            allowQuickCreate={false}
+                            allowClear
+                            showSearch
+                            placeholder="Tất cả giáo viên"
+                        />
+                    </Form.Item>
+                    <Form.Item
+                        name="date_range"
+                        label="Khoảng ngày"
+                        style={{ flex: "1 1 235px", minWidth: 220, marginBottom: 10 }}
+                        normalize={(range) => {
+                            const [from, to] = Array.isArray(range) ? range : [];
+                            return dayjs.isDayjs(from) && from.isValid() && dayjs.isDayjs(to) && to.isValid()
+                                ? [from, to]
+                                : undefined;
+                        }}
+                    >
+                        <RangePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
+                    </Form.Item>
+                    <Form.Item name="time_status" label="Trạng thái" style={{ flex: "1 1 175px", minWidth: 165, marginBottom: 10 }}>
+                        <Select
+                            mode="multiple"
+                            maxTagCount="responsive"
+                            allowClear
+                            placeholder="Tất cả trạng thái"
+                            options={[
+                                { value: "upcoming", label: "Chưa bắt đầu" },
+                                { value: "ongoing", label: "Đang diễn ra" },
+                                { value: "completed", label: "Đã kết thúc" },
+                            ]}
+                        />
+                    </Form.Item>
+                    <Form.Item name="system_type" label="Hệ thống" style={{ flex: "1 1 145px", minWidth: 140, marginBottom: 10 }}>
+                        <Select
+                            mode="multiple"
+                            maxTagCount="responsive"
+                            allowClear
+                            placeholder="Tất cả"
+                            options={[
+                                { value: "topclass", label: "Topclass" },
+                                { value: "topuni", label: "Topuni" },
+                            ]}
+                        />
+                    </Form.Item>
+                    <Form.Item label=" " colon={false} style={{ flex: "0 0 auto", marginBottom: 10 }}>
+                        <Space>
+                            <Button onClick={() => {
+                                filterForm.resetFields();
+                                onReset();
+                            }}>
+                                Xóa lọc
+                            </Button>
+                            <Button type="primary" htmlType="submit" icon={<FilterOutlined />} loading={loading}>
+                                Lọc
+                            </Button>
+                        </Space>
+                    </Form.Item>
+                </div>
+            </Form>
+            <style>{`
+                .schedule-inline-filters .ant-form-item-explain,
+                .schedule-inline-filters .ant-form-item-extra {
+                    min-height: 22px;
+                }
+                .schedule-inline-filters .ant-form-item-explain:empty,
+                .schedule-inline-filters .ant-form-item-extra:empty {
+                    min-height: 0;
+                }
+            `}</style>
+        </div>
+    );
+};
+
 const Page = () => {
     const pageScrollRef = useRef<HTMLDivElement>(null);
     const [showBackToTop, setShowBackToTop] = useState(false);
@@ -534,6 +666,9 @@ const Page = () => {
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
     const [selectedRecord, setSelectedRecord] = useState<ScheduleDataType | null>(null);
+    // Bản nháp được vẽ trực tiếp trên lịch khi người dùng kéo/click để tạo lịch.
+    // Nó chỉ tồn tại trong lúc modal tạo mới đang mở, không phải dữ liệu đã lưu.
+    const [calendarDraftPreview, setCalendarDraftPreview] = useState<ScheduleDataType | null>(null);
     const [copySource, setCopySource] = useState<ScheduleDataType | null>(null);
     const [isEditMode, setIsEditMode] = useState(false);
     // Khởi tạo thu gọn để không chớp phần hướng dẫn trước khi đọc thiết lập
@@ -541,6 +676,7 @@ const Page = () => {
     const [showPageInfo, setShowPageInfo] = useState(false);
     const [pageInfoReady, setPageInfoReady] = useState(false);
     const [syncingTeachingUsers, setSyncingTeachingUsers] = useState(false);
+    const [classroomAssignmentCalendarId, setClassroomAssignmentCalendarId] = useState<string | number | null>(null);
 
     // Đồng bộ trước khi browser vẽ frame đầu tiên; đồng thời giữ transition
     // tắt cho lần đồng bộ này để trạng thái đã lưu không bị animate.
@@ -561,7 +697,7 @@ const Page = () => {
         };
     }, []);
     const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
-    const [syncProgress, setSyncProgress] = useState<{ current: number; total: number; created: number; failed: number; errors: Array<{ calendar_id: number; message: string }> } | null>(null);
+    const [syncProgress, setSyncProgress] = useState<{ current: number; total: number; created: number; updated: number; failed: number; errors: Array<{ calendar_id: number; message: string }> } | null>(null);
 
     const replaceScheduleUrl = useCallback((values: ScheduleFilterValues, targetPage = 1) => {
         const program = String(values.code || "").trim();
@@ -793,7 +929,10 @@ const Page = () => {
         return calendarData.filter((item) => item.start_time).map((item) => {
             const start = dayjs(item.start_time);
             const end = item.end_time ? dayjs(item.end_time) : start.add(1, "hour");
-            const styleType = Number(item.lesson_status) === 1
+            const isDraft = item.key === "calendar-create-draft";
+            const styleType = isDraft
+                ? "draft"
+                : Number(item.lesson_status) === 1
                 ? "cancelled"
                 : now.isAfter(end)
                     ? "completed"
@@ -801,11 +940,16 @@ const Page = () => {
                         ? "ongoing"
                         : "upcoming";
             return {
-                id: String(item.key),
-                title: item.lesson_name || `Bài ${item.learn_number}`,
+                // FullCalendar giữ event theo id. Gắn nội dung bản nháp vào id
+                // để khi người dùng chọn bài/giáo viên, event preview được render
+                // mới ngay thay vì giữ title của lần kéo ban đầu.
+                id: isDraft
+                    ? `${item.key}-${item.start_time}-${item.end_time}-${item.lesson_name || ""}-${item.teacher || ""}`
+                    : String(item.key),
+                title: item.lesson_name || (isDraft ? "Lịch mới" : `Bài ${item.learn_number}`),
                 start: start.toDate(),
                 end: end.toDate(),
-                extendedProps: { record: item, styleType },
+                extendedProps: { record: item, styleType, isDraft },
             };
         });
     }, [calendarData]);
@@ -822,7 +966,11 @@ const Page = () => {
 
     const renderCalendarEvent = useCallback((eventInfo: any) => {
         const styleType = eventInfo.event.extendedProps.styleType;
-        const visual = styleType === "cancelled"
+        const isDraft = Boolean(eventInfo.event.extendedProps.isDraft);
+        const record = eventInfo.event.extendedProps.record as ScheduleDataType;
+        const visual = styleType === "draft"
+            ? { background: "#e6f4ff", color: "#0958d9", border: "3px solid #1677ff" }
+            : styleType === "cancelled"
             ? { background: "#fff1f0", color: "#cf1322", border: "3px solid #ff4d4f" }
             : styleType === "completed"
                 ? { background: "#f6ffed", color: "#389e0d", border: "3px solid #52c41a" }
@@ -850,11 +998,17 @@ const Page = () => {
                 <div style={{ fontSize: 12, whiteSpace: "normal", lineHeight: 1.3, marginTop: 2, fontWeight: 500 }}>
                     {eventInfo.event.title}
                 </div>
+                {isDraft && record.teacher && (
+                    <div style={{ fontSize: 11, whiteSpace: "normal", lineHeight: 1.25, marginTop: 2, opacity: 0.85 }}>
+                        {record.teacher}
+                    </div>
+                )}
             </div>
         );
     }, []);
 
     const handleCalendarEventClick = useCallback((info: any) => {
+        if (info.event.extendedProps.isDraft) return;
         setCalendarDetail(info.event.extendedProps.record);
     }, []);
 
@@ -930,13 +1084,17 @@ const Page = () => {
         setOpenFilterDrawer(false);
     };
 
-    const handleAddBtn = () => {
+    const openCreateScheduleModal = (calendarDraft?: {
+        date: Dayjs;
+        start_time: Dayjs;
+        end_time: Dayjs;
+    }) => {
         if (!canCreateSchedule) {
             api.warning({
                 message: "Không có quyền",
                 description: "Vai trò hiện tại không có quyền thêm lịch học.",
             });
-            return;
+            return false;
         }
 
         if (!canEditAnyField(moduleFields, fieldPolicy, SCHEDULE_MODULE_CODE)) {
@@ -944,7 +1102,7 @@ const Page = () => {
                 message: "Không có quyền",
                 description: "Vai trò hiện tại không có quyền chỉnh sửa/thêm dữ liệu.",
             });
-            return;
+            return false;
         }
         if (!submittedFilterValues.code) {
             api.warning({
@@ -952,10 +1110,90 @@ const Page = () => {
                 description: "Chọn Chương trình trong bộ lọc trước khi thêm lịch học.",
             });
             setOpenFilterDrawer(true);
+            return false;
+        }
+        const draft = calendarDraft ? {
+            key: "calendar-create-draft",
+            date: calendarDraft.date.format("YYYY-MM-DD"),
+            start_time: calendarDraft.start_time.format("YYYY-MM-DDTHH:mm:ss"),
+            end_time: calendarDraft.end_time.format("YYYY-MM-DDTHH:mm:ss"),
+            lesson_name: "Lịch mới",
+        } : null;
+        setSelectedRecord(draft);
+        setCalendarDraftPreview(draft);
+        setIsModalOpen(true);
+        setIsEditMode(false);
+        return true;
+    };
+
+    const handleCalendarDraftChange = useCallback((draft: {
+        date?: Dayjs;
+        start_time?: Dayjs;
+        end_time?: Dayjs;
+        lesson_name?: string;
+        teacher?: string;
+    }) => {
+        setCalendarDraftPreview((previous) => {
+            if (!previous) return previous;
+            return {
+                ...previous,
+                ...(draft.date ? { date: draft.date.format("YYYY-MM-DD") } : {}),
+                ...(draft.start_time ? { start_time: draft.start_time.format("YYYY-MM-DDTHH:mm:ss") } : {}),
+                ...(draft.end_time ? { end_time: draft.end_time.format("YYYY-MM-DDTHH:mm:ss") } : {}),
+                lesson_name: String(draft.lesson_name || "Lịch mới").trim() || "Lịch mới",
+                teacher: String(draft.teacher || "").trim(),
+            };
+        });
+    }, []);
+
+    const handleAddBtn = () => {
+        openCreateScheduleModal();
+    };
+
+    const handleCalendarDateClick = (info: any) => {
+        const clicked = dayjs(info.date);
+        if (clicked.isBefore(dayjs().startOf("day"))) {
+            api.warning({ message: "Không thể tạo lịch học trong ngày đã qua" });
             return;
         }
-        setIsModalOpen(true);
-        setIsEditMode(false)
+
+        const start = info.allDay
+            ? clicked.startOf("day").hour(19)
+            : clicked.startOf("minute");
+        const proposedEnd = start.add(90, "minute");
+        const end = proposedEnd.isSame(start, "day")
+            ? proposedEnd
+            : start.endOf("day").second(0).millisecond(0);
+        const opened = openCreateScheduleModal({
+            date: start.startOf("day"),
+            start_time: start,
+            end_time: end,
+        });
+        if (!opened) info.view?.calendar?.unselect();
+    };
+
+    const handleCalendarSelect = (info: any) => {
+        const start = dayjs(info.start).startOf("minute");
+        const end = dayjs(info.end).startOf("minute");
+
+        if (info.allDay || !start.isSame(end, "day")) {
+            info.view?.calendar?.unselect();
+            api.warning({
+                message: "Vui lòng kéo chọn khung giờ trong cùng một ngày",
+            });
+            return;
+        }
+        if (start.isBefore(dayjs().startOf("day"))) {
+            info.view?.calendar?.unselect();
+            api.warning({ message: "Không thể tạo lịch học trong ngày đã qua" });
+            return;
+        }
+        const opened = openCreateScheduleModal({
+            date: start.startOf("day"),
+            start_time: start,
+            end_time: end,
+        });
+        if (!opened) info.view?.calendar?.unselect();
     };
 
     // ... (giữ nguyên các hàm xử lý danh sách, import, cập nhật, chỉnh sửa và xóa lịch)
@@ -990,15 +1228,16 @@ const Page = () => {
 
         Modal.confirm({
             title: "Quét user giáo viên và trợ giảng",
-            content: `Hệ thống sẽ quét ${targetIds.length} lịch đã chọn và chỉ thêm các user nhân sự còn thiếu. Lịch học và user đã có sẽ không bị thay đổi.`,
+            content: `Hệ thống sẽ quét ${targetIds.length} lịch đã chọn, thêm user nhân sự còn thiếu và bổ sung student_hmid hoặc sửa tên vai trò cho user hiện có khi cần. Lịch học không bị thay đổi.`,
             okText: "Bắt đầu quét",
             cancelText: "Hủy",
             onOk: async () => {
                 setSyncingTeachingUsers(true);
-                setSyncProgress({ current: 0, total: targetIds.length, created: 0, failed: 0, errors: [] });
+                setSyncProgress({ current: 0, total: targetIds.length, created: 0, updated: 0, failed: 0, errors: [] });
                 setIsSyncModalOpen(true);
                 try {
                     let totalCreated = 0;
+                    let totalUpdated = 0;
                     let totalFailed = 0;
                     let totalScanned = 0;
                     const allErrors: Array<{ calendar_id: number; message: string }> = [];
@@ -1009,6 +1248,7 @@ const Page = () => {
                         const result = response?.data ?? response ?? {};
                         totalScanned += Number(result.scanned ?? 0);
                         totalCreated += Number(result.created ?? 0);
+                        totalUpdated += Number(result.updated ?? 0);
                         totalFailed += Number(result.failed ?? 0);
                         if (Array.isArray(result.errors)) {
                             allErrors.push(...result.errors);
@@ -1018,13 +1258,14 @@ const Page = () => {
                             current: Math.min(i + chunkSize, targetIds.length),
                             total: targetIds.length,
                             created: totalCreated,
+                            updated: totalUpdated,
                             failed: totalFailed,
                             errors: allErrors
                         });
                     }
                     api.success({
                         message: "Đã quét user nhân sự",
-                        description: `Đã quét ${totalScanned} lịch, tạo ${totalCreated} user mới${totalFailed ? `; ${totalFailed} lịch chưa xử lý được` : ''}.`,
+                        description: `Đã quét ${totalScanned} lịch, tạo ${totalCreated} user mới và cập nhật ${totalUpdated} user${totalFailed ? `; ${totalFailed} lịch chưa xử lý được` : ''}.`,
                         duration: 6,
                     });
                 } catch (error: any) {
@@ -1037,6 +1278,17 @@ const Page = () => {
                 }
             },
         });
+    };
+
+    const handleOpenClassroomAssignment = () => {
+        if (selectedRowKeys.length !== 1) {
+            api.warning({
+                message: selectedRowKeys.length ? "Đang chọn nhiều lịch" : "Chưa chọn lịch",
+                description: "Vui lòng chọn đúng 1 lịch học để xem trước và chia lớp học sinh.",
+            });
+            return;
+        }
+        setClassroomAssignmentCalendarId(String(selectedRowKeys[0]));
     };
 
     const handleDownloadImportTemplate = async (format: "csv" | "xlsx") => {
@@ -1740,7 +1992,7 @@ const Page = () => {
                 />
             )}
             {viewMode === "table" && <>
-                <div
+                {/* <div
                     style={{
                         border: "1px solid #d6e4ff",
                         background: "#f6fbff",
@@ -1789,7 +2041,7 @@ const Page = () => {
                             </div>
                         </div>
                     </div>
-                </div>
+                </div> */}
 
                 <SearchAndActionsBar
                     onSearch={handleSearch}
@@ -1801,6 +2053,7 @@ const Page = () => {
                         setOpenImportModal(true);
                     } : undefined}
                     actionClassName="schedule-action-buttons"
+                    importBtnStyle={undefined}
                     secondaryActions={
                         isDesktop ? <>
                             <div className="schedule-workflow-actions">
@@ -1815,7 +2068,6 @@ const Page = () => {
                                 )}
                                 {canEditSchedule && (
                                     <Button
-                                        type="primary"
                                         icon={<EditOutlined />}
                                         onClick={handleOpenBulkEdit}
                                     >
@@ -1831,6 +2083,14 @@ const Page = () => {
                                 >
                                     Quét user nhân sự
                                 </Button>
+                                {canEditSchedule && (
+                                    <Button
+                                        icon={<ApartmentOutlined />}
+                                        onClick={handleOpenClassroomAssignment}
+                                    >
+                                        Đồng bộ phân lớp
+                                    </Button>
+                                )}
                                 {canExportSchedule && (
                                     <Dropdown
                                         trigger={["click"]}
@@ -1855,12 +2115,6 @@ const Page = () => {
                                         if (hasSearched) void refreshSchedules();
                                     }}
                                 />
-                                <Button
-                                    aria-label="Lọc lịch học"
-                                    title="Lọc lịch học"
-                                    icon={<FilterOutlined />}
-                                    onClick={() => setOpenFilterDrawer(true)}
-                                />
                             </div>
                         </> : <div className="schedule-mobile-actions">
                             <Dropdown
@@ -1870,6 +2124,7 @@ const Page = () => {
                                         ...(canCreateSchedule ? [{ key: "auto", icon: <CalendarOutlined />, label: "Tạo lịch tự động", disabled: !submittedFilterValues.code }] : []),
                                         ...(canEditSchedule ? [{ key: "bulk-edit", icon: <EditOutlined />, label: "Sửa hàng loạt" }] : []),
                                         { key: "sync-teaching-users", icon: <ReloadOutlined />, label: "Quét user nhân sự" },
+                                        ...(canEditSchedule ? [{ key: "assign-student-classrooms", icon: <ApartmentOutlined />, label: "Đồng bộ phân lớp" }] : []),
                                         ...(canExportSchedule ? [{ key: "xlsx", icon: <FileExcelOutlined />, label: `Xuất Excel${selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}` }, { key: "csv", icon: <FileTextOutlined />, label: "Xuất CSV" }] : []),
                                         { key: "reload", icon: <ReloadOutlined />, label: "Làm mới" },
                                     ],
@@ -1877,6 +2132,7 @@ const Page = () => {
                                         if (key === "auto") handleOpenAutoSchedule();
                                         if (key === "bulk-edit") handleOpenBulkEdit();
                                         if (key === "sync-teaching-users") handleSyncMissingTeachingUsers();
+                                        if (key === "assign-student-classrooms") handleOpenClassroomAssignment();
                                         if (key === "xlsx" || key === "csv") handleExportSchedule(key);
                                         if (key === "reload" && hasSearched) void refreshSchedules();
                                     },
@@ -1888,6 +2144,17 @@ const Page = () => {
                         </div>
                     }
                 />
+                {isDesktop && (
+                    <ScheduleInlineFilters
+                        value={filterValues}
+                        loading={loading}
+                        programOptions={programOptions}
+                        loadingPrograms={programsQuery.isLoading || programsQuery.isValidating}
+                        allowFilterWithoutProgram={Boolean(isAdmin)}
+                        onSearch={handleScheduleFilter}
+                        onReset={handleResetScheduleFilter}
+                    />
+                )}
             </>}
 
             <style>{`
@@ -2026,7 +2293,7 @@ const Page = () => {
                         `}</style>
                             <div className={`schedule-view-stage${viewMode === "table" ? " schedule-view-stage-table" : ""}`}>
                                 <div
-                                    className={`schedule-view-pane custom-calendar-wrapper${viewMode === "calendar" ? " schedule-view-pane-active" : ""}`}
+                                    className={`schedule-view-pane custom-calendar-wrapper${viewMode === "calendar" ? " schedule-view-pane-active" : ""}${canCreateSchedule && activeProgramCode ? " calendar-create-enabled" : ""}`}
                                     aria-hidden={viewMode !== "calendar"}
                                     style={{ height: "100%", padding: "16px", background: "#fff", borderRadius: "8px" }}
                                 >
@@ -2044,6 +2311,7 @@ const Page = () => {
                                     font-weight: 600;
                                 }
                                 .custom-calendar-wrapper .fc-event {
+                                    cursor: pointer;
                                     border-radius: 4px;
                                     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
                                     border: none !important;
@@ -2062,6 +2330,10 @@ const Page = () => {
                                 .custom-calendar-wrapper .fc-timegrid-slot-label-cushion {
                                     font-size: 13px;
                                     color: #8c8c8c;
+                                }
+                                .custom-calendar-wrapper.calendar-create-enabled .fc-timegrid-slot-lane,
+                                .custom-calendar-wrapper.calendar-create-enabled .fc-daygrid-day-frame {
+                                    cursor: crosshair;
                                 }
                                 .custom-calendar-wrapper .fc-daygrid-event-harness {
                                     margin-bottom: 2px !important;
@@ -2103,6 +2375,14 @@ const Page = () => {
                                         events={calendarEvents}
                                         eventContent={renderCalendarEvent}
                                         eventClick={handleCalendarEventClick}
+                                        selectable={Boolean(canCreateSchedule && activeProgramCode)}
+                                        // Dùng vùng chọn native của FullCalendar: hiển thị đúng
+                                        // thời lượng đã kéo và không bị co khi lịch đang dày event.
+                                        selectMirror
+                                        selectMinDistance={5}
+                                        unselectAuto={false}
+                                        select={handleCalendarSelect}
+                                        dateClick={handleCalendarDateClick}
                                         // Khi admin xem nhiều chương trình, các lịch trùng giờ có
                                         // thể rất dày. Giới hạn stack để event còn đủ rộng để đọc;
                                         // các lịch còn lại nằm trong liên kết "+ thêm" của FullCalendar.
@@ -2196,30 +2476,39 @@ const Page = () => {
                         </>
                     )}
                 </div>
-                <ScheduleFilterDrawer
-                    open={openFilterDrawer}
-                    onClose={() => setOpenFilterDrawer(false)}
-                    value={filterValues}
-                    loading={loading}
-                    programOptions={programOptions}
-                    loadingPrograms={programsQuery.isLoading || programsQuery.isValidating}
-                    allowFilterWithoutProgram={Boolean(isAdmin)}
-                    onSearch={handleScheduleFilter}
-                    onReset={handleResetScheduleFilter}
-                />
+                {!isDesktop && (
+                    <ScheduleFilterDrawer
+                        open={openFilterDrawer}
+                        onClose={() => setOpenFilterDrawer(false)}
+                        value={filterValues}
+                        loading={loading}
+                        programOptions={programOptions}
+                        loadingPrograms={programsQuery.isLoading || programsQuery.isValidating}
+                        allowFilterWithoutProgram={Boolean(isAdmin)}
+                        onSearch={handleScheduleFilter}
+                        onReset={handleResetScheduleFilter}
+                    />
+                )}
                 <Modal
                     open={Boolean(calendarDetail)}
-                    title={calendarDetail?.lesson_name || "Chi tiết buổi học"}
+                    title="Chi tiết buổi học"
                     footer={null}
-                    width={900}
+                    width={760}
                     onCancel={() => setCalendarDetail(null)}
                 >
                     {calendarDetail && <ScheduleDetailRow record={calendarDetail} />}
                 </Modal>
                 <ScheduleModal
                     open={isModalOpen}
-                    onClose={() => setIsModalOpen(false)}
+                    onClose={() => {
+                        calendarRef.current?.getApi().unselect();
+                        setCalendarDraftPreview(null);
+                        setIsModalOpen(false);
+                        setSelectedRecord(null);
+                        setIsEditMode(false);
+                    }}
                     onSuccess={handleModalSuccess}
+                    onDraftChange={handleCalendarDraftChange}
                     isEdit={isEditMode}
                     initialData={selectedRecord}
                     moduleFields={moduleFields}
@@ -2258,6 +2547,11 @@ const Page = () => {
                     }}
                     onDownloadTemplate={handleDownloadImportTemplate}
                 />
+                <ClassroomAssignmentModal
+                    open={Boolean(classroomAssignmentCalendarId)}
+                    calendarId={classroomAssignmentCalendarId}
+                    onClose={() => setClassroomAssignmentCalendarId(null)}
+                />
                 <Modal
                     title="Tiến trình quét user nhân sự"
                     open={isSyncModalOpen}
@@ -2289,6 +2583,8 @@ const Page = () => {
                                 <Typography.Text>Đã quét: {syncProgress.current} / {syncProgress.total} lịch</Typography.Text>
                                 <br />
                                 <Typography.Text type="success">Đã tạo mới: {syncProgress.created} user</Typography.Text>
+                                <br />
+                                <Typography.Text style={{ color: '#1677ff' }}>Đã bổ sung/chỉnh sửa: {syncProgress.updated} user</Typography.Text>
                                 {syncProgress.failed > 0 && (
                                     <>
                                         <br />

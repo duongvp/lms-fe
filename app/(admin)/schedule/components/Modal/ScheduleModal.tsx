@@ -1,7 +1,7 @@
 'use client';
 import { Alert, Modal, Input, Row, Col, Form, Button, Typography, Select, Radio, Checkbox, Card, TimePicker, DatePicker, message, Space, Tooltip } from 'antd';
-import { CloseCircleOutlined, EyeFilled, PlusOutlined } from '@ant-design/icons';
-import React, { useState } from 'react';
+import { CloseCircleOutlined, CompressOutlined, ExpandOutlined, EyeFilled, HolderOutlined, PlusOutlined } from '@ant-design/icons';
+import React, { useMemo, useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
     createLivestream,
@@ -81,6 +81,13 @@ interface ScheduleModalProps {
     fieldPolicy?: any;
     moduleCode?: string;
     programCode?: string;
+    onDraftChange?: (draft: {
+        date?: Dayjs;
+        start_time?: Dayjs;
+        end_time?: Dayjs;
+        lesson_name?: string;
+        teacher?: string;
+    }) => void;
 }
 
 const DAYS_OPTIONS = [
@@ -174,15 +181,27 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     fieldPolicy,
     moduleCode = 'calendar',
     programCode,
+    onDraftChange,
 }) => {
     const [form] = Form.useForm();
+    const [modalFrame, setModalFrame] = useState({
+        x: 24,
+        y: 16,
+        width: 900,
+        height: 720,
+    });
+    const [isModalCompact, setIsModalCompact] = useState(false);
+    const [isModalInteracting, setIsModalInteracting] = useState(false);
+    const tripleColumnSpan = modalFrame.width < 680 ? 24 : 8;
     const usesProgramContext = !isEdit && Boolean(programCode);
     const [loading, setLoading] = useState(false);
+    // Cho modal render trước, rồi mới tải các lựa chọn phụ để thao tác mở không bị khựng.
+    const [loadSupportingData, setLoadSupportingData] = useState(false);
 
     // For Add
     const [addMode, setAddMode] = useState<"single" | "bulk">("single");
     const [bulkConfigMode, setBulkConfigMode] = useState<"common" | "separate">("common");
-    const needsManualProgramOptions = open && (isEdit || !usesProgramContext || addMode === 'bulk');
+    const needsManualProgramOptions = open && loadSupportingData && (isEdit || !usesProgramContext || addMode === 'bulk');
     const subjectOptions = useLessonSubjectOptions(needsManualProgramOptions);
     const lessonPrograms = useLessonProgramOptions(needsManualProgramOptions);
     const selectedProgram = lessonPrograms.find((program) => program.subject_code === programCode);
@@ -204,6 +223,10 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const newSessionStartTime = Form.useWatch(['new_session', 'start_time'], form) as Dayjs | undefined;
     const newSessionDate = Form.useWatch(['new_session', 'date'], form) as Dayjs | undefined;
     const singleStartTime = Form.useWatch('start_time', form) as Dayjs | undefined;
+    const draftDate = Form.useWatch('date', form) as Dayjs | undefined;
+    const draftEndTime = Form.useWatch('end_time', form) as Dayjs | undefined;
+    const draftLessonName = Form.useWatch('lesson_name', form) as string | undefined;
+    const draftTeacher = Form.useWatch('teacher', form) as string | undefined;
     const bulkStartTime = Form.useWatch('bulk_start_time', form) as Dayjs | undefined;
     const [lessonOptions, setLessonOptions] = useState<LessonApiResponse[]>([]);
     const [hmoOptions, setHmoOptions] = useState<HocmaiSectionOption[]>([]);
@@ -220,9 +243,116 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const hasPermission = useAuthStore((state) => state.hasPermission);
     const canCreateLesson = hasPermission(PermissionKey.LESSON_CREATE);
     const canAssignTeachingStaff = hasPermission(PermissionKey.CALENDAR_TEACHER_MANAGE);
-    usePackageCoursesQuery();
+    // lesson_name là field ẩn để gửi API. Lấy thêm từ lesson_id đã chọn để
+    // preview trên calendar đổi ngay cả khi Form chưa kịp đồng bộ field ẩn.
+    const selectedLessonName = useMemo(() => (
+        lessonOptions.find((lesson) => String(lesson.id) === String(selectedLessonId))?.lesson_name
+    ), [lessonOptions, selectedLessonId]);
+
+    React.useEffect(() => {
+        if (!open || isEdit || !onDraftChange) return;
+        onDraftChange({
+            date: draftDate,
+            start_time: singleStartTime,
+            end_time: draftEndTime,
+            lesson_name: draftLessonName || selectedLessonName,
+            teacher: draftTeacher,
+        });
+    }, [draftDate, draftEndTime, draftLessonName, draftTeacher, isEdit, onDraftChange, open, selectedLessonName, singleStartTime]);
+
+    React.useEffect(() => {
+        setLoadSupportingData(false);
+        if (!open) return;
+        const timer = window.setTimeout(() => setLoadSupportingData(true), 180);
+        return () => window.clearTimeout(timer);
+    }, [open]);
+
+    React.useEffect(() => {
+        if (!open || typeof window === 'undefined') return;
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const width = Math.min(900, Math.max(320, viewportWidth - 32));
+        const height = Math.min(760, Math.max(420, viewportHeight - 32));
+        setModalFrame({
+            x: Math.max(8, (viewportWidth - width) / 2),
+            y: Math.max(8, (viewportHeight - height) / 2),
+            width,
+            height,
+        });
+        setIsModalCompact(false);
+    }, [open]);
+
+    const toggleModalCompact = (event: React.MouseEvent<HTMLElement>) => {
+        event.stopPropagation();
+        if (typeof window === 'undefined') return;
+        const nextCompact = !isModalCompact;
+        const width = Math.min(nextCompact ? 520 : 900, window.innerWidth - 16);
+        const height = Math.min(nextCompact ? 480 : 760, window.innerHeight - 16);
+        setModalFrame({
+            x: Math.max(8, (window.innerWidth - width) / 2),
+            y: Math.max(8, (window.innerHeight - height) / 2),
+            width,
+            height,
+        });
+        setIsModalCompact(nextCompact);
+    };
+
+    const startModalDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (event.button !== 0 || typeof window === 'undefined') return;
+        event.preventDefault();
+        setIsModalInteracting(true);
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const initialFrame = modalFrame;
+
+        const handleMove = (moveEvent: PointerEvent) => {
+            const maxX = Math.max(8, window.innerWidth - initialFrame.width - 8);
+            const maxY = Math.max(8, window.innerHeight - initialFrame.height - 8);
+            setModalFrame((current) => ({
+                ...current,
+                x: Math.min(maxX, Math.max(8, initialFrame.x + moveEvent.clientX - startX)),
+                y: Math.min(maxY, Math.max(8, initialFrame.y + moveEvent.clientY - startY)),
+            }));
+        };
+        const handleUp = () => {
+            window.removeEventListener('pointermove', handleMove);
+            window.removeEventListener('pointerup', handleUp);
+            setIsModalInteracting(false);
+        };
+        window.addEventListener('pointermove', handleMove);
+        window.addEventListener('pointerup', handleUp);
+    };
+
+    const startModalResize = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (event.button !== 0 || typeof window === 'undefined') return;
+        event.preventDefault();
+        event.stopPropagation();
+        setIsModalInteracting(true);
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const initialFrame = modalFrame;
+
+        const handleMove = (moveEvent: PointerEvent) => {
+            const maxWidth = Math.max(320, window.innerWidth - initialFrame.x - 8);
+            const maxHeight = Math.max(320, window.innerHeight - initialFrame.y - 8);
+            const minWidth = Math.min(520, maxWidth);
+            const minHeight = Math.min(360, maxHeight);
+            const width = Math.min(maxWidth, Math.max(minWidth, initialFrame.width + moveEvent.clientX - startX));
+            const height = Math.min(maxHeight, Math.max(minHeight, initialFrame.height + moveEvent.clientY - startY));
+            setModalFrame((current) => ({ ...current, width, height }));
+            setIsModalCompact(width <= 540 && height <= 500);
+        };
+        const handleUp = () => {
+            window.removeEventListener('pointermove', handleMove);
+            window.removeEventListener('pointerup', handleUp);
+            setIsModalInteracting(false);
+        };
+        window.addEventListener('pointermove', handleMove);
+        window.addEventListener('pointerup', handleUp);
+    };
+    usePackageCoursesQuery(open && loadSupportingData);
     const singleLessonParams: LessonListParams | null = (
-        open && !isEdit && addMode === 'single' && contextProgramCode && !usesProgramContext
+        open && loadSupportingData && !isEdit && addMode === 'single' && contextProgramCode && !usesProgramContext
     ) ? {
         page: 1,
         limit: 100,
@@ -233,7 +363,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         sort_order: 'asc',
     } : null;
     const bulkLessonParams: LessonListParams | null = (
-        open && !isEdit && addMode === 'bulk' && selectedBulkGrade && selectedBulkSubjectCode
+        open && loadSupportingData && !isEdit && addMode === 'bulk' && selectedBulkGrade && selectedBulkSubjectCode
     ) ? {
         page: 1,
         limit: 100,
@@ -655,6 +785,10 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                 form.resetFields();
                 setAddMode("single");
                 setBulkConfigMode("common");
+                const calendarStart = parseCalendarWallTime(initialData?.start_time);
+                const calendarEnd = parseCalendarWallTime(initialData?.end_time);
+                const calendarDate = parseCalendarWallTime(initialData?.date)
+                    || calendarStart?.startOf('day');
                 if (programCode) {
                     const inferredGrade = Number(String(programCode).match(/-(\d{1,2})-/)?.[1]) || undefined;
                     const programSystemType = selectedProgram?.system_type || 'topclass';
@@ -665,6 +799,15 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                         class_code: String(programCode),
                         system_type: programSystemType,
                         bulk_system_type: programSystemType,
+                        date: calendarDate,
+                        start_time: calendarStart,
+                        end_time: calendarEnd,
+                    });
+                } else if (calendarStart || calendarEnd || calendarDate) {
+                    form.setFieldsValue({
+                        date: calendarDate,
+                        start_time: calendarStart,
+                        end_time: calendarEnd,
                     });
                 }
             }
@@ -691,35 +834,92 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             <Modal
                 rootClassName="schedule-responsive-modal"
                 title={
-                    <>
-                        <Title level={5} style={{ marginBottom: 4 }}>
-                            {title || (isEdit ? 'Cập nhật Lịch học' : 'Thêm mới Lịch học')}
-                        </Title>
-                        <Text type="secondary" style={{ marginBottom: 0, fontSize: 13, fontWeight: 500 }}>
-                            {isEdit ? 'Chỉnh sửa thông tin hoặc dời lịch học.' : 'Điền thông tin chi tiết để tạo lịch học mới.'}
-                        </Text>
-                    </>
+                    <div
+                        onPointerDown={startModalDrag}
+                        style={{ position: 'relative', cursor: 'move', userSelect: 'none', touchAction: 'none', paddingRight: 76 }}
+                        title="Giữ và kéo để di chuyển cửa sổ"
+                    >
+                        <Space size={8} align="start">
+                            <HolderOutlined style={{ color: '#8c8c8c', marginTop: 5 }} />
+                            <div>
+                                <Title level={5} style={{ marginBottom: 4 }}>
+                                    {title || (isEdit ? 'Cập nhật Lịch học' : 'Thêm mới Lịch học')}
+                                </Title>
+                                <Text type="secondary" style={{ marginBottom: 0, fontSize: 13, fontWeight: 500 }}>
+                                    {isEdit ? 'Chỉnh sửa thông tin hoặc dời lịch học.' : 'Điền thông tin chi tiết để tạo lịch học mới.'}
+                                </Text>
+                            </div>
+                        </Space>
+                        <Tooltip title={isModalCompact ? 'Mở rộng cửa sổ' : 'Thu gọn cửa sổ'}>
+                            <Button
+                                type="text"
+                                size="small"
+                                aria-label={isModalCompact ? 'Mở rộng cửa sổ' : 'Thu gọn cửa sổ'}
+                                icon={isModalCompact ? <ExpandOutlined /> : <CompressOutlined />}
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onClick={toggleModalCompact}
+                                style={{ position: 'absolute', right: 30, top: 0 }}
+                            />
+                        </Tooltip>
+                    </div>
                 }
                 open={open}
                 onCancel={handleClose}
                 onOk={() => form.submit()}
-                width={900}
-                centered
+                width={modalFrame.width}
+                style={{
+                    position: 'absolute',
+                    left: modalFrame.x,
+                    top: modalFrame.y,
+                    margin: 0,
+                    paddingBottom: 0,
+                    transition: isModalInteracting
+                        ? 'none'
+                        : 'left 220ms ease, top 220ms ease, width 220ms ease',
+                }}
                 styles={{
                     content: {
-                        maxHeight: 'calc(100dvh - 32px)',
+                        height: modalFrame.height,
+                        maxHeight: 'calc(100dvh - 16px)',
                         display: 'flex',
                         flexDirection: 'column',
+                        transition: isModalInteracting ? 'none' : 'height 220ms ease',
                     },
                     body: {
                         flex: 1,
                         minHeight: 0,
-                        maxHeight: 'calc(100dvh - 200px)',
+                        maxHeight: 'none',
                         overflowY: 'auto',
                         overflowX: 'hidden',
                         paddingRight: 8,
                     },
                 }}
+                modalRender={(modal) => (
+                    <div style={{ position: 'relative', width: '100%', height: modalFrame.height }}>
+                        {modal}
+                        <div
+                            role="separator"
+                            aria-label="Kéo để thay đổi kích thước cửa sổ"
+                            title="Kéo để thay đổi kích thước cửa sổ"
+                            onPointerDown={startModalResize}
+                            style={{
+                                position: 'absolute',
+                                right: 5,
+                                bottom: 5,
+                                width: 22,
+                                height: 22,
+                                zIndex: 20,
+                                cursor: 'nwse-resize',
+                                touchAction: 'none',
+                                color: '#8c8c8c',
+                                fontSize: 18,
+                                lineHeight: '22px',
+                                textAlign: 'center',
+                                userSelect: 'none',
+                            }}
+                        >◢</div>
+                    </div>
+                )}
                 footer={[
                     <Button key="back" onClick={handleClose} icon={<CloseCircleOutlined />}>
                         Huỷ
@@ -735,6 +935,15 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                     </Button>,
                 ]}
             >
+                {!loadSupportingData && (
+                    <Alert
+                        showIcon
+                        type="info"
+                        message="Đang chuẩn bị biểu mẫu"
+                        description="Danh sách bài học và dữ liệu liên kết được nạp ở nền. Bạn có thể bắt đầu nhập thông tin ngay."
+                        style={{ marginBottom: 16 }}
+                    />
+                )}
                 {isEdit && (
                     <div style={{ marginBottom: 24 }}>
                         <Radio.Group
@@ -802,7 +1011,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                     </>
                                 )}
                                 {!usesProgramContext && <Row gutter={24}>
-                                    <Col span={8}>
+                                    <Col span={tripleColumnSpan}>
                                         <Form.Item label="Khối" name="grade" rules={[{ required: true, message: 'Chọn khối' }]}>
                                             <Select
                                                 options={GRADE_OPTIONS}
@@ -817,7 +1026,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             />
                                         </Form.Item>
                                     </Col>
-                                    <Col span={8}>
+                                    <Col span={tripleColumnSpan}>
                                         <Form.Item label="Môn học" name="subject_name" rules={requiredWhenEditable('subject', 'Chọn môn học')}>
                                             <Select
                                                 options={subjectOptions}
@@ -835,7 +1044,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             />
                                         </Form.Item>
                                     </Col>
-                                    <Col span={8}>
+                                    <Col span={tripleColumnSpan}>
                                         <Form.Item label="Mã môn học" name="subject_code" rules={[{ required: true, message: 'Chọn mã môn học' }]}>
                                             <Select
                                                 options={getProgramOptions(selectedGrade, selectedSubject)}
@@ -900,6 +1109,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                                 lesson_scheduled_count: scheduledCount,
                                                                 hmo_mapping_keys: [],
                                                             });
+                                                            onDraftChange?.({ lesson_name: lesson?.lesson_name });
                                                         }}
                                                         notFoundContent={
                                                             selectedGrade && selectedSubjectCode && !loadingLessons
@@ -982,6 +1192,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                                 lesson_scheduled_count: scheduledCount,
                                                                 hmo_mapping_keys: [],
                                                             });
+                                                            onDraftChange?.({ lesson_name: lesson?.lesson_name });
                                                         }}
                                                         notFoundContent={contextProgramCode && !loadingLessons ? 'Chưa có bài học' : undefined}
                                                         style={{ width: 'calc(100% - 32px)' }}
@@ -1045,12 +1256,12 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
 
                             <FormSection title="Chi tiết thời gian">
                                 <Row gutter={24}>
-                                    <Col span={8}>
+                                    <Col span={tripleColumnSpan}>
                                         <Form.Item label="Ngày học" name="date" rules={requiredWhenEditable('start_time', 'Nhập ngày học')}>
                                             <DatePicker format="DD/MM/YYYY" minDate={dayjs()} style={{ width: '100%' }} placeholder="DD/MM/YYYY" disabled={!isFieldEditable('start_time')} />
                                         </Form.Item>
                                     </Col>
-                                    <Col span={8}>
+                                    <Col span={tripleColumnSpan}>
                                         <Form.Item label="Thời gian bắt đầu" name="start_time" rules={requiredWhenEditable('start_time', 'Nhập giờ bắt đầu')}>
                                             <TimePicker
                                                 format="HH:mm"
@@ -1061,7 +1272,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             />
                                         </Form.Item>
                                     </Col>
-                                    <Col span={8}>
+                                    <Col span={tripleColumnSpan}>
                                         <Form.Item
                                             label="Thời gian kết thúc"
                                             name="end_time"
@@ -1085,12 +1296,12 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
 
                             <FormSection title="Thông tin quản lý">
                                 <Row gutter={24}>
-                                    <Col span={8}>
+                                    <Col span={tripleColumnSpan}>
                                         <Form.Item label="Giáo viên" name="teacher" rules={requiredWhenEditable('teacher', 'Chọn giáo viên')}>
                                             <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" showSearch optionFilterProp="label" placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
                                         </Form.Item>
                                     </Col>
-                                    <Col span={8}>
+                                    <Col span={tripleColumnSpan}>
                                         <Form.Item label="Trợ giảng" name="assistant_teacher">
                                             <TeachingStaffSelect
                                                 teacherType={0}
@@ -1102,7 +1313,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             />
                                         </Form.Item>
                                     </Col>
-                                    <Col span={8}>
+                                    <Col span={tripleColumnSpan}>
                                         <Form.Item
                                             label="Hệ thống"
                                             name="system_type"
@@ -1511,7 +1722,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
 
                             <FormSection title={updateMode === 'following' ? 'Thông tin buổi mới ở cuối khóa' : 'Thông tin buổi học bù'}>
                                 <Row gutter={24}>
-                                    <Col span={8}>
+                                    <Col span={tripleColumnSpan}>
                                         <Form.Item
                                             label={updateMode === 'following' ? 'Ngày buổi mới' : 'Ngày học bù'}
                                             name={['new_session', 'date']}
@@ -1547,7 +1758,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             />
                                         </Form.Item>
                                     </Col>
-                                    <Col span={8}>
+                                    <Col span={tripleColumnSpan}>
                                         <Form.Item
                                             label="Thời gian bắt đầu"
                                             name={['new_session', 'start_time']}
@@ -1566,7 +1777,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             />
                                         </Form.Item>
                                     </Col>
-                                    <Col span={8}>
+                                    <Col span={tripleColumnSpan}>
                                         <Form.Item
                                             label="Thời gian kết thúc"
                                             name={['new_session', 'end_time']}

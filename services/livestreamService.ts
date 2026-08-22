@@ -310,6 +310,43 @@ export const syncMissingTeachingUsers = (ids?: number[]) =>
         credentials: "include",
     }, "json", 120_000);
 
+export interface ClassroomAssignmentSummary {
+    roomId: number;
+    classId: string;
+    classroomIndex: number;
+    studentCount: number;
+    interactionScore: number;
+}
+
+export interface ClassroomAssignmentResult {
+    operation_id?: string;
+    calendar: {
+        id: number;
+        code: string;
+        learn_number: number;
+        system_type: "topclass" | "topuni";
+        start_time: string;
+    };
+    total_students: number;
+    classroom_count: number;
+    moved_count: number;
+    classrooms: ClassroomAssignmentSummary[];
+}
+
+export const previewStudentClassroomAssignment = (calendarId: string | number) =>
+    fetchInstance(`${API_BASE_URL}/${calendarId}/classroom-assignment/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+    });
+
+export const applyStudentClassroomAssignment = (calendarId: string | number) =>
+    fetchInstance(`${API_BASE_URL}/${calendarId}/classroom-assignment/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+    }, "json", 120_000);
+
 export const rescheduleLivestream = (id: string, payload: any) =>
     fetchInstance(`${API_BASE_URL}/${id}/reschedule`, {
         method: "PUT",

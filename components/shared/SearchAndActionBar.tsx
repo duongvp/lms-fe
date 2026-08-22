@@ -20,6 +20,7 @@ interface SearchAndActionsBarProps {
     secondaryActions?: React.ReactNode;
     actionClassName?: string;
     handleImportClick?: React.MouseEventHandler<HTMLElement>;
+    importBtnStyle?: React.CSSProperties;
 }
 
 export default function SearchAndActionsBar({
@@ -37,7 +38,8 @@ export default function SearchAndActionsBar({
     filterLabel,
     handleImportClick,
     handlePrintBarcode,
-    handleDeleteProducts
+    handleDeleteProducts,
+    importBtnStyle,
 }: Partial<SearchAndActionsBarProps>) {
     const screens = Grid.useBreakpoint();
     const compact = !screens.md;
@@ -98,6 +100,7 @@ export default function SearchAndActionsBar({
                                 type="primary"
                                 icon={<UploadOutlined />}
                                 onClick={handleImportClick}
+                                style={importBtnStyle}
                             >
                                 {titleBtnImport}
                             </Button>

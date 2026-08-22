@@ -264,6 +264,9 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
 }) => {
     const [form] = Form.useForm();
     const [loading, setLoading] = React.useState(false);
+    // Hiển thị form trước, rồi mới bắt đầu các request HMO theo từng bài học.
+    // Khi chọn nhiều lịch, việc này tránh làm frame mở modal bị nghẽn.
+    const [loadRelatedData, setLoadRelatedData] = React.useState(false);
     const [submitProgress, setSubmitProgress] = React.useState<SubmitProgress | null>(null);
     const [selectedRows, setSelectedRows] = React.useState<any[]>([]);
     const [selectedRowKeys, setSelectedRowKeys] = React.useState<React.Key[]>([]);
@@ -281,6 +284,13 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     const [autoFillWeekdays, setAutoFillWeekdays] = React.useState<number[]>([]);
     const [autoFillHolidays, setAutoFillHolidays] = React.useState<string>("");
     const previewRef = React.useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        setLoadRelatedData(false);
+        if (!open) return;
+        const timer = window.setTimeout(() => setLoadRelatedData(true), 180);
+        return () => window.clearTimeout(timer);
+    }, [open]);
 
     useEffect(() => {
         if (!previewRows.length) return;
@@ -367,7 +377,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     // cập nhật trước. Luôn lấy tên chuẩn từ bảng lessons để lần cập nhật sau
     // thay thế hoàn toàn mẫu tên cũ, không ghép chồng các tiền tố/hậu tố.
     useEffect(() => {
-        if (!open || !selectedRows.length) {
+        if (!open || !loadRelatedData || !selectedRows.length) {
             setSourceLessonNames(new Map());
             return;
         }
@@ -403,7 +413,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             if (active) setLoadingSourceLessonNames(false);
         });
         return () => { active = false; };
-    }, [open, selectedRows]);
+    }, [open, loadRelatedData, selectedRows]);
 
     const getSourceLessonName = React.useCallback((record: any) => {
         const sessionId = String(record?.session_id || '').trim();
@@ -415,7 +425,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     }, [sourceLessonNames]);
 
     useEffect(() => {
-        if (!open) return;
+        if (!open || !loadRelatedData) return;
         let active = true;
         setHmoOptionsByLesson({});
         setLoadingHmoLessons(new Set(lessonContexts.map((item) => item.lessonId)));
@@ -447,7 +457,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             }
         }));
         return () => { active = false; };
-    }, [lessonContexts, open]);
+    }, [lessonContexts, loadRelatedData, open]);
 
     // Form Watchers
     const configMode = Form.useWatch('config_mode', form) || 'common';
@@ -1283,6 +1293,17 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 </Button>
             ]}
         >
+            {(!loadRelatedData || loadingSourceLessonNames || loadingHmoLessons.size > 0) && (
+                <Alert
+                    showIcon
+                    type="info"
+                    message={!loadRelatedData ? 'Đang mở trình chỉnh sửa' : 'Đang tải dữ liệu liên kết'}
+                    description={!loadRelatedData
+                        ? 'Biểu mẫu đã sẵn sàng. Dữ liệu bài học và Lesson ID HMO sẽ được nạp ở nền để không làm đơ cửa sổ.'
+                        : `Bạn có thể chỉnh sửa ngay. Đang hoàn tất dữ liệu cho ${loadingHmoLessons.size} bài học${loadingSourceLessonNames ? ' và tên bài học chuẩn' : ''}.`}
+                    style={{ marginBottom: 16 }}
+                />
+            )}
             <Form
                 className="responsive-modal-form responsive-schedule-form"
                 form={form}
