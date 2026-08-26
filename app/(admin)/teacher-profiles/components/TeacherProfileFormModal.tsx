@@ -52,6 +52,11 @@ const TeacherProfileFormModal = ({
                 form={form}
                 layout="vertical"
                 preserve={false}
+                initialValues={{
+                    can_view_stream_key:
+                        fixedTeacherType ?? 1,
+                    status: 1,
+                }}
             >
                 <Form.Item
                     label="Tên đăng nhập"

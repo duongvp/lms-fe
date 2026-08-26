@@ -55,7 +55,11 @@ export const getTeacherProfiles = (params: TeacherProfileListParams = {}) => {
 export const createTeacherProfile = (payload: TeacherProfilePayload) =>
     fetchInstance(API_BASE_URL, {
         method: 'POST',
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+            ...payload,
+            can_view_stream_key: payload.can_view_stream_key ?? 1,
+            status: payload.status ?? 1,
+        }),
         headers: { 'Content-Type': 'application/json' },
     });
 

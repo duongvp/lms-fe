@@ -30,7 +30,6 @@ import TeacherProfileFormModal from '../teacher-profiles/components/TeacherProfi
 import TeacherProfileImportModal from '../teacher-profiles/components/TeacherProfileImportModal';
 import CustomSearchInput from '@/components/ui/Inputs/CustomSearchInput';
 
-
 const downloadBlob = (
     blob: Blob,
     filename: string
@@ -94,16 +93,10 @@ const TeacherProfilesPage = () => {
         React.useState(() => String(searchParams.get('q') || ''));
 
     const [teacherType, setTeacherType] =
-        React.useState<0 | 1 | undefined>(() => {
-            const value = Number(searchParams.get('teacher_type'));
-            return value === 0 || value === 1 ? value : undefined;
-        });
+        React.useState<0 | 1 | undefined>(1);
 
     const [status, setStatus] =
-        React.useState<0 | 1 | undefined>(() => {
-            const value = Number(searchParams.get('status'));
-            return value === 0 || value === 1 ? value : undefined;
-        });
+        React.useState<0 | 1 | undefined>(1);
 
     const [
         updatingStatusId,
@@ -124,22 +117,16 @@ const TeacherProfilesPage = () => {
     React.useEffect(() => {
         const params = new URLSearchParams();
         if (search.trim()) params.set('q', search.trim());
-        if (teacherType !== undefined) params.set('teacher_type', String(teacherType));
-        if (status !== undefined) params.set('status', String(status));
         if (pagination.current > 1) params.set('page', String(pagination.current));
         if (pagination.pageSize !== 20) params.set('limit', String(pagination.pageSize));
         const nextUrl = params.size ? `/teacher-profiles?${params.toString()}` : '/teacher-profiles';
         window.history.replaceState(window.history.state, '', nextUrl);
-    }, [pagination.current, pagination.pageSize, search, status, teacherType]);
+    }, [pagination.current, pagination.pageSize, search]);
 
     React.useEffect(() => {
         const page = Number(searchParams.get('page'));
         const limit = Number(searchParams.get('limit'));
-        const nextTeacherType = Number(searchParams.get('teacher_type'));
-        const nextStatus = Number(searchParams.get('status'));
         setSearch(String(searchParams.get('q') || ''));
-        setTeacherType(nextTeacherType === 0 || nextTeacherType === 1 ? nextTeacherType : undefined);
-        setStatus(nextStatus === 0 || nextStatus === 1 ? nextStatus : undefined);
         setPagination((current) => ({
             ...current,
             current: Number.isInteger(page) && page > 0 ? page : 1,

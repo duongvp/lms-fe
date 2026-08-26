@@ -13,7 +13,7 @@ import {
     DeleteOutlined,
     EditOutlined,
 } from '@ant-design/icons';
-import dayjs from 'dayjs';
+import { formatVietnamDateTime } from '@/helper/convertDate';
 import type { TeacherProfile } from '@/services/teacherProfileService';
 
 interface TeacherProfileTableProps {
@@ -206,13 +206,10 @@ const TeacherProfileTable = ({
                     dataIndex: 'created_at',
                     width: 160,
                     render: (value) =>
-                        value
-                            ? dayjs(
-                                  value
-                              ).format(
-                                  'DD/MM/YYYY HH:mm'
-                              )
-                            : '-',
+                        formatVietnamDateTime(
+                            value,
+                            'DD/MM/YYYY HH:mm'
+                        ),
                 },
 
                 {
