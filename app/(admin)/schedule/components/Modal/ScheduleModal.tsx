@@ -195,6 +195,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const tripleColumnSpan = modalFrame.width < 680 ? 24 : 8;
     const usesProgramContext = !isEdit && Boolean(programCode);
     const [loading, setLoading] = useState(false);
+    const [modalContentReady, setModalContentReady] = useState(false);
     // Cho modal render trước, rồi mới tải các lựa chọn phụ để thao tác mở không bị khựng.
     const [loadSupportingData, setLoadSupportingData] = useState(false);
 
@@ -262,10 +263,10 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
 
     React.useEffect(() => {
         setLoadSupportingData(false);
-        if (!open) return;
-        const timer = window.setTimeout(() => setLoadSupportingData(true), 180);
+        if (!open || !modalContentReady) return;
+        const timer = window.setTimeout(() => setLoadSupportingData(true), 50);
         return () => window.clearTimeout(timer);
-    }, [open]);
+    }, [modalContentReady, open]);
 
     React.useEffect(() => {
         if (!open || typeof window === 'undefined') return;
@@ -377,7 +378,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const bulkLessonsQuery = useLessonsQuery(bulkLessonParams);
     const courseCode = initialData?.code || initialData?.class_code;
     const courseEndQuery = useSchedulesQuery(
-        open && isEdit && courseCode ? {
+        open && modalContentReady && isEdit && courseCode ? {
             page: 1,
             limit: 100,
             code_exact: courseCode,
@@ -608,13 +609,25 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     };
 
     const handleClose = () => {
+        // Đóng modal trước. Reset một form lớn ngay trong click handler làm
+        // animation đóng phải tranh main thread với hàng loạt Form.Item update.
+        onClose();
+    };
+
+    const resetAfterClose = () => {
         form.resetFields();
         setAddMode("single");
         setBulkConfigMode("common");
         setSubmitError(null);
-        // setUpdateMode("current");
         setUpdateMode("following");
-        onClose();
+        setLoadSupportingData(false);
+        setLessonOptions([]);
+        setBulkLessonOptions([]);
+        setHmoOptions([]);
+        setCourseEndDate(null);
+        setCourseLastStartTime(null);
+        setCourseCadenceDays(undefined);
+        setModalContentReady(false);
     };
 
     const handleCreateQuickLesson = async ({
@@ -754,7 +767,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
 
 
     React.useEffect(() => {
-        if (open) {
+        if (open && modalContentReady) {
             if (isEdit) {
                 form.setFieldsValue({
                     ...initialData,
@@ -812,7 +825,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                 }
             }
         }
-    }, [open, initialData, form, isEdit, programCode, selectedProgram]);
+    }, [open, modalContentReady, initialData, form, isEdit, programCode, selectedProgram]);
 
     React.useEffect(() => {
         const rows: any[] = courseEndQuery.data?.data?.data ?? [];
@@ -865,6 +878,11 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                 }
                 open={open}
                 onCancel={handleClose}
+                afterOpenChange={(visible) => {
+                    if (visible) setModalContentReady(true);
+                }}
+                afterClose={resetAfterClose}
+                destroyOnClose
                 onOk={() => form.submit()}
                 width={modalFrame.width}
                 style={{
@@ -930,11 +948,17 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                         onClick={() => form.submit()}
                         icon={<EyeFilled />}
                         loading={loading}
+                        disabled={!modalContentReady}
                     >
                         Xem trước
                     </Button>,
                 ]}
             >
+                {!modalContentReady ? (
+                    <div style={{ minHeight: 180, display: 'grid', placeItems: 'center' }}>
+                        <Typography.Text type="secondary">Đang mở biểu mẫu...</Typography.Text>
+                    </div>
+                ) : (<>
                 {!loadSupportingData && (
                     <Alert
                         showIcon
@@ -1846,6 +1870,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                     )}
 
                 </Form>
+                </>)}
             </Modal>
 
             {previewOpen && previewValues && (

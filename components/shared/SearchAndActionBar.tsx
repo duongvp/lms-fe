@@ -15,6 +15,7 @@ interface SearchAndActionsBarProps {
     handlePrintBarcode?: () => void;
     handleDeleteProducts?: () => void;
     placeholder?: string;
+    searchValue?: string;
     extraButtons?: React.ReactNode;
     extraExportButton?: React.ReactNode;
     secondaryActions?: React.ReactNode;
@@ -30,6 +31,7 @@ export default function SearchAndActionsBar({
     titleBtnImport = "Import",
     handleAddBtn,
     placeholder = 'Tìm kiếm...',
+    searchValue,
     extraButtons,
     extraExportButton,
     secondaryActions,
@@ -66,6 +68,7 @@ export default function SearchAndActionsBar({
                 {showSearch && (
                     <CustomSearchInput
                         placeholder={placeholder}
+                        value={searchValue}
                         fetchApi={onSearch}
                     />
                 )}

@@ -7,6 +7,7 @@ import { Button, Form, Modal, notification, Drawer, Select, Space, Empty, Dropdo
 import { DownOutlined, InfoCircleOutlined, UpOutlined, EditOutlined, ReloadOutlined, DownloadOutlined, FilterOutlined, MoreOutlined } from "@ant-design/icons";
 import type { UploadFile } from "antd/es/upload/interface";
 import { useAuthStore } from "@/stores/authStore";
+import { rememberProgramContextUrl } from "@/components/layouts/AdminLayout/SideMenu";
 import { PermissionKey } from "@/types/permissions";
 import { resolveModuleFieldPermissions, sanitizeEditablePayload } from "@/helper/fieldPolicy";
 import type { ModuleField } from "@/types/fieldPolicy";
@@ -24,6 +25,7 @@ import {
     downloadQuizTemplate,
     exportQuizzes,
     getQuizIndexSuggestion,
+    getQuizzes,
     importQuizzesFile,
     reorderQuizzes,
     restoreQuiz,
@@ -48,6 +50,7 @@ import {
     quizFormToPayload,
     recordToQuizForm,
 } from "./quiz.utils";
+import { fetchAllPages } from "@/lib/fetchAllPages";
 import styles from "./quiz.module.css";
 
 // ✅ Hook debounce
@@ -55,6 +58,18 @@ function useDebounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     const fnRef = useRef(fn);
     fnRef.current = fn;
+
+    useEffect(() => {
+        const cancel = () => {
+            if (timerRef.current) clearTimeout(timerRef.current);
+            timerRef.current = null;
+        };
+        window.addEventListener("lms:route-navigation-start", cancel);
+        return () => {
+            window.removeEventListener("lms:route-navigation-start", cancel);
+            cancel();
+        };
+    }, []);
 
     return useCallback((...args: Parameters<T>) => {
         if (timerRef.current) {
@@ -66,11 +81,28 @@ function useDebounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
     }, [delay]);
 }
 
+const buildQuizUrl = (nextFilters: QuizFilterValues, nextKeyword = "", nextPage = 1) => {
+    const params = new URLSearchParams();
+    const program = String(nextFilters.code || "").trim();
+    const lesson = Number(nextFilters.learn_number);
+    if (program) params.set("program", program);
+    if (Number.isInteger(lesson) && lesson > 0) params.set("learn_number", String(lesson));
+    if (nextFilters.quiz_status) params.set("quiz_status", String(nextFilters.quiz_status));
+    const quizTypes = Array.isArray(nextFilters.quiz_type)
+        ? nextFilters.quiz_type
+        : nextFilters.quiz_type !== undefined
+            ? [nextFilters.quiz_type]
+            : [];
+    if (quizTypes.length) params.set("quiz_type", quizTypes.join(","));
+    if (nextKeyword.trim()) params.set("q", nextKeyword.trim());
+    if (nextPage > 1) params.set("page", String(nextPage));
+    return params.size ? `/quizzes?${params.toString()}` : "/quizzes";
+};
+
 const QuizManagementPage = () => {
     const searchParams = useSearchParams();
     const screens = Grid.useBreakpoint();
     const compact = !screens.md;
-    const initializedFromUrl = useRef(false);
     const [form] = Form.useForm<QuizFormValues>();
     const [api, contextHolder] = notification.useNotification();
     const [page, setPage] = useState(1);
@@ -86,6 +118,7 @@ const QuizManagementPage = () => {
     const [preview, setPreview] = useState<QuizFormValues>(INITIAL_QUIZ_FORM_VALUES);
     const [saving, setSaving] = useState(false);
     const [selectedKeys, setSelectedKeys] = useState<Key[]>([]);
+    const selectAllRequestRef = useRef(0);
     const [formOpen, setFormOpen] = useState(false);
     const [previewOpen, setPreviewOpen] = useState(false);
     const [importOpen, setImportOpen] = useState(false);
@@ -123,25 +156,17 @@ const QuizManagementPage = () => {
     }, []);
 
     const replaceQuizUrl = useCallback((nextFilters: QuizFilterValues, nextKeyword = "", nextPage = 1) => {
-        const params = new URLSearchParams();
         const program = String(nextFilters.code || "").trim();
         if (program) useAuthStore.getState().setCurrentProgram(program);
-        const lesson = nextFilters.learn_number;
-        if (program) params.set("program", program);
-        if (lesson !== undefined && lesson !== null) params.set("learn_number", String(lesson));
-        if (nextFilters.quiz_status) params.set("quiz_status", String(nextFilters.quiz_status));
-        if (nextFilters.quiz_type) params.set("quiz_type", String(nextFilters.quiz_type));
-        if (nextKeyword.trim()) params.set("q", nextKeyword.trim());
-        if (nextPage > 1) params.set("page", String(nextPage));
-        const nextUrl = params.size ? `/quizzes?${params.toString()}` : "/quizzes";
+        const nextUrl = buildQuizUrl(nextFilters, nextKeyword, nextPage);
         // Chỉ đồng bộ URL, không điều hướng lại trang đang có state bộ lọc.
         // Điều này cũng tránh Next ghi đè query bằng state route cũ.
         window.history.replaceState(window.history.state, "", nextUrl);
+        rememberProgramContextUrl(nextUrl);
     }, []);
 
     useEffect(() => {
-        if (initializedFromUrl.current) return;
-        initializedFromUrl.current = true;
+        const currentUrl = searchParams.size ? `/quizzes?${searchParams.toString()}` : "/quizzes";
         const urlProgram = String(searchParams.get("program") || "").trim();
         const sharedProgram = String(useAuthStore.getState().currentProgram || "").trim();
         const program = urlProgram || sharedProgram;
@@ -152,14 +177,15 @@ const QuizManagementPage = () => {
             params.set("program", program);
             window.history.replaceState(window.history.state, "", `/quizzes?${params.toString()}`);
         }
-        const lesson = Number(searchParams.get("learn_number") || searchParams.get("lesson"));
+        const rawLesson = Number(searchParams.get("learn_number") || searchParams.get("lesson"));
+        const lesson = Number.isInteger(rawLesson) && rawLesson > 0 ? rawLesson : undefined;
         const nextKeyword = String(searchParams.get("q") || "").trim();
         const nextPage = Math.max(1, Number(searchParams.get("page")) || 1);
         const status = searchParams.get("quiz_status") || searchParams.get("status");
         const type = searchParams.get("quiz_type") || searchParams.get("type");
         const nextFilters: QuizFilterValues = {
             code: program,
-            learn_number: lesson || undefined,
+            learn_number: lesson,
             quiz_status: ["done", "disable"].includes(String(status))
                 ? status as QuizFilterValues["quiz_status"]
                 : undefined,
@@ -174,6 +200,13 @@ const QuizManagementPage = () => {
         setSubmittedKeyword(nextKeyword);
         setPage(nextPage);
         setHasSearched(true);
+        const canonicalUrl = buildQuizUrl(nextFilters, nextKeyword, nextPage);
+        if (canonicalUrl !== currentUrl) {
+            window.history.replaceState(window.history.state, "", canonicalUrl);
+            rememberProgramContextUrl(canonicalUrl);
+        } else {
+            rememberProgramContextUrl(currentUrl);
+        }
     }, [searchParams]);
 
     const hasPermission = useAuthStore((state) => state.hasPermission);
@@ -226,6 +259,47 @@ const QuizManagementPage = () => {
         return response?.data || [];
     }, [response?.data, hasSearched, reorderMode]);
     const total = Number(response?.total || 0);
+
+    useEffect(() => {
+        selectAllRequestRef.current += 1;
+        setSelectedKeys([]);
+    }, [submittedFilters, submittedKeyword]);
+
+    const handleSelectAll = useCallback(async (selected: boolean) => {
+        const requestId = ++selectAllRequestRef.current;
+        if (!selected) {
+            setSelectedKeys([]);
+            return;
+        }
+        setSelectedKeys((current) => Array.from(new Set([
+            ...current,
+            ...data.map((record) => String(record.quiz_id)),
+        ])));
+
+        try {
+            const rows = await fetchAllPages<QuizApiResponse>({
+                total,
+                pageSize: 100,
+                fetchPage: async (nextPage, limit) => {
+                    const result: any = await getQuizzes({
+                        ...params,
+                        page: nextPage,
+                        limit,
+                    });
+                    return Array.isArray(result?.data?.data) ? result.data.data : [];
+                },
+            });
+            if (requestId !== selectAllRequestRef.current) return;
+            setSelectedKeys(rows.map((record) => String(record.quiz_id)));
+        } catch (error: any) {
+            if (requestId !== selectAllRequestRef.current) return;
+            setSelectedKeys([]);
+            api.error({
+                message: "Không thể chọn tất cả câu hỏi",
+                description: error?.message || "Không thể tải toàn bộ danh sách câu hỏi.",
+            });
+        }
+    }, [api, data, params, total]);
     const classRows: QuizClassOption[] = Array.isArray(classesQuery.data?.data)
         ? classesQuery.data.data
         : [];
@@ -362,14 +436,21 @@ const QuizManagementPage = () => {
     };
 
     const handleResetFilter = () => {
-        setFilters({});
+        const program = String(
+            filters.code
+            || submittedFilters.code
+            || useAuthStore.getState().currentProgram
+            || ""
+        ).trim();
+        const resetFilters: QuizFilterValues = program ? { code: program } : {};
+        setFilters(resetFilters);
         setKeyword("");
-        setSubmittedFilters({});
-        submittedFiltersRef.current = {};
+        setSubmittedFilters(resetFilters);
+        submittedFiltersRef.current = resetFilters;
         setSubmittedKeyword("");
-        setHasSearched(false);
+        setHasSearched(Boolean(program));
         setPage(1);
-        replaceQuizUrl({});
+        replaceQuizUrl(resetFilters);
         setOpenFilterDrawer(false);
     };
 
@@ -843,6 +924,7 @@ const QuizManagementPage = () => {
 
         <SearchAndActionsBar
             onSearch={handleSearch}
+            searchValue={keyword}
             placeholder="Tìm kiếm câu hỏi..."
             titleBtnAdd="Câu hỏi"
             handleAddBtn={canCreate ? handleOpenCreate : undefined}
@@ -943,6 +1025,7 @@ const QuizManagementPage = () => {
                 canViewField={canViewField}
                 hasSearched={hasSearched}
                 onSelectionChange={setSelectedKeys}
+                onSelectAll={handleSelectAll}
                 onPageChange={(nextPage, nextSize) => {
                     if (!hasSearched && !reorderMode) return;
                     const targetPage = nextSize !== pageSize ? 1 : nextPage;

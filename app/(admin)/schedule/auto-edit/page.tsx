@@ -14,7 +14,7 @@ const AutoEditSchedulePage = () => {
     const returnToParam = String(searchParams.get("returnTo") || "");
     const returnTo = returnToParam.startsWith("/schedule") ? returnToParam : (program ? `/schedule?program=${encodeURIComponent(program)}` : "/schedule");
 
-    const backToSchedule = () => router.push(returnTo);
+    const backToSchedule = () => router.replace(returnTo);
 
     if (!requestedIds.length) {
         return (
@@ -29,12 +29,12 @@ const AutoEditSchedulePage = () => {
 
     return (
         <>
-            <Alert
+            {/* <Alert
                 banner
                 showIcon
                 message={`Chỉnh sửa tự động ${requestedIds.length} lịch học${program ? ` · ${program}` : ""}`}
                 description="Thiết lập chung hoặc riêng theo từng lịch, xem trước rồi xác nhận cập nhật."
-            />
+            /> */}
             <BulkEditModal
                 open
                 fullscreen

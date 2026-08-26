@@ -1,7 +1,7 @@
 "use client";
 
 import { PlusOutlined, SyncOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Checkbox, DatePicker, Empty, Form, Input, InputNumber, message, Modal, Progress, Select, Space, Spin, Table, TimePicker, Typography } from "antd";
+import { Alert, Button, Card, Checkbox, DatePicker, Empty, Form, Grid, Input, InputNumber, message, Modal, Progress, Select, Space, Spin, Table, TimePicker, Typography } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import {
     commitAutoSchedule,
@@ -97,6 +97,11 @@ const renderLessonNamePattern = (pattern: unknown, occurrence: number) => (
 
 const getCalendarLessonName = (lesson: any, occurrence: number, values: any) => {
     const masterLessonName = String(lesson.lesson_name || "");
+    const perLessonPrefix = String(lesson.lesson_name_prefix || "");
+    const perLessonSuffix = String(lesson.lesson_name_suffix || "");
+    if (perLessonPrefix || perLessonSuffix) {
+        return `${perLessonPrefix}${masterLessonName}${perLessonSuffix}`.slice(0, 400);
+    }
     if (!values.customize_lesson_names || occurrence <= 1) return masterLessonName;
 
     const lessonRule = (values.lesson_name_rules || []).find((rule: any) => (
@@ -177,15 +182,57 @@ const normalizeHolidayDates = (value: unknown) => String(value || "")
         return parsed.format("YYYY-MM-DD");
     });
 
+const buildTopuniTemplateSequence = (
+    startDate: Dayjs | null | undefined,
+    holidaysValue: unknown,
+    templates: any[],
+    count: number,
+    weekInterval = 1
+) => {
+    const normalizedTemplates = cloneScheduleTemplate(templates);
+    const byWeekday = new Map(normalizedTemplates.map((item) => [Number(item.weekday), item]));
+    if (!startDate?.isValid() || !byWeekday.size || count <= 0) return [];
+    const holidays = new Set(
+        String(holidaysValue || "").split(",").map((item) => item.trim()).filter(Boolean)
+            .map((item) => dayjs(item, ["DD/MM/YYYY", "YYYY-MM-DD"], true))
+            .filter((item) => item.isValid())
+            .map((item) => item.format("YYYY-MM-DD"))
+    );
+    const sequence: any[] = [];
+    let cursor = startDate.startOf("day");
+    let anchorWeek: Dayjs | null = null;
+    for (let attempts = 0; sequence.length < count && attempts < 3660; attempts += 1) {
+        const weekday = cursor.day() === 0 ? 7 : cursor.day();
+        const template = byWeekday.get(weekday);
+        const isHoliday = holidays.has(cursor.format("YYYY-MM-DD"));
+        if (!anchorWeek && template && !isHoliday) {
+            anchorWeek = cursor.subtract(weekday - 1, "day").startOf("day");
+        }
+        const candidateWeek = cursor.subtract(weekday - 1, "day").startOf("day");
+        const weeksFromAnchor = anchorWeek ? candidateWeek.diff(anchorWeek, "week") : 0;
+        const isActiveWeek = !anchorWeek
+            || (weeksFromAnchor >= 0 && weeksFromAnchor % Math.max(1, Number(weekInterval) || 1) === 0);
+        if (template && !isHoliday && isActiveWeek) {
+            sequence.push({ ...template, assistant_teachers: [...(template.assistant_teachers || [])] });
+        }
+        cursor = cursor.add(1, "day");
+    }
+    return sequence;
+};
+
 const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen = false }: Props) => {
+    const screens = Grid.useBreakpoint();
+    const isDesktopPreview = Boolean(screens.md);
     const [form] = Form.useForm();
     const [lessons, setLessons] = useState<SchedulingLesson[]>([]);
     const [preview, setPreview] = useState<any[]>([]);
     const [payload, setPayload] = useState<AutoSchedulePayload | null>(null);
     const [loading, setLoading] = useState(false);
     const [loadingLessons, setLoadingLessons] = useState(false);
+    const [loadedLessonsProgramCode, setLoadedLessonsProgramCode] = useState<string | null>(null);
     const [blockSize, setBlockSize] = useState<1 | 2>(1);
     const [lessonLimit, setLessonLimit] = useState(0);
+    const [visibleBlockCount, setVisibleBlockCount] = useState(8);
     const [commitProgress, setCommitProgress] = useState<CreateProgress | null>(null);
     const [previewError, setPreviewError] = useState("");
     const [hmoOptions, setHmoOptions] = useState<Record<string, HocmaiSectionOption[]>>({});
@@ -202,7 +249,16 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     // Lấy system_type từ Chương trình đã chọn
     const lessonPrograms = useLessonProgramOptions(Boolean(open && programCode));
     const selectedProgram = lessonPrograms.find((p) => p.subject_code === programCode);
-    const programSystemType = selectedProgram?.system_type || null;
+    // Lịch tự động phải ưu tiên system_type trả về cùng đề cương đang tạo lịch.
+    // Danh sách option chương trình có thể chưa tải xong hoặc bị giới hạn quyền,
+    // nhưng lessons đã là nguồn dữ liệu bắt buộc của màn hình này.
+    const programLessonsReady = loadedLessonsProgramCode === programCode;
+    const programSystemType = programLessonsReady
+        ? lessons.find((lesson) => lesson.system_type === "topuni")?.system_type
+            || lessons.find((lesson) => lesson.system_type === "topclass")?.system_type
+            || selectedProgram?.system_type
+            || "topclass"
+        : null;
     const selectedSystemType = Form.useWatch("system_type", form);
     const isTopuni = selectedSystemType === "topuni" || programSystemType === "topuni";
 
@@ -271,7 +327,12 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
 
     const getScheduleTemplate = (blockIndex = 0, lessonIndex = 0) => {
         if (form.getFieldValue("system_type") === "topuni") {
-            return singleSessionTemplate(form.getFieldValue("schedule_template") || []);
+            const selectedWeekdays = new Set<number>(
+                (form.getFieldValue("topuni_weekdays") || []).map(Number)
+            );
+            const template = cloneScheduleTemplate(form.getFieldValue("schedule_template") || [])
+                .filter((item) => selectedWeekdays.has(Number(item.weekday)));
+            return template.length ? template : singleSessionTemplate([]);
         }
         const mode = form.getFieldValue("template_mode") || "common";
         const fieldName = mode === "odd_even"
@@ -281,28 +342,22 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                 : "schedule_template";
         const template = cloneScheduleTemplate(form.getFieldValue(fieldName) || []);
         const sessions = template.length ? template : null;
-        return form.getFieldValue("system_type") === "topuni"
-            ? sessions?.slice(0, 1) || buildSessions(lessonIndex).slice(0, 1)
-            : sessions;
+        return sessions;
     };
 
-    const syncTopuniWeekdayFromStartDate = (startDate: Dayjs | null) => {
-        if (!startDate) return;
-        const weekday = weekdayFromDate(startDate);
-        const template = singleSessionTemplate(form.getFieldValue("schedule_template") || []);
-        form.setFieldValue("schedule_template", [{ ...template[0], weekday }]);
-        const blocks = form.getFieldValue("blocks") || [];
-        form.setFieldValue("blocks", blocks.map((block: any) => ({
-            ...block,
-            lessons: (block.lessons || []).map((lesson: any) => ({
-                ...lesson,
-                sessions: (lesson.sessions || []).slice(0, 1).map((session: any) => ({
-                    ...session,
-                    weekday,
-                })),
-            })),
-        })));
+    const syncTopuniScheduleWeekdays = (checked: Array<number | string>) => {
+        const weekdays = Array.from(new Set(checked.map(Number)))
+            .filter((value) => Number.isInteger(value) && value >= 1 && value <= 7)
+            .sort((left, right) => left - right);
+        const current = cloneScheduleTemplate(form.getFieldValue("schedule_template") || []);
+        const fallback = current[0] || buildSessions(0)[0];
+        const scheduleTemplate = weekdays.map((weekday) => (
+            current.find((item) => Number(item.weekday) === weekday)
+            || { ...fallback, weekday, assistant_teachers: [...(fallback.assistant_teachers || [])] }
+        ));
+        form.setFieldsValue({ topuni_weekdays: weekdays, schedule_template: scheduleTemplate });
         setPreview([]);
+        setPreviewError("");
         setPayload(null);
     };
 
@@ -316,6 +371,15 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
         const available = remaining.slice(0, normalizedLimit);
         const blocks = [];
         const effectiveSize = topuni ? 1 : size;
+        const topuniSequence = topuni
+            ? buildTopuniTemplateSequence(
+                form.getFieldValue("start_date"),
+                form.getFieldValue("holidays"),
+                getScheduleTemplate(0, 0) || [],
+                available.length,
+                Number(form.getFieldValue("topuni_week_interval") || 1)
+            )
+            : [];
         for (let index = 0; index < available.length; index += effectiveSize) {
             const blockLessons = available.slice(index, index + effectiveSize);
             blocks.push({
@@ -324,10 +388,9 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                     learn_number: lesson.learn_number,
                     session_id: lesson.id,
                     lesson_name: lesson.lesson_name,
-                    sessions: getScheduleTemplate(blocks.length, lessonIndex)
-                        || (form.getFieldValue("system_type") === "topuni"
-                            ? buildSessions(lessonIndex).slice(0, 1)
-                            : buildSessions(lessonIndex)),
+                    sessions: topuni
+                        ? [topuniSequence[index + lessonIndex] || buildSessions(lessonIndex)[0]]
+                        : getScheduleTemplate(blocks.length, lessonIndex) || buildSessions(lessonIndex),
                 })),
             });
         }
@@ -347,17 +410,40 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                     ? ["first_lesson_schedule_template", "second_lesson_schedule_template"]
                     : ["schedule_template"]);
             const blocks = form.getFieldValue("blocks") || [];
+            const topuni = form.getFieldValue("system_type") === "topuni";
+            const topuniSequence = topuni
+                ? buildTopuniTemplateSequence(
+                    form.getFieldValue("start_date"),
+                    form.getFieldValue("holidays"),
+                    form.getFieldValue("schedule_template") || [],
+                    blocks.reduce((total: number, block: any) => total + (block.lessons || []).length, 0),
+                    Number(form.getFieldValue("topuni_week_interval") || 1)
+                )
+                : [];
+            let topuniLessonIndex = 0;
             form.setFieldValue("blocks", blocks.map((block: any, blockIndex: number) => ({
                 ...block,
-                lessons: (block.lessons || []).map((lesson: any, lessonIndex: number) => ({
-                    ...lesson,
-                    sessions: cloneScheduleTemplate(getScheduleTemplate(blockIndex, lessonIndex) || []),
-                })),
+                lessons: (block.lessons || []).map((lesson: any, lessonIndex: number) => {
+                    if (!topuni) {
+                        return {
+                            ...lesson,
+                            sessions: cloneScheduleTemplate(getScheduleTemplate(blockIndex, lessonIndex) || []),
+                        };
+                    }
+                    const currentMappingKeys = lesson.sessions?.[0]?.hmo_mapping_keys || [];
+                    const session = topuniSequence[topuniLessonIndex++] || buildSessions(0)[0];
+                    return {
+                        ...lesson,
+                        sessions: [{ ...session, hmo_mapping_keys: currentMappingKeys }],
+                    };
+                }),
             })));
             setHmoSyncNotes({});
             setPreview([]);
             setPayload(null);
-            message.success("Đã áp dụng mẫu lịch cho toàn bộ Block đã chọn");
+            message.success(topuni
+                ? "Đã áp dụng lịch tuần cho toàn bộ bài TopUni"
+                : "Đã áp dụng mẫu lịch cho toàn bộ Block đã chọn");
         } catch {
             // Ant Design đã hiển thị lỗi ngay tại dòng mẫu không hợp lệ.
         }
@@ -375,14 +461,21 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                     (lesson: SchedulingLesson) => Number(lesson.scheduled_count || 0) === 0
                 ).length;
                 setLessons(rows);
+                setLoadedLessonsProgramCode(programCode);
                 setLessonLimit(remainingCount);
+                setVisibleBlockCount(8);
                 setHmoOptions({});
                 hmoOptionsRef.current = {};
                 setHmoSyncNotes({});
                 requestedHmoLessonIds.current.clear();
                 divideIntoBlocks(rows, 1, remainingCount);
             })
-            .catch((error: any) => message.error(error?.message || "Không thể tải bài học của chương trình"))
+            .catch((error: any) => {
+                if (!active) return;
+                setLessons([]);
+                setLoadedLessonsProgramCode(programCode);
+                message.error(error?.message || "Không thể tải bài học của chương trình");
+            })
             .finally(() => active && setLoadingLessons(false));
         return () => { active = false; };
         // form ổn định trong suốt vòng đời component.
@@ -398,11 +491,20 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             const remaining = lessons.filter((lesson) => Number(lesson.scheduled_count || 0) === 0).length;
             const startDate = form.getFieldValue("start_date");
             const weekday = weekdayFromDate(startDate);
-            const template = singleSessionTemplate(form.getFieldValue("schedule_template") || []);
+            const currentTemplates = cloneScheduleTemplate(form.getFieldValue("schedule_template") || []);
+            const fallback = currentTemplates[0] || buildSessions(0)[0];
+            const configuredWeekdays = (form.getFieldValue("topuni_weekdays") || [])
+                .map(Number)
+                .filter((value: number) => Number.isInteger(value) && value >= 1 && value <= 7);
+            const selectedWeekdays = configuredWeekdays.length ? configuredWeekdays : [weekday];
             form.setFieldsValue({
                 strategy: "by_block",
                 template_mode: "common",
-                schedule_template: [{ ...template[0], weekday }],
+                schedule_template: selectedWeekdays.map((selectedWeekday: number) => (
+                    currentTemplates.find((item) => Number(item.weekday) === selectedWeekday)
+                    || { ...fallback, weekday: selectedWeekday, assistant_teachers: [...(fallback.assistant_teachers || [])] }
+                )),
+                topuni_weekdays: selectedWeekdays,
             });
             setBlockSize(1);
             setLessonLimit(remaining);
@@ -415,20 +517,33 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
 
     useEffect(() => {
         if (!open || !programCode) return;
-        const available = lessons
-            .filter((lesson) => Number(lesson.scheduled_count || 0) === 0)
-            .slice(0, lessonLimit);
-        available.forEach((lesson) => {
-            const lessonId = String(lesson.id);
-            if (requestedHmoLessonIds.current.has(lessonId)) return;
-            void loadHmoOptions(lessonId)
-                .catch((error: any) => {
-                    message.error(error?.message || `Không thể tải Lesson ID HMO cho bài ${lesson.learn_number}`);
-                });
-        });
+        const visibleLessons = (form.getFieldValue("blocks") || [])
+            .slice(0, visibleBlockCount)
+            .flatMap((block: any) => block.lessons || []);
+        let cancelled = false;
+        let nextIndex = 0;
+        const worker = async () => {
+            while (!cancelled && nextIndex < visibleLessons.length) {
+                const lesson = visibleLessons[nextIndex++];
+                const lessonId = String(lesson.session_id || "");
+                if (!lessonId || requestedHmoLessonIds.current.has(lessonId)) continue;
+                try {
+                    await loadHmoOptions(lessonId);
+                } catch (error: any) {
+                    if (!cancelled) {
+                        message.error(error?.message || `Không thể tải Lesson ID HMO cho bài ${lesson.learn_number}`);
+                    }
+                }
+            }
+        };
+        void Promise.all(Array.from(
+            { length: Math.min(4, visibleLessons.length) },
+            () => worker()
+        ));
+        return () => { cancelled = true; };
         // loadHmoOptions dùng cache/ref nội bộ để tránh gọi trùng API.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [lessonLimit, lessons, open, programCode]);
+    }, [lessonLimit, lessons, open, programCode, visibleBlockCount]);
 
     const handleSyncHmoLessonIds = async () => {
         const blocks = form.getFieldValue("blocks") || [];
@@ -588,13 +703,38 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
 
     const buildPayload = async (): Promise<AutoSchedulePayload> => {
         const values = await form.validateFields();
+        const topuniWeekdays: number[] = Array.from(new Set<number>(
+            ((values.topuni_weekdays || []) as unknown[]).map((value) => Number(value))
+        ))
+            .filter((value) => Number.isInteger(value) && value >= 1 && value <= 7);
+        const topuniWeekInterval = Number(values.topuni_week_interval || 1);
+        if (values.system_type === "topuni" && ![1, 2].includes(topuniWeekInterval)) {
+            throw new Error("Nhịp học TopUni chỉ hỗ trợ hàng tuần hoặc cách tuần.");
+        }
+        if (values.system_type === "topuni" && !topuniWeekdays.length) {
+            throw new Error("Vui lòng chọn ít nhất một thứ học hàng tuần cho TopUni.");
+        }
+        const topuniSessions = values.system_type === "topuni"
+            ? (values.schedule_template || []).filter(
+                (session: any) => topuniWeekdays.includes(Number(session.weekday))
+            )
+            : [];
+        if (values.system_type === "topuni" && topuniSessions.length !== topuniWeekdays.length) {
+            throw new Error("Mỗi thứ học TopUni phải có đúng một khung giờ.");
+        }
+        if (values.system_type === "topuni") {
+            const missingTeacher = topuniSessions.find(
+                (session: any) => !String(session.teacher || "").trim()
+            );
+            if (missingTeacher) {
+                const label = WEEKDAYS.find((item) => item.value === Number(missingTeacher.weekday))?.label;
+                throw new Error(`Vui lòng chọn Giáo viên cho ${label || "ngày học TopUni"}.`);
+            }
+        }
         // Kiểm tra trực tiếp toàn bộ dữ liệu để mọi buổi của mọi bài đều có GV.
         for (const block of values.blocks || []) {
             for (const lesson of block.lessons || []) {
-                const sessions = (lesson.sessions || []).slice(
-                    0,
-                    values.system_type === "topuni" ? 1 : undefined
-                );
+                const sessions = lesson.sessions || [];
                 const missingTeacherIndex = sessions.findIndex(
                     (session: any) => !String(session.teacher || "").trim()
                 );
@@ -605,11 +745,33 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                 }
             }
         }
+        const configuredTopuniLessons = new Map<string, any>(
+            (values.blocks || []).flatMap((block: any) => block.lessons || [])
+                .map((lesson: any) => [String(lesson.session_id), lesson])
+        );
+        const sourceBlocks = values.system_type === "topuni"
+            ? [{
+                block_name: "TopUni",
+                lessons: lessons
+                    .filter((lesson) => Number(lesson.scheduled_count || 0) === 0)
+                    .map((lesson) => ({
+                        learn_number: lesson.learn_number,
+                        session_id: lesson.id,
+                        lesson_name: lesson.lesson_name,
+                        lesson_name_prefix: configuredTopuniLessons.get(String(lesson.id))?.lesson_name_prefix || "",
+                        lesson_name_suffix: configuredTopuniLessons.get(String(lesson.id))?.lesson_name_suffix || "",
+                        sessions: configuredTopuniLessons.get(String(lesson.id))?.sessions || [],
+                    })),
+            }]
+            : (values.blocks || []);
         return {
             program_code: programCode,
             system_type: values.system_type,
             strategy: values.system_type === "topuni" ? "by_block" : values.strategy,
             start_date: values.start_date.format("YYYY-MM-DD"),
+            ...(values.system_type === "topuni" ? { topuni_weekdays: topuniWeekdays } : {}),
+            ...(values.system_type === "topuni" ? { topuni_per_lesson_schedule: true } : {}),
+            ...(values.system_type === "topuni" ? { topuni_week_interval: topuniWeekInterval } : {}),
             holidays: normalizeHolidayDates(values.holidays),
             customize_lesson_names: Boolean(values.customize_lesson_names),
             lesson_name_prefix: values.customize_lesson_names ? String(values.lesson_name_prefix || "") : "",
@@ -622,14 +784,15 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                     suffix: String(rule.suffix || ""),
                 }))
                 : [],
-            blocks: values.blocks.map((block: any, blockIndex: number) => ({
+            blocks: sourceBlocks.map((block: any, blockIndex: number) => ({
                 block_name: block.block_name || `Block ${blockIndex + 1}`,
-                lessons: block.lessons.map((lesson: any) => ({
+                lessons: (block.lessons || []).map((lesson: any) => ({
                     learn_number: Number(lesson.learn_number),
                     session_id: lesson.session_id,
                     lesson_name: lesson.lesson_name,
-                    sessions: lesson.sessions
-                        .slice(0, values.system_type === "topuni" ? 1 : undefined)
+                    lesson_name_prefix: String(lesson.lesson_name_prefix || "").slice(0, 100),
+                    lesson_name_suffix: String(lesson.lesson_name_suffix || "").slice(0, 100),
+                    sessions: (lesson.sessions || [])
                         .map((session: any) => ({
                         weekday: Number(session.weekday),
                         start_time: session.start_time.format("HH:mm"),
@@ -724,25 +887,19 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             <Form.List name={name}>
                 {(fields, { add, remove }) => (
                     <Space direction="vertical" style={{ width: "100%" }}>
-                        {fields.slice(0, lockToOneSession ? 1 : undefined).map((field, index) => (
+                        {fields.map((field, index) => (
                             <Space key={field.key} align="start" wrap>
-                                <Form.Item name={[field.name, "weekday"]} label={lockToOneSession ? "Thứ" : `Buổi mẫu ${index + 1}`} rules={[{ required: true, message: "Chọn thứ học" }]}>
-                                    <Select style={{ width: 125 }} options={WEEKDAYS} />
-                                </Form.Item>
-                                {lockToOneSession && (
-                                    <Form.Item label="Ngày">
-                                        <Form.Item noStyle shouldUpdate>
-                                            {({ getFieldValue }) => (
-                                                <DatePicker
-                                                    value={getFieldValue("start_date")}
-                                                    format="DD/MM/YYYY"
-                                                    onChange={(value) => {
-                                                        form.setFieldValue("start_date", value);
-                                                        syncTopuniWeekdayFromStartDate(value);
-                                                    }}
-                                                />
-                                            )}
-                                        </Form.Item>
+                                {lockToOneSession ? (
+                                    <Form.Item label="Thứ học">
+                                        <Typography.Text strong style={{ display: "inline-block", minWidth: 72, paddingTop: 5 }}>
+                                            {WEEKDAYS.find((item) => item.value === Number(
+                                                form.getFieldValue([name, field.name, "weekday"])
+                                            ))?.label || `Ngày ${index + 1}`}
+                                        </Typography.Text>
+                                    </Form.Item>
+                                ) : (
+                                    <Form.Item name={[field.name, "weekday"]} label={`Buổi mẫu ${index + 1}`} rules={[{ required: true, message: "Chọn thứ học" }]}>
+                                        <Select style={{ width: 125 }} options={WEEKDAYS} />
                                     </Form.Item>
                                 )}
                                 <Form.Item name={[field.name, "start_time"]} label="Bắt đầu" rules={[{ required: true }]}>
@@ -769,7 +926,11 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                         );
                                     }}
                                 </Form.Item>
-                                <Form.Item name={[field.name, "teacher"]} label="Giáo viên">
+                                <Form.Item
+                                    name={[field.name, "teacher"]}
+                                    label="Giáo viên"
+                                    rules={lockToOneSession ? [{ required: true, message: "Chọn giáo viên" }] : undefined}
+                                >
                                     <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" allowClear placeholder="Chọn giáo viên" style={{ width: 220 }} />
                                 </Form.Item>
                                 <Form.Item name={[field.name, "assistant_teachers"]} label="Trợ giảng">
@@ -811,21 +972,29 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             maskClosable={!loading}
             footer={[
                 <Button key="cancel" onClick={onClose} disabled={loading}>Đóng</Button>,
-                <Button key="preview" loading={loading} disabled={loadingLessons || remainingCount === 0} onClick={() => void handlePreview()}>Xem trước</Button>,
+                <Button key="preview" loading={loading} disabled={!programSystemType || loadingLessons || remainingCount === 0} onClick={() => void handlePreview()}>Xem trước</Button>,
                 <Button key="commit" type="primary" disabled={!preview.length} loading={loading} onClick={() => void handleCommit()}>
                     Xác nhận tạo {preview.length || ""} lịch
                 </Button>,
             ]}
         >
-            <Spin spinning={loadingLessons}>
+            {!programSystemType ? (
+                <div style={{ minHeight: fullscreen ? "calc(100dvh - 130px)" : 320, display: "grid", placeItems: "center" }}>
+                    <Spin size="large" tip={`Đang xác định hệ thống của Chương trình ${programCode}...`}>
+                        <div style={{ width: 360, height: 120 }} />
+                    </Spin>
+                </div>
+            ) : <Spin spinning={loadingLessons}>
                 <Form
                     className="responsive-modal-form responsive-schedule-form"
                     form={form}
                     layout="vertical"
                     initialValues={{
-                        system_type: "topclass",
+                        system_type: programSystemType,
                         strategy: "interleaved",
                         start_date: dayjs(),
+                        topuni_weekdays: [],
+                        topuni_week_interval: 1,
                         customize_lesson_names: false,
                         hmo_sync_name_source: "lesson",
                         lesson_name_prefix: "[Lịch {n}] - ",
@@ -914,13 +1083,40 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                             </>
                         )}
                         <Form.Item name="start_date" label="Ngày bắt đầu" rules={[{ required: true }]}>
-                            <DatePicker
-                                format="DD/MM/YYYY"
-                                onChange={(value) => {
-                                    if (isTopuni) syncTopuniWeekdayFromStartDate(value);
-                                }}
-                            />
+                            <DatePicker format="DD/MM/YYYY" />
                         </Form.Item>
+                        {isTopuni && (
+                            <>
+                                <Form.Item
+                                    name="topuni_weekdays"
+                                    label="Thứ học"
+                                    rules={[{ required: true, type: "array", min: 1, message: "Chọn ít nhất một thứ học" }]}
+                                >
+                                    <Checkbox.Group
+                                        options={WEEKDAYS.map(({ value, label }) => ({
+                                            value,
+                                            label: label.replace("Thứ ", "T").replace("Chủ nhật", "CN"),
+                                        }))}
+                                        onChange={(checked) => syncTopuniScheduleWeekdays(checked as Array<number | string>)}
+                                    />
+                                </Form.Item>
+                                <Form.Item name="topuni_week_interval" label="Nhịp học">
+                                    <Select
+                                        style={{ width: 130 }}
+                                        options={[
+                                            { value: 1, label: "Hàng tuần" },
+                                            { value: 2, label: "Cách tuần" },
+                                        ]}
+                                        onChange={(value) => {
+                                            form.setFieldValue("topuni_week_interval", value);
+                                            divideIntoBlocks(lessons, 1, lessons.filter(
+                                                (lesson) => Number(lesson.scheduled_count || 0) === 0
+                                            ).length);
+                                        }}
+                                    />
+                                </Form.Item>
+                            </>
+                        )}
                         <Form.Item name="holidays" label="Ngày nghỉ (DD/MM/YYYY, cách nhau dấu phẩy)">
                             <Input style={{ width: 320 }} placeholder="19/12/2026, 01/01/2027" />
                         </Form.Item>
@@ -1007,9 +1203,9 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                         {isTopuni ? (
                             <>
                                 <Typography.Text type="secondary" style={{ display: "block", marginBottom: 12 }}>
-                                    Thứ được tự động lấy theo Ngày bắt đầu; bạn vẫn có thể chỉnh lại khi cần.
+                                    Mỗi thứ đã chọn có thể dùng khung giờ và nhân sự riêng. Các bài sẽ lần lượt chạy theo lịch tuần này, mỗi bài đúng một buổi.
                                 </Typography.Text>
-                                {renderTemplateFields("schedule_template", "Buổi mẫu", true)}
+                                {renderTemplateFields("schedule_template", "Khung giờ theo thứ", true)}
                             </>
                         ) : (
                             <>
@@ -1036,7 +1232,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                             </>
                         )}
                         <Button type="primary" onClick={() => void applyScheduleTemplateToAllLessons()} disabled={remainingCount === 0}>
-                            Áp dụng mẫu cho tất cả Block
+                            {isTopuni ? "Áp dụng lịch tuần cho tất cả bài" : "Áp dụng mẫu cho tất cả Block"}
                         </Button>
                     </Card>
 
@@ -1079,10 +1275,150 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                         </div>
                     )}
 
-                    <Form.List name="blocks">
+                    {isTopuni && (
+                        <Form.List name="blocks">
+                            {(blockFields) => blockFields.length ? (
+                                <Space direction="vertical" style={{ width: "100%" }}>
+                                    {blockFields.slice(0, visibleBlockCount).map((blockField) => {
+                                        const firstLesson = form.getFieldValue([
+                                            "blocks", blockField.name, "lessons", 0,
+                                        ]) || {};
+                                        return (
+                                        <Card
+                                            key={blockField.key}
+                                            size="small"
+                                            title={`Bài ${firstLesson.learn_number || Number(blockField.name) + 1}${firstLesson.lesson_name ? ` - ${firstLesson.lesson_name}` : ""}`}
+                                        >
+                                        <Form.List name={[blockField.name, "lessons"]}>
+                                            {(lessonFields) => lessonFields.map((lessonField) => {
+                                                const lessonId = String(form.getFieldValue([
+                                                    "blocks", blockField.name, "lessons", lessonField.name, "session_id",
+                                                ]) || "");
+                                                const outlineOptions = hmoOptions[lessonId] || [];
+                                                return (
+                                                    <div
+                                                        key={lessonField.key}
+                                                    >
+                                                        <Form.Item name={[lessonField.name, "session_id"]} hidden><Input /></Form.Item>
+                                                        <Form.Item name={[lessonField.name, "learn_number"]} hidden><Input /></Form.Item>
+                                                        <Form.Item name={[lessonField.name, "lesson_name"]} hidden><Input /></Form.Item>
+                                                        <Space wrap align="start" size={16} style={{ width: "100%" }}>
+                                                            <Form.Item
+                                                                name={[lessonField.name, "lesson_name_prefix"]}
+                                                                label="Tiền tố"
+                                                                rules={[{ max: 100, message: "Tiền tố tối đa 100 ký tự" }]}
+                                                                style={{ marginBottom: 0 }}
+                                                            >
+                                                                <Input style={{ width: 200 }} maxLength={100} placeholder="VD: [Lịch riêng] - " />
+                                                            </Form.Item>
+                                                            <Form.Item
+                                                                name={[lessonField.name, "lesson_name_suffix"]}
+                                                                label="Hậu tố"
+                                                                rules={[{ max: 100, message: "Hậu tố tối đa 100 ký tự" }]}
+                                                                style={{ marginBottom: 0 }}
+                                                            >
+                                                                <Input style={{ width: 200 }} maxLength={100} placeholder="VD: - Buổi bổ sung" />
+                                                            </Form.Item>
+                                                        </Space>
+                                                        {hmoSyncNotes[lessonId] && (
+                                                            <Alert
+                                                                showIcon
+                                                                type={hmoSyncNotes[lessonId].type}
+                                                                message={hmoSyncNotes[lessonId].message}
+                                                                style={{ marginTop: 8 }}
+                                                            />
+                                                        )}
+                                                        <Form.List name={[lessonField.name, "sessions"]}>
+                                                            {(sessionFields) => sessionFields.slice(0, 1).map((sessionField) => (
+                                                                <Space key={sessionField.key} align="start" wrap style={{ width: "100%", marginTop: 8 }}>
+                                                                    <Form.Item name={[sessionField.name, "weekday"]} label="Thứ" rules={[{ required: true, message: "Chọn thứ học" }]}>
+                                                                        <Select style={{ width: 125 }} options={WEEKDAYS} />
+                                                                    </Form.Item>
+                                                                    <Form.Item name={[sessionField.name, "start_time"]} label="Bắt đầu" rules={[{ required: true }]}>
+                                                                        <TimePicker
+                                                                            format="HH:mm"
+                                                                            onChange={(startTime) => {
+                                                                                const endName = ["blocks", blockField.name, "lessons", lessonField.name, "sessions", sessionField.name, "end_time"];
+                                                                                if (isEndTimeInvalid(startTime, form.getFieldValue(endName))) form.setFieldValue(endName, undefined);
+                                                                            }}
+                                                                        />
+                                                                    </Form.Item>
+                                                                    <Form.Item noStyle shouldUpdate>
+                                                                        {({ getFieldValue }) => {
+                                                                            const startTime = getFieldValue(["blocks", blockField.name, "lessons", lessonField.name, "sessions", sessionField.name, "start_time"]);
+                                                                            return (
+                                                                                <Form.Item name={[sessionField.name, "end_time"]} label="Kết thúc" rules={[{ required: true }]}>
+                                                                                    <TimePicker
+                                                                                        format="HH:mm"
+                                                                                        disabled={!startTime}
+                                                                                        disabledTime={() => getEndTimeDisabledTime(startTime)}
+                                                                                    />
+                                                                                </Form.Item>
+                                                                            );
+                                                                        }}
+                                                                    </Form.Item>
+                                                                    <Form.Item name={[sessionField.name, "teacher"]} label="Giáo viên" rules={[{ required: true, message: "Chọn giáo viên" }]}>
+                                                                        <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" allowClear placeholder="Chọn giáo viên" style={{ width: 220 }} />
+                                                                    </Form.Item>
+                                                                    <Form.Item name={[sessionField.name, "assistant_teachers"]} label="Trợ giảng">
+                                                                        <TeachingStaffSelect
+                                                                            teacherType={0}
+                                                                            mode="multiple"
+                                                                            allowClear
+                                                                            placeholder="Chọn một hoặc nhiều trợ giảng"
+                                                                            style={{ width: 300 }}
+                                                                            popupMatchSelectWidth={480}
+                                                                            maxTagCount="responsive"
+                                                                        />
+                                                                    </Form.Item>
+                                                                    <Form.Item name={[sessionField.name, "hmo_mapping_keys"]} label="Lesson ID HMO" style={{ width: 600, maxWidth: "100%" }}>
+                                                                        <HmoMappingSelect
+                                                                            allowClear
+                                                                            showSearch
+                                                                            loading={loadingHmoLessonIds.has(lessonId)}
+                                                                            style={{ width: "100%" }}
+                                                                            popupMatchSelectWidth={680}
+                                                                            listHeight={420}
+                                                                            placeholder={outlineOptions.length
+                                                                                ? "Chọn Lesson ID từ HMO"
+                                                                                : "Bài chưa có Course ID hoặc HMO không có Lesson ID"}
+                                                                            options={buildGroupedHmoOptions(outlineOptions)}
+                                                                            optionFilterProp="label"
+                                                                        />
+                                                                    </Form.Item>
+                                                                </Space>
+                                                            ))}
+                                                        </Form.List>
+                                                        {!!outlineOptions.length && (
+                                                            <Typography.Text type="secondary" style={{ display: "block", marginTop: 4, fontSize: 12 }}>
+                                                                {summarizeHmoOptions(outlineOptions)} — danh sách được nhóm theo Package/Course.
+                                                            </Typography.Text>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </Form.List>
+                                        </Card>
+                                        );
+                                    })}
+                                    {blockFields.length > visibleBlockCount && (
+                                        <Button
+                                            block
+                                            type="dashed"
+                                            onClick={() => setVisibleBlockCount((count) => Math.min(blockFields.length, count + 8))}
+                                        >
+                                            Hiển thị thêm {Math.min(8, blockFields.length - visibleBlockCount)} bài
+                                        </Button>
+                                    )}
+                                </Space>
+                            ) : <Empty description={remainingCount === 0 ? "Tất cả bài đã được gán lịch" : "Chưa có bài để tạo lịch"} />}
+                        </Form.List>
+                    )}
+
+                    {!isTopuni && <Form.List name="blocks">
                         {(blockFields) => blockFields.length ? (
                             <Space direction="vertical" style={{ width: "100%" }}>
-                                {blockFields.map((blockField) => {
+                                {blockFields.slice(0, visibleBlockCount).map((blockField) => {
                                     const blockIndex = blockField.name;
                                     return (
                                     <Card key={blockField.key} size="small" title={`Block ${blockIndex + 1}`}>
@@ -1199,11 +1535,20 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                     </Card>
                                     );
                                 })}
+                                {blockFields.length > visibleBlockCount && (
+                                    <Button
+                                        block
+                                        type="dashed"
+                                        onClick={() => setVisibleBlockCount((count) => Math.min(blockFields.length, count + 8))}
+                                    >
+                                        Hiển thị thêm {Math.min(8, blockFields.length - visibleBlockCount)} Block
+                                    </Button>
+                                )}
                             </Space>
                         ) : <Empty description={remainingCount === 0 ? "Tất cả bài đã được gán lịch" : "Chưa chọn bài để tạo Block"} />}
-                    </Form.List>
+                    </Form.List>}
                 </Form>
-            </Spin>
+            </Spin>}
 
             {previewError && (
                 <div ref={previewErrorRef} style={{ scrollMarginTop: 16 }}>
@@ -1223,26 +1568,27 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                     <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
                         Hiển thị toàn bộ để kiểm tra trước khi xác nhận, không chia thành các trang.
                     </Typography.Text>
-                    <div className="auto-schedule-preview-desktop">
+                    {isDesktopPreview ? <div className="auto-schedule-preview-desktop">
                         <Table size="small" rowKey={(_, index) => String(index)} pagination={false} scroll={{ x: "max-content" }} dataSource={preview} columns={[
-                            { title: "Block", render: (_value, row) => Number(row.auto_schedule?.block_index ?? 0) + 1 },
+                            { title: "Thứ", dataIndex: "start_time", render: (value) => previewWeekdayLabel(value) },
+                            { title: "Ngày live", dataIndex: "start_time", render: (value) => dayjs(String(value).replace(/Z$/, "")).format("DD/MM/YYYY") },
+                            {
+                                title: "Khung giờ",
+                                render: (_value, row) => `${dayjs(String(row.start_time).replace(/Z$/, "")).format("HH:mm")}–${dayjs(String(row.end_time).replace(/Z$/, "")).format("HH:mm")}`,
+                            },
                             { title: "Bài", dataIndex: "learn_number" },
                             { title: "Tên bài", dataIndex: "lesson_name" },
-                            { title: "Lesson ID", render: (_value, row) => previewLessonIds(row) },
                             { title: "Giáo viên", dataIndex: "teacher", render: (value) => value || "-" },
                             { title: "Trợ giảng", dataIndex: "assistant_teacher", render: (value) => value || "-" },
-                            { title: "Thứ", dataIndex: "start_time", render: (value) => previewWeekdayLabel(value) },
-                            { title: "Bắt đầu", dataIndex: "start_time", render: (value) => dayjs(String(value).replace(/Z$/, "")).format("DD/MM/YYYY HH:mm") },
-                            { title: "Kết thúc", dataIndex: "end_time", render: (value) => dayjs(String(value).replace(/Z$/, "")).format("DD/MM/YYYY HH:mm") },
+                            { title: "Lesson ID", render: (_value, row) => previewLessonIds(row) },
                         ]} />
-                    </div>
-                    <div className="auto-schedule-preview-mobile">
+                    </div> : <div className="auto-schedule-preview-mobile">
                         {preview.map((row, index) => (
                             <Card
                                 key={`${row.id || row.start_time}-${index}`}
                                 size="small"
                                 title={<Typography.Text strong>{row.lesson_name || `Bài ${row.learn_number}`}</Typography.Text>}
-                                extra={<Typography.Text type="secondary">Bài {row.learn_number} · Block {Number(row.auto_schedule?.block_index ?? 0) + 1}</Typography.Text>}
+                                extra={<Typography.Text type="secondary">Bài {row.learn_number}</Typography.Text>}
                             >
                                 <Space direction="vertical" size={6} style={{ width: "100%" }}>
                                     <Typography.Text><Typography.Text type="secondary">Thời gian: </Typography.Text>{previewWeekdayLabel(row.start_time)} · {dayjs(String(row.start_time).replace(/Z$/, "")).format("DD/MM/YYYY HH:mm")} – {dayjs(String(row.end_time).replace(/Z$/, "")).format("HH:mm")}</Typography.Text>
@@ -1252,7 +1598,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                 </Space>
                             </Card>
                         ))}
-                    </div>
+                    </div>}
                 </div>
             )}
         </Modal>

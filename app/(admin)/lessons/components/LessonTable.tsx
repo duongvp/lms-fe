@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { DragEvent } from "react";
-import { Button, Empty, Grid, Input, Space, Tag, Tooltip } from "antd";
+import { Button, Checkbox, Empty, Grid, Input, Space, Tag, Tooltip } from "antd";
 import { FilterOutlined } from "@ant-design/icons";
 import {
     DeleteOutlined,
@@ -28,6 +28,7 @@ interface LessonTableProps {
     sortState: LessonSortState;
     visibleFieldPermissions: ResolvedFieldPermission[];
     selectedRowKeys: React.Key[];
+    allRowsSelected: boolean;
     reorderMode: boolean;
     dragRowKey: React.Key;
     canEdit: boolean;
@@ -40,6 +41,7 @@ interface LessonTableProps {
     /** Khi false: hiển thị empty placeholder, không hiển thị data */
     hasSearched: boolean;
     onSelectionChange: (selectedRowKeys: React.Key[]) => void;
+    onSelectAll: (selected: boolean) => void;
     onPageChange: (page: number, pageSize: number) => void;
     onSortChange: (sorter: LessonSortState) => void;
     onDragStart: (key: React.Key) => void;
@@ -60,6 +62,7 @@ const LessonTable = ({
     sortState,
     visibleFieldPermissions,
     selectedRowKeys,
+    allRowsSelected,
     reorderMode,
     dragRowKey,
     canEdit,
@@ -71,6 +74,7 @@ const LessonTable = ({
     visibleFormFieldCodes,
     hasSearched,
     onSelectionChange,
+    onSelectAll,
     onPageChange,
     onSortChange,
     onDragStart,
@@ -252,7 +256,23 @@ const LessonTable = ({
                     loading={loading}
                     rowSelection={reorderMode ? undefined : {
                         selectedRowKeys,
-                        onChange: onSelectionChange,
+                        preserveSelectedRowKeys: true,
+                        onChange: (keys, _rows, info) => {
+                            if (info.type !== "all") onSelectionChange(keys);
+                        },
+                        onSelectAll: (selected) => onSelectAll(selected),
+                        columnTitle: () => {
+                            const selectableOnPage = data.filter((record) => !isPastLesson(record)).length;
+                            return (
+                                <Checkbox
+                                    aria-label="Chọn tất cả đề cương"
+                                    checked={allRowsSelected}
+                                    indeterminate={!allRowsSelected && selectedRowKeys.length > 0}
+                                    disabled={totalItems <= 0 || (totalItems <= data.length && selectableOnPage === 0)}
+                                    onChange={(event) => onSelectAll(event.target.checked)}
+                                />
+                            );
+                        },
                         columnWidth: 32,
                         getCheckboxProps: (record) => ({
                             disabled: isPastLesson(record),

@@ -20,6 +20,12 @@ import { logoutUser } from "@/services/authService";
 
 const { useBreakpoint } = Grid;
 
+export const notifyRouteNavigationStart = () => {
+    if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("lms:route-navigation-start"));
+    }
+};
+
 interface SideMenuProps {
     drawerOpen: boolean;
     onCloseDrawer: () => void;
@@ -113,6 +119,23 @@ export const menuConfig: IMenuItem[] = [
 // không nhận query `program`, nhưng cũng không được xóa lựa chọn trong store.
 export const PROGRAM_CONTEXT_PATHS = ["/lessons", "/quizzes", "/schedule"] as const;
 
+const programContextStorageKey = (pathname: string, programCode?: string | null) => (
+    `lms:filters:${pathname}:${String(programCode || "__all__").trim() || "__all__"}`
+);
+
+export const rememberProgramContextUrl = (url: string) => {
+    if (typeof window === "undefined") return;
+    const parsed = new URL(url, window.location.origin);
+    if (!(PROGRAM_CONTEXT_PATHS as readonly string[]).includes(parsed.pathname)) return;
+    const program = String(parsed.searchParams.get("program") || "").trim();
+    // Chỉ Lịch học hỗ trợ ngữ cảnh liên Chương trình.
+    if (!program && parsed.pathname !== "/schedule") return;
+    window.sessionStorage.setItem(
+        programContextStorageKey(parsed.pathname, program),
+        `${parsed.pathname}${parsed.search}`
+    );
+};
+
 export const isProgramContextPath = (path: string) => {
     const pathname = path.split("?")[0].split("#")[0];
     return PROGRAM_CONTEXT_PATHS.some(
@@ -123,14 +146,22 @@ export const isProgramContextPath = (path: string) => {
 export const withProgramContext = (path: string, programCode?: string | null) => {
     const [pathWithoutHash, hash] = path.split("#", 2);
     const [pathname, query = ""] = pathWithoutHash.split("?", 2);
-    const params = new URLSearchParams(query);
+    const program = String(
+        programCode === undefined
+            ? useAuthStore.getState().currentProgram || ""
+            : programCode || ""
+    ).trim();
+    const rememberedUrl = typeof window !== "undefined"
+        && !query
+        && (PROGRAM_CONTEXT_PATHS as readonly string[]).includes(pathname)
+        ? window.sessionStorage.getItem(programContextStorageKey(pathname, program))
+        : null;
+    const rememberedQuery = rememberedUrl?.startsWith(`${pathname}?`)
+        ? rememberedUrl.slice(pathname.length + 1)
+        : "";
+    const params = new URLSearchParams(rememberedQuery || query);
 
     if (isProgramContextPath(path)) {
-        const program = String(
-            programCode === undefined
-                ? useAuthStore.getState().currentProgram || ""
-                : programCode || ""
-        ).trim();
         if (program) params.set("program", program);
         else params.delete("program");
     } else {
@@ -308,12 +339,14 @@ const SideMenu: React.FC<SideMenuProps> = ({ drawerOpen, onCloseDrawer }) => {
         const path = menuRoutes[key];
         if (path) {
             if (path === "/auth/login") {
+                notifyRouteNavigationStart();
                 void logoutUser().finally(() => {
                     useAuthStore.getState().logout();
                     router.replace("/auth/login");
                 });
                 return;
             }
+            notifyRouteNavigationStart();
             router.push(withProgramContext(path, currentProgram));
             onCloseDrawer();
         }

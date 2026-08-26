@@ -38,6 +38,7 @@ interface QuizTableProps {
     /** Khi false: hiển thị empty placeholder thay vì bảng */
     hasSearched: boolean;
     onSelectionChange: (keys: Key[]) => void;
+    onSelectAll: (selected: boolean) => void;
     onPageChange: (page: number, pageSize: number) => void;
     onDragStart: (key: Key) => void;
     onDrop: (key: Key) => void;
@@ -64,6 +65,7 @@ const QuizTable = ({
     canViewField,
     hasSearched,
     onSelectionChange,
+    onSelectAll,
     onPageChange,
     onDragStart,
     onDrop,
@@ -274,7 +276,11 @@ const QuizTable = ({
                 loading={loading}
                 rowSelection={!reorderMode && canExport ? {
                     selectedRowKeys: selectedKeys,
-                    onChange: onSelectionChange,
+                    preserveSelectedRowKeys: true,
+                    onChange: (keys, _rows, info) => {
+                        if (info.type !== "all") onSelectionChange(keys);
+                    },
+                    onSelectAll: (selected) => onSelectAll(selected),
                 } : undefined}
                 onRow={(record) => ({
                     draggable: reorderMode,

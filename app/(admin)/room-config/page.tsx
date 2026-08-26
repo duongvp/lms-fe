@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Table as AntTable,
   Card,
@@ -72,6 +73,11 @@ const RoomConfigFormSection = ({
 );
 
 export default function RoomConfigPage() {
+  const searchParams = useSearchParams();
+  const positiveParam = (name: string, fallback: number) => {
+    const value = Number(searchParams.get(name));
+    return Number.isInteger(value) && value > 0 ? value : fallback;
+  };
   const hasPermission = useAuthStore((state) => state.hasPermission);
   const can = useAuthStore((state) => state.can);
   const canCreateRoomConfig = hasPermission(PermissionKey.ROOM_CONFIG_CREATE);
@@ -80,10 +86,33 @@ export default function RoomConfigPage() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<RoomConfigRecord[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(10);
-  const [search, setSearch] = useState("");
-  const [filterLearnNumber, setFilterLearnNumber] = useState<number | null>(null);
+  const [page, setPage] = useState(() => positiveParam("page", 1));
+  const [limit, setLimit] = useState(() => positiveParam("limit", 10));
+  const [search, setSearch] = useState(() => String(searchParams.get("q") || ""));
+  const [filterLearnNumber, setFilterLearnNumber] = useState<number | null>(() => {
+    const value = Number(searchParams.get("learn_number"));
+    return Number.isInteger(value) && value > 0 ? value : null;
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (search.trim()) params.set("q", search.trim());
+    if (filterLearnNumber) params.set("learn_number", String(filterLearnNumber));
+    if (page > 1) params.set("page", String(page));
+    if (limit !== 10) params.set("limit", String(limit));
+    const nextUrl = params.size ? `/room-config?${params.toString()}` : "/room-config";
+    window.history.replaceState(window.history.state, "", nextUrl);
+  }, [filterLearnNumber, limit, page, search]);
+
+  useEffect(() => {
+    const nextPage = Number(searchParams.get("page"));
+    const nextLimit = Number(searchParams.get("limit"));
+    const nextLesson = Number(searchParams.get("learn_number"));
+    setPage(Number.isInteger(nextPage) && nextPage > 0 ? nextPage : 1);
+    setLimit(Number.isInteger(nextLimit) && nextLimit > 0 ? nextLimit : 10);
+    setSearch(String(searchParams.get("q") || ""));
+    setFilterLearnNumber(Number.isInteger(nextLesson) && nextLesson > 0 ? nextLesson : null);
+  }, [searchParams]);
 
   // Options fetched from API (quiz classes + lessons — same as quiz modal)
 
@@ -566,7 +595,10 @@ export default function RoomConfigPage() {
               placeholder="Tìm kiếm môn học, mã môn hoặc người cập nhật..."
               prefix={<SearchOutlined />}
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               allowClear
             />
           </Col>
@@ -575,7 +607,10 @@ export default function RoomConfigPage() {
               style={{ width: "100%" }}
               placeholder="Lọc số buổi học..."
               value={filterLearnNumber}
-              onChange={(val) => setFilterLearnNumber(val)}
+              onChange={(val) => {
+                setFilterLearnNumber(val);
+                setPage(1);
+              }}
               min={1}
             />
           </Col>
@@ -584,6 +619,7 @@ export default function RoomConfigPage() {
               onClick={() => {
                 setSearch("");
                 setFilterLearnNumber(null);
+                setPage(1);
               }}
             >
               Xóa bộ lọc

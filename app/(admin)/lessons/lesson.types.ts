@@ -9,7 +9,8 @@ export interface LessonFilterValues {
     grade?: number;
     subject_code?: string;
     subject?: string;
-    learn_number?: number;
+    from_learn_number?: number;
+    to_learn_number?: number;
 }
 
 export interface LessonSortState {

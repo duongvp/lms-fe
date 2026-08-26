@@ -35,6 +35,7 @@ const LessonFilterDrawer = ({
     }));
 
     useEffect(() => {
+        filterForm.resetFields();
         filterForm.setFieldsValue(value);
     }, [filterForm, value]);
 
@@ -87,8 +88,25 @@ const LessonFilterDrawer = ({
                 </Form.Item>
                 <Form.Item name="grade" hidden><InputNumber /></Form.Item>
                 <Form.Item name="subject" hidden><Select /></Form.Item>
-                <Form.Item name="learn_number" label="Số thứ tự bài">
-                    <InputNumber min={1} style={{ width: "100%" }} placeholder="VD: 1" />
+                <Form.Item label="Khoảng bài">
+                    <Space.Compact block>
+                        <Form.Item name="from_learn_number" noStyle>
+                            <InputNumber
+                                min={1}
+                                precision={0}
+                                style={{ width: "50%" }}
+                                placeholder="Từ bài"
+                            />
+                        </Form.Item>
+                        <Form.Item name="to_learn_number" noStyle>
+                            <InputNumber
+                                min={1}
+                                precision={0}
+                                style={{ width: "50%" }}
+                                placeholder="Đến bài"
+                            />
+                        </Form.Item>
+                    </Space.Compact>
                 </Form.Item>
             </Form>
         </Drawer>

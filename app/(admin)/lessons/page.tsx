@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button, Input, Modal, notification, Spin, Tag } from "antd";
 import { DownOutlined, InfoCircleOutlined, UpOutlined } from "@ant-design/icons";
 import { useAuthStore } from "@/stores/authStore";
+import { rememberProgramContextUrl } from "@/components/layouts/AdminLayout/SideMenu";
 import { PermissionKey } from "@/types/permissions";
 import {
     canEditAnyField,
@@ -20,6 +21,7 @@ import {
     downloadLessonTemplate,
     downloadLessonProgramTemplate,
     exportLessons,
+    getLessons,
     importLessonsFile,
     importLessonProgramFile,
     hasLessonReauthToken,
@@ -59,12 +61,25 @@ import type {
     LessonSortState,
 } from "./lesson.types";
 import { cleanFilterValues, downloadBlob } from "./lesson.utils";
+import { fetchAllPages } from "@/lib/fetchAllPages";
 
 // ✅ Hàm debounce helper
 function useDebounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     const fnRef = useRef(fn);
     fnRef.current = fn;
+
+    useEffect(() => {
+        const cancel = () => {
+            if (timerRef.current) clearTimeout(timerRef.current);
+            timerRef.current = null;
+        };
+        window.addEventListener("lms:route-navigation-start", cancel);
+        return () => {
+            window.removeEventListener("lms:route-navigation-start", cancel);
+            cancel();
+        };
+    }, []);
 
     return useCallback((...args: Parameters<T>) => {
         if (timerRef.current) {
@@ -76,9 +91,28 @@ function useDebounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
     }, [delay]);
 }
 
+const buildLessonUrl = (values: LessonFilterValues, page = 1) => {
+    const cleaned = cleanFilterValues(values);
+    const params = new URLSearchParams();
+    const program = String(cleaned.subject_code || "").trim();
+    if (program) params.set("program", program);
+    if (cleaned.grade !== undefined) params.set("grade", String(cleaned.grade));
+    if (cleaned.subject) params.set("subject", String(cleaned.subject).trim());
+    if (cleaned.from_learn_number !== undefined) {
+        params.set("from_learn_number", String(cleaned.from_learn_number));
+    }
+    if (cleaned.to_learn_number !== undefined) {
+        params.set("to_learn_number", String(cleaned.to_learn_number));
+    }
+    if (cleaned.keyword) params.set("q", String(cleaned.keyword).trim());
+    if (page > 1) params.set("page", String(page));
+    return params.size ? `/lessons?${params.toString()}` : "/lessons";
+};
+
 const Page = () => {
     const router = useRouter();
     const searchParams = useSearchParams();
+    const pendingLessonUrlRef = useRef<string | null>(null);
     const [data, setData] = useState<LessonDataType[]>([]);
     const [saving, setSaving] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
@@ -102,6 +136,8 @@ const Page = () => {
     const [moduleFields, setModuleFields] = useState<ModuleField[]>(DEFAULT_MODULE_FIELDS);
     const [selectedRecord, setSelectedRecord] = useState<LessonDataType | null>(null);
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+    const [allRowsSelected, setAllRowsSelected] = useState(false);
+    const selectAllRequestRef = useRef(0);
     const [reorderMode, setReorderMode] = useState(false);
     const [reorderStrategy, setReorderStrategy] = useState<LessonReorderStrategy>("insert");
     const [savingReorder, setSavingReorder] = useState(false);
@@ -145,21 +181,18 @@ const Page = () => {
     const lessonPrograms = useLessonProgramOptions();
 
     const replaceLessonUrl = useCallback((values: LessonFilterValues, page = 1) => {
-        const params = new URLSearchParams();
         const program = String(values.subject_code || "").trim();
         if (program) useAuthStore.getState().setCurrentProgram(program);
-        const lesson = values.learn_number;
-        const keyword = String(values.keyword || "").trim();
-        if (program) params.set("program", program);
-        if (values.grade !== undefined && values.grade !== null) params.set("grade", String(values.grade));
-        if (values.subject) params.set("subject", String(values.subject).trim());
-        if (lesson !== undefined && lesson !== null) params.set("lesson", String(lesson));
-        if (keyword) params.set("q", keyword);
-        if (page > 1) params.set("page", String(page));
-        router.replace(params.size ? `/lessons?${params.toString()}` : "/lessons", { scroll: false });
+        const nextUrl = buildLessonUrl(values, page);
+        pendingLessonUrlRef.current = nextUrl;
+        rememberProgramContextUrl(nextUrl);
+        router.replace(nextUrl, { scroll: false });
     }, [router]);
 
     useEffect(() => {
+        const currentUrl = searchParams.size ? `/lessons?${searchParams.toString()}` : "/lessons";
+        if (pendingLessonUrlRef.current && pendingLessonUrlRef.current !== currentUrl) return;
+        pendingLessonUrlRef.current = null;
         const urlProgram = String(searchParams.get("program") || "").trim();
         const sharedProgram = String(useAuthStore.getState().currentProgram || "").trim();
         const program = urlProgram || sharedProgram;
@@ -172,24 +205,51 @@ const Page = () => {
         if (!urlProgram) {
             const params = new URLSearchParams(searchParams.toString());
             params.set("program", program);
-            router.replace(`/lessons?${params.toString()}`, { scroll: false });
+            const nextUrl = `/lessons?${params.toString()}`;
+            pendingLessonUrlRef.current = nextUrl;
+            rememberProgramContextUrl(nextUrl);
+            router.replace(nextUrl, { scroll: false });
         }
-        const lesson = Number(searchParams.get("lesson"));
-        const grade = Number(searchParams.get("grade"));
+        const positiveInteger = (value: string | null) => {
+            const parsed = Number(value);
+            return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+        };
+        const legacyLesson = positiveInteger(searchParams.get("lesson"));
+        const fromLesson = positiveInteger(
+            searchParams.get("from_learn_number") || searchParams.get("from_lesson")
+        );
+        const toLesson = positiveInteger(
+            searchParams.get("to_learn_number") || searchParams.get("to_lesson")
+        );
+        const grade = positiveInteger(searchParams.get("grade"));
         const keyword = String(searchParams.get("q") || "").trim();
         const page = Math.max(1, Number(searchParams.get("page")) || 1);
         const values = cleanFilterValues({
             subject_code: program,
-            grade: grade || undefined,
+            grade,
             subject: String(searchParams.get("subject") || "").trim() || undefined,
-            learn_number: lesson || undefined,
+            from_learn_number: fromLesson || legacyLesson,
+            to_learn_number: toLesson || legacyLesson,
             keyword,
         });
+        if (values.from_learn_number !== undefined && values.to_learn_number !== undefined
+            && values.from_learn_number > values.to_learn_number) {
+            delete values.from_learn_number;
+            delete values.to_learn_number;
+        }
         setFilterValues(values);
         setSubmittedFilterValues(values);
         setSearchText(keyword);
         setCurrentPage(page);
         setHasSearched(true);
+        const canonicalUrl = buildLessonUrl(values, page);
+        if (canonicalUrl !== currentUrl) {
+            pendingLessonUrlRef.current = canonicalUrl;
+            rememberProgramContextUrl(canonicalUrl);
+            router.replace(canonicalUrl, { scroll: false });
+        } else {
+            rememberProgramContextUrl(currentUrl);
+        }
     }, [router, searchParams]);
     const hasPermission = useAuthStore((state) => state.hasPermission);
     const can = useAuthStore((state) => state.can);
@@ -253,6 +313,59 @@ const Page = () => {
     const moduleFieldsQuery = useModuleFieldsQuery(LESSON_MODULE_CODE);
     const { refreshLessons } = useLmsCache();
     const loading = lessonsQuery.isLoading || lessonsQuery.isValidating;
+
+    useEffect(() => {
+        selectAllRequestRef.current += 1;
+        setSelectedRowKeys([]);
+        setAllRowsSelected(false);
+    }, [submittedFilterValues]);
+
+    const handleSelectAll = useCallback(async (selected: boolean) => {
+        const requestId = ++selectAllRequestRef.current;
+        if (!selected) {
+            setSelectedRowKeys([]);
+            setAllRowsSelected(false);
+            return;
+        }
+        setSelectedRowKeys((current) => Array.from(new Set([
+            ...current,
+            ...data
+                .filter((record) => Number(record.past_scheduled_count || 0) <= 0)
+                .map((record) => String(record.id)),
+        ])));
+
+        try {
+            const rows = await fetchAllPages<LessonApiResponse>({
+                total: totalItems,
+                pageSize: 100,
+                fetchPage: async (page, limit) => {
+                    const response: any = await getLessons({
+                        ...lessonParams,
+                        page,
+                        limit,
+                    });
+                    const payload = response?.data;
+                    return Array.isArray(payload)
+                        ? payload
+                        : Array.isArray(payload?.data) ? payload.data : [];
+                },
+            });
+            if (requestId !== selectAllRequestRef.current) return;
+            const selectableKeys = rows
+                .filter((record) => Number(record.past_scheduled_count || 0) <= 0)
+                .map((record) => String(record.id));
+            setSelectedRowKeys(selectableKeys);
+            setAllRowsSelected(selectableKeys.length > 0);
+        } catch (error: any) {
+            if (requestId !== selectAllRequestRef.current) return;
+            setSelectedRowKeys([]);
+            setAllRowsSelected(false);
+            api.error({
+                message: "Không thể chọn tất cả đề cương",
+                description: error?.message || "Không thể tải toàn bộ danh sách đề cương.",
+            });
+        }
+    }, [api, data, lessonParams, totalItems]);
 
     useEffect(() => {
         let active = true;
@@ -371,6 +484,14 @@ const Page = () => {
             api.warning({ message: "Vui lòng chọn Chương trình" });
             return;
         }
+        if (values.from_learn_number !== undefined && values.to_learn_number !== undefined
+            && Number(values.from_learn_number) > Number(values.to_learn_number)) {
+            api.warning({
+                message: "Khoảng bài không hợp lệ",
+                description: "Bài bắt đầu phải nhỏ hơn hoặc bằng bài kết thúc.",
+            });
+            return;
+        }
         const cleaned = cleanFilterValues({ ...values, keyword: searchText });
         setFilterValues(cleaned);
         setSubmittedFilterValues(cleaned);
@@ -381,11 +502,17 @@ const Page = () => {
     };
 
     const handleResetFilter = () => {
-        const cleaned = cleanFilterValues({ keyword: "" });
+        const program = String(
+            filterValues.subject_code
+            || submittedFilterValues.subject_code
+            || useAuthStore.getState().currentProgram
+            || ""
+        ).trim();
+        const cleaned = cleanFilterValues({ subject_code: program || undefined, keyword: "" });
         setSearchText("");
         setFilterValues(cleaned);
         setSubmittedFilterValues(cleaned);
-        setHasSearched(false);
+        setHasSearched(Boolean(program));
         setCurrentPage(1);
         replaceLessonUrl(cleaned);
         setOpenFilterDrawer(false);
@@ -933,6 +1060,7 @@ const Page = () => {
             ) : secondaryUnlocked ? (
                 <>
             <LessonActions
+                searchValue={searchText}
                 canCreate={canCreate}
                 canEdit={canEdit}
                 selectedCount={selectedRowKeys.length}
@@ -972,6 +1100,7 @@ const Page = () => {
                 sortState={sortState}
                 visibleFieldPermissions={visibleFieldPermissions}
                 selectedRowKeys={selectedRowKeys}
+                allRowsSelected={allRowsSelected}
                 reorderMode={reorderMode}
                 dragRowKey={dragRowKey as React.Key}
                 canEdit={canEdit}
@@ -982,7 +1111,11 @@ const Page = () => {
                 savingInlineName={savingInlineName}
                 visibleFormFieldCodes={[...visibleFormFieldCodes, "updated_at"]}
                 hasSearched={hasSearched}
-                onSelectionChange={setSelectedRowKeys}
+                onSelectionChange={(keys) => {
+                    setAllRowsSelected(false);
+                    setSelectedRowKeys(keys);
+                }}
+                onSelectAll={handleSelectAll}
                 onPageChange={(page, size) => {
                     if (!hasSearched) return;
                     setCurrentPage(page);

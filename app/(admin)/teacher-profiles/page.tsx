@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
     Form,
     notification,
@@ -51,6 +52,7 @@ const downloadBlob = (
 };
 
 const TeacherProfilesPage = () => {
+    const searchParams = useSearchParams();
     const [form] =
         Form.useForm<TeacherProfilePayload>();
 
@@ -89,17 +91,19 @@ const TeacherProfilesPage = () => {
         React.useState<ImportError[]>([]);
 
     const [search, setSearch] =
-        React.useState('');
+        React.useState(() => String(searchParams.get('q') || ''));
 
     const [teacherType, setTeacherType] =
-        React.useState<
-            0 | 1 | undefined
-        >();
+        React.useState<0 | 1 | undefined>(() => {
+            const value = Number(searchParams.get('teacher_type'));
+            return value === 0 || value === 1 ? value : undefined;
+        });
 
     const [status, setStatus] =
-        React.useState<
-            0 | 1 | undefined
-        >();
+        React.useState<0 | 1 | undefined>(() => {
+            const value = Number(searchParams.get('status'));
+            return value === 0 || value === 1 ? value : undefined;
+        });
 
     const [
         updatingStatusId,
@@ -107,11 +111,41 @@ const TeacherProfilesPage = () => {
     ] = React.useState<number | null>(null);
 
     const [pagination, setPagination] =
-        React.useState({
-            current: 1,
-            pageSize: 20,
+        React.useState(() => {
+            const page = Number(searchParams.get('page'));
+            const limit = Number(searchParams.get('limit'));
+            return {
+            current: Number.isInteger(page) && page > 0 ? page : 1,
+            pageSize: Number.isInteger(limit) && limit > 0 ? limit : 20,
             total: 0,
+            };
         });
+
+    React.useEffect(() => {
+        const params = new URLSearchParams();
+        if (search.trim()) params.set('q', search.trim());
+        if (teacherType !== undefined) params.set('teacher_type', String(teacherType));
+        if (status !== undefined) params.set('status', String(status));
+        if (pagination.current > 1) params.set('page', String(pagination.current));
+        if (pagination.pageSize !== 20) params.set('limit', String(pagination.pageSize));
+        const nextUrl = params.size ? `/teacher-profiles?${params.toString()}` : '/teacher-profiles';
+        window.history.replaceState(window.history.state, '', nextUrl);
+    }, [pagination.current, pagination.pageSize, search, status, teacherType]);
+
+    React.useEffect(() => {
+        const page = Number(searchParams.get('page'));
+        const limit = Number(searchParams.get('limit'));
+        const nextTeacherType = Number(searchParams.get('teacher_type'));
+        const nextStatus = Number(searchParams.get('status'));
+        setSearch(String(searchParams.get('q') || ''));
+        setTeacherType(nextTeacherType === 0 || nextTeacherType === 1 ? nextTeacherType : undefined);
+        setStatus(nextStatus === 0 || nextStatus === 1 ? nextStatus : undefined);
+        setPagination((current) => ({
+            ...current,
+            current: Number.isInteger(page) && page > 0 ? page : 1,
+            pageSize: Number.isInteger(limit) && limit > 0 ? limit : 20,
+        }));
+    }, [searchParams]);
 
     const [
         api,
@@ -639,13 +673,22 @@ const TeacherProfilesPage = () => {
                 }
                 status={status}
                 onSearchChange={
-                    setSearch
+                    (value) => {
+                        setSearch(value);
+                        setPagination((current) => ({ ...current, current: 1 }));
+                    }
                 }
                 onTeacherTypeChange={
-                    setTeacherType
+                    (value) => {
+                        setTeacherType(value);
+                        setPagination((current) => ({ ...current, current: 1 }));
+                    }
                 }
                 onStatusChange={
-                    setStatus
+                    (value) => {
+                        setStatus(value);
+                        setPagination((current) => ({ ...current, current: 1 }));
+                    }
                 }
             />
 

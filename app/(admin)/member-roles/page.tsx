@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
@@ -43,9 +44,11 @@ const columns: ColumnsType<DataType> = [
 ];
 
 const Page = () => {
+    const searchParams = useSearchParams();
     const [data, setData] = useState<DataType[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
+    const [searchText, setSearchText] = useState(() => String(searchParams.get("q") || ""));
     const { setModal, shouldReload, setShouldReload } = useRoleStore();
     const [api, contextHolder] = notification.useNotification();
     const canCreateRole = useAuthStore((state) =>
@@ -90,6 +93,24 @@ const Page = () => {
     }, []);
 
     useEffect(() => {
+        const params = new URLSearchParams();
+        if (searchText.trim()) params.set("q", searchText.trim());
+        const nextUrl = params.size ? `/member-roles?${params.toString()}` : "/member-roles";
+        window.history.replaceState(window.history.state, "", nextUrl);
+    }, [searchText]);
+
+    useEffect(() => {
+        setSearchText(String(searchParams.get("q") || ""));
+    }, [searchParams]);
+
+    const filteredData = data.filter((role) => {
+        const keyword = searchText.trim().toLocaleLowerCase("vi");
+        if (!keyword) return true;
+        return [role.name, role.description]
+            .some((value) => String(value || "").toLocaleLowerCase("vi").includes(keyword));
+    });
+
+    useEffect(() => {
         if (shouldReload) {
             fetchRoles();
             setShouldReload(false); // reset lại
@@ -100,16 +121,17 @@ const Page = () => {
         <>
             {contextHolder}
             <SearchAndActionsBar
+                searchValue={searchText}
                 placeholder="Tên vai trò"
                 titleBtnAdd="Vai trò"
-                onSearch={async (value) => console.log(value)}
+                onSearch={async (value) => setSearchText(value.trim())}
                 handleAddBtn={canCreateRole
                     ? () => setModal({ open: true, type: ActionType.CREATE, role: null })
                     : undefined}
             />
             <CustomTable<DataType>
                 columns={columns}
-                dataSource={data}
+                dataSource={filteredData}
                 loading={loading}
                 pagination={{ position: ["bottomRight"] }}
                 scroll={{ x: "max-content" }}

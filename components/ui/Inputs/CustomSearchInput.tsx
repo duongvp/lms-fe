@@ -15,9 +15,15 @@ const CustomSearchInput: React.FC<CustomSearchInputProps> = ({
     placeholder,
     fetchApi,
     debounceTime = 300,
+    value,
     ...restProps
 }) => {
     const [loading, setLoading] = useState(false);
+    const [inputValue, setInputValue] = useState(String(value ?? ''));
+
+    useEffect(() => {
+        setInputValue(String(value ?? ''));
+    }, [value]);
 
     const debouncedFetchApi = useMemo(() => {
         if (!fetchApi) return undefined;
@@ -38,6 +44,7 @@ const CustomSearchInput: React.FC<CustomSearchInputProps> = ({
     }, [debouncedFetchApi]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setInputValue(e.target.value);
         if (debouncedFetchApi) {
             debouncedFetchApi(e.target.value);
         }
@@ -55,8 +62,9 @@ const CustomSearchInput: React.FC<CustomSearchInputProps> = ({
                     flex: 1,
                     ...restProps.style,
                 }}
-                onChange={handleChange}
                 {...restProps}
+                value={inputValue}
+                onChange={handleChange}
             />
         )
     }
@@ -66,8 +74,9 @@ const CustomSearchInput: React.FC<CustomSearchInputProps> = ({
             <Input
                 placeholder={placeholder}
                 style={{ paddingLeft: 30, paddingRight: 30 }}
-                onChange={handleChange}
                 {...restProps}
+                value={inputValue}
+                onChange={handleChange}
             />
             {loading ? (
                 <Spin

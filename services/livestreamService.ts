@@ -43,6 +43,11 @@ export interface AutoSchedulePayload {
     program_code: string;
     system_type: "topclass" | "topuni";
     start_date: string;
+    /** Các thứ lặp lại của lịch TopUni: 1 = Thứ 2, ..., 7 = Chủ nhật. */
+    topuni_weekdays?: number[];
+    topuni_per_lesson_schedule?: boolean;
+    /** 1 = hàng tuần, 2 = cách tuần. */
+    topuni_week_interval?: number;
     strategy?: "by_block" | "interleaved";
     holidays?: string[];
     customize_lesson_names?: boolean;
@@ -60,6 +65,8 @@ export interface AutoSchedulePayload {
             learn_number: number;
             session_id?: string | number;
             lesson_name?: string;
+            lesson_name_prefix?: string;
+            lesson_name_suffix?: string;
             sessions: Array<{
             weekday: number;
             start_time: string;
@@ -82,6 +89,7 @@ export interface SchedulingLesson {
     id: string;
     learn_number: number;
     lesson_name: string;
+    system_type?: "topclass" | "topuni" | null;
     scheduled_count: number;
     past_scheduled_count: number;
 }
@@ -105,6 +113,11 @@ export interface HocmaiSectionOption {
     lesson_name?: string;
 }
 
+export interface HocmaiSectionsBatchData {
+    by_lesson_id: Record<string, HocmaiSectionOption[]>;
+    errors_by_lesson_id: Record<string, string[]>;
+}
+
 export const getProgramLessonsForScheduling = (programCode: string) =>
     fetchInstance(`${API_BASE_URL}/programs/${encodeURIComponent(programCode)}/lessons`, {
         method: "GET",
@@ -123,6 +136,47 @@ export const getHocmaiSectionsForSchedulingLesson = (
         cache: "no-store",
     }
 );
+
+export const getHocmaiSectionsForSchedulingLessons = (
+    programCode: string,
+    lessonIds: Array<string | number>
+) => {
+    const normalizedLessonIds = Array.from(new Set(lessonIds.map(String)));
+    if (!normalizedLessonIds.length) {
+        return Promise.resolve({
+            success: true,
+            data: { by_lesson_id: {}, errors_by_lesson_id: {} } satisfies HocmaiSectionsBatchData,
+        });
+    }
+
+    const batches: string[][] = [];
+    for (let index = 0; index < normalizedLessonIds.length; index += 500) {
+        batches.push(normalizedLessonIds.slice(index, index + 500));
+    }
+
+    return Promise.all(batches.map((batch) => fetchInstance(
+        `${API_BASE_URL}/programs/${encodeURIComponent(programCode)}/lessons/hmo-sections/batch`,
+        {
+            method: "POST",
+            body: JSON.stringify({ lesson_ids: batch }),
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            cache: "no-store",
+        }
+    ))).then((responses: any[]) => ({
+        success: responses.every((response) => response?.success !== false),
+        data: responses.reduce<HocmaiSectionsBatchData>((combined, response) => ({
+            by_lesson_id: {
+                ...combined.by_lesson_id,
+                ...(response?.data?.by_lesson_id || {}),
+            },
+            errors_by_lesson_id: {
+                ...combined.errors_by_lesson_id,
+                ...(response?.data?.errors_by_lesson_id || {}),
+            },
+        }), { by_lesson_id: {}, errors_by_lesson_id: {} }),
+    }));
+};
 
 export const previewAutoSchedule = (payload: AutoSchedulePayload) =>
     fetchInstance(`${API_BASE_URL}/auto-schedule/preview`, {
@@ -156,10 +210,13 @@ export const createLivestreamBulk = (payload: BulkLivestreamPayload) =>
 
 export const exportLivestreams = (
     format: "csv" | "xlsx",
-    ids?: Array<string | number>
+    ids?: Array<string | number>,
+    options?: { purpose?: "update"; programCode?: string }
 ) => {
     const query = new URLSearchParams({ format });
     if (ids?.length) query.set("ids", ids.join(","));
+    if (options?.purpose) query.set("purpose", options.purpose);
+    if (options?.programCode) query.set("program_code", options.programCode);
     return fetchInstance(`${API_BASE_URL}/export?${query.toString()}`, {
         method: "GET",
         credentials: "include",
@@ -184,11 +241,17 @@ export const importLivestreamsFile = (file?: File, programCode?: string, sheetUr
     }, "json", 180_000);
 };
 
-export const updateLivestreamsFile = (file?: File, programCode?: string, sheetUrl?: string) => {
+export const updateLivestreamsFile = (
+    file?: File,
+    programCode?: string,
+    sheetUrl?: string,
+    existingDataMode: "skip" | "overwrite" = "skip"
+) => {
     const formData = new FormData();
     if (file) formData.append("file", file);
     if (programCode) formData.append("program_code", programCode);
     if (sheetUrl) formData.append("sheet_url", sheetUrl);
+    formData.append("existing_data_mode", existingDataMode);
     return fetchInstance(`${API_BASE_URL}/import/update`, {
         method: "POST",
         body: formData,
@@ -241,7 +304,7 @@ export interface LivestreamListParams {
     page?: number;
     limit?: number;
     keyword?: string;
-    teacher?: string;
+    teacher?: string | string[];
     code?: string;
     code_exact?: string;
     subject?: string;
@@ -249,6 +312,9 @@ export interface LivestreamListParams {
     system_type?: "topclass" | "topuni" | Array<"topclass" | "topuni">;
     lesson_status?: string | number;
     time_status?: "upcoming" | "ongoing" | "completed" | Array<"upcoming" | "ongoing" | "completed">;
+    weekdays?: number[];
+    from_learn_number?: number;
+    to_learn_number?: number;
     start_time?: string;
     end_time?: string;
     sort_by?: string;
@@ -316,6 +382,13 @@ export interface ClassroomAssignmentSummary {
     classroomIndex: number;
     studentCount: number;
     interactionScore: number;
+    previousInteractionScore: number | null;
+    expectedAttendeeCount: number | null;
+    previousExpectedAttendeeCount: number | null;
+    needsMakeupCount: number | null;
+    previousNeedsMakeupCount: number | null;
+    attendanceBreakdown: Record<0 | 1 | 2 | 3, number> | null;
+    interactionBreakdown: Record<"high" | "medium" | "low" | "none", number> | null;
 }
 
 export interface ClassroomAssignmentResult {
@@ -330,19 +403,61 @@ export interface ClassroomAssignmentResult {
     total_students: number;
     classroom_count: number;
     moved_count: number;
+    max_students_per_classroom: number | null;
+    attendance?: {
+        applied: boolean;
+        based_on_current_roster: boolean;
+        population_students: number;
+        sessions_considered: number;
+        lessons_considered: number;
+        is_repeat_lesson: boolean;
+        prior_occurrence_count: number;
+        makeup_signal_applied: boolean;
+        already_covered_current_lesson: number;
+        needs_makeup_current_lesson: number;
+        distribution: Record<0 | 1 | 2 | 3, number> | null;
+    };
+    interaction?: {
+        distribution: Record<"high" | "medium" | "low" | "none", number>;
+        based_on_roster: boolean;
+        population_students: number;
+        interacting_students: number;
+        min_room_score: number;
+        max_room_score: number;
+        total_score: number;
+        average_score: number;
+        average_interacting_score: number;
+    } | null;
+    interaction_source?: {
+        learn_number: number | null;
+    } | null;
+    continuity?: {
+        existing_students: number;
+        new_students: number;
+        retained_existing_students: number;
+        moved_existing_students: number;
+    } | null;
     classrooms: ClassroomAssignmentSummary[];
 }
 
-export const previewStudentClassroomAssignment = (calendarId: string | number) =>
+export const previewStudentClassroomAssignment = (
+    calendarId: string | number,
+    maxStudentsPerClassroom?: number
+) =>
     fetchInstance(`${API_BASE_URL}/${calendarId}/classroom-assignment/preview`, {
         method: "POST",
+        body: JSON.stringify({ max_students_per_classroom: maxStudentsPerClassroom }),
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-    });
+    }, "json", 120_000);
 
-export const applyStudentClassroomAssignment = (calendarId: string | number) =>
+export const applyStudentClassroomAssignment = (
+    calendarId: string | number,
+    maxStudentsPerClassroom?: number
+) =>
     fetchInstance(`${API_BASE_URL}/${calendarId}/classroom-assignment/apply`, {
         method: "POST",
+        body: JSON.stringify({ max_students_per_classroom: maxStudentsPerClassroom }),
         headers: { "Content-Type": "application/json" },
         credentials: "include",
     }, "json", 120_000);

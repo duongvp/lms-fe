@@ -30,6 +30,7 @@ interface LessonActionsProps {
     reorderStrategy: LessonReorderStrategy;
     savingReorder: boolean;
     onSearch: (value: string) => Promise<void>;
+    searchValue: string;
     onCreate: () => void;
     onCreateProgram: () => void;
     onImportProgram: () => void;
@@ -53,6 +54,7 @@ const LessonActions = ({
     reorderStrategy,
     savingReorder,
     onSearch,
+    searchValue,
     onCreate,
     onCreateProgram,
     onImportProgram,
@@ -145,6 +147,7 @@ const LessonActions = ({
     <>
         <SearchAndActionsBar
             onSearch={onSearch}
+            searchValue={searchValue}
             placeholder="Tìm theo tên bài học..."
             titleBtnAdd="Bài học"
             handleAddBtn={canCreate && !reorderMode ? onCreate : undefined}

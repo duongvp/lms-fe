@@ -21,7 +21,7 @@ const AutoSchedulePage = () => {
                 status="warning"
                 title="Chưa chọn Chương trình"
                 subTitle="Quay lại Quản lý lịch học, chọn Chương trình trong bộ lọc rồi bấm Tạo lịch tự động."
-                extra={<Button type="primary" onClick={() => router.push(returnTo)}>Quay lại Quản lý lịch học</Button>}
+                extra={<Button type="primary" onClick={() => router.replace(returnTo)}>Quay lại Quản lý lịch học</Button>}
             />
         );
     }
@@ -38,7 +38,7 @@ const AutoSchedulePage = () => {
                 open
                 fullscreen
                 programCode={programCode}
-                onClose={() => router.push(returnTo)}
+                onClose={() => router.replace(returnTo)}
                 onSuccess={async () => {
                     await refreshSchedules();
                     message.success("Đã tạo lịch tự động");

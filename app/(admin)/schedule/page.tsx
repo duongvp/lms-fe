@@ -3,10 +3,9 @@ import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useR
 import { useRouter, useSearchParams } from "next/navigation";
 import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
-import type { SorterResult } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
-import { notification, Alert, Form, Input, Select, Button, Space, Modal, Row, Col, DatePicker, TimePicker, Drawer, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress } from "antd";
-import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, FilterOutlined, MoreOutlined, FileExcelOutlined, FileTextOutlined, ApartmentOutlined } from "@ant-design/icons";
+import { notification, Alert, Form, Input, InputNumber, Select, Button, Checkbox, Space, Modal, Row, Col, DatePicker, TimePicker, Drawer, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress } from "antd";
+import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, MoreOutlined, ApartmentOutlined } from "@ant-design/icons";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -22,6 +21,7 @@ import {
     deleteLivestream,
     downloadLivestreamImportTemplate,
     exportLivestreams,
+    getLivestreams,
     importLivestreamsFile,
     syncMissingTeachingUsers,
     updateLivestreamsFile,
@@ -33,6 +33,8 @@ import { canEditAnyField, resolveModuleFieldPermissions, sanitizeEditablePayload
 import { useLmsCache, useModuleFieldsQuery, useSchedulesQuery, useSchedulingProgramsQuery, useTeachingStaffQuery } from "@/hooks/useLmsQueries";
 import type { LivestreamListParams } from "@/services/livestreamService";
 import TeachingStaffSelect from "@/components/shared/TeachingStaffSelect";
+import { rememberProgramContextUrl } from "@/components/layouts/AdminLayout/SideMenu";
+import { fetchAllPages } from "@/lib/fetchAllPages";
 
 const SCHEDULE_MODULE_CODE = "calendar";
 const { RangePicker } = DatePicker;
@@ -141,18 +143,84 @@ interface ScheduleDataType {
 interface ScheduleFilterValues {
     keyword?: string;
     code?: string;
-    teacher?: string;
+    teacher?: string[];
     system_type?: Array<"topclass" | "topuni">;
     time_status?: Array<"upcoming" | "ongoing" | "completed">;
     date_range?: [Dayjs, Dayjs];
+    weekdays?: number[];
+    from_learn_number?: number;
+    to_learn_number?: number;
 }
 
-interface ScheduleSortItem {
-    field: string;
-    order: "ascend" | "descend";
-}
+type ScheduleModalControllerRef = {
+    openCreate: (initialData: ScheduleDataType | null) => void;
+    openEdit: (initialData: ScheduleDataType) => void;
+};
 
-type ScheduleSortState = ScheduleSortItem[];
+type ScheduleModalControllerProps = {
+    moduleFields: ModuleField[];
+    fieldPolicy: any;
+    programCode?: string;
+    onSuccess: (values: any) => void;
+    onDraftChange: (draft: {
+        date?: Dayjs;
+        start_time?: Dayjs;
+        end_time?: Dayjs;
+        lesson_name?: string;
+        teacher?: string;
+    }) => void;
+    onCloseCleanup: () => void;
+};
+
+const ScheduleModalController = React.forwardRef<ScheduleModalControllerRef, ScheduleModalControllerProps>(({
+    moduleFields,
+    fieldPolicy,
+    programCode,
+    onSuccess,
+    onDraftChange,
+    onCloseCleanup,
+}, ref) => {
+    const [modalState, setModalState] = useState<{
+        open: boolean;
+        isEdit: boolean;
+        initialData: ScheduleDataType | null;
+    }>({ open: false, isEdit: false, initialData: null });
+
+    React.useImperativeHandle(ref, () => ({
+        openCreate: (initialData) => setModalState({ open: true, isEdit: false, initialData }),
+        openEdit: (initialData) => setModalState({ open: true, isEdit: true, initialData }),
+    }), []);
+
+    return (
+        <ScheduleModal
+            open={modalState.open}
+            onClose={() => {
+                setModalState((current) => ({ ...current, open: false }));
+                onCloseCleanup();
+            }}
+            onSuccess={onSuccess}
+            onDraftChange={onDraftChange}
+            isEdit={modalState.isEdit}
+            initialData={modalState.initialData}
+            moduleFields={moduleFields}
+            fieldPolicy={fieldPolicy}
+            moduleCode={SCHEDULE_MODULE_CODE}
+            programCode={modalState.isEdit ? undefined : programCode}
+        />
+    );
+});
+
+ScheduleModalController.displayName = "ScheduleModalController";
+
+const WEEKDAY_OPTIONS = [
+    { value: 1, label: "Thứ 2" },
+    { value: 2, label: "Thứ 3" },
+    { value: 3, label: "Thứ 4" },
+    { value: 4, label: "Thứ 5" },
+    { value: 5, label: "Thứ 6" },
+    { value: 6, label: "Thứ 7" },
+    { value: 7, label: "Chủ nhật" },
+];
 
 const DEFAULT_MODULE_FIELDS: ModuleField[] = [
     { fieldCode: "learn_number", fieldLabel: "Bài học", fieldType: "number", sortOrder: 1 },
@@ -207,16 +275,6 @@ const mapScheduleRows = (rows: any[]): ScheduleDataType[] => rows.map((item: any
     lesson_status: item.lesson_status ?? 0,
     can_modify: item.can_modify === true,
 }));
-const SORTABLE_FIELDS = new Set([
-    "code",
-    "learn_number",
-    "subject",
-    "teacher",
-    "start_time",
-    "end_time",
-    "lesson_status",
-    "system_type",
-]);
 const REQUIRED_QUICK_EDIT_FIELDS = new Set([
     "start_time",
     "end_time",
@@ -252,10 +310,11 @@ const cleanFilterValues = (values: ScheduleFilterValues): ScheduleFilterValues =
 
 const buildScheduleApiParams = (values: ScheduleFilterValues) => {
     const cleaned = cleanFilterValues(values);
-    const { date_range, ...rest } = cleaned;
+    const { date_range, teacher, ...rest } = cleaned;
 
     return {
         ...rest,
+        teacher: teacher?.join(","),
         start_time: date_range?.[0]?.startOf("day").format("YYYY-MM-DDTHH:mm:ss.SSS[Z]"),
         end_time: date_range?.[1]?.endOf("day").format("YYYY-MM-DDTHH:mm:ss.SSS[Z]"),
     };
@@ -269,12 +328,15 @@ const buildScheduleUrl = (values: ScheduleFilterValues, targetPage = 1) => {
     const params = new URLSearchParams();
     const program = String(cleaned.code || "").trim();
     const keyword = String(cleaned.keyword || "").trim();
-    const teacher = String(cleaned.teacher || "").trim();
+    const teachers = Array.isArray(cleaned.teacher) ? cleaned.teacher : [];
     if (program) params.set("program", program);
     if (keyword) params.set("q", keyword);
-    if (teacher) params.set("teacher", teacher);
+    if (teachers.length) params.set("teacher", teachers.join(","));
     if (cleaned.system_type?.length) params.set("system_type", cleaned.system_type.join(","));
     if (cleaned.time_status?.length) params.set("status", cleaned.time_status.join(","));
+    if (cleaned.weekdays?.length) params.set("weekdays", cleaned.weekdays.join(","));
+    if (cleaned.from_learn_number !== undefined) params.set("from_learn_number", String(cleaned.from_learn_number));
+    if (cleaned.to_learn_number !== undefined) params.set("to_learn_number", String(cleaned.to_learn_number));
     if (cleaned.date_range?.[0]?.isValid() && cleaned.date_range[1]?.isValid()) {
         params.set("from", cleaned.date_range[0].format("YYYY-MM-DD"));
         params.set("to", cleaned.date_range[1].format("YYYY-MM-DD"));
@@ -370,6 +432,18 @@ function useDebounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
     const fnRef = useRef(fn);
     fnRef.current = fn;
 
+    useEffect(() => {
+        const cancel = () => {
+            if (timerRef.current) clearTimeout(timerRef.current);
+            timerRef.current = null;
+        };
+        window.addEventListener("lms:route-navigation-start", cancel);
+        return () => {
+            window.removeEventListener("lms:route-navigation-start", cancel);
+            cancel();
+        };
+    }, []);
+
     return useCallback((...args: Parameters<T>) => {
         if (timerRef.current) {
             clearTimeout(timerRef.current);
@@ -403,6 +477,7 @@ const ScheduleFilterDrawer = ({
 }) => {
     const [filterForm] = Form.useForm();
     useEffect(() => {
+        filterForm.resetFields();
         filterForm.setFieldsValue(value);
     }, [filterForm, value]);
 
@@ -455,6 +530,8 @@ const ScheduleFilterDrawer = ({
                     <Form.Item name="teacher" label="Giáo viên">
                         <TeachingStaffSelect
                             teacherType={1}
+                            mode="multiple"
+                            maxTagCount="responsive"
                             allowQuickCreate={false}
                             allowClear
                             showSearch
@@ -485,6 +562,25 @@ const ScheduleFilterDrawer = ({
                                 { value: "completed", label: "Đã kết thúc" },
                             ]}
                         />
+                    </Form.Item>
+                    <Form.Item name="weekdays" label="Thứ trong tuần">
+                        <Select
+                            mode="multiple"
+                            maxTagCount="responsive"
+                            allowClear
+                            placeholder="Tất cả các thứ"
+                            options={WEEKDAY_OPTIONS}
+                        />
+                    </Form.Item>
+                    <Form.Item label="Khoảng bài">
+                        <Space.Compact block>
+                            <Form.Item name="from_learn_number" noStyle>
+                                <InputNumber min={1} precision={0} placeholder="Từ bài" style={{ width: "50%" }} />
+                            </Form.Item>
+                            <Form.Item name="to_learn_number" noStyle>
+                                <InputNumber min={1} precision={0} placeholder="Đến bài" style={{ width: "50%" }} />
+                            </Form.Item>
+                        </Space.Compact>
                     </Form.Item>
                     <Form.Item
                         name="date_range"
@@ -564,6 +660,8 @@ const ScheduleInlineFilters = ({
                     <Form.Item name="teacher" label="Giáo viên" style={{ flex: "1 1 210px", minWidth: 190, marginBottom: 10 }}>
                         <TeachingStaffSelect
                             teacherType={1}
+                            mode="multiple"
+                            maxTagCount="responsive"
                             allowQuickCreate={false}
                             allowClear
                             showSearch
@@ -582,6 +680,25 @@ const ScheduleInlineFilters = ({
                         }}
                     >
                         <RangePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
+                    </Form.Item>
+                    <Form.Item name="weekdays" label="Thứ" style={{ flex: "1 1 190px", minWidth: 180, marginBottom: 10 }}>
+                        <Select
+                            mode="multiple"
+                            maxTagCount="responsive"
+                            allowClear
+                            placeholder="Tất cả các thứ"
+                            options={WEEKDAY_OPTIONS}
+                        />
+                    </Form.Item>
+                    <Form.Item label="Khoảng bài" style={{ flex: "1 1 190px", minWidth: 180, marginBottom: 10 }}>
+                        <Space.Compact block>
+                            <Form.Item name="from_learn_number" noStyle>
+                                <InputNumber min={1} precision={0} placeholder="Từ bài" style={{ width: "50%" }} />
+                            </Form.Item>
+                            <Form.Item name="to_learn_number" noStyle>
+                                <InputNumber min={1} precision={0} placeholder="Đến bài" style={{ width: "50%" }} />
+                            </Form.Item>
+                        </Space.Compact>
                     </Form.Item>
                     <Form.Item name="time_status" label="Trạng thái" style={{ flex: "1 1 175px", minWidth: 165, marginBottom: 10 }}>
                         <Select
@@ -658,25 +775,28 @@ const Page = () => {
     // searchParams cũ không ghi đè những điều kiện lọc người dùng vừa chọn.
     const filterRevisionRef = useRef(0);
     const pendingScheduleUrlRef = useRef<string | null>(null);
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const scheduleModalRef = useRef<ScheduleModalControllerRef>(null);
     const [openImportModal, setOpenImportModal] = useState(false);
     const [importing, setImporting] = useState(false);
     const [importErrors, setImportErrors] = useState<ScheduleImportError[]>([]);
     const [importMode, setImportMode] = useState<"create" | "update">("create");
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+    const [allRowsSelected, setAllRowsSelected] = useState(false);
+    const selectAllRequestRef = useRef(0);
+    const selectedRowsCacheRef = useRef(new Map<string, ScheduleDataType>());
     const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
-    const [selectedRecord, setSelectedRecord] = useState<ScheduleDataType | null>(null);
     // Bản nháp được vẽ trực tiếp trên lịch khi người dùng kéo/click để tạo lịch.
     // Nó chỉ tồn tại trong lúc modal tạo mới đang mở, không phải dữ liệu đã lưu.
     const [calendarDraftPreview, setCalendarDraftPreview] = useState<ScheduleDataType | null>(null);
     const [copySource, setCopySource] = useState<ScheduleDataType | null>(null);
-    const [isEditMode, setIsEditMode] = useState(false);
     // Khởi tạo thu gọn để không chớp phần hướng dẫn trước khi đọc thiết lập
     // localStorage. Nếu người dùng chọn hiển thị, effect bên dưới sẽ mở ra.
     const [showPageInfo, setShowPageInfo] = useState(false);
     const [pageInfoReady, setPageInfoReady] = useState(false);
     const [syncingTeachingUsers, setSyncingTeachingUsers] = useState(false);
+    const [refreshingScheduleList, setRefreshingScheduleList] = useState(false);
     const [classroomAssignmentCalendarId, setClassroomAssignmentCalendarId] = useState<string | number | null>(null);
+    const [classroomAssignmentSystemType, setClassroomAssignmentSystemType] = useState<"topclass" | "topuni" | null>(null);
 
     // Đồng bộ trước khi browser vẽ frame đầu tiên; đồng thời giữ transition
     // tắt cho lần đồng bộ này để trạng thái đã lưu không bị animate.
@@ -703,6 +823,7 @@ const Page = () => {
         const program = String(values.code || "").trim();
         const nextUrl = buildScheduleUrl(values, targetPage);
         pendingScheduleUrlRef.current = nextUrl;
+        rememberProgramContextUrl(nextUrl);
         if (program) useAuthStore.getState().setCurrentProgram(program);
         // Admin bỏ chọn chương trình là thao tác chủ động chuyển sang ngữ cảnh
         // liên chương trình; cũng phải xoá shared context để trang Câu hỏi và
@@ -731,7 +852,9 @@ const Page = () => {
         const program = urlProgram || (isAdmin ? "" : sharedProgram);
         const hasDateFilter = Boolean(searchParams.get("from") || searchParams.get("to"));
         const hasOtherFilter = Boolean(
-            searchParams.get("q") || searchParams.get("teacher") || searchParams.get("system_type") || searchParams.get("status")
+            searchParams.get("q") || searchParams.get("teacher") || searchParams.get("system_type")
+            || searchParams.get("status") || searchParams.get("weekdays")
+            || searchParams.get("from_learn_number") || searchParams.get("to_learn_number")
         );
         // Admin được phép xem liên chương trình theo thời gian, nên URL không
         // có `program` vẫn phải được khôi phục đầy đủ sau khi tải lại trang.
@@ -754,7 +877,10 @@ const Page = () => {
         const values: ScheduleFilterValues = cleanFilterValues({
             code: program,
             keyword: String(searchParams.get("q") || "").trim(),
-            teacher: String(searchParams.get("teacher") || "").trim(),
+            teacher: String(searchParams.get("teacher") || "")
+                .split(",")
+                .map((teacher) => teacher.trim())
+                .filter(Boolean),
             system_type: String(searchParams.get("system_type") || "")
                 .split(",")
                 .filter((system): system is "topclass" | "topuni" => (
@@ -765,28 +891,40 @@ const Page = () => {
                 .filter((status): status is "upcoming" | "ongoing" | "completed" => (
                     ["upcoming", "ongoing", "completed"].includes(status)
                 )),
+            weekdays: String(searchParams.get("weekdays") || "")
+                .split(",")
+                .map(Number)
+                .filter((weekday) => Number.isInteger(weekday) && weekday >= 1 && weekday <= 7),
+            from_learn_number: (() => {
+                const parsed = Number(searchParams.get("from_learn_number"));
+                return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+            })(),
+            to_learn_number: (() => {
+                const parsed = Number(searchParams.get("to_learn_number"));
+                return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+            })(),
             date_range: from.isValid() && to.isValid() ? [from, to] : undefined,
         });
+        if (values.from_learn_number !== undefined && values.to_learn_number !== undefined
+            && values.from_learn_number > values.to_learn_number) {
+            delete values.from_learn_number;
+            delete values.to_learn_number;
+        }
         setFilterValues(values);
         setSubmittedFilterValues(values);
         setSearchText(String(values.keyword || ""));
-        setCurrentPage(Math.max(1, Number(searchParams.get("page")) || 1));
+        const hydratedPage = Math.max(1, Number(searchParams.get("page")) || 1);
+        setCurrentPage(hydratedPage);
         setHasSearched(true);
+        const canonicalUrl = buildScheduleUrl(values, hydratedPage);
+        if (canonicalUrl !== currentUrl) {
+            pendingScheduleUrlRef.current = canonicalUrl;
+            rememberProgramContextUrl(canonicalUrl);
+            router.replace(canonicalUrl, { scroll: false });
+        } else {
+            rememberProgramContextUrl(currentUrl);
+        }
     }, [searchParams, isAdmin, router]);
-
-    const rowSelection = {
-        selectedRowKeys,
-        onChange: (newSelectedRowKeys: React.Key[]) => {
-            setSelectedRowKeys(newSelectedRowKeys);
-        },
-        getCheckboxProps: (record: ScheduleDataType) => ({
-            disabled: !canModifySchedule(record),
-            title: canModifySchedule(record)
-                ? undefined
-                : "Buổi học đã bắt đầu, không thể chọn để cập nhật",
-        }),
-        columnWidth: 32,
-    };
 
     const handleReschedule = (record: ScheduleDataType) => {
         if (!canModifySchedule(record)) {
@@ -796,9 +934,7 @@ const Page = () => {
             });
             return;
         }
-        setSelectedRecord(record);
-        setIsEditMode(true);
-        setIsModalOpen(true);
+        scheduleModalRef.current?.openEdit(record);
     };
 
     const handleCopySchedule = (record: ScheduleDataType) => {
@@ -814,9 +950,8 @@ const Page = () => {
     const [totalItems, setTotalItems] = useState(0);
     const [filterValues, setFilterValues] = useState<ScheduleFilterValues>({});
     const [submittedFilterValues, setSubmittedFilterValues] = useState<ScheduleFilterValues>({});
+    const [tableColumnFilters, setTableColumnFilters] = useState<Record<string, React.Key[] | null>>({});
     const [hasSearched, setHasSearched] = useState(false);
-    const [sortState, setSortState] = useState<ScheduleSortState>([]);
-    const [columnProgramFilter, setColumnProgramFilter] = useState<string | undefined>();
     const [viewMode, setViewMode] = useState<"table" | "calendar">("table");
     const [calendarMounted, setCalendarMounted] = useState(false);
     const [calendarData, setCalendarData] = useState<ScheduleDataType[]>([]);
@@ -849,14 +984,109 @@ const Page = () => {
             page: currentPage,
             limit: pageSize,
             ...buildScheduleApiParams(submittedFilterValues),
-            sort_by: sortState.length
-                ? sortState.map((item) => item.field).join(",")
-                : undefined,
-            sort_order: sortState.length
-                ? sortState.map((item) => item.order === "descend" ? "desc" : "asc").join(",")
-                : undefined,
         };
-    }, [currentPage, pageSize, submittedFilterValues, sortState, hasSearched]);
+    }, [currentPage, pageSize, submittedFilterValues, hasSearched]);
+
+    useEffect(() => {
+        selectAllRequestRef.current += 1;
+        setSelectedRowKeys([]);
+        setAllRowsSelected(false);
+        selectedRowsCacheRef.current.clear();
+    }, [submittedFilterValues]);
+
+    useEffect(() => {
+        data.forEach((record) => {
+            if (record.id !== undefined && record.id !== null) {
+                selectedRowsCacheRef.current.set(String(record.id), record);
+            }
+        });
+    }, [data]);
+
+    const selectableRowKeys = useMemo(() => new Set(
+        data.filter(canModifySchedule).map((record) => String(record.id))
+    ), [data]);
+    const handleRowSelectionChange = useCallback((newSelectedRowKeys: React.Key[], info?: { type?: string }) => {
+        if (info?.type === "all") return;
+        setAllRowsSelected(false);
+        setSelectedRowKeys(newSelectedRowKeys);
+    }, []);
+    const handleSelectAll = useCallback(async (selected: boolean) => {
+        const requestId = ++selectAllRequestRef.current;
+        if (!selected) {
+            setSelectedRowKeys([]);
+            setAllRowsSelected(false);
+            return;
+        }
+        setSelectedRowKeys((current) => Array.from(new Set([
+            ...current,
+            ...data
+                .filter(canModifySchedule)
+                .map((record) => String(record.id)),
+        ])));
+
+        try {
+            const rows = await fetchAllPages<any>({
+                total: totalItems,
+                pageSize: 300,
+                fetchPage: async (page, limit) => {
+                    const response: any = await getLivestreams({
+                        ...scheduleParams,
+                        page,
+                        limit,
+                    });
+                    return Array.isArray(response?.data?.data) ? response.data.data : [];
+                },
+            });
+            if (requestId !== selectAllRequestRef.current) return;
+            const selectableRows = mapScheduleRows(rows).filter(canModifySchedule);
+            selectableRows.forEach((record) => {
+                selectedRowsCacheRef.current.set(String(record.id), record);
+            });
+            setSelectedRowKeys(selectableRows.map((record) => String(record.id)));
+            setAllRowsSelected(selectableRows.length > 0);
+        } catch (error: any) {
+            if (requestId !== selectAllRequestRef.current) return;
+            setSelectedRowKeys([]);
+            setAllRowsSelected(false);
+            api.error({
+                message: "Không thể chọn tất cả lịch học",
+                description: error?.message || "Không thể tải toàn bộ danh sách lịch học.",
+            });
+        }
+    }, [api, data, scheduleParams, totalItems]);
+    const rowSelection = useMemo(() => ({
+        selectedRowKeys,
+        preserveSelectedRowKeys: true,
+        onChange: (keys: React.Key[], _rows: ScheduleDataType[], info: { type?: string }) => (
+            handleRowSelectionChange(keys, info)
+        ),
+        onSelectAll: (selected: boolean) => handleSelectAll(selected),
+        columnTitle: () => (
+            <Checkbox
+                aria-label="Chọn tất cả lịch học"
+                checked={allRowsSelected}
+                indeterminate={!allRowsSelected && selectedRowKeys.length > 0}
+                disabled={totalItems <= 0 || (totalItems <= data.length && selectableRowKeys.size === 0)}
+                onChange={(event) => void handleSelectAll(event.target.checked)}
+            />
+        ),
+        // Checkbox nằm trong row có expandRowByClick. Chặn bubble ngay tại ô
+        // chọn để click lệch trong vùng checkbox không vô tình mở chi tiết.
+        onCell: () => ({
+            onClick: (event: React.MouseEvent) => event.stopPropagation(),
+            onMouseDown: (event: React.MouseEvent) => event.stopPropagation(),
+        }),
+        getCheckboxProps: (record: ScheduleDataType) => {
+            const canSelect = selectableRowKeys.has(String(record.id));
+            return {
+                disabled: !canSelect,
+                title: canSelect
+                    ? undefined
+                    : "Buổi học đã bắt đầu, không thể chọn để cập nhật",
+            };
+        },
+        columnWidth: 32,
+    }), [allRowsSelected, data.length, handleRowSelectionChange, handleSelectAll, selectableRowKeys, selectedRowKeys, totalItems]);
 
     const calendarParams = useMemo<LivestreamListParams | null>(() => {
         if (!hasSearched || !calendarMounted) return null;
@@ -877,7 +1107,10 @@ const Page = () => {
     const programsQuery = useSchedulingProgramsQuery();
     const { refreshSchedules } = useLmsCache();
     const loading = schedulesQuery.isLoading || schedulesQuery.isValidating;
-    const assistantOptions = assistantsQuery.data ?? [];
+    const assistantOptions = useMemo(() => assistantsQuery.data ?? [], [assistantsQuery.data]);
+    const assistantLabelByUsername = useMemo(() => new Map(
+        assistantOptions.map((option) => [String(option.value), String(option.label)])
+    ), [assistantOptions]);
     const programOptions = useMemo(() => {
         const rows = Array.isArray(programsQuery.data?.data) ? programsQuery.data.data : [];
         return rows.map((program: any) => {
@@ -1063,9 +1296,18 @@ const Page = () => {
             });
             return;
         }
+        if (values.from_learn_number !== undefined && values.to_learn_number !== undefined
+            && Number(values.from_learn_number) > Number(values.to_learn_number)) {
+            api.warning({
+                message: "Khoảng bài không hợp lệ",
+                description: "Bài bắt đầu phải nhỏ hơn hoặc bằng bài kết thúc.",
+            });
+            return;
+        }
         const cleaned = cleanFilterValues({ ...values, keyword: searchText });
         setFilterValues(cleaned);
         setSubmittedFilterValues(cleaned);
+        setTableColumnFilters({});
         setHasSearched(true);
         setCurrentPage(1);
         replaceScheduleUrl(cleaned);
@@ -1074,11 +1316,20 @@ const Page = () => {
 
     const handleResetScheduleFilter = () => {
         filterRevisionRef.current += 1;
-        const cleaned = cleanFilterValues({ keyword: "" });
+        const retainedProgram = isAdmin
+            ? ""
+            : String(
+                filterValues.code
+                || submittedFilterValues.code
+                || useAuthStore.getState().currentProgram
+                || ""
+            ).trim();
+        const cleaned = cleanFilterValues({ code: retainedProgram || undefined, keyword: "" });
         setSearchText("");
         setFilterValues(cleaned);
         setSubmittedFilterValues(cleaned);
-        setHasSearched(false);
+        setTableColumnFilters({});
+        setHasSearched(Boolean(retainedProgram));
         setCurrentPage(1);
         replaceScheduleUrl(cleaned);
         setOpenFilterDrawer(false);
@@ -1119,10 +1370,8 @@ const Page = () => {
             end_time: calendarDraft.end_time.format("YYYY-MM-DDTHH:mm:ss"),
             lesson_name: "Lịch mới",
         } : null;
-        setSelectedRecord(draft);
         setCalendarDraftPreview(draft);
-        setIsModalOpen(true);
-        setIsEditMode(false);
+        scheduleModalRef.current?.openCreate(draft);
         return true;
     };
 
@@ -1198,15 +1447,28 @@ const Page = () => {
 
     // ... (giữ nguyên các hàm xử lý danh sách, import, cập nhật, chỉnh sửa và xóa lịch)
 
-    const handleExportSchedule = async (format: "csv" | "xlsx") => {
+    const handleExportSchedule = async (
+        format: "csv" | "xlsx",
+        purpose?: "update"
+    ) => {
         try {
             const selectedIds = selectedRowKeys.length
                 ? selectedRowKeys.map(String)
                 : undefined;
-            const blob = await exportLivestreams(format, selectedIds);
+            const programCode = String(submittedFilterValues.code || "").trim() || undefined;
+            if (purpose === "update" && !selectedIds?.length && !programCode) {
+                api.warning({
+                    message: "Vui lòng chọn Chương trình",
+                    description: "Hãy lọc một chương trình hoặc chọn các lịch cần xuất trước khi tạo file bổ sung trợ giảng.",
+                });
+                return;
+            }
+            const blob = await exportLivestreams(format, selectedIds, { purpose, programCode });
             downloadBlob(
                 blob,
-                `calendar-${selectedIds?.length ? "selected" : "all"}.${format}`
+                purpose === "update"
+                    ? `calendar-update-assistants-${programCode || (selectedIds?.length ? "selected" : "all")}.xlsx`
+                    : `calendar-${selectedIds?.length ? "selected" : programCode || "all"}.${format}`
             );
         } catch (error: any) {
             api.error({
@@ -1288,7 +1550,14 @@ const Page = () => {
             });
             return;
         }
-        setClassroomAssignmentCalendarId(String(selectedRowKeys[0]));
+        const selectedKey = String(selectedRowKeys[0]);
+        const selectedSchedule = data.find((record) => String(record.id) === selectedKey);
+        setClassroomAssignmentSystemType(
+            selectedSchedule?.system_type === "topuni"
+                ? "topuni"
+                : selectedSchedule?.system_type === "topclass" ? "topclass" : null
+        );
+        setClassroomAssignmentCalendarId(selectedKey);
     };
 
     const handleDownloadImportTemplate = async (format: "csv" | "xlsx") => {
@@ -1303,7 +1572,11 @@ const Page = () => {
         }
     };
 
-    const handleImportSchedule = async (file: File | undefined, sheetUrl?: string) => {
+    const handleImportSchedule = async (
+        file: File | undefined,
+        sheetUrl?: string,
+        existingDataMode: "skip" | "overwrite" = "skip"
+    ) => {
         const programCode = String(submittedFilterValues.code || "").trim();
         if (!isAdmin && !programCode) {
             api.warning({
@@ -1319,7 +1592,12 @@ const Page = () => {
             setImportErrors([]);
             const isUpdate = importMode === "update";
             const response: any = isUpdate
-                ? await updateLivestreamsFile(file, programCode || undefined, sheetUrl)
+                ? await updateLivestreamsFile(
+                    file,
+                    programCode || undefined,
+                    sheetUrl,
+                    existingDataMode
+                )
                 : await importLivestreamsFile(file, programCode || undefined, sheetUrl);
             api.success({
                 message: isUpdate ? "Cập nhật thành công" : "Import thành công",
@@ -1495,37 +1773,38 @@ const Page = () => {
         }
     };
 
-    const fieldPermissions: ResolvedFieldPermission[] = resolveModuleFieldPermissions(
-        moduleFields,
-        fieldPolicy,
-        SCHEDULE_MODULE_CODE
-    );
-    const visibleFieldPermissions = fieldPermissions.filter(
-        (item) =>
-            item.field.fieldCode !== "id"
-            && item.field.fieldCode !== "lesson_document"
-            // Hai thời điểm này được gộp thành ba cột đọc nhanh: Thứ, Ngày live
-            // và Khung giờ. Vẫn giữ nguyên dữ liệu start_time/end_time khi lưu.
-            && !["start_time", "end_time"].includes(item.field.fieldCode)
-            && !HIDDEN_SCHEDULE_LIST_FIELDS.has(item.field.fieldCode)
-            && (item.visible || item.editable)
-    );
-    // Luôn để tên bài ngay cạnh số bài, kể cả khi thứ tự field được trả về từ
-    // cấu hình cũ trong DB khác với thứ tự hiển thị của bảng lịch.
-    const lessonNameIndex = visibleFieldPermissions.findIndex(
-        (item) => item.field.fieldCode === "lesson_name"
-    );
-    const learnNumberIndex = visibleFieldPermissions.findIndex(
-        (item) => item.field.fieldCode === "learn_number"
-    );
-    if (lessonNameIndex >= 0 && learnNumberIndex >= 0 && lessonNameIndex !== learnNumberIndex + 1) {
-        const [lessonNameField] = visibleFieldPermissions.splice(lessonNameIndex, 1);
-        const updatedLearnNumberIndex = visibleFieldPermissions.findIndex(
+    const fieldPermissions: ResolvedFieldPermission[] = useMemo(() => (
+        resolveModuleFieldPermissions(moduleFields, fieldPolicy, SCHEDULE_MODULE_CODE)
+    ), [fieldPolicy, moduleFields]);
+    const visibleFieldPermissions = useMemo(() => {
+        const visibleFields = fieldPermissions.filter(
+            (item) =>
+                item.field.fieldCode !== "id"
+                && item.field.fieldCode !== "lesson_document"
+                // Hai thời điểm này được gộp thành ba cột đọc nhanh: Thứ, Ngày live
+                // và Khung giờ. Vẫn giữ nguyên dữ liệu start_time/end_time khi lưu.
+                && !["start_time", "end_time"].includes(item.field.fieldCode)
+                && !HIDDEN_SCHEDULE_LIST_FIELDS.has(item.field.fieldCode)
+                && (item.visible || item.editable)
+        );
+        // Luôn để tên bài ngay cạnh số bài, kể cả khi thứ tự field được trả về từ
+        // cấu hình cũ trong DB khác với thứ tự hiển thị của bảng lịch.
+        const lessonNameIndex = visibleFields.findIndex(
+            (item) => item.field.fieldCode === "lesson_name"
+        );
+        const learnNumberIndex = visibleFields.findIndex(
             (item) => item.field.fieldCode === "learn_number"
         );
-        visibleFieldPermissions.splice(updatedLearnNumberIndex + 1, 0, lessonNameField);
-    }
-    const editableFieldCodes = fieldPermissions
+        if (lessonNameIndex >= 0 && learnNumberIndex >= 0 && lessonNameIndex !== learnNumberIndex + 1) {
+            const [lessonNameField] = visibleFields.splice(lessonNameIndex, 1);
+            const updatedLearnNumberIndex = visibleFields.findIndex(
+                (item) => item.field.fieldCode === "learn_number"
+            );
+            visibleFields.splice(updatedLearnNumberIndex + 1, 0, lessonNameField);
+        }
+        return visibleFields;
+    }, [fieldPermissions]);
+    const editableFieldCodes = useMemo(() => fieldPermissions
         .filter((item) => (
             item.field.fieldCode !== "id"
             && item.editable
@@ -1536,11 +1815,65 @@ const Page = () => {
                 || canEditTeachingAssignment
             )
         ))
-        .map((item) => item.field.fieldCode);
+        .map((item) => item.field.fieldCode), [canEditTeachingAssignment, fieldPermissions]);
+    const editableFieldCodeSet = useMemo(() => new Set(editableFieldCodes), [editableFieldCodes]);
+
+    const getTableFilterValue = useCallback((fieldCode: string, record: ScheduleDataType) => {
+        if (fieldCode === "live_weekday") return liveWeekdayLabel(record.start_time);
+        if (fieldCode === "live_date") {
+            const date = parseCalendarWallTime(record.start_time);
+            return date.isValid() ? date.format("DD/MM/YYYY") : "-";
+        }
+        if (fieldCode === "lesson_status") {
+            return Number(record.lesson_status) === 1
+                ? "Nghỉ học"
+                : lessonStatusText(record.start_time, record.end_time);
+        }
+        return String(record[fieldCode] ?? "-").trim() || "-";
+    }, []);
+    const filterableFieldCodes = useMemo(() => new Set([
+        "learn_number", "subject", "teacher", "assistant_teacher", "system_type", "lesson_status",
+    ]), []);
+    const tableFiltersByField = useMemo(() => {
+        const result = new Map<string, Array<{ text: string; value: string }>>();
+        const fieldCodes = [...filterableFieldCodes, "live_weekday", "live_date"];
+        fieldCodes.forEach((fieldCode) => {
+            const values = Array.from(new Set(
+                data.map((record) => getTableFilterValue(fieldCode, record))
+            ));
+            result.set(fieldCode, values
+                .sort((left, right) => left.localeCompare(right, "vi"))
+                .map((value) => ({ text: value, value })));
+        });
+        return result;
+    }, [data, filterableFieldCodes, getTableFilterValue]);
+    const getTableFilters = useCallback(
+        (fieldCode: string) => tableFiltersByField.get(fieldCode) ?? [],
+        [tableFiltersByField]
+    );
+    const previousEditingKeyRef = useRef(editingKey);
+    const previousEditingKey = previousEditingKeyRef.current;
+    const previousSavingKeyRef = useRef(savingKey);
+    const previousSavingKey = previousSavingKeyRef.current;
+    useEffect(() => {
+        previousEditingKeyRef.current = editingKey;
+    }, [editingKey]);
+    useEffect(() => {
+        previousSavingKeyRef.current = savingKey;
+    }, [savingKey]);
+    const shouldUpdateScheduleCell = useCallback((record: ScheduleDataType, previousRecord: ScheduleDataType) => (
+        record !== previousRecord
+        || record.key === editingKey
+        || record.key === previousEditingKey
+    ), [editingKey, previousEditingKey]);
+    const shouldUpdateActionCell = useCallback((record: ScheduleDataType, previousRecord: ScheduleDataType) => (
+        record !== previousRecord
+        || editingKey !== previousEditingKey
+        || savingKey !== previousSavingKey
+    ), [editingKey, previousEditingKey, previousSavingKey, savingKey]);
 
     const columns: ColumnsType<ScheduleDataType> = visibleFieldPermissions.map(({ field }, columnIndex) => {
         const fieldCode = field.fieldCode;
-        const activeSort = sortState.find((item) => item.field === fieldCode);
         return {
             title: fieldCode === "lesson_status" ? "Tiến độ" : (field.fieldLabel || fieldCode),
             dataIndex: fieldCode,
@@ -1559,14 +1892,24 @@ const Page = () => {
                                             : fieldCode === "class_code" ? 120
                                                 : fieldCode === "subject" ? 120
                                                     : 150,
-            sorter: SORTABLE_FIELDS.has(fieldCode)
-                ? { multiple: visibleFieldPermissions.length - columnIndex }
-                : false,
-            sortOrder: activeSort?.order,
+            filters: filterableFieldCodes.has(fieldCode) ? getTableFilters(fieldCode) : undefined,
+            filterMultiple: true,
+            filteredValue: filterableFieldCodes.has(fieldCode)
+                ? tableColumnFilters[fieldCode] ?? null
+                : undefined,
+            onFilter: filterableFieldCodes.has(fieldCode)
+                ? (value: React.Key | boolean, record: ScheduleDataType) => (
+                    getTableFilterValue(fieldCode, record) === String(value)
+                )
+                : undefined,
+            // Nhãn trợ giảng phụ thuộc danh sách tải riêng, nên cột này vẫn cần
+            // render khi options về. Các cột còn lại bỏ qua render khi chỉ tick row.
+            shouldCellUpdate: fieldCode === "assistant_teacher"
+                ? undefined
+                : shouldUpdateScheduleCell,
             render: (text: any, record: ScheduleDataType) => {
-                console.log("text", text, "record", record);
                 const editing = isEditing(record);
-                const editable = editableFieldCodes.includes(fieldCode);
+                const editable = editableFieldCodeSet.has(fieldCode);
 
                 if (editing && editable) {
                     if (fieldCode === "teacher") {
@@ -1653,9 +1996,7 @@ const Page = () => {
                 if (fieldCode === "assistant_teacher") {
                     const labels = String(text || '')
                         .split(',')
-                        .map((username) => assistantOptions.find(
-                            (option) => option.value === username.trim()
-                        )?.label || username.trim())
+                        .map((username) => assistantLabelByUsername.get(username.trim()) || username.trim())
                         .filter(Boolean);
                     return <span>{labels.join(', ') || '-'}</span>;
                 }
@@ -1684,6 +2025,13 @@ const Page = () => {
             dataIndex: "start_time",
             width: 92,
             fixed: "left",
+            filters: getTableFilters("live_weekday"),
+            filterMultiple: true,
+            filteredValue: tableColumnFilters.live_weekday ?? null,
+            onFilter: (value: React.Key | boolean, record: ScheduleDataType) => (
+                getTableFilterValue("live_weekday", record) === String(value)
+            ),
+            shouldCellUpdate: shouldUpdateScheduleCell,
             render: (value: unknown) => liveWeekdayLabel(value),
         },
         {
@@ -1692,10 +2040,15 @@ const Page = () => {
             key: "live_date",
             width: 118,
             fixed: "left",
-            sorter: { multiple: visibleFieldPermissions.length + 2 },
-            sortOrder: sortState.find((item) => item.field === "start_time")?.order,
+            filters: getTableFilters("live_date"),
+            filterMultiple: true,
+            filteredValue: tableColumnFilters.live_date ?? null,
+            onFilter: (value: React.Key | boolean, record: ScheduleDataType) => (
+                getTableFilterValue("live_date", record) === String(value)
+            ),
+            shouldCellUpdate: shouldUpdateScheduleCell,
             render: (value: unknown, record: ScheduleDataType) => {
-                if (isEditing(record) && editableFieldCodes.includes("start_time")) {
+                if (isEditing(record) && editableFieldCodeSet.has("start_time")) {
                     return (
                         <Form.Item noStyle shouldUpdate>
                             {() => {
@@ -1733,9 +2086,10 @@ const Page = () => {
             key: "live_time_range",
             width: 132,
             fixed: "left",
+            shouldCellUpdate: shouldUpdateScheduleCell,
             render: (_: unknown, record: ScheduleDataType) => {
-                const canEditStart = editableFieldCodes.includes("start_time");
-                const canEditEnd = editableFieldCodes.includes("end_time");
+                const canEditStart = editableFieldCodeSet.has("start_time");
+                const canEditEnd = editableFieldCodeSet.has("end_time");
                 if (isEditing(record) && (canEditStart || canEditEnd)) {
                     return (
                         <Space size={4} wrap={false}>
@@ -1793,10 +2147,11 @@ const Page = () => {
                 value: code,
             })),
             filterMultiple: false,
-            filteredValue: columnProgramFilter ? [columnProgramFilter] : null,
+            filteredValue: submittedFilterValues.code ? [submittedFilterValues.code] : null,
             onFilter: (value: React.Key | boolean, record: ScheduleDataType) => (
                 String(record.code || '') === String(value)
             ),
+            shouldCellUpdate: shouldUpdateScheduleCell,
             render: (code: string, record: ScheduleDataType) => (
                 <Space direction="vertical" size={0} style={{ lineHeight: 1.25 }}>
                     <Tag color="blue" style={{ width: "fit-content", marginInlineEnd: 0 }}>
@@ -1818,6 +2173,7 @@ const Page = () => {
             key: "action",
             fixed: "right",
             width: 156,
+            shouldCellUpdate: shouldUpdateActionCell,
             render: (_: any, record: ScheduleDataType) => {
                 const editing = isEditing(record);
                 const canModify = canModifySchedule(record);
@@ -1933,8 +2289,31 @@ const Page = () => {
         router.push(`/schedule/auto?${params.toString()}`);
     };
 
-    const handleOpenBulkEdit = () => {
-        const requestedRows = data.filter((item) => selectedRowKeys.map(String).includes(String(item.id)));
+    const handleOpenBulkEdit = async () => {
+        const selectedKeySet = new Set(selectedRowKeys.map(String));
+        let requestedRows = selectedRowKeys
+            .map((key) => selectedRowsCacheRef.current.get(String(key)))
+            .filter((item): item is ScheduleDataType => Boolean(item));
+        if (requestedRows.length < selectedKeySet.size) {
+            try {
+                const rows = await fetchAllPages<any>({
+                    total: totalItems,
+                    pageSize: 300,
+                    fetchPage: async (page, limit) => {
+                        const response: any = await getLivestreams({ ...scheduleParams, page, limit });
+                        return Array.isArray(response?.data?.data) ? response.data.data : [];
+                    },
+                });
+                requestedRows = mapScheduleRows(rows).filter((item) => selectedKeySet.has(String(item.id)));
+                requestedRows.forEach((record) => selectedRowsCacheRef.current.set(String(record.id), record));
+            } catch (error: any) {
+                api.error({
+                    message: "Không thể mở sửa hàng loạt",
+                    description: error?.message || "Không thể tải đủ các lịch học đã chọn.",
+                });
+                return;
+            }
+        }
         const selectedPrograms = Array.from(new Set(
             requestedRows.map((item) => String(item.code || "").trim()).filter(Boolean)
         ));
@@ -1966,6 +2345,63 @@ const Page = () => {
             returnTo: buildScheduleUrl(submittedFilterValues, currentPage),
         });
         router.push(`/schedule/auto-edit?${params.toString()}`);
+    };
+
+    const handleOpenScheduleImport = () => {
+        setImportErrors([]);
+        setImportMode(canImportSchedule ? "create" : "update");
+        setOpenImportModal(true);
+    };
+
+    const handleRefreshScheduleList = async () => {
+        if (!hasSearched || refreshingScheduleList) return;
+        setRefreshingScheduleList(true);
+        try {
+            await refreshSchedules();
+        } catch (error: any) {
+            api.error({
+                message: "Làm mới danh sách thất bại",
+                description: error?.message || "Không thể tải lại dữ liệu lịch học.",
+            });
+        } finally {
+            setRefreshingScheduleList(false);
+        }
+    };
+
+    const exportMenu = {
+        items: [
+            { key: "xlsx", label: "Xuất Excel (.xlsx)" },
+            { key: "csv", label: "Xuất CSV (.csv)" },
+            { type: "divider" as const },
+            { key: "update-assistants", label: "Excel để bổ sung trợ giảng" },
+        ],
+        onClick: ({ key }: { key: string }) => {
+            if (key === "update-assistants") {
+                void handleExportSchedule("xlsx", "update");
+                return;
+            }
+            void handleExportSchedule(key as "csv" | "xlsx");
+        },
+    };
+
+    const syncMenu = {
+        items: [
+            {
+                key: "sync-teaching-users",
+                icon: <ReloadOutlined />,
+                label: "Quét user nhân sự",
+                disabled: syncingTeachingUsers,
+            },
+            ...(canEditSchedule ? [{
+                key: "assign-student-classrooms",
+                icon: <ApartmentOutlined />,
+                label: "Đồng bộ phân lớp",
+            }] : []),
+        ],
+        onClick: ({ key }: { key: string }) => {
+            if (key === "sync-teaching-users") handleSyncMissingTeachingUsers();
+            if (key === "assign-student-classrooms") handleOpenClassroomAssignment();
+        },
     };
 
     return (
@@ -2045,15 +2481,10 @@ const Page = () => {
 
                 <SearchAndActionsBar
                     onSearch={handleSearch}
+                    searchValue={searchText}
                     placeholder="Tìm kiếm theo chương trình, bài học, giáo viên, phòng học..."
                     handleAddBtn={canCreateSchedule ? handleAddBtn : undefined}
-                    handleImportClick={(canImportSchedule || canEditSchedule) ? () => {
-                        setImportErrors([]);
-                        setImportMode(canImportSchedule ? "create" : "update");
-                        setOpenImportModal(true);
-                    } : undefined}
                     actionClassName="schedule-action-buttons"
-                    importBtnStyle={undefined}
                     secondaryActions={
                         isDesktop ? <>
                             <div className="schedule-workflow-actions">
@@ -2076,70 +2507,77 @@ const Page = () => {
                                 )}
                             </div>
                             <div className="schedule-utility-actions">
-                                <Button
-                                    icon={<ReloadOutlined />}
-                                    loading={syncingTeachingUsers}
-                                    onClick={handleSyncMissingTeachingUsers}
-                                >
-                                    Quét user nhân sự
-                                </Button>
-                                {canEditSchedule && (
-                                    <Button
-                                        icon={<ApartmentOutlined />}
-                                        onClick={handleOpenClassroomAssignment}
-                                    >
-                                        Đồng bộ phân lớp
+                                {(canImportSchedule || canEditSchedule || canExportSchedule) && (
+                                    <Space.Compact className="schedule-file-actions">
+                                        {(canImportSchedule || canEditSchedule) && (
+                                            <Button icon={<UploadOutlined />} onClick={handleOpenScheduleImport}>
+                                                Import
+                                            </Button>
+                                        )}
+                                        {canExportSchedule && (
+                                            <Dropdown trigger={["click"]} menu={exportMenu}>
+                                                <Button icon={<DownloadOutlined />}>
+                                                    Export{selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}
+                                                </Button>
+                                            </Dropdown>
+                                        )}
+                                    </Space.Compact>
+                                )}
+                                <Dropdown trigger={["click"]} menu={syncMenu}>
+                                    <Button icon={<DatabaseOutlined />} loading={syncingTeachingUsers}>
+                                        Đồng bộ <DownOutlined />
                                     </Button>
-                                )}
-                                {canExportSchedule && (
-                                    <Dropdown
-                                        trigger={["click"]}
-                                        menu={{
-                                            items: [
-                                                { key: "xlsx", label: "Xuất Excel (.xlsx)" },
-                                                { key: "csv", label: "Xuất CSV (.csv)" },
-                                            ],
-                                            onClick: ({ key }) => handleExportSchedule(key as "csv" | "xlsx"),
-                                        }}
-                                    >
-                                        <Button icon={<DownloadOutlined />}>
-                                            Export{selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}
-                                        </Button>
-                                    </Dropdown>
-                                )}
+                                </Dropdown>
                                 <Button
                                     aria-label="Làm mới danh sách"
                                     title="Làm mới danh sách"
                                     icon={<ReloadOutlined />}
-                                    onClick={() => {
-                                        if (hasSearched) void refreshSchedules();
-                                    }}
+                                    loading={refreshingScheduleList}
+                                    disabled={!hasSearched}
+                                    onClick={() => void handleRefreshScheduleList()}
                                 />
                             </div>
                         </> : <div className="schedule-mobile-actions">
-                            <Dropdown
-                                trigger={["click"]}
-                                menu={{
-                                    items: [
-                                        ...(canCreateSchedule ? [{ key: "auto", icon: <CalendarOutlined />, label: "Tạo lịch tự động", disabled: !submittedFilterValues.code }] : []),
-                                        ...(canEditSchedule ? [{ key: "bulk-edit", icon: <EditOutlined />, label: "Sửa hàng loạt" }] : []),
-                                        { key: "sync-teaching-users", icon: <ReloadOutlined />, label: "Quét user nhân sự" },
-                                        ...(canEditSchedule ? [{ key: "assign-student-classrooms", icon: <ApartmentOutlined />, label: "Đồng bộ phân lớp" }] : []),
-                                        ...(canExportSchedule ? [{ key: "xlsx", icon: <FileExcelOutlined />, label: `Xuất Excel${selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}` }, { key: "csv", icon: <FileTextOutlined />, label: "Xuất CSV" }] : []),
-                                        { key: "reload", icon: <ReloadOutlined />, label: "Làm mới" },
-                                    ],
-                                    onClick: ({ key }) => {
-                                        if (key === "auto") handleOpenAutoSchedule();
-                                        if (key === "bulk-edit") handleOpenBulkEdit();
-                                        if (key === "sync-teaching-users") handleSyncMissingTeachingUsers();
-                                        if (key === "assign-student-classrooms") handleOpenClassroomAssignment();
-                                        if (key === "xlsx" || key === "csv") handleExportSchedule(key);
-                                        if (key === "reload" && hasSearched) void refreshSchedules();
-                                    },
-                                }}
-                            >
-                                <Button icon={<MoreOutlined />}>Thao tác khác</Button>
+                            {(canImportSchedule || canEditSchedule) && (
+                                <Button icon={<UploadOutlined />} onClick={handleOpenScheduleImport}>Import</Button>
+                            )}
+                            {canExportSchedule && (
+                                <Dropdown trigger={["click"]} menu={exportMenu}>
+                                    <Button icon={<DownloadOutlined />}>
+                                        Export{selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}
+                                    </Button>
+                                </Dropdown>
+                            )}
+                            {(canCreateSchedule || canEditSchedule) && (
+                                <Dropdown
+                                    trigger={["click"]}
+                                    menu={{
+                                        items: [
+                                            ...(canCreateSchedule ? [{ key: "auto", icon: <CalendarOutlined />, label: "Tạo lịch tự động", disabled: !submittedFilterValues.code }] : []),
+                                            ...(canEditSchedule ? [{ key: "bulk-edit", icon: <EditOutlined />, label: "Sửa hàng loạt" }] : []),
+                                        ],
+                                        onClick: ({ key }) => {
+                                            if (key === "auto") handleOpenAutoSchedule();
+                                            if (key === "bulk-edit") handleOpenBulkEdit();
+                                        },
+                                    }}
+                                >
+                                    <Button icon={<MoreOutlined />}>Thao tác khác</Button>
+                                </Dropdown>
+                            )}
+                            <Dropdown trigger={["click"]} menu={syncMenu}>
+                                <Button icon={<DatabaseOutlined />} loading={syncingTeachingUsers}>
+                                    Đồng bộ <DownOutlined />
+                                </Button>
                             </Dropdown>
+                            <Button
+                                icon={<ReloadOutlined />}
+                                loading={refreshingScheduleList}
+                                disabled={!hasSearched}
+                                onClick={() => void handleRefreshScheduleList()}
+                            >
+                                Làm mới
+                            </Button>
                             <Button icon={<FilterOutlined />} onClick={() => setOpenFilterDrawer(true)}>Lọc</Button>
                         </div>
                     }
@@ -2429,29 +2867,38 @@ const Page = () => {
                                             }
                                         }}
                                         size="middle"
-                                        onChange={(_, filters, sorter, extra) => {
+                                        onChange={(_, filters, _sorter, extra) => {
                                             if (extra.action === "filter") {
-                                                const selectedProgram = filters.program_code?.[0];
-                                                // Filter cột chỉ áp dụng trên dữ liệu đang hiển thị,
-                                                // không gọi lại API hay làm gián đoạn thao tác của admin.
-                                                setColumnProgramFilter(selectedProgram ? String(selectedProgram) : undefined);
+                                                const nextColumnFilters: Record<string, React.Key[] | null> = {};
+                                                Object.entries(filters).forEach(([key, values]) => {
+                                                    if (key === "program_code") return;
+                                                    nextColumnFilters[key] = values?.map((value) => value as React.Key) || null;
+                                                });
+                                                setTableColumnFilters(nextColumnFilters);
+
+                                                // Ant Table gửi tất cả filter-enabled columns trong callback.
+                                                // Vì vậy bấm "Đồng ý" ở Giáo viên vẫn có program_code; chỉ
+                                                // đổi API/URL khi cột Chương trình thực sự đổi giá trị.
+                                                if (filters.program_code === undefined) return;
+                                                const currentProgramFilter = submittedFilterValues.code
+                                                    ? [String(submittedFilterValues.code)]
+                                                    : null;
+                                                const nextProgramFilter = filters.program_code?.map(String) || null;
+                                                if (JSON.stringify(nextProgramFilter) === JSON.stringify(currentProgramFilter)) {
+                                                    return;
+                                                }
+                                                const selectedProgram = nextProgramFilter?.[0];
+                                                const nextValues = cleanFilterValues({
+                                                    ...submittedFilterValues,
+                                                    code: selectedProgram ? String(selectedProgram) : undefined,
+                                                });
+                                                setFilterValues(nextValues);
+                                                setSubmittedFilterValues(nextValues);
+                                                setCurrentPage(1);
+                                                setHasSearched(true);
+                                                replaceScheduleUrl(nextValues);
                                                 return;
                                             }
-                                            if (extra.action !== "sort") return;
-                                            if (!hasSearched) return;
-                                            const sorterItems = (
-                                                Array.isArray(sorter) ? sorter : [sorter]
-                                            ) as SorterResult<ScheduleDataType>[];
-                                            setSortState(
-                                                sorterItems
-                                                    .filter((item) => item.field && item.order)
-                                                    .map((item) => ({
-                                                        field: String(item.field),
-                                                        order: item.order as "ascend" | "descend",
-                                                    }))
-                                            );
-                                            setCurrentPage(1);
-                                            replaceScheduleUrl(submittedFilterValues);
                                         }}
                                         expandable={{
                                             expandedRowRender: (record) => <ScheduleDetailRow record={record} />,
@@ -2498,23 +2945,17 @@ const Page = () => {
                 >
                     {calendarDetail && <ScheduleDetailRow record={calendarDetail} />}
                 </Modal>
-                <ScheduleModal
-                    open={isModalOpen}
-                    onClose={() => {
+                <ScheduleModalController
+                    ref={scheduleModalRef}
+                    onCloseCleanup={() => {
                         calendarRef.current?.getApi().unselect();
                         setCalendarDraftPreview(null);
-                        setIsModalOpen(false);
-                        setSelectedRecord(null);
-                        setIsEditMode(false);
                     }}
                     onSuccess={handleModalSuccess}
                     onDraftChange={handleCalendarDraftChange}
-                    isEdit={isEditMode}
-                    initialData={selectedRecord}
                     moduleFields={moduleFields}
                     fieldPolicy={fieldPolicy}
-                    moduleCode={SCHEDULE_MODULE_CODE}
-                    programCode={isEditMode ? undefined : String(submittedFilterValues.code || "").trim() || undefined}
+                    programCode={String(submittedFilterValues.code || "").trim() || undefined}
                 />
                 <CopyScheduleModal
                     open={Boolean(copySource)}
@@ -2550,7 +2991,11 @@ const Page = () => {
                 <ClassroomAssignmentModal
                     open={Boolean(classroomAssignmentCalendarId)}
                     calendarId={classroomAssignmentCalendarId}
-                    onClose={() => setClassroomAssignmentCalendarId(null)}
+                    systemType={classroomAssignmentSystemType}
+                    onClose={() => {
+                        setClassroomAssignmentCalendarId(null);
+                        setClassroomAssignmentSystemType(null);
+                    }}
                 />
                 <Modal
                     title="Tiến trình quét user nhân sự"

@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
@@ -52,12 +53,19 @@ const columns: ColumnsType<DataType> = [
 ];
 
 const Page = () => {
+    const searchParams = useSearchParams();
     const [data, setData] = useState<DataType[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [pageSize, setPageSize] = useState(10);
+    const [currentPage, setCurrentPage] = useState(() => {
+        const value = Number(searchParams.get("page"));
+        return Number.isInteger(value) && value > 0 ? value : 1;
+    });
+    const [pageSize, setPageSize] = useState(() => {
+        const value = Number(searchParams.get("limit"));
+        return Number.isInteger(value) && value > 0 ? value : 10;
+    });
     const [totalItems, setTotalItems] = useState(0);
-    const [searchText, setSearchText] = useState("");
+    const [searchText, setSearchText] = useState(() => String(searchParams.get("q") || ""));
     const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
     const { shouldReload, setModal, setShouldReload } = useUserStore();
     const hasPermission = useAuthStore(state => state.hasPermission);
@@ -112,6 +120,23 @@ const Page = () => {
     }, [currentPage, pageSize, searchText]);
 
     useEffect(() => {
+        const params = new URLSearchParams();
+        if (searchText.trim()) params.set("q", searchText.trim());
+        if (currentPage > 1) params.set("page", String(currentPage));
+        if (pageSize !== 10) params.set("limit", String(pageSize));
+        const nextUrl = params.size ? `/users?${params.toString()}` : "/users";
+        window.history.replaceState(window.history.state, "", nextUrl);
+    }, [currentPage, pageSize, searchText]);
+
+    useEffect(() => {
+        const page = Number(searchParams.get("page"));
+        const limit = Number(searchParams.get("limit"));
+        setSearchText(String(searchParams.get("q") || ""));
+        setCurrentPage(Number.isInteger(page) && page > 0 ? page : 1);
+        setPageSize(Number.isInteger(limit) && limit > 0 ? limit : 10);
+    }, [searchParams]);
+
+    useEffect(() => {
         if (shouldReload) {
             void fetchUsers();
             setShouldReload(false); // reset lại
@@ -122,6 +147,7 @@ const Page = () => {
         <>
             {contextHolder}
             <SearchAndActionsBar
+                searchValue={searchText}
                 placeholder="Tên đăng nhập, người dùng"
                 titleBtnAdd="Người dùng"
                 onSearch={async (value) => {

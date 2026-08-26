@@ -11,6 +11,7 @@ import {
   menuConfig,
   getActiveKeys,
   isProgramContextPath,
+  notifyRouteNavigationStart,
   withProgramContext,
 } from "./SideMenu";
 
@@ -82,47 +83,15 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
       return {
         key: item.key,
         // Dùng link thật để menu chuột phải của trình duyệt có thể mở tab mới.
-        label: <Link href={targetPath}>{item.label}</Link>,
+        label: <Link href={targetPath} onClick={notifyRouteNavigationStart}>{item.label}</Link>,
         children: allowedChildren && allowedChildren.length > 0
           ? allowedChildren.map(child => ({
             key: child.key,
-            label: <Link href={withProgramContext(child.path as string, navigationProgram)}>{child.label}</Link>,
+            label: <Link href={withProgramContext(child.path as string, navigationProgram)} onClick={notifyRouteNavigationStart}>{child.label}</Link>,
           }))
           : undefined,
       };
     });
-
-  const onHeaderMenuClick: MenuProps['onClick'] = ({ key }) => {
-    let targetPath = '';
-
-    // Check if it's a main item
-    const mainItem = menuConfig.find(item => item.key === key);
-    if (mainItem) {
-      if (mainItem.children && mainItem.children.length > 0) {
-        const allowedChild = mainItem.children.find(child => hasPermission(child.permission));
-        if (allowedChild) {
-          targetPath = allowedChild.path as string;
-        }
-      } else {
-        targetPath = mainItem.path || '';
-      }
-    } else {
-      // It might be a child item from the dropdown
-      for (const item of menuConfig) {
-        if (item.children) {
-          const child = item.children.find(c => c.key === key);
-          if (child) {
-            targetPath = child.path as string;
-            break;
-          }
-        }
-      }
-    }
-
-    if (targetPath) {
-      router.push(withProgramContext(targetPath, navigationProgram));
-    }
-  };
 
   const profileMenuItems: MenuProps['items'] = [
     {
@@ -236,7 +205,6 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
             <Menu
               mode="horizontal"
               selectedKeys={[activeTopKey, activeSideKey]}
-              onClick={onHeaderMenuClick}
               items={headerItems}
               style={{
                 borderBottom: 'none',

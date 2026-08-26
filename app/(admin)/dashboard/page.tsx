@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
     Alert,
     Avatar,
@@ -121,6 +121,7 @@ const SummaryCard = ({
 
 const Page: React.FC = () => {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const user = useAuthStore((state) => state.user);
     const hasPermission = useAuthStore((state) => state.hasPermission);
     const currentProgram = useAuthStore((state) => state.currentProgram);
@@ -133,6 +134,32 @@ const Page: React.FC = () => {
         dayjs().startOf('week'),
         dayjs().endOf('week'),
     ]);
+
+    useEffect(() => {
+        const parsedFrom = dayjs(searchParams.get('from'));
+        const parsedTo = dayjs(searchParams.get('to'));
+        const hasValidUrlRange = parsedFrom.isValid()
+            && parsedTo.isValid()
+            && !parsedFrom.isAfter(parsedTo, 'day');
+        const canonicalRange: [Dayjs, Dayjs] = hasValidUrlRange
+            ? [parsedFrom.startOf('day'), parsedTo.endOf('day')]
+            : dateRange;
+
+        if (
+            hasValidUrlRange
+            && (!dateRange[0].isSame(canonicalRange[0], 'day')
+                || !dateRange[1].isSame(canonicalRange[1], 'day'))
+        ) {
+            setDateRange(canonicalRange);
+        }
+
+        const canonicalParams = new URLSearchParams();
+        canonicalParams.set('from', canonicalRange[0].format('YYYY-MM-DD'));
+        canonicalParams.set('to', canonicalRange[1].format('YYYY-MM-DD'));
+        if (canonicalParams.toString() !== searchParams.toString()) {
+            window.history.replaceState(null, '', `/dashboard?${canonicalParams.toString()}`);
+        }
+    }, [searchParams]);
 
     const loadDashboard = useCallback(async (manual = false) => {
         manual ? setRefreshing(true) : setLoading(true);
@@ -234,7 +261,14 @@ const Page: React.FC = () => {
                                 { label: 'Tháng này', value: [dayjs().startOf('month'), dayjs().endOf('month')] },
                             ]}
                             onChange={(value) => {
-                                if (value?.[0] && value?.[1]) setDateRange([value[0], value[1]]);
+                                if (value?.[0] && value?.[1]) {
+                                    const nextRange: [Dayjs, Dayjs] = [value[0], value[1]];
+                                    setDateRange(nextRange);
+                                    const params = new URLSearchParams();
+                                    params.set('from', nextRange[0].format('YYYY-MM-DD'));
+                                    params.set('to', nextRange[1].format('YYYY-MM-DD'));
+                                    window.history.replaceState(null, '', `/dashboard?${params.toString()}`);
+                                }
                             }}
                         />
                         <Button

@@ -2,7 +2,7 @@
 
 import { PlusOutlined } from "@ant-design/icons";
 import { Button, Form, message, Select, Space, Tooltip, type SelectProps } from "antd";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import TeacherProfileFormModal from "@/app/(admin)/teacher-profiles/components/TeacherProfileFormModal";
 import {
     createTeacherProfile,
@@ -28,6 +28,82 @@ const normalizeSearchText = (value: unknown) => String(value ?? "")
     .toLocaleLowerCase("vi-VN")
     .trim();
 
+type TeacherProfileQuickCreateProps = {
+    teacherType: CanViewStreamKey;
+    teacherValueMode: "username" | "displayName";
+    mode?: SelectProps["mode"];
+    selectedValue: unknown;
+    onChange?: SelectProps["onChange"];
+    refreshStaff: () => Promise<unknown>;
+    onClose: () => void;
+};
+
+// Modal thêm nhanh chỉ được mount khi thực sự mở. Trước đây mỗi Select tạo sẵn
+// một Form, message context và Modal ẩn; màn bulk 132 lịch vì thế tạo hàng trăm
+// form phụ dù người dùng chưa bấm nút "+".
+const TeacherProfileQuickCreate = ({
+    teacherType,
+    teacherValueMode,
+    mode,
+    selectedValue,
+    onChange,
+    refreshStaff,
+    onClose,
+}: TeacherProfileQuickCreateProps) => {
+    const [form] = Form.useForm<TeacherProfilePayload>();
+    const [saving, setSaving] = useState(false);
+    const [messageApi, contextHolder] = message.useMessage();
+
+    useEffect(() => {
+        form.setFieldsValue({
+            username: "",
+            display_name: "",
+            can_view_stream_key: teacherType,
+            status: 1,
+        });
+    }, [form, teacherType]);
+
+    const handleCreate = async () => {
+        try {
+            const values = await form.validateFields();
+            setSaving(true);
+            await createTeacherProfile({ ...values, can_view_stream_key: teacherType, status: 1 });
+            await refreshStaff();
+
+            const value = teacherType === 1 && teacherValueMode === "displayName"
+                ? String(values.display_name || values.username).trim()
+                : String(values.username).trim();
+            const label = formatTeachingStaffLabel(values.display_name, values.username);
+            const nextValue = mode === "multiple"
+                ? Array.from(new Set([...(Array.isArray(selectedValue) ? selectedValue : []), value]))
+                : value;
+            onChange?.(nextValue as never, { value, label } as never);
+            onClose();
+            messageApi.success(teacherType === 1 ? "Đã thêm giáo viên" : "Đã thêm trợ giảng");
+        } catch (error: any) {
+            if (error?.errorFields) return;
+            messageApi.error(error?.message || "Không thể thêm nhân sự giảng dạy");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <>
+            {contextHolder}
+            <TeacherProfileFormModal
+                open
+                loading={saving}
+                editing={null}
+                form={form}
+                fixedTeacherType={teacherType}
+                onSubmit={handleCreate}
+                onClose={onClose}
+            />
+        </>
+    );
+};
+
 const TeachingStaffSelect = ({
     teacherType,
     allowQuickCreate = true,
@@ -38,11 +114,8 @@ const TeachingStaffSelect = ({
     style,
     ...props
 }: TeachingStaffSelectProps) => {
-    const [form] = Form.useForm<TeacherProfilePayload>();
     const [modalOpen, setModalOpen] = useState(false);
-    const [saving, setSaving] = useState(false);
     const [searchText, setSearchText] = useState("");
-    const [messageApi, contextHolder] = message.useMessage();
     const staffQuery = useTeachingStaffQuery(teacherType);
     const canCreate = useAuthStore((state) => state.hasPermission(PermissionKey.TEACHER_PROFILE_CREATE));
     const options = useMemo(() => {
@@ -94,45 +167,8 @@ const TeachingStaffSelect = ({
     };
     const showQuickCreate = allowQuickCreate && canCreate && !disabled;
 
-    const openCreate = () => {
-        form.resetFields();
-        form.setFieldsValue({
-            username: "",
-            display_name: "",
-            can_view_stream_key: teacherType,
-            status: 1,
-        });
-        setModalOpen(true);
-    };
-
-    const handleCreate = async () => {
-        try {
-            const values = await form.validateFields();
-            setSaving(true);
-            await createTeacherProfile({ ...values, can_view_stream_key: teacherType, status: 1 });
-            await staffQuery.mutate();
-
-            const value = teacherType === 1 && teacherValueMode === "displayName"
-                ? String(values.display_name || values.username).trim()
-                : String(values.username).trim();
-            const label = formatTeachingStaffLabel(values.display_name, values.username);
-            const nextValue = props.mode === "multiple"
-                ? Array.from(new Set([...(Array.isArray(props.value) ? props.value : []), value]))
-                : value;
-            onChange?.(nextValue as never, { value, label } as never);
-            setModalOpen(false);
-            messageApi.success(teacherType === 1 ? "Đã thêm giáo viên" : "Đã thêm trợ giảng");
-        } catch (error: any) {
-            if (error?.errorFields) return;
-            messageApi.error(error?.message || "Không thể thêm nhân sự giảng dạy");
-        } finally {
-            setSaving(false);
-        }
-    };
-
     return (
         <>
-            {contextHolder}
             <Space.Compact style={{ width: "100%", ...style }}>
                 <Select
                     {...props}
@@ -158,20 +194,22 @@ const TeachingStaffSelect = ({
                             aria-label="Thêm nhanh nhân sự"
                             icon={<PlusOutlined />}
                             size={props.size}
-                            onClick={openCreate}
+                            onClick={() => setModalOpen(true)}
                         />
                     </Tooltip>
                 )}
             </Space.Compact>
-            <TeacherProfileFormModal
-                open={modalOpen}
-                loading={saving}
-                editing={null}
-                form={form}
-                fixedTeacherType={teacherType}
-                onSubmit={handleCreate}
-                onClose={() => setModalOpen(false)}
-            />
+            {modalOpen && (
+                <TeacherProfileQuickCreate
+                    teacherType={teacherType}
+                    teacherValueMode={teacherValueMode}
+                    mode={props.mode}
+                    selectedValue={props.value}
+                    onChange={onChange}
+                    refreshStaff={staffQuery.mutate}
+                    onClose={() => setModalOpen(false)}
+                />
+            )}
         </>
     );
 };

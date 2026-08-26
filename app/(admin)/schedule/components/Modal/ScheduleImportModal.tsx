@@ -41,7 +41,11 @@ interface ScheduleImportModalProps {
     allowCreateImport: boolean;
     allowUpdateImport: boolean;
     onClose: () => void;
-    onSubmit: (file: File | undefined, sheetUrl?: string) => Promise<void>;
+    onSubmit: (
+        file: File | undefined,
+        sheetUrl?: string,
+        existingDataMode?: "skip" | "overwrite"
+    ) => Promise<void>;
     onModeChange: (mode: "create" | "update") => void;
     onDownloadTemplate: (format: "csv" | "xlsx") => Promise<void>;
 }
@@ -61,12 +65,14 @@ const ScheduleImportModal = ({
     const [selectedFile, setSelectedFile] = useState<File>();
     const [sheetUrl, setSheetUrl] = useState("");
     const [importSource, setImportSource] = useState<"file" | "sheet">("file");
+    const [existingDataMode, setExistingDataMode] = useState<"skip" | "overwrite">("skip");
 
     useEffect(() => {
         if (open) {
             setSelectedFile(undefined);
             setSheetUrl("");
             setImportSource("file");
+            setExistingDataMode("skip");
         }
     }, [open]);
 
@@ -113,6 +119,7 @@ const ScheduleImportModal = ({
                             onClick={() => onSubmit(
                                 importSource === "file" ? selectedFile : undefined,
                                 importSource === "sheet" ? sheetUrl.trim() : undefined,
+                                existingDataMode,
                             )}
                         >
                             {mode === 'update' ? 'Cập nhật lịch' : 'Import tạo lịch'}
@@ -158,6 +165,10 @@ const ScheduleImportModal = ({
                             và được dùng để tìm chính xác lịch cần cập nhật.
                         </Typography.Paragraph>
                         <Typography.Paragraph style={{ marginBottom: 8 }}>
+                            Có thể dùng menu <Typography.Text strong>Export → Excel để bổ sung trợ giảng</Typography.Text>,
+                            nhập tên hiển thị vào cột <Typography.Text code>assistant_teacher</Typography.Text> rồi import lại.
+                        </Typography.Paragraph>
+                        <Typography.Paragraph style={{ marginBottom: 8 }}>
                             Không được thay đổi <Typography.Text code>code</Typography.Text>,{" "}
                             <Typography.Text code>learn_number</Typography.Text> hoặc{" "}
                             <Typography.Text code>system_type</Typography.Text> và{" "}
@@ -172,6 +183,10 @@ const ScheduleImportModal = ({
                     <div>
                         <Typography.Paragraph style={{ marginBottom: 8 }}>
                             File CSV, Excel và Google Sheets dùng cùng một cấu trúc; mỗi dòng tương ứng một lịch học.
+                        </Typography.Paragraph>
+                        <Typography.Paragraph style={{ marginBottom: 8 }}>
+                            Cột <Typography.Text code>assistant_teacher</Typography.Text> nhập theo tên hiển thị trong mục
+                            Giáo viên &amp; Trợ giảng; nhiều người cách nhau bằng dấu phẩy hoặc dấu chấm phẩy.
                         </Typography.Paragraph>
                         <Typography.Paragraph style={{ marginBottom: 8 }}>
                             Hệ thống tìm bài học trong chương trình bằng <Typography.Text code>code</Typography.Text> và{" "}
@@ -202,6 +217,27 @@ const ScheduleImportModal = ({
                 {allowCreateImport && <Radio.Button value="create">Import tạo lịch</Radio.Button>}
                 {allowUpdateImport && <Radio.Button value="update">Cập nhật lịch</Radio.Button>}
             </Radio.Group>
+
+            {mode === "update" && (
+                <div style={{ marginBottom: 16 }}>
+                    <Typography.Text strong style={{ display: "block", marginBottom: 8 }}>
+                        Cách xử lý dữ liệu đã tồn tại
+                    </Typography.Text>
+                    <Radio.Group
+                        value={existingDataMode}
+                        onChange={(event) => setExistingDataMode(event.target.value)}
+                    >
+                        <Space direction="vertical" size={6}>
+                            <Radio value="skip">Bỏ qua dữ liệu đã có — chỉ bổ sung các trường đang trống</Radio>
+                            <Radio value="overwrite">Ghi đè dữ liệu đã có bằng giá trị trong file/Google Sheet</Radio>
+                        </Space>
+                    </Radio.Group>
+                    <Typography.Text type="secondary" style={{ display: "block", marginTop: 6 }}>
+                        Áp dụng cho giáo viên, trợ giảng, tên bài học, thời gian, tài liệu và các trường được phép cập nhật.
+                        Ô trống luôn giữ nguyên dữ liệu hiện tại và không dùng để xóa.
+                    </Typography.Text>
+                </div>
+            )}
 
             <div style={{ margin: "6px 0 12px" }}>
                 <Radio.Group value={importSource} onChange={(event) => setImportSource(event.target.value)}>

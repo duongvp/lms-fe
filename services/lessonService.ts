@@ -63,6 +63,8 @@ export interface LessonListParams {
     subject_code?: string;
     subject?: string;
     learn_number?: number | string;
+    from_learn_number?: number | string;
+    to_learn_number?: number | string;
     sort_by?: string;
     sort_order?: string;
 }
