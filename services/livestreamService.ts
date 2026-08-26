@@ -2,7 +2,7 @@ import { Dayjs } from "dayjs";
 import { combineDateTime, normalizeSchedulePayload } from "@/helper/convertDate";
 import { fetchInstance } from "@/ultils/fetchInstance";
 
-const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://localhost:5000"}/livestreams`;
+const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://localhost:5000"}/api/livestreams`;
 
 export interface LivestreamPayload {
     system_type: string;
