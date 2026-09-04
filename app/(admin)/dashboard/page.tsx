@@ -76,6 +76,7 @@ const actionLabels: Record<string, { label: string; color: string }> = {
     cancel: { label: 'Nghỉ học', color: 'red' },
     makeup: { label: 'Tạo lịch bù', color: 'gold' },
     following: { label: 'Dời chuỗi', color: 'purple' },
+    time_update: { label: 'Cập nhật thời gian', color: 'blue' },
 };
 
 const formatWallClock = (value: string, pattern: string) => {

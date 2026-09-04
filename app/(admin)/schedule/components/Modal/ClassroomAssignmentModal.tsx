@@ -36,8 +36,9 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
     const [maxStudentsPerRoom, setMaxStudentsPerRoom] = useState(
         DEFAULT_TOPUNI_MAX_STUDENTS_PER_ROOM
     );
+    const [useSuggestedTopUniLimit, setUseSuggestedTopUniLimit] = useState(true);
 
-    const loadPreview = useCallback(async (requestedMaxStudentsPerRoom: number) => {
+    const loadPreview = useCallback(async (requestedMaxStudentsPerRoom?: number) => {
         if (!calendarId) return;
         setLoading(true);
         setError("");
@@ -46,7 +47,12 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
                 calendarId,
                 requestedMaxStudentsPerRoom
             );
-            setPreview(unwrapResult(response));
+            const result = unwrapResult(response);
+            setPreview(result);
+            if (result.calendar.system_type === "topuni"
+                && typeof result.max_students_per_classroom === "number") {
+                setMaxStudentsPerRoom(result.max_students_per_classroom);
+            }
         } catch (requestError: any) {
             setError(requestError?.message || "Không thể xem trước kết quả chia lớp.");
         } finally {
@@ -58,7 +64,8 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
         if (open) {
             setPreview(null);
             setMaxStudentsPerRoom(DEFAULT_TOPUNI_MAX_STUDENTS_PER_ROOM);
-            void loadPreview(DEFAULT_TOPUNI_MAX_STUDENTS_PER_ROOM);
+            setUseSuggestedTopUniLimit(true);
+            void loadPreview();
         }
         else {
             setPreview(null);
@@ -72,14 +79,16 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
         try {
             const response = await applyStudentClassroomAssignment(
                 calendarId,
-                preview.max_students_per_classroom ?? undefined
+                useSuggestedTopUniLimit
+                    ? undefined
+                    : preview.max_students_per_classroom ?? undefined
             );
             const result = unwrapResult(response);
             api.success({
                 message: "Chia lớp học sinh thành công",
                 description: result.moved_count
-                    ? `Đã cập nhật phòng học cho ${result.moved_count} học sinh.`
-                    : "Phân lớp hiện tại đã phù hợp, không có học sinh cần chuyển phòng.",
+                    ? `Đã cập nhật phân lớp cho ${result.moved_count} học sinh.`
+                    : "Phân lớp hiện tại đã phù hợp, không có học sinh cần cập nhật.",
             });
             onApplied?.();
             onClose();
@@ -218,15 +227,22 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
                     value={maxStudentsPerRoom}
                     addonAfter="học sinh"
                     onChange={(value) => {
-                        if (typeof value === "number") setMaxStudentsPerRoom(value);
+                        if (typeof value === "number") {
+                            setMaxStudentsPerRoom(value);
+                            setUseSuggestedTopUniLimit(false);
+                        }
                     }}
-                    onPressEnter={() => void loadPreview(maxStudentsPerRoom)}
+                    onPressEnter={() => void loadPreview(
+                        useSuggestedTopUniLimit ? undefined : maxStudentsPerRoom
+                    )}
                 />
                 <Button
                     type={maxStudentsPerRoomChanged ? "primary" : "default"}
                     loading={loading}
                     disabled={!maxStudentsPerRoomChanged || applying}
-                    onClick={() => void loadPreview(maxStudentsPerRoom)}
+                    onClick={() => void loadPreview(
+                        useSuggestedTopUniLimit ? undefined : maxStudentsPerRoom
+                    )}
                 >
                     Tính lại phương án
                 </Button>
@@ -260,7 +276,9 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
                 onCancel={onClose}
                 footer={[
                     <Button key="cancel" onClick={onClose} disabled={applying}>Hủy</Button>,
-                    <Button key="reload" onClick={() => void loadPreview(maxStudentsPerRoom)} disabled={loading || applying}>
+                    <Button key="reload" onClick={() => void loadPreview(
+                        useSuggestedTopUniLimit ? undefined : maxStudentsPerRoom
+                    )} disabled={loading || applying}>
                         Tải lại xem trước
                     </Button>,
                     <Button
@@ -342,10 +360,15 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
                                     {preview.total_students.toLocaleString("vi-VN")}
                                 </Descriptions.Item>
                                 <Descriptions.Item label="Số phòng">{preview.classroom_count}</Descriptions.Item>
-                                <Descriptions.Item label="Cần chuyển phòng">
-                                    <Typography.Text type={preview.moved_count ? "warning" : "success"} strong>
-                                        {preview.moved_count.toLocaleString("vi-VN")}
-                                    </Typography.Text>
+                                <Descriptions.Item label="Cần cập nhật phân lớp">
+                                    <Space direction="vertical" size={0}>
+                                        <Typography.Text type={preview.moved_count ? "warning" : "success"} strong>
+                                            {preview.moved_count.toLocaleString("vi-VN")} học sinh
+                                        </Typography.Text>
+                                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                            Phòng hoặc mã lớp sẽ thay đổi
+                                        </Typography.Text>
+                                    </Space>
                                 </Descriptions.Item>
                             </Descriptions>
                             {preview.calendar.system_type === "topuni" && preview.total_students === 0 && (

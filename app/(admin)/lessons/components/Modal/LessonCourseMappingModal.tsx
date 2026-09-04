@@ -25,24 +25,27 @@ const LessonCourseMappingModal = ({ open, programCode, selectedLessonIds, onClos
     const packageCourses: PackageCourseOption[] = packageCoursesQuery.data?.data ?? [];
     const loadingPackageCourses = packageCoursesQuery.isLoading || packageCoursesQuery.isValidating;
     const selectedPackageId = Form.useWatch("package_id", form);
+    const selectedCourseId = Form.useWatch("course_id", form);
 
     const packageOptions = useMemo(() => {
         const grouped = new Map<string, Set<string>>();
-        packageCourses.forEach((item) => {
-            const names = grouped.get(item.package_id) ?? new Set<string>();
-            if (item.product_name) names.add(item.product_name);
-            grouped.set(item.package_id, names);
-        });
+        packageCourses
+            .filter((item) => !selectedCourseId || item.course_id === selectedCourseId)
+            .forEach((item) => {
+                const names = grouped.get(item.package_id) ?? new Set<string>();
+                if (item.product_name) names.add(item.product_name);
+                grouped.set(item.package_id, names);
+            });
         return Array.from(grouped.entries()).map(([packageId, names]) => ({
             value: packageId,
             label: `${packageId}${names.size ? ` · ${Array.from(names).join(", ")}` : ""}`,
         }));
-    }, [packageCourses]);
+    }, [packageCourses, selectedCourseId]);
 
     const courseOptions = useMemo(() => {
         const seen = new Set<string>();
         return packageCourses
-            .filter((item) => item.package_id === selectedPackageId)
+            .filter((item) => !selectedPackageId || item.package_id === selectedPackageId)
             .filter((item) => {
                 if (seen.has(item.course_id)) return false;
                 seen.add(item.course_id);
@@ -106,7 +109,7 @@ const LessonCourseMappingModal = ({ open, programCode, selectedLessonIds, onClos
             <Alert
                 showIcon
                 type="info"
-                message="Package ID và Course ID được tải từ PACKAGE_COURSE_SHEET_URL. Chọn Package trước, danh sách Course tương ứng sẽ được lọc tự động."
+                message="Package ID và Course ID được tải từ PACKAGE_COURSE_SHEET_URL. Có thể chọn mục nào trước; danh sách còn lại sẽ được lọc theo lựa chọn đó."
                 style={{ marginBottom: 16 }}
             />
             <Form className="responsive-modal-form" form={form} layout="vertical" initialValues={{ action: "add", scope: selectedLessonIds.length ? "selected" : "all" }}>
@@ -126,20 +129,20 @@ const LessonCourseMappingModal = ({ open, programCode, selectedLessonIds, onClos
                             loading={loadingPackageCourses}
                             options={packageOptions}
                             showSearch
+                            allowClear
                             optionFilterProp="label"
                             placeholder="Chọn Package từ Google Sheet"
-                            onChange={() => form.setFieldValue("course_id", undefined)}
                         />
                     </Form.Item>
                     <Form.Item name="course_id" label="Course ID" rules={[{ required: true, message: "Chọn Course ID" }]}>
                         <Select
                             style={{ width: 300 }}
                             loading={loadingPackageCourses}
-                            disabled={!selectedPackageId}
                             options={courseOptions}
                             showSearch
+                            allowClear
                             optionFilterProp="label"
-                            placeholder={selectedPackageId ? "Chọn Course thuộc Package" : "Chọn Package trước"}
+                            placeholder={selectedPackageId ? "Chọn Course thuộc Package" : "Chọn Course từ Google Sheet"}
                         />
                     </Form.Item>
                     <Button type="primary" loading={loading} disabled={loadingPackageCourses || packageCourses.length === 0} onClick={() => void submit()} style={{ marginTop: 30 }}>Thực hiện</Button>

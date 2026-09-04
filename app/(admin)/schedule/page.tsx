@@ -137,6 +137,8 @@ interface ScheduleDataType {
     class_name?: string;
     room?: string;
     can_modify?: boolean;
+    classroom_assigned?: boolean;
+    classroom_assigned_at?: string | null;
     [key: string]: any;
 }
 
@@ -274,6 +276,8 @@ const mapScheduleRows = (rows: any[]): ScheduleDataType[] => rows.map((item: any
     system_type: item.system_type,
     lesson_status: item.lesson_status ?? 0,
     can_modify: item.can_modify === true,
+    classroom_assigned: item.classroom_assigned === true,
+    classroom_assigned_at: item.classroom_assigned_at || null,
 }));
 const REQUIRED_QUICK_EDIT_FIELDS = new Set([
     "start_time",
@@ -405,6 +409,7 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
                     <Space size={[8, 8]} wrap>
                         <Tag color="blue">{date} · {time}</Tag>
                         <Tag color={statusColor}>{status}</Tag>
+                        {record.classroom_assigned && <Tag color="green">Đã chia lớp</Tag>}
                     </Space>
                 </Space>
             </div>
@@ -417,6 +422,18 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
                 <Col xs={24} sm={12}><DetailItem label="Giáo viên">{record.teacher || "-"}</DetailItem></Col>
                 <Col xs={24} sm={12}><DetailItem label="Trợ giảng">{record.assistant_teacher || "-"}</DetailItem></Col>
                 <Col xs={24} sm={12}><DetailItem label="Phòng/Kênh học">{record.room || "-"}</DetailItem></Col>
+                <Col xs={24} sm={12}><DetailItem label="Trạng thái phân lớp">
+                    {record.classroom_assigned ? (
+                        <Space size={6} wrap>
+                            <Tag color="green">Đã chia lớp</Tag>
+                            {record.classroom_assigned_at && (
+                                <Typography.Text type="secondary">
+                                    {dayjs(record.classroom_assigned_at).format("DD/MM/YYYY HH:mm")}
+                                </Typography.Text>
+                            )}
+                        </Space>
+                    ) : <Tag>Chưa chia lớp</Tag>}
+                </DetailItem></Col>
                 <Col xs={24} sm={12}><DetailItem label="Link học">
                     {record.lesson_link ? <Typography.Link href={record.lesson_link} target="_blank" rel="noreferrer">Mở liên kết buổi học</Typography.Link> : "-"}
                 </DetailItem></Col>
@@ -1227,6 +1244,9 @@ const Page = () => {
                 <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.85 }}>{eventInfo.timeText}</div>
                 {styleType === "cancelled" && (
                     <div style={{ fontSize: 10, fontWeight: 700, marginTop: 2 }}>NGHỈ HỌC</div>
+                )}
+                {record.classroom_assigned && (
+                    <div style={{ fontSize: 10, fontWeight: 700, marginTop: 2 }}>ĐÃ CHIA LỚP</div>
                 )}
                 <div style={{ fontSize: 12, whiteSpace: "normal", lineHeight: 1.3, marginTop: 2, fontWeight: 500 }}>
                     {eventInfo.event.title}
@@ -2167,12 +2187,28 @@ const Page = () => {
         });
     }
 
+    columns.push({
+        title: "Phân lớp",
+        key: "classroom_assignment_status",
+        width: 130,
+        className: "responsive-card-hidden",
+        shouldCellUpdate: shouldUpdateScheduleCell,
+        render: (_: unknown, record: ScheduleDataType) => record.classroom_assigned ? (
+            <Tooltip title={record.classroom_assigned_at
+                ? `Lần chia gần nhất: ${dayjs(record.classroom_assigned_at).format("DD/MM/YYYY HH:mm")}`
+                : "Buổi học đã được chia lớp"}>
+                <Tag color="green">Đã chia lớp</Tag>
+            </Tooltip>
+        ) : <Tag>Chưa chia lớp</Tag>,
+    });
+
     if ((canEditSchedule && editableFieldCodes.length > 0) || canDeleteSchedule || canCreateSchedule) {
         columns.push({
             title: "Thao tác",
             key: "action",
             fixed: "right",
-            width: 156,
+            width: 112,
+            align: "center",
             shouldCellUpdate: shouldUpdateActionCell,
             render: (_: any, record: ScheduleDataType) => {
                 const editing = isEditing(record);
@@ -2185,7 +2221,7 @@ const Page = () => {
                     && canEditAnyField(moduleFields, fieldPolicy, SCHEDULE_MODULE_CODE)
                 );
                 return editing ? (
-                    <Space>
+                    <Space size={4} wrap={false}>
                         <Tooltip title="Lưu">
                             <Button
                                 type="primary"
@@ -2213,7 +2249,7 @@ const Page = () => {
                         </Tooltip>
                     </Space>
                 ) : (
-                    <Space>
+                    <Space size={4} wrap={false}>
                         {canCopy && (
                             <Tooltip title="Sao chép thành lịch mới">
                                 <Button
@@ -2842,6 +2878,7 @@ const Page = () => {
                                         responsiveCardTitle={(record) => (
                                             <Space size={6} style={{ maxWidth: "100%" }}>
                                                 {record.code && <Tag color="blue" style={{ marginInlineEnd: 0 }}>{record.code}</Tag>}
+                                                {record.classroom_assigned && <Tag color="green" style={{ marginInlineEnd: 0 }}>Đã chia</Tag>}
                                                 <Typography.Text strong ellipsis style={{ maxWidth: 190 }}>
                                                     Bài {record.learn_number || "-"}{record.lesson_name ? ` · ${record.lesson_name}` : ""}
                                                 </Typography.Text>
@@ -2995,6 +3032,9 @@ const Page = () => {
                     onClose={() => {
                         setClassroomAssignmentCalendarId(null);
                         setClassroomAssignmentSystemType(null);
+                    }}
+                    onApplied={() => {
+                        void refreshSchedules();
                     }}
                 />
                 <Modal

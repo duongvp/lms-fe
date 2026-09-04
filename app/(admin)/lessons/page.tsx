@@ -311,7 +311,7 @@ const Page = () => {
         secondaryUnlocked && hasSearched ? lessonParams : null
     );
     const moduleFieldsQuery = useModuleFieldsQuery(LESSON_MODULE_CODE);
-    const { refreshLessons } = useLmsCache();
+    const { refreshLessons, refreshSchedules } = useLmsCache();
     const loading = lessonsQuery.isLoading || lessonsQuery.isValidating;
 
     useEffect(() => {
@@ -613,7 +613,7 @@ const Page = () => {
                 if (selectedRecord) {
                     // Dữ liệu vừa sửa đã được cập nhật ngay trên bảng. Tải lại
                     // chạy nền để lỗi mạng không bị hiểu nhầm là lỗi lưu bài.
-                    void refreshLessons().catch(() => undefined);
+                    void Promise.all([refreshLessons(), refreshSchedules()]).catch(() => undefined);
                 } else {
                     await refreshLessons();
                 }
@@ -756,7 +756,9 @@ const Page = () => {
             api.success({ message: "Đã cập nhật tên bài học" });
             setEditingLessonId(null);
             setEditingLessonName("");
-            if (hasSearched) void refreshLessons().catch(() => undefined);
+            if (hasSearched) {
+                void Promise.all([refreshLessons(), refreshSchedules()]).catch(() => undefined);
+            }
         } catch (error: any) {
             api.error({
                 message: "Cập nhật thất bại",
@@ -857,7 +859,7 @@ const Page = () => {
             api.success({ message: "Đã lưu thứ tự bài học" });
             setReorderMode(false);
             if (hasSearched) {
-                await refreshLessons();
+                await Promise.all([refreshLessons(), refreshSchedules()]);
             }
         } catch (error: any) {
             api.error({
@@ -943,7 +945,7 @@ const Page = () => {
             });
             setOpenImportModal(false);
             if (hasSearched) {
-                await refreshLessons();
+                await Promise.all([refreshLessons(), refreshSchedules()]);
             }
         } catch (error: any) {
             const errors = error?.detail?.errors ?? [];
