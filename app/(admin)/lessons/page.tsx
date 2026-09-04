@@ -137,6 +137,7 @@ const Page = () => {
     const [selectedRecord, setSelectedRecord] = useState<LessonDataType | null>(null);
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [allRowsSelected, setAllRowsSelected] = useState(false);
+    const [selectingAllRows, setSelectingAllRows] = useState(false);
     const selectAllRequestRef = useRef(0);
     const [reorderMode, setReorderMode] = useState(false);
     const [reorderStrategy, setReorderStrategy] = useState<LessonReorderStrategy>("insert");
@@ -318,15 +319,27 @@ const Page = () => {
         selectAllRequestRef.current += 1;
         setSelectedRowKeys([]);
         setAllRowsSelected(false);
+        setSelectingAllRows(false);
     }, [submittedFilterValues]);
+
+    const handleSelectionChange = useCallback((keys: React.Key[]) => {
+        selectAllRequestRef.current += 1;
+        setSelectingAllRows(false);
+        setAllRowsSelected(false);
+        setSelectedRowKeys(keys);
+    }, []);
 
     const handleSelectAll = useCallback(async (selected: boolean) => {
         const requestId = ++selectAllRequestRef.current;
         if (!selected) {
             setSelectedRowKeys([]);
             setAllRowsSelected(false);
+            setSelectingAllRows(false);
             return;
         }
+        // Cập nhật dấu tick trước, sau đó mới tải các trang còn lại ở nền.
+        setAllRowsSelected(true);
+        setSelectingAllRows(true);
         setSelectedRowKeys((current) => Array.from(new Set([
             ...current,
             ...data
@@ -335,6 +348,8 @@ const Page = () => {
         ])));
 
         try {
+            await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+            if (requestId !== selectAllRequestRef.current) return;
             const rows = await fetchAllPages<LessonApiResponse>({
                 total: totalItems,
                 pageSize: 100,
@@ -364,6 +379,8 @@ const Page = () => {
                 message: "Không thể chọn tất cả đề cương",
                 description: error?.message || "Không thể tải toàn bộ danh sách đề cương.",
             });
+        } finally {
+            if (requestId === selectAllRequestRef.current) setSelectingAllRows(false);
         }
     }, [api, data, lessonParams, totalItems]);
 
@@ -1103,6 +1120,7 @@ const Page = () => {
                 visibleFieldPermissions={visibleFieldPermissions}
                 selectedRowKeys={selectedRowKeys}
                 allRowsSelected={allRowsSelected}
+                selectingAllRows={selectingAllRows}
                 reorderMode={reorderMode}
                 dragRowKey={dragRowKey as React.Key}
                 canEdit={canEdit}
@@ -1113,10 +1131,7 @@ const Page = () => {
                 savingInlineName={savingInlineName}
                 visibleFormFieldCodes={[...visibleFormFieldCodes, "updated_at"]}
                 hasSearched={hasSearched}
-                onSelectionChange={(keys) => {
-                    setAllRowsSelected(false);
-                    setSelectedRowKeys(keys);
-                }}
+                onSelectionChange={handleSelectionChange}
                 onSelectAll={handleSelectAll}
                 onPageChange={(page, size) => {
                     if (!hasSearched) return;

@@ -102,7 +102,12 @@ const LessonCourseMappingModal = ({ open, programCode, selectedLessonIds, onClos
                 lesson_ids: values.scope === "selected" ? selectedLessonIds : undefined,
             });
             const result = response?.data || {};
-            message.success(`Đã xử lý ${result.affected ?? 0} bài; bỏ qua ${result.skipped_past ?? 0} bài đã diễn ra.`);
+            const skippedPast = Number(result.skipped_past ?? 0);
+            message.success(
+                skippedPast > 0
+                    ? `Đã xử lý ${result.affected ?? 0} bài; bỏ qua ${skippedPast} bài đã diễn ra.`
+                    : `Đã xử lý ${result.affected ?? 0} bài.`,
+            );
             await loadMappings();
         } catch (error: any) {
             message.error(error?.message || "Không thể cập nhật Course ID");

@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
-import { notification, Alert, Form, Input, InputNumber, Select, Button, Checkbox, Space, Modal, Row, Col, DatePicker, TimePicker, Drawer, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress } from "antd";
+import { notification, Alert, Form, Input, InputNumber, Select, Button, Checkbox, Space, Modal, Row, Col, DatePicker, TimePicker, Drawer, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress, Table, Spin } from "antd";
 import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, MoreOutlined, ApartmentOutlined } from "@ant-design/icons";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
@@ -18,6 +18,7 @@ import ClassroomAssignmentModal from "./components/Modal/ClassroomAssignmentModa
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
 import {
+    applyStudentClassroomAssignment,
     deleteLivestream,
     downloadLivestreamImportTemplate,
     exportLivestreams,
@@ -43,6 +44,54 @@ type ScheduleDocument = {
     url: string;
     label: string;
 };
+
+type ImmediateSelectAllCheckboxProps = {
+    checked: boolean;
+    indeterminate: boolean;
+    busy: boolean;
+    disabled: boolean;
+    onChange: (checked: boolean) => void;
+};
+
+const ImmediateSelectAllCheckbox = React.memo(({
+    checked,
+    indeterminate,
+    busy,
+    disabled,
+    onChange,
+}: ImmediateSelectAllCheckboxProps) => {
+    const [visualChecked, setVisualChecked] = useState(checked);
+    const firstFrameRef = useRef<number | null>(null);
+    const secondFrameRef = useRef<number | null>(null);
+
+    useEffect(() => setVisualChecked(checked), [checked]);
+    useEffect(() => () => {
+        if (firstFrameRef.current !== null) cancelAnimationFrame(firstFrameRef.current);
+        if (secondFrameRef.current !== null) cancelAnimationFrame(secondFrameRef.current);
+    }, []);
+
+    return (
+        <Checkbox
+            aria-label="Chọn tất cả lịch học"
+            aria-busy={busy}
+            checked={visualChecked}
+            indeterminate={!visualChecked && indeterminate}
+            title={busy ? "Đang chọn tất cả lịch học..." : undefined}
+            disabled={disabled}
+            onChange={(event) => {
+                const nextChecked = event.target.checked;
+                setVisualChecked(nextChecked);
+                if (firstFrameRef.current !== null) cancelAnimationFrame(firstFrameRef.current);
+                if (secondFrameRef.current !== null) cancelAnimationFrame(secondFrameRef.current);
+                // Chờ browser vẽ dấu tick trước khi cập nhật selection của cả bảng.
+                firstFrameRef.current = requestAnimationFrame(() => {
+                    secondFrameRef.current = requestAnimationFrame(() => onChange(nextChecked));
+                });
+            }}
+        />
+    );
+});
+ImmediateSelectAllCheckbox.displayName = "ImmediateSelectAllCheckbox";
 
 const parseScheduleDocuments = (value: unknown): ScheduleDocument[] => {
     if (value === undefined || value === null || value === "") return [];
@@ -141,6 +190,18 @@ interface ScheduleDataType {
     classroom_assigned_at?: string | null;
     [key: string]: any;
 }
+
+type BatchClassroomAssignmentItem = {
+    calendarId: string;
+    code: string;
+    learnNumber?: number;
+    lessonName?: string;
+    startTime?: string;
+    systemType?: string;
+    status: "pending" | "running" | "success" | "skipped" | "error";
+    movedCount?: number;
+    message?: string;
+};
 
 interface ScheduleFilterValues {
     keyword?: string;
@@ -409,7 +470,7 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
                     <Space size={[8, 8]} wrap>
                         <Tag color="blue">{date} · {time}</Tag>
                         <Tag color={statusColor}>{status}</Tag>
-                        {record.classroom_assigned && <Tag color="green">Đã chia lớp</Tag>}
+                        {!isCancelled && record.classroom_assigned && <Tag color="green">Đã chia lớp</Tag>}
                     </Space>
                 </Space>
             </div>
@@ -422,18 +483,20 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
                 <Col xs={24} sm={12}><DetailItem label="Giáo viên">{record.teacher || "-"}</DetailItem></Col>
                 <Col xs={24} sm={12}><DetailItem label="Trợ giảng">{record.assistant_teacher || "-"}</DetailItem></Col>
                 <Col xs={24} sm={12}><DetailItem label="Phòng/Kênh học">{record.room || "-"}</DetailItem></Col>
-                <Col xs={24} sm={12}><DetailItem label="Trạng thái phân lớp">
-                    {record.classroom_assigned ? (
-                        <Space size={6} wrap>
-                            <Tag color="green">Đã chia lớp</Tag>
-                            {record.classroom_assigned_at && (
-                                <Typography.Text type="secondary">
-                                    {dayjs(record.classroom_assigned_at).format("DD/MM/YYYY HH:mm")}
-                                </Typography.Text>
-                            )}
-                        </Space>
-                    ) : <Tag>Chưa chia lớp</Tag>}
-                </DetailItem></Col>
+                {!isCancelled && (
+                    <Col xs={24} sm={12}><DetailItem label="Trạng thái phân lớp">
+                        {record.classroom_assigned ? (
+                            <Space size={6} wrap>
+                                <Tag color="green">Đã chia lớp</Tag>
+                                {record.classroom_assigned_at && (
+                                    <Typography.Text type="secondary">
+                                        {dayjs(record.classroom_assigned_at).format("DD/MM/YYYY HH:mm")}
+                                    </Typography.Text>
+                                )}
+                            </Space>
+                        ) : <Tag>Chưa chia lớp</Tag>}
+                    </DetailItem></Col>
+                )}
                 <Col xs={24} sm={12}><DetailItem label="Link học">
                     {record.lesson_link ? <Typography.Link href={record.lesson_link} target="_blank" rel="noreferrer">Mở liên kết buổi học</Typography.Link> : "-"}
                 </DetailItem></Col>
@@ -799,6 +862,7 @@ const Page = () => {
     const [importMode, setImportMode] = useState<"create" | "update">("create");
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [allRowsSelected, setAllRowsSelected] = useState(false);
+    const [selectingAllRows, setSelectingAllRows] = useState(false);
     const selectAllRequestRef = useRef(0);
     const selectedRowsCacheRef = useRef(new Map<string, ScheduleDataType>());
     const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
@@ -814,6 +878,9 @@ const Page = () => {
     const [refreshingScheduleList, setRefreshingScheduleList] = useState(false);
     const [classroomAssignmentCalendarId, setClassroomAssignmentCalendarId] = useState<string | number | null>(null);
     const [classroomAssignmentSystemType, setClassroomAssignmentSystemType] = useState<"topclass" | "topuni" | null>(null);
+    const [batchClassroomAssignmentOpen, setBatchClassroomAssignmentOpen] = useState(false);
+    const [batchClassroomAssigning, setBatchClassroomAssigning] = useState(false);
+    const [batchClassroomItems, setBatchClassroomItems] = useState<BatchClassroomAssignmentItem[]>([]);
 
     // Đồng bộ trước khi browser vẽ frame đầu tiên; đồng thời giữ transition
     // tắt cho lần đồng bộ này để trạng thái đã lưu không bị animate.
@@ -1008,6 +1075,7 @@ const Page = () => {
         selectAllRequestRef.current += 1;
         setSelectedRowKeys([]);
         setAllRowsSelected(false);
+        setSelectingAllRows(false);
         selectedRowsCacheRef.current.clear();
     }, [submittedFilterValues]);
 
@@ -1024,6 +1092,8 @@ const Page = () => {
     ), [data]);
     const handleRowSelectionChange = useCallback((newSelectedRowKeys: React.Key[], info?: { type?: string }) => {
         if (info?.type === "all") return;
+        selectAllRequestRef.current += 1;
+        setSelectingAllRows(false);
         setAllRowsSelected(false);
         setSelectedRowKeys(newSelectedRowKeys);
     }, []);
@@ -1032,16 +1102,32 @@ const Page = () => {
         if (!selected) {
             setSelectedRowKeys([]);
             setAllRowsSelected(false);
+            setSelectingAllRows(false);
             return;
         }
-        setSelectedRowKeys((current) => Array.from(new Set([
+        // Phản hồi checkbox ngay trước khi bắt đầu tải các trang còn lại.
+        // Nếu chờ fetch hoàn tất mới set, người dùng có cảm giác click không ăn.
+        setAllRowsSelected(true);
+        setSelectingAllRows(true);
+        const selectableKeysOnPage = data
+            .filter(canModifySchedule)
+            .map((record) => String(record.id));
+        const nextVisibleSelection = (current: React.Key[]) => Array.from(new Set([
             ...current,
-            ...data
-                .filter(canModifySchedule)
-                .map((record) => String(record.id)),
-        ])));
+            ...selectableKeysOnPage,
+        ]));
+        setSelectedRowKeys(nextVisibleSelection);
+
+        // Page hiện tại đã chứa toàn bộ kết quả, không gọi lại chính API đó.
+        if (totalItems <= data.length) {
+            setAllRowsSelected(selectableKeysOnPage.length > 0);
+            setSelectingAllRows(false);
+            return;
+        }
 
         try {
+            await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+            if (requestId !== selectAllRequestRef.current) return;
             const rows = await fetchAllPages<any>({
                 total: totalItems,
                 pageSize: 300,
@@ -1069,6 +1155,8 @@ const Page = () => {
                 message: "Không thể chọn tất cả lịch học",
                 description: error?.message || "Không thể tải toàn bộ danh sách lịch học.",
             });
+        } finally {
+            if (requestId === selectAllRequestRef.current) setSelectingAllRows(false);
         }
     }, [api, data, scheduleParams, totalItems]);
     const rowSelection = useMemo(() => ({
@@ -1079,12 +1167,12 @@ const Page = () => {
         ),
         onSelectAll: (selected: boolean) => handleSelectAll(selected),
         columnTitle: () => (
-            <Checkbox
-                aria-label="Chọn tất cả lịch học"
+            <ImmediateSelectAllCheckbox
                 checked={allRowsSelected}
                 indeterminate={!allRowsSelected && selectedRowKeys.length > 0}
+                busy={selectingAllRows}
                 disabled={totalItems <= 0 || (totalItems <= data.length && selectableRowKeys.size === 0)}
-                onChange={(event) => void handleSelectAll(event.target.checked)}
+                onChange={(checked) => void handleSelectAll(checked)}
             />
         ),
         // Checkbox nằm trong row có expandRowByClick. Chặn bubble ngay tại ô
@@ -1103,7 +1191,7 @@ const Page = () => {
             };
         },
         columnWidth: 32,
-    }), [allRowsSelected, data.length, handleRowSelectionChange, handleSelectAll, selectableRowKeys, selectedRowKeys, totalItems]);
+    }), [allRowsSelected, data.length, handleRowSelectionChange, handleSelectAll, selectableRowKeys, selectedRowKeys, selectingAllRows, totalItems]);
 
     const calendarParams = useMemo<LivestreamListParams | null>(() => {
         if (!hasSearched || !calendarMounted) return null;
@@ -1245,7 +1333,7 @@ const Page = () => {
                 {styleType === "cancelled" && (
                     <div style={{ fontSize: 10, fontWeight: 700, marginTop: 2 }}>NGHỈ HỌC</div>
                 )}
-                {record.classroom_assigned && (
+                {styleType !== "cancelled" && record.classroom_assigned && (
                     <div style={{ fontSize: 10, fontWeight: 700, marginTop: 2 }}>ĐÃ CHIA LỚP</div>
                 )}
                 <div style={{ fontSize: 12, whiteSpace: "normal", lineHeight: 1.3, marginTop: 2, fontWeight: 500 }}>
@@ -1580,6 +1668,131 @@ const Page = () => {
         setClassroomAssignmentCalendarId(selectedKey);
     };
 
+    const runBatchClassroomAssignment = async (items: BatchClassroomAssignmentItem[]) => {
+        setBatchClassroomItems(items);
+        setBatchClassroomAssignmentOpen(true);
+        setBatchClassroomAssigning(true);
+        let successCount = 0;
+        let skippedCount = 0;
+        let failedCount = 0;
+
+        for (const item of items) {
+            setBatchClassroomItems((current) => current.map((row) => (
+                row.calendarId === item.calendarId
+                    ? { ...row, status: "running", message: "Đang tính toán và chia lớp..." }
+                    : row
+            )));
+            try {
+                // Endpoint apply tự dựng lại phương án ngay trong transaction,
+                // vì vậy thuật toán giống hệt thao tác xác nhận ở modal đơn lẻ.
+                const response: any = await applyStudentClassroomAssignment(item.calendarId);
+                const result = response?.data ?? response;
+                const totalStudents = Number(result?.total_students || 0);
+                const movedCount = Number(result?.moved_count || 0);
+                if (totalStudents === 0) {
+                    skippedCount += 1;
+                    setBatchClassroomItems((current) => current.map((row) => (
+                        row.calendarId === item.calendarId
+                            ? {
+                                ...row,
+                                status: "skipped",
+                                movedCount: 0,
+                                message: "Chưa có danh sách học sinh nên chưa thể chia lớp.",
+                            }
+                            : row
+                    )));
+                    continue;
+                }
+                successCount += 1;
+                setBatchClassroomItems((current) => current.map((row) => (
+                    row.calendarId === item.calendarId
+                        ? {
+                            ...row,
+                            status: "success",
+                            movedCount,
+                            message: movedCount
+                                ? `Đã cập nhật phân lớp cho ${movedCount.toLocaleString("vi-VN")} học sinh.`
+                                : "Phân lớp hiện tại đã phù hợp, không cần thay đổi.",
+                        }
+                        : row
+                )));
+            } catch (requestError: any) {
+                failedCount += 1;
+                setBatchClassroomItems((current) => current.map((row) => (
+                    row.calendarId === item.calendarId
+                        ? {
+                            ...row,
+                            status: "error",
+                            message: requestError?.message || "Không thể chia lớp cho lịch này.",
+                        }
+                        : row
+                )));
+            }
+        }
+
+        setBatchClassroomAssigning(false);
+        try {
+            await refreshSchedules();
+        } catch {
+            // Kết quả từng lịch vẫn được giữ trong modal nếu tải lại bảng lỗi.
+        }
+        api[failedCount || skippedCount ? "warning" : "success"]({
+            message: "Đã hoàn tất tự động chia lớp",
+            description: `Thành công ${successCount}/${items.length} lịch${skippedCount ? `, bỏ qua ${skippedCount} lịch chưa có học sinh` : ""}${failedCount ? `, lỗi ${failedCount} lịch` : ""}.`,
+            duration: 6,
+        });
+    };
+
+    const handleOpenBatchClassroomAssignment = () => {
+        if (!selectedRowKeys.length) {
+            api.warning({
+                message: "Chưa chọn lịch",
+                description: "Hãy tick các lịch cần tự động chia lớp trước khi thực hiện.",
+            });
+            return;
+        }
+        const items = selectedRowKeys.map((key) => {
+            const calendarId = String(key);
+            const row = selectedRowsCacheRef.current.get(calendarId);
+            return {
+                calendarId,
+                code: String(row?.code || ""),
+                learnNumber: row?.learn_number,
+                lessonName: row?.lesson_name,
+                startTime: row?.start_time,
+                systemType: row?.system_type,
+                status: "pending" as const,
+            };
+        }).sort((left, right) => {
+            const leftTime = dayjs(left.startTime).valueOf();
+            const rightTime = dayjs(right.startTime).valueOf();
+            if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
+                return leftTime - rightTime;
+            }
+            return left.calendarId.localeCompare(right.calendarId, "vi", { numeric: true });
+        });
+
+        Modal.confirm({
+            title: `Tự động chia lớp cho ${items.length} lịch?`,
+            icon: <ApartmentOutlined />,
+            content: (
+                <Space direction="vertical" size={8}>
+                    <Typography.Text>
+                        Hệ thống sẽ chia lần lượt theo thời gian: hoàn tất lịch trước rồi mới chuyển sang lịch tiếp theo.
+                    </Typography.Text>
+                    <Typography.Text type="secondary">
+                        Thuật toán chia lớp hiện tại được giữ nguyên. Lịch TopUni dùng giới hạn mặc định 500 học sinh/phòng; lịch lỗi không làm dừng các lịch còn lại.
+                    </Typography.Text>
+                </Space>
+            ),
+            okText: "Bắt đầu chia lớp",
+            cancelText: "Hủy",
+            onOk: () => {
+                void runBatchClassroomAssignment(items);
+            },
+        });
+    };
+
     const handleDownloadImportTemplate = async (format: "csv" | "xlsx") => {
         try {
             const blob = await downloadLivestreamImportTemplate(format);
@@ -1598,10 +1811,10 @@ const Page = () => {
         existingDataMode: "skip" | "overwrite" = "skip"
     ) => {
         const programCode = String(submittedFilterValues.code || "").trim();
-        if (!isAdmin && !programCode) {
+        if (!programCode) {
             api.warning({
                 message: "Chưa chọn Chương trình",
-                description: "Tài khoản không phải Admin phải lọc đúng Chương trình trước khi import hoặc cập nhật.",
+                description: "Hãy lọc đúng một Chương trình trước khi import hoặc cập nhật lịch học.",
             });
             setOpenImportModal(false);
             setOpenFilterDrawer(true);
@@ -2193,13 +2406,16 @@ const Page = () => {
         width: 130,
         className: "responsive-card-hidden",
         shouldCellUpdate: shouldUpdateScheduleCell,
-        render: (_: unknown, record: ScheduleDataType) => record.classroom_assigned ? (
-            <Tooltip title={record.classroom_assigned_at
-                ? `Lần chia gần nhất: ${dayjs(record.classroom_assigned_at).format("DD/MM/YYYY HH:mm")}`
-                : "Buổi học đã được chia lớp"}>
-                <Tag color="green">Đã chia lớp</Tag>
-            </Tooltip>
-        ) : <Tag>Chưa chia lớp</Tag>,
+        render: (_: unknown, record: ScheduleDataType) => {
+            if (Number(record.lesson_status) === 1) return null;
+            return record.classroom_assigned ? (
+                <Tooltip title={record.classroom_assigned_at
+                    ? `Lần chia gần nhất: ${dayjs(record.classroom_assigned_at).format("DD/MM/YYYY HH:mm")}`
+                    : "Buổi học đã được chia lớp"}>
+                    <Tag color="green">Đã chia lớp</Tag>
+                </Tooltip>
+            ) : <Tag>Chưa chia lớp</Tag>;
+        },
     });
 
     if ((canEditSchedule && editableFieldCodes.length > 0) || canDeleteSchedule || canCreateSchedule) {
@@ -2384,6 +2600,14 @@ const Page = () => {
     };
 
     const handleOpenScheduleImport = () => {
+        if (!String(submittedFilterValues.code || "").trim()) {
+            api.warning({
+                message: "Chưa chọn Chương trình",
+                description: "Hãy lọc đúng một Chương trình trước khi mở chức năng import lịch học.",
+            });
+            setOpenFilterDrawer(true);
+            return;
+        }
         setImportErrors([]);
         setImportMode(canImportSchedule ? "create" : "update");
         setOpenImportModal(true);
@@ -2431,14 +2655,27 @@ const Page = () => {
             ...(canEditSchedule ? [{
                 key: "assign-student-classrooms",
                 icon: <ApartmentOutlined />,
-                label: "Đồng bộ phân lớp",
+                label: "Xem trước & chia 1 lịch",
+                disabled: batchClassroomAssigning,
+            }, {
+                key: "batch-assign-student-classrooms",
+                icon: <ApartmentOutlined />,
+                label: `Tự động chia lớp đã chọn${selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}`,
+                disabled: !selectedRowKeys.length || batchClassroomAssigning,
             }] : []),
         ],
         onClick: ({ key }: { key: string }) => {
             if (key === "sync-teaching-users") handleSyncMissingTeachingUsers();
             if (key === "assign-student-classrooms") handleOpenClassroomAssignment();
+            if (key === "batch-assign-student-classrooms") handleOpenBatchClassroomAssignment();
         },
     };
+    const completedClassroomAssignments = batchClassroomItems.filter(
+        (item) => ["success", "skipped", "error"].includes(item.status)
+    ).length;
+    const batchClassroomPercent = batchClassroomItems.length
+        ? Math.round((completedClassroomAssignments / batchClassroomItems.length) * 100)
+        : 0;
 
     return (
         <div ref={pageScrollRef} style={{
@@ -2560,7 +2797,7 @@ const Page = () => {
                                     </Space.Compact>
                                 )}
                                 <Dropdown trigger={["click"]} menu={syncMenu}>
-                                    <Button icon={<DatabaseOutlined />} loading={syncingTeachingUsers}>
+                                    <Button icon={<DatabaseOutlined />} loading={syncingTeachingUsers || batchClassroomAssigning}>
                                         Đồng bộ <DownOutlined />
                                     </Button>
                                 </Dropdown>
@@ -2602,7 +2839,7 @@ const Page = () => {
                                 </Dropdown>
                             )}
                             <Dropdown trigger={["click"]} menu={syncMenu}>
-                                <Button icon={<DatabaseOutlined />} loading={syncingTeachingUsers}>
+                                <Button icon={<DatabaseOutlined />} loading={syncingTeachingUsers || batchClassroomAssigning}>
                                     Đồng bộ <DownOutlined />
                                 </Button>
                             </Dropdown>
@@ -2878,7 +3115,7 @@ const Page = () => {
                                         responsiveCardTitle={(record) => (
                                             <Space size={6} style={{ maxWidth: "100%" }}>
                                                 {record.code && <Tag color="blue" style={{ marginInlineEnd: 0 }}>{record.code}</Tag>}
-                                                {record.classroom_assigned && <Tag color="green" style={{ marginInlineEnd: 0 }}>Đã chia</Tag>}
+                                                {Number(record.lesson_status) !== 1 && record.classroom_assigned && <Tag color="green" style={{ marginInlineEnd: 0 }}>Đã chia</Tag>}
                                                 <Typography.Text strong ellipsis style={{ maxWidth: 190 }}>
                                                     Bài {record.learn_number || "-"}{record.lesson_name ? ` · ${record.lesson_name}` : ""}
                                                 </Typography.Text>
@@ -3037,6 +3274,121 @@ const Page = () => {
                         void refreshSchedules();
                     }}
                 />
+                <Modal
+                    title="Tiến trình tự động chia lớp"
+                    open={batchClassroomAssignmentOpen}
+                    width={960}
+                    closable={!batchClassroomAssigning}
+                    maskClosable={!batchClassroomAssigning}
+                    onCancel={() => {
+                        if (!batchClassroomAssigning) setBatchClassroomAssignmentOpen(false);
+                    }}
+                    footer={(
+                        <Button
+                            type="primary"
+                            disabled={batchClassroomAssigning}
+                            onClick={() => setBatchClassroomAssignmentOpen(false)}
+                        >
+                            Đóng
+                        </Button>
+                    )}
+                >
+                    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                        <div>
+                            <Space style={{ width: "100%", justifyContent: "space-between", marginBottom: 6 }}>
+                                <Typography.Text strong>Tiến độ tổng</Typography.Text>
+                                <Typography.Text>
+                                    {completedClassroomAssignments}/{batchClassroomItems.length} lịch
+                                </Typography.Text>
+                            </Space>
+                            <Progress
+                                percent={batchClassroomPercent}
+                                status={batchClassroomAssigning
+                                    ? "active"
+                                    : batchClassroomItems.some((item) => item.status === "error")
+                                        ? "exception"
+                                        : batchClassroomItems.some((item) => item.status === "skipped")
+                                            ? "normal"
+                                            : "success"}
+                            />
+                        </div>
+                        <Table<BatchClassroomAssignmentItem>
+                            rowKey="calendarId"
+                            size="small"
+                            pagination={false}
+                            dataSource={batchClassroomItems}
+                            scroll={{ x: 820, y: "min(52vh, 480px)" }}
+                            columns={[
+                                {
+                                    title: "Lịch",
+                                    key: "schedule",
+                                    width: 270,
+                                    render: (_, item) => (
+                                        <Space direction="vertical" size={0} style={{ maxWidth: 250 }}>
+                                            <Typography.Text strong ellipsis={{ tooltip: item.lessonName }}>
+                                                {item.code || "Chưa có chương trình"} · Bài {item.learnNumber || "-"}
+                                            </Typography.Text>
+                                            <Typography.Text type="secondary" ellipsis={{ tooltip: item.lessonName }}>
+                                                {item.lessonName || `Lịch ID ${item.calendarId}`}
+                                            </Typography.Text>
+                                            {item.startTime && (
+                                                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                                    {dayjs(item.startTime).format("DD/MM/YYYY HH:mm")}
+                                                </Typography.Text>
+                                            )}
+                                        </Space>
+                                    ),
+                                },
+                                {
+                                    title: "Hệ thống",
+                                    dataIndex: "systemType",
+                                    width: 100,
+                                    render: (value) => value === "topuni"
+                                        ? <Tag color="purple">TopUni</Tag>
+                                        : value === "topclass" ? <Tag color="cyan">TopClass</Tag> : "-",
+                                },
+                                {
+                                    title: "Phần trăm",
+                                    key: "percent",
+                                    width: 150,
+                                    render: (_, item) => {
+                                        const finished = ["success", "skipped", "error"].includes(item.status);
+                                        return item.status === "running" ? (
+                                            <Space size={8}><Spin size="small" /> <Typography.Text>Đang xử lý</Typography.Text></Space>
+                                        ) : (
+                                            <Progress
+                                                percent={finished ? 100 : 0}
+                                                size="small"
+                                                status={item.status === "error"
+                                                    ? "exception"
+                                                    : item.status === "success" ? "success" : "normal"}
+                                            />
+                                        );
+                                    },
+                                },
+                                {
+                                    title: "Kết quả",
+                                    key: "result",
+                                    width: 300,
+                                    render: (_, item) => (
+                                        <Space direction="vertical" size={2}>
+                                            {item.status === "pending" && <Tag>Chờ xử lý</Tag>}
+                                            {item.status === "running" && <Tag color="processing">Đang chia lớp</Tag>}
+                                            {item.status === "success" && <Tag color="success">Thành công</Tag>}
+                                            {item.status === "skipped" && <Tag color="warning">Bỏ qua</Tag>}
+                                            {item.status === "error" && <Tag color="error">Lỗi</Tag>}
+                                            {item.message && (
+                                                <Typography.Text type={item.status === "error" ? "danger" : "secondary"}>
+                                                    {item.message}
+                                                </Typography.Text>
+                                            )}
+                                        </Space>
+                                    ),
+                                },
+                            ]}
+                        />
+                    </Space>
+                </Modal>
                 <Modal
                     title="Tiến trình quét user nhân sự"
                     open={isSyncModalOpen}

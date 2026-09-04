@@ -16,6 +16,11 @@ import { useEffect, useRef, useState } from "react";
 import TeachingStaffSelect from "@/components/shared/TeachingStaffSelect";
 import HmoMappingSelect from "@/components/shared/HmoMappingSelect";
 import { buildGroupedHmoOptions, hmoOptionKey, summarizeHmoOptions } from "@/helper/hmoOptions";
+import {
+    hmoCourseMatchSummary,
+    matchHmoLessonsByCourse,
+    normalizeLessonTitle,
+} from "@/helper/hmoLessonMatching";
 import { useLessonProgramOptions } from "@/hooks/useLessonSubjectOptions";
 
 type Props = {
@@ -55,41 +60,9 @@ const getEndTimeDisabledTime = (startTime?: Dayjs | null) => {
 const isEndTimeInvalid = (startTime?: Dayjs | null, endTime?: Dayjs | null) => (
     !!startTime && !!endTime && !endTime.isAfter(startTime)
 );
-const normalizeLessonTitle = (value: unknown) => String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .toLowerCase()
-    .replace(/^bai\s*\d+\s*[:.\-–—]*\s*/, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-
 const uniqueHmoOptions = (options: HocmaiSectionOption[]) => Array.from(new Map(
     options.map((option) => [hmoOptionKey(option), option])
 ).values());
-
-const hmoTitleMatchesByCourse = (
-    options: HocmaiSectionOption[],
-    normalizedTitle: string
-) => {
-    const matches = new Map<string, Map<string, HocmaiSectionOption[]>>();
-    uniqueHmoOptions(options).forEach((option) => {
-        if (normalizeLessonTitle(option.lesson_name) !== normalizedTitle) return;
-        const byLessonId = matches.get(String(option.course_id)) || new Map<string, HocmaiSectionOption[]>();
-        const lessonId = String(option.lesson_id);
-        byLessonId.set(lessonId, [...(byLessonId.get(lessonId) || []), option]);
-        matches.set(String(option.course_id), byLessonId);
-    });
-    return matches;
-};
-
-const hmoCourseIds = (options: HocmaiSectionOption[]) => Array.from(new Set(
-    uniqueHmoOptions(options).map((option) => String(option.course_id))
-));
-
-const courseMatchSummary = (courseIds: string[], matches: Map<string, Map<string, HocmaiSectionOption[]>>) => (
-    courseIds.map((courseId) => `Course ${courseId}: ${matches.get(courseId)?.size || 0} Lesson ID`).join("; ")
-);
 
 const renderLessonNamePattern = (pattern: unknown, occurrence: number) => (
     String(pattern || "").replaceAll("{n}", String(occurrence))
@@ -579,14 +552,18 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                 ...block,
                 lessons: (block.lessons || []).map((lesson: any) => {
                     const lessonId = String(lesson.session_id || "");
-                    const lessonTitle = normalizeLessonTitle(lesson.lesson_name);
-                    // Lesson cùng tên ở các Course khác nhau là mapping hợp lệ.
-                    // Chỉ từ chối tự gán nếu một Course có nhiều Lesson ID trùng tên.
                     const availableOptions = uniqueHmoOptions(optionsByLesson.get(lessonId) || [])
-                        .sort(sortHmoOptionsByLessonId)
-                    const courseIds = hmoCourseIds(availableOptions);
-                    const matchesByCourse = hmoTitleMatchesByCourse(availableOptions, lessonTitle);
+                        .sort(sortHmoOptionsByLessonId);
                     const sessions = lesson.sessions || [];
+                    const matchingRows = sessions.map((session: any, sessionIndex: number) => ({
+                        key: String(sessionIndex),
+                        title: syncNameSource === "calendar"
+                            ? getCalendarLessonName(lesson, sessionIndex + 1, formValues)
+                            : lesson.lesson_name,
+                        teacher: session.teacher,
+                    }));
+                    const matching = matchHmoLessonsByCourse(availableOptions, matchingRows);
+                    const courseIds = matching.courseIds;
 
                     if (failedLessonIds.has(lessonId)) {
                         notes[lessonId] = {
@@ -597,43 +574,29 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                     }
 
                     if (syncNameSource === "calendar") {
-                        const claimedMappingKeys = new Set<string>();
                         const syncErrors: string[] = [];
                         let assignedCount = 0;
                         const nextSessions = sessions.map((session: any, sessionIndex: number) => {
                             const calendarLessonName = getCalendarLessonName(lesson, sessionIndex + 1, formValues);
-                            const sessionMatchesByCourse = hmoTitleMatchesByCourse(
-                                availableOptions,
-                                normalizeLessonTitle(calendarLessonName)
-                            );
-                            const matchedCourseIds = courseIds.filter(
-                                (courseId) => sessionMatchesByCourse.get(courseId)?.size === 1
-                            );
+                            const rowMatches = matching.matchesByRow.get(String(sessionIndex));
+                            const matchedCourseIds = courseIds.filter((courseId) => rowMatches?.has(courseId));
 
                             if (!normalizeLessonTitle(calendarLessonName)) {
                                 syncErrors.push(`buổi ${sessionIndex + 1} chưa có tên lịch`);
                                 return session;
                             }
                             if (!matchedCourseIds.length) {
-                                syncErrors.push(`buổi ${sessionIndex + 1}: ${courseMatchSummary(courseIds, sessionMatchesByCourse)}`);
+                                syncErrors.push(`buổi ${sessionIndex + 1}: ${hmoCourseMatchSummary(matching)}`);
                                 return session;
                             }
 
                             const selectedOptions = matchedCourseIds.flatMap((courseId) => (
-                                Array.from(sessionMatchesByCourse.get(courseId)!.values())[0]
+                                rowMatches!.get(courseId)!.options
                             ));
-                            const selectedCourseLessonIds = matchedCourseIds.map((courseId) => (
-                                `${courseId}::${Array.from(sessionMatchesByCourse.get(courseId)!.keys())[0]}`
-                            ));
-                            if (selectedCourseLessonIds.some((identity) => claimedMappingKeys.has(identity))) {
-                                syncErrors.push(`Lesson ID bị trùng giữa các lịch trong cùng Course`);
-                                return session;
-                            }
-                            selectedCourseLessonIds.forEach((identity) => claimedMappingKeys.add(identity));
                             assignedCount += 1;
                             syncedSessionCount += 1;
                             if (matchedCourseIds.length !== courseIds.length) {
-                                syncErrors.push(`buổi ${sessionIndex + 1} chỉ gán ${matchedCourseIds.length}/${courseIds.length} Course; chưa gán: ${courseMatchSummary(courseIds.filter((courseId) => !matchedCourseIds.includes(courseId)), sessionMatchesByCourse)}`);
+                                syncErrors.push(`buổi ${sessionIndex + 1} chỉ gán ${matchedCourseIds.length}/${courseIds.length} Course; chưa gán: ${hmoCourseMatchSummary(matching, courseIds.filter((courseId) => !matchedCourseIds.includes(courseId)))}`);
                             }
                             return { ...session, hmo_mapping_keys: selectedOptions.map(hmoOptionKey) };
                         });
@@ -652,7 +615,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                     }
 
                     const matchedCourseIds = courseIds.filter(
-                        (courseId) => matchesByCourse.get(courseId)?.size === sessions.length
+                        (courseId) => matching.matchedRowCountByCourse.get(courseId) === sessions.length
                     );
                     if (matchedCourseIds.length > 0 && sessions.length > 0) {
                         syncedCount += 1;
@@ -660,18 +623,16 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                         notes[lessonId] = {
                             type: matchedCourseIds.length === courseIds.length ? "success" : "warning",
                             message: matchedCourseIds.length === courseIds.length
-                                ? `Đã gán ${sessions.length} lịch theo thứ tự Lesson ID tăng dần trong từng Course.`
-                                : `Đã gán ${sessions.length} lịch cho ${matchedCourseIds.length}/${courseIds.length} Course. Chưa gán: ${courseMatchSummary(courseIds.filter((courseId) => !matchedCourseIds.includes(courseId)), matchesByCourse)}.`,
+                                ? `Đã gán ${sessions.length} lịch theo tên bài và giáo viên trong từng Course.`
+                                : `Đã gán ${sessions.length} lịch cho ${matchedCourseIds.length}/${courseIds.length} Course. Chưa gán: ${hmoCourseMatchSummary(matching, courseIds.filter((courseId) => !matchedCourseIds.includes(courseId)))}.`,
                         };
                         return {
                             ...lesson,
                             sessions: sessions.map((session: any, index: number) => ({
                                 ...session,
                                 hmo_mapping_keys: matchedCourseIds.flatMap((courseId) => {
-                                    const byLessonId = matchesByCourse.get(courseId)!;
-                                    const matchedLessonId = Array.from(byLessonId.keys())
-                                        .sort((left, right) => left.localeCompare(right, "vi", { numeric: true }))[index];
-                                    return byLessonId.get(matchedLessonId)!.map(hmoOptionKey);
+                                    return matching.matchesByRow.get(String(index))!
+                                        .get(courseId)!.options.map(hmoOptionKey);
                                 }),
                             })),
                         };
@@ -679,7 +640,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
 
                     notes[lessonId] = {
                         type: "warning",
-                        message: `Bài có ${sessions.length} lịch. Đối chiếu theo từng Course: ${courseMatchSummary(courseIds, matchesByCourse)}. Mỗi Course cần đúng ${sessions.length} Lesson ID cùng tên.`,
+                        message: `Bài có ${sessions.length} lịch. Đối chiếu theo từng Course: ${hmoCourseMatchSummary(matching)}. Mỗi Course cần ghép đủ ${sessions.length} Lesson ID không trùng nhau.`,
                     };
                     return lesson;
                 }),

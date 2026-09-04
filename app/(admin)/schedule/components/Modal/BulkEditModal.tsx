@@ -43,6 +43,11 @@ import {
     updateLivestreamBulk,
     type HocmaiSectionOption,
 } from '@/services/livestreamService';
+import {
+    hmoCourseMatchSummary,
+    matchHmoLessonsByCourse,
+    normalizeLessonTitle,
+} from '@/helper/hmoLessonMatching';
 
 const { Text, Title } = Typography;
 const SEPARATE_RENDER_BATCH_SIZE = 25;
@@ -177,41 +182,9 @@ const renderMappingPreviewChange = (current: unknown, next: unknown) => {
     );
 };
 
-const normalizeLessonTitle = (value: unknown) => String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .toLowerCase()
-    .replace(/^bai\s*\d+\s*[:.\-–—]*\s*/, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-
 const uniqueHmoOptions = (options: HocmaiSectionOption[]) => Array.from(new Map(
     options.map((option) => [hmoOptionKey(option), option])
 ).values());
-
-const hmoTitleMatchesByCourse = (
-    options: HocmaiSectionOption[],
-    normalizedTitle: string
-) => {
-    const matches = new Map<string, Map<string, HocmaiSectionOption[]>>();
-    uniqueHmoOptions(options).forEach((option) => {
-        if (normalizeLessonTitle(option.lesson_name) !== normalizedTitle) return;
-        const byLessonId = matches.get(String(option.course_id)) || new Map<string, HocmaiSectionOption[]>();
-        const lessonId = String(option.lesson_id);
-        byLessonId.set(lessonId, [...(byLessonId.get(lessonId) || []), option]);
-        matches.set(String(option.course_id), byLessonId);
-    });
-    return matches;
-};
-
-const hmoCourseIds = (options: HocmaiSectionOption[]) => Array.from(new Set(
-    uniqueHmoOptions(options).map((option) => String(option.course_id))
-));
-
-const courseMatchSummary = (courseIds: string[], matches: Map<string, Map<string, HocmaiSectionOption[]>>) => (
-    courseIds.map((courseId) => `Course ${courseId}: ${matches.get(courseId)?.size || 0} Lesson ID`).join('; ')
-);
 
 const getErrorMessage = (error: unknown) => {
     if (error && typeof error === 'object') {
@@ -297,6 +270,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     const modalRenderRef = React.useRef<HTMLDivElement>(null);
     const leavingPageRef = React.useRef(false);
     const hmoOptionsCacheRef = React.useRef<Record<string, HocmaiSectionOption[]>>({});
+    const loadingHmoLessonIdsRef = React.useRef<Set<string>>(new Set());
     // Form được thay bằng màn loading trong lúc tải HMO. `preserve` giữ giá trị
     // watcher khi các Form.Item tạm unmount, tránh vòng lặp bật/tắt tải dữ liệu.
     const watchedConfigMode = Form.useWatch('config_mode', { form, preserve: true }) || 'common';
@@ -311,6 +285,9 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         setRenderedSeparateCount(0);
         setLoadingMoreSeparate(false);
         hmoOptionsCacheRef.current = {};
+        loadingHmoLessonIdsRef.current.clear();
+        setHmoOptionsByLesson({});
+        setLoadingHmoLessons(new Set());
         if (!open) return;
         const timer = window.setTimeout(() => setLoadRelatedData(true), 50);
         return () => window.clearTimeout(timer);
@@ -469,11 +446,42 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         );
     }, [sourceLessonNames]);
 
+    const loadHmoOptionsForLesson = React.useCallback(async (lessonIdInput: string, programCodeInput: string) => {
+        const lessonId = String(lessonIdInput || '').trim();
+        const programCode = String(programCodeInput || '').trim();
+        if (!lessonId || !programCode
+            || Object.prototype.hasOwnProperty.call(hmoOptionsCacheRef.current, lessonId)
+            || loadingHmoLessonIdsRef.current.has(lessonId)) return;
+
+        loadingHmoLessonIdsRef.current.add(lessonId);
+        setLoadingHmoLessons((current) => new Set(current).add(lessonId));
+        try {
+            const response: any = await getHocmaiSectionsForSchedulingLessons(programCode, [lessonId]);
+            const errorsByLessonId = response?.data?.errors_by_lesson_id || {};
+            const options = response?.data?.by_lesson_id?.[lessonId];
+            const nextOptions = errorsByLessonId[lessonId]
+                ? []
+                : Array.isArray(options) ? options : [];
+            hmoOptionsCacheRef.current = {
+                ...hmoOptionsCacheRef.current,
+                [lessonId]: nextOptions,
+            };
+            setHmoOptionsByLesson((current) => ({ ...current, [lessonId]: nextOptions }));
+        } catch (error: any) {
+            message.error(error?.message || 'Không thể tải Lesson ID HMO');
+        } finally {
+            loadingHmoLessonIdsRef.current.delete(lessonId);
+            setLoadingHmoLessons((current) => {
+                const next = new Set(current);
+                next.delete(lessonId);
+                return next;
+            });
+        }
+    }, []);
+
     useEffect(() => {
         if (!open || !loadRelatedData || !selectionReady) return;
-        if (watchedConfigMode !== 'separate' && !mappingEnabled) {
-            setHmoOptionsByLesson({});
-            setLoadingHmoLessons(new Set());
+        if (watchedConfigMode !== 'separate') {
             setHmoDataReady(true);
             return;
         }
@@ -525,7 +533,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             setHmoDataReady(true);
         });
         return () => { active = false; };
-    }, [lessonContexts, loadRelatedData, mappingEnabled, open, selectionReady, watchedConfigMode]);
+    }, [lessonContexts, loadRelatedData, open, selectionReady, watchedConfigMode]);
 
     // Form Watchers
     const configMode = watchedConfigMode;
@@ -939,97 +947,75 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             });
 
             rowsByLesson.forEach((lessonRows, lessonId) => {
-                // Một Lesson nội bộ có thể thuộc nhiều Course HMO. Chỉ coi là
-                // trùng khi cùng Course có nhiều Lesson ID cùng tên; trùng tên
-                // ở Course khác là mapping hợp lệ và phải được gán đồng thời.
                 const availableOptions = uniqueHmoOptions(optionsByLesson.get(lessonId) || [])
-                    .sort((left, right) => String(left.lesson_id).localeCompare(String(right.lesson_id), 'vi', { numeric: true }))
-                const courseIds = hmoCourseIds(availableOptions);
+                    .sort((left, right) => String(left.lesson_id).localeCompare(String(right.lesson_id), 'vi', { numeric: true }));
                 const orderedRows = [...lessonRows].sort((left, right) => dayjs(left.start_time).valueOf() - dayjs(right.start_time).valueOf());
+                const sourceLessonName = getSourceLessonName(lessonRows[0]);
+                const matchingRows = orderedRows.map((row) => ({
+                    key: String(row.id),
+                    title: syncNameSource === 'calendar' ? row.lesson_name : sourceLessonName,
+                    teacher: teacherValue(row.teacher),
+                }));
+
+                if (matchingRows.some((row) => !normalizeLessonTitle(row.title))) {
+                    orderedRows.forEach((row) => {
+                        notes[String(row.id)] = {
+                            type: 'warning',
+                            message: syncNameSource === 'calendar'
+                                ? 'Lịch chưa có tên bài học nên không thể tự gán Lesson ID HMO.'
+                                : 'Không tìm thấy tên bài học trong Quản lý đề cương. Hệ thống không tự gán.',
+                        };
+                    });
+                    return;
+                }
+
+                const matching = matchHmoLessonsByCourse(availableOptions, matchingRows);
+                const courseIds = matching.courseIds;
 
                 if (syncNameSource === 'calendar') {
-                    const claimedCourseLessonIds = new Set<string>();
                     orderedRows.forEach((row) => {
-                        const title = normalizeLessonTitle(row.lesson_name);
-                        const matchesByCourse = hmoTitleMatchesByCourse(availableOptions, title);
-                        const matchedCourseIds = courseIds.filter(
-                            (courseId) => matchesByCourse.get(courseId)?.size === 1
-                        );
-
-                        if (!title) {
-                            notes[String(row.id)] = {
-                                type: 'warning',
-                                message: 'Lịch chưa có tên bài học nên không thể tự gán Lesson ID HMO.',
-                            };
-                            return;
-                        }
+                        const rowMatches = matching.matchesByRow.get(String(row.id));
+                        const matchedCourseIds = courseIds.filter((courseId) => rowMatches?.has(courseId));
                         if (!matchedCourseIds.length) {
                             notes[String(row.id)] = {
                                 type: 'warning',
-                                message: `Không thể tự gán Lesson ID HMO cho “${row.lesson_name}”: ${courseMatchSummary(courseIds, matchesByCourse)}. Mỗi Course cần đúng 1 Lesson ID trùng tên.`,
+                                message: `Không thể tự gán Lesson ID HMO cho “${row.lesson_name}”: ${hmoCourseMatchSummary(matching)}. Tên cần đạt ít nhất 92%, đúng P1/P2 và đúng giáo viên nếu HMO có hậu tố Cô/Thầy.`,
                             };
                             return;
                         }
 
                         const selectedOptions = matchedCourseIds.flatMap((courseId) => (
-                            Array.from(matchesByCourse.get(courseId)!.values())[0]
+                            rowMatches!.get(courseId)!.options
                         ));
-                        const selectedCourseLessonIds = matchedCourseIds.map((courseId) => (
-                            `${courseId}::${Array.from(matchesByCourse.get(courseId)!.keys())[0]}`
-                        ));
-                        if (selectedCourseLessonIds.some((identity) => claimedCourseLessonIds.has(identity))) {
-                            notes[String(row.id)] = {
-                                type: 'warning',
-                                message: 'Lesson ID HMO đã được dùng cho một lịch khác trong cùng Course; hệ thống không tự gán.',
-                            };
-                            return;
-                        }
-                        selectedCourseLessonIds.forEach((identity) => claimedCourseLessonIds.add(identity));
                         nextMappings[String(row.id)] = selectedOptions.map(hmoOptionKey);
                         syncedCount += 1;
                         notes[String(row.id)] = {
                             type: matchedCourseIds.length === courseIds.length ? 'success' : 'warning',
                             message: matchedCourseIds.length === courseIds.length
                                 ? `Đã gán Lesson ID HMO theo tên lịch trong ${courseIds.length} Course.`
-                                : `Đã gán Lesson ID HMO trong ${matchedCourseIds.length}/${courseIds.length} Course. Chưa gán: ${courseMatchSummary(courseIds.filter((courseId) => !matchedCourseIds.includes(courseId)), matchesByCourse)}.`,
-                        };
-                    });
-                    return;
-                }
-
-                const sourceLessonName = getSourceLessonName(lessonRows[0]);
-                const title = normalizeLessonTitle(sourceLessonName);
-                const matchesByCourse = hmoTitleMatchesByCourse(availableOptions, title);
-
-                if (!title) {
-                    orderedRows.forEach((row) => {
-                        notes[String(row.id)] = {
-                            type: 'warning',
-                            message: 'Không tìm thấy tên bài học trong Quản lý đề cương. Hệ thống không tự gán.',
+                                : `Đã gán Lesson ID HMO trong ${matchedCourseIds.length}/${courseIds.length} Course. Chưa gán: ${hmoCourseMatchSummary(matching, courseIds.filter((courseId) => !matchedCourseIds.includes(courseId)))}.`,
                         };
                     });
                     return;
                 }
 
                 const matchedCourseIds = courseIds.filter(
-                    (courseId) => matchesByCourse.get(courseId)?.size === orderedRows.length
+                    (courseId) => matching.matchedRowCountByCourse.get(courseId) === orderedRows.length
                 );
                 if (matchedCourseIds.length > 0 && orderedRows.length > 0) {
-                    orderedRows.forEach((row, index) => {
-                        nextMappings[String(row.id)] = matchedCourseIds.flatMap((courseId) => {
-                            const byLessonId = matchesByCourse.get(courseId)!;
-                            const lessonId = Array.from(byLessonId.keys())
-                                .sort((left, right) => left.localeCompare(right, 'vi', { numeric: true }))[index];
-                            return byLessonId.get(lessonId)!.map(hmoOptionKey);
-                        });
+                    orderedRows.forEach((row) => {
+                        const rowMatches = matching.matchesByRow.get(String(row.id))!;
+                        nextMappings[String(row.id)] = matchedCourseIds.flatMap(
+                            (courseId) => rowMatches.get(courseId)!.options.map(hmoOptionKey)
+                        );
                     });
                     syncedCount += orderedRows.length;
                     orderedRows.forEach((row) => {
                         notes[String(row.id)] = {
                             type: matchedCourseIds.length === courseIds.length ? 'success' : 'warning',
                             message: matchedCourseIds.length === courseIds.length
-                                ? `Đã gán ${summarizeSelectedHmoMappings(nextMappings[String(row.id)])} cho lịch này theo thứ tự các lịch của cùng bài.`
-                                : `Đã gán Lesson ID cho ${matchedCourseIds.length}/${courseIds.length} Course. Chưa gán: ${courseMatchSummary(courseIds.filter((courseId) => !matchedCourseIds.includes(courseId)), matchesByCourse)}.`,
+                                ? `Đã gán ${summarizeSelectedHmoMappings(nextMappings[String(row.id)])} theo tên bài và giáo viên của lịch.`
+                                : `Đã gán Lesson ID cho ${matchedCourseIds.length}/${courseIds.length} Course. Chưa gán: ${hmoCourseMatchSummary(matching, courseIds.filter((courseId) => !matchedCourseIds.includes(courseId)))}.`,
                         };
                     });
                     return;
@@ -1038,7 +1024,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 orderedRows.forEach((row) => {
                     notes[String(row.id)] = {
                         type: 'warning',
-                        message: `Có ${orderedRows.length} lịch. Đối chiếu theo từng Course cho “${sourceLessonName}”: ${courseMatchSummary(courseIds, matchesByCourse)}. Mỗi Course cần đúng ${orderedRows.length} Lesson ID.`,
+                        message: `Có ${orderedRows.length} lịch. Đối chiếu theo từng Course cho “${sourceLessonName}”: ${hmoCourseMatchSummary(matching)}. Mỗi Course cần ghép đủ ${orderedRows.length} Lesson ID không trùng nhau.`,
                     };
                 });
             });
@@ -1859,14 +1845,16 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                         </Button>
                                     </Col>
                                     <Col span={16}>
-                                        <Form.Item noStyle dependencies={['enable_mapping']}>
-                                            {({ getFieldValue }) => {
-                                                const enabled = getFieldValue('enable_mapping');
-                                                return (
-                                                    <div style={{ opacity: enabled ? 1 : 0.5, pointerEvents: enabled ? 'auto' : 'none' }}>
+                                        <div style={{ opacity: mappingEnabled ? 1 : 0.5 }}>
                                                         <Space direction="vertical" style={{ width: '100%' }}>
                                                             {calendarContexts.map((context) => {
                                                                 const options = hmoOptionsByLesson[context.internalLessonId] || [];
+                                                                const optionsResolved = Object.prototype.hasOwnProperty.call(
+                                                                    hmoOptionsByLesson,
+                                                                    context.internalLessonId,
+                                                                );
+                                                                const optionsLoading = loadingHmoLessons.has(context.internalLessonId);
+                                                                const calendarRow = selectedRowByCalendarId.get(context.calendarId);
                                                                 return (
                                                                     <React.Fragment key={context.calendarId}>
                                                                         <Form.Item
@@ -1885,13 +1873,31 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                                                 allowClear
                                                                                 showSearch
                                                                                 optionFilterProp="label"
-                                                                                loading={loadingHmoLessons.has(context.internalLessonId)}
-                                                                                disabled={!enabled}
+                                                                                loading={optionsLoading}
+                                                                                disabled={!mappingEnabled}
+                                                                                onDropdownVisibleChange={(nextOpen: boolean) => {
+                                                                                    if (nextOpen && !optionsResolved) {
+                                                                                        void loadHmoOptionsForLesson(
+                                                                                            context.internalLessonId,
+                                                                                            String(calendarRow?.code || ''),
+                                                                                        );
+                                                                                    }
+                                                                                }}
                                                                                 listHeight={420}
                                                                                 popupMatchSelectWidth={680}
-                                                                                placeholder={options.length
-                                                                                    ? 'Chọn Lesson ID HMO'
-                                                                                    : 'Bài chưa có Course ID hoặc HMO không có Lesson ID'}
+                                                                                placeholder={optionsLoading
+                                                                                    ? 'Đang tải Lesson ID HMO...'
+                                                                                    : !optionsResolved
+                                                                                        ? 'Chọn để tải Lesson ID HMO'
+                                                                                    : options.length
+                                                                                        ? 'Chọn Lesson ID HMO'
+                                                                                        : 'Bài chưa có Course ID hoặc HMO không có Lesson ID'}
+                                                                                notFoundContent={optionsLoading ? (
+                                                                                    <Space size={8}>
+                                                                                        <Spin size="small" />
+                                                                                        <Text type="secondary">Đang tải Lesson ID HMO...</Text>
+                                                                                    </Space>
+                                                                                ) : 'Không có Lesson ID HMO phù hợp'}
                                                                                 options={buildGroupedHmoOptions(options)}
                                                                             />
                                                                         </Form.Item>
@@ -1910,10 +1916,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                                 <Alert type="warning" showIcon message="Lịch đã chọn chưa gắn bài học nội bộ" />
                                                             )}
                                                         </Space>
-                                                    </div>
-                                                );
-                                            }}
-                                        </Form.Item>
+                                        </div>
                                     </Col>
                                 </Row>
                             </Card>
@@ -2126,6 +2129,11 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                         const internalLessonId = String(record?.session_id || '');
                                                         const options = hmoOptionsByLesson[internalLessonId] || [];
                                                         const presentation = hmoPresentationByLesson[internalLessonId];
+                                                        const optionsResolved = Object.prototype.hasOwnProperty.call(
+                                                            hmoOptionsByLesson,
+                                                            internalLessonId,
+                                                        );
+                                                        const optionsLoading = loadingHmoLessons.has(internalLessonId);
                                                         return (
                                                                     <Col xs={24} xl={16} style={{ order: 2 }}>
                                                                         <Form.Item
@@ -2140,15 +2148,33 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                                         allowClear
                                                                         showSearch
                                                                         optionFilterProp="label"
-                                                                        loading={loadingHmoLessons.has(internalLessonId)}
+                                                                        loading={optionsLoading}
                                                                         disabled={!internalLessonId}
+                                                                        onDropdownVisibleChange={(nextOpen: boolean) => {
+                                                                            if (nextOpen && !optionsResolved) {
+                                                                                void loadHmoOptionsForLesson(
+                                                                                    internalLessonId,
+                                                                                    String(record?.code || ''),
+                                                                                );
+                                                                            }
+                                                                        }}
                                                                         listHeight={420}
                                                                         popupMatchSelectWidth={680}
                                                                         placeholder={!internalLessonId
                                                                             ? 'Lịch chưa gắn bài học'
+                                                                            : optionsLoading
+                                                                                ? 'Đang tải Lesson ID HMO...'
+                                                                                : !optionsResolved
+                                                                                    ? 'Chọn để tải Lesson ID HMO'
                                                                             : options.length
-                                                                                ? 'Chọn Lesson ID HMO'
-                                                                                : 'Bài chưa có Course ID / HMO không có Lesson ID'}
+                                                                                    ? 'Chọn Lesson ID HMO'
+                                                                                    : 'Bài chưa có Course ID / HMO không có Lesson ID'}
+                                                                        notFoundContent={optionsLoading ? (
+                                                                            <Space size={8}>
+                                                                                <Spin size="small" />
+                                                                                <Text type="secondary">Đang tải Lesson ID HMO...</Text>
+                                                                            </Space>
+                                                                        ) : 'Không có Lesson ID HMO phù hợp'}
                                                                         options={presentation?.groupedOptions || []}
                                                                         style={{ width: '100%' }}
                                                                     />

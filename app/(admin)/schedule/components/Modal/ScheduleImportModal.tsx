@@ -161,18 +161,17 @@ const ScheduleImportModal = ({
                     mode === 'update' ? (
                     <div>
                         <Typography.Paragraph style={{ marginBottom: 8 }}>
-                            Dùng cùng file mẫu với tạo mới. Cột <Typography.Text code>key</Typography.Text> là bắt buộc
-                            và được dùng để tìm chính xác lịch cần cập nhật.
+                            Dùng cùng file mẫu với tạo mới. Hệ thống tự lấy <Typography.Text code>code</Typography.Text>,{" "}
+                            <Typography.Text code>subject</Typography.Text> và <Typography.Text code>system_type</Typography.Text> từ Chương trình đang chọn.
                         </Typography.Paragraph>
                         <Typography.Paragraph style={{ marginBottom: 8 }}>
                             Có thể dùng menu <Typography.Text strong>Export → Excel để bổ sung trợ giảng</Typography.Text>,
                             nhập tên hiển thị vào cột <Typography.Text code>assistant_teacher</Typography.Text> rồi import lại.
                         </Typography.Paragraph>
                         <Typography.Paragraph style={{ marginBottom: 8 }}>
-                            Không được thay đổi <Typography.Text code>code</Typography.Text>,{" "}
-                            <Typography.Text code>learn_number</Typography.Text> hoặc{" "}
-                            <Typography.Text code>system_type</Typography.Text> và{" "}
-                            <Typography.Text code>lesson_count</Typography.Text>. Lịch đã diễn ra hoặc đã nghỉ sẽ không được cập nhật.
+                            Lịch cần cập nhật được xác định bằng <Typography.Text code>learn_number</Typography.Text> và{" "}
+                            <Typography.Text code>lesson_count</Typography.Text> trong Chương trình đã chọn. Không được thay đổi hai giá trị này;
+                            lịch đã diễn ra hoặc đã nghỉ sẽ không được cập nhật.
                         </Typography.Paragraph>
                         <Typography.Paragraph style={{ marginBottom: 0 }}>
                             Hệ thống kiểm tra toàn bộ dữ liệu trước khi cập nhật. Nếu có một dòng không hợp lệ,
@@ -189,7 +188,7 @@ const ScheduleImportModal = ({
                             Giáo viên &amp; Trợ giảng; nhiều người cách nhau bằng dấu phẩy hoặc dấu chấm phẩy.
                         </Typography.Paragraph>
                         <Typography.Paragraph style={{ marginBottom: 8 }}>
-                            Hệ thống tìm bài học trong chương trình bằng <Typography.Text code>code</Typography.Text> và{" "}
+                            Hệ thống tự lấy mã, môn học và hệ thống từ Chương trình đang chọn, sau đó tìm bài học bằng{" "}
                             <Typography.Text code>learn_number</Typography.Text>. Package ID và Course ID đã được thiết lập
                             trong phần quản lý đề cương nên không cần nhập lại trong file lịch.
                         </Typography.Paragraph>
@@ -254,14 +253,11 @@ const ScheduleImportModal = ({
                 maxSizeMb={10}
                 maxRows={300}
                 requiredHeaders={[
-                    ["code", "Mã buổi học"],
-                    ["subject", "Môn"],
                     "start_time",
                     "end_time",
                     "learn_number",
                     ["lesson_name", "Tên bài giảng"],
-                    "system_type",
-                    ...(mode === "update" ? ["key"] : []),
+                    ...(mode === "update" ? ["lesson_count"] : []),
                 ]}
                 hint="Hỗ trợ .xlsx và .csv, cùng format với Google Sheets, tối đa 10 MB/300 lịch"
                 disabled={importSource !== "file"}

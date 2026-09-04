@@ -29,6 +29,7 @@ interface LessonTableProps {
     visibleFieldPermissions: ResolvedFieldPermission[];
     selectedRowKeys: React.Key[];
     allRowsSelected: boolean;
+    selectingAllRows: boolean;
     reorderMode: boolean;
     dragRowKey: React.Key;
     canEdit: boolean;
@@ -63,6 +64,7 @@ const LessonTable = ({
     visibleFieldPermissions,
     selectedRowKeys,
     allRowsSelected,
+    selectingAllRows,
     reorderMode,
     dragRowKey,
     canEdit,
@@ -266,8 +268,10 @@ const LessonTable = ({
                             return (
                                 <Checkbox
                                     aria-label="Chọn tất cả đề cương"
+                                    aria-busy={selectingAllRows}
                                     checked={allRowsSelected}
                                     indeterminate={!allRowsSelected && selectedRowKeys.length > 0}
+                                    title={selectingAllRows ? "Đang chọn tất cả đề cương..." : undefined}
                                     disabled={totalItems <= 0 || (totalItems <= data.length && selectableOnPage === 0)}
                                     onChange={(event) => onSelectAll(event.target.checked)}
                                 />
