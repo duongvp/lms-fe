@@ -314,6 +314,31 @@ body {
     max-width: 100% !important;
   }
 
+  .lesson-course-mapping-modal .ant-modal-title {
+    padding-right: 24px;
+    line-height: 1.35;
+  }
+
+  .lesson-course-mapping-table .ant-table-cell {
+    padding: 8px !important;
+    font-size: 12px;
+  }
+
+  .lesson-course-mapping-table .ant-table-thead > tr > th:nth-child(1),
+  .lesson-course-mapping-table .ant-table-thead > tr > th:nth-child(3),
+  .lesson-course-mapping-table .ant-table-thead > tr > th:nth-child(4),
+  .lesson-course-mapping-table .ant-table-tbody > tr > td:nth-child(1),
+  .lesson-course-mapping-table .ant-table-tbody > tr > td:nth-child(3),
+  .lesson-course-mapping-table .ant-table-tbody > tr > td:nth-child(4) {
+    white-space: nowrap;
+  }
+
+  .lesson-course-mapping-table .ant-table-body {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    touch-action: pan-x pan-y;
+  }
+
   .responsive-modal-footer {
     display: flex;
     flex-wrap: wrap;

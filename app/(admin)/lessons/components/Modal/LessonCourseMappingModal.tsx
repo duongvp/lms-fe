@@ -1,6 +1,7 @@
 "use client";
 
-import { Alert, Button, Form, message, Modal, Radio, Select, Space, Table, Typography } from "antd";
+import { ClearOutlined } from "@ant-design/icons";
+import { Alert, Button, Col, Form, message, Modal, Radio, Row, Select, Space, Table, Typography } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import {
     getLessonCourseMappings,
@@ -26,6 +27,8 @@ const LessonCourseMappingModal = ({ open, programCode, selectedLessonIds, onClos
     const loadingPackageCourses = packageCoursesQuery.isLoading || packageCoursesQuery.isValidating;
     const selectedPackageId = Form.useWatch("package_id", form);
     const selectedCourseId = Form.useWatch("course_id", form);
+    const packageCourseSheetUrl = process.env.NEXT_PUBLIC_PACKAGE_COURSE_SHEET_URL
+        || "https://docs.google.com/spreadsheets/d/1m_KNVZc5PMu-UQi2PCrEGuXAfVM0NPGEghRbEYnJeH0/edit?usp=sharing";
 
     const packageOptions = useMemo(() => {
         const grouped = new Map<string, Set<string>>();
@@ -83,6 +86,10 @@ const LessonCourseMappingModal = ({ open, programCode, selectedLessonIds, onClos
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, programCode]);
 
+    const clearPackageCourse = () => {
+        form.resetFields(["package_id", "course_id"]);
+    };
+
     const submit = async () => {
         const values = await form.validateFields();
         setLoading(true);
@@ -105,11 +112,16 @@ const LessonCourseMappingModal = ({ open, programCode, selectedLessonIds, onClos
     };
 
     return (
-        <Modal open={open} title={`Course ID theo đề cương · ${programCode}`} width={850} onCancel={onClose} footer={<Button onClick={onClose}>Đóng</Button>}>
+        <Modal className="lesson-course-mapping-modal" open={open} title={`Course ID theo đề cương · ${programCode}`} width={850} style={{ top: 24 }} onCancel={onClose} footer={<Button onClick={onClose}>Đóng</Button>}>
             <Alert
                 showIcon
                 type="info"
-                message="Package ID và Course ID được tải từ PACKAGE_COURSE_SHEET_URL. Có thể chọn mục nào trước; danh sách còn lại sẽ được lọc theo lựa chọn đó."
+                message={
+                    <>
+                        Package ID và Course ID được tải từ <Typography.Link href={packageCourseSheetUrl} target="_blank" rel="noreferrer">Google Sheet</Typography.Link>.
+                        {" "}Có thể chọn mục nào trước; danh sách còn lại sẽ được lọc theo lựa chọn đó.
+                    </>
+                }
                 style={{ marginBottom: 16 }}
             />
             <Form className="responsive-modal-form" form={form} layout="vertical" initialValues={{ action: "add", scope: selectedLessonIds.length ? "selected" : "all" }}>
@@ -123,46 +135,75 @@ const LessonCourseMappingModal = ({ open, programCode, selectedLessonIds, onClos
                             { value: "all", label: "Toàn bộ Chương trình" },
                         ]} />
                     </Form.Item>
-                    <Form.Item name="package_id" label="Package ID" rules={[{ required: true, message: "Chọn Package ID" }]}>
-                        <Select
-                            style={{ width: 280 }}
-                            loading={loadingPackageCourses}
-                            options={packageOptions}
-                            showSearch
-                            allowClear
-                            optionFilterProp="label"
-                            placeholder="Chọn Package từ Google Sheet"
-                        />
-                    </Form.Item>
-                    <Form.Item name="course_id" label="Course ID" rules={[{ required: true, message: "Chọn Course ID" }]}>
-                        <Select
-                            style={{ width: 300 }}
-                            loading={loadingPackageCourses}
-                            options={courseOptions}
-                            showSearch
-                            allowClear
-                            optionFilterProp="label"
-                            placeholder={selectedPackageId ? "Chọn Course thuộc Package" : "Chọn Course từ Google Sheet"}
-                        />
-                    </Form.Item>
-                    <Button type="primary" loading={loading} disabled={loadingPackageCourses || packageCourses.length === 0} onClick={() => void submit()} style={{ marginTop: 30 }}>Thực hiện</Button>
                 </Space>
+                <Row gutter={8} align="top">
+                    <Col xs={24} md={8}>
+                        <Form.Item name="package_id" label="Package ID" rules={[{ required: true, message: "Chọn Package ID" }]}>
+                            <Select
+                                loading={loadingPackageCourses}
+                                options={packageOptions}
+                                showSearch
+                                allowClear
+                                optionFilterProp="label"
+                                placeholder="Chọn Package từ Google Sheet"
+                            />
+                        </Form.Item>
+                    </Col>
+                    <Col xs={24} md={8}>
+                        <Form.Item name="course_id" label="Course ID" rules={[{ required: true, message: "Chọn Course ID" }]}>
+                            <Select
+                                loading={loadingPackageCourses}
+                                options={courseOptions}
+                                showSearch
+                                allowClear
+                                optionFilterProp="label"
+                                placeholder={selectedPackageId ? "Chọn Course thuộc Package" : "Chọn Course từ Google Sheet"}
+                            />
+                        </Form.Item>
+                    </Col>
+                    <Col xs={12} md={4}>
+                        <Button
+                            block
+                            icon={<ClearOutlined />}
+                            disabled={!selectedPackageId && !selectedCourseId}
+                            onClick={clearPackageCourse}
+                            style={{ marginTop: 30 }}
+                        >
+                            Xóa chọn
+                        </Button>
+                    </Col>
+                    <Col xs={12} md={4}>
+                        <Button
+                            block
+                            type="primary"
+                            loading={loading}
+                            disabled={loadingPackageCourses || packageCourses.length === 0}
+                            onClick={() => void submit()}
+                            style={{ marginTop: 30 }}
+                        >
+                            Thực hiện
+                        </Button>
+                    </Col>
+                </Row>
             </Form>
             {!loadingPackageCourses && packageCourses.length === 0 && (
-                <Alert type="warning" showIcon message="Không tải được Package/Course từ PACKAGE_COURSE_SHEET_URL" style={{ marginBottom: 16 }} />
+                <Alert type="warning" showIcon message="Không tải được dữ liệu Package/Course từ Google Sheet" style={{ marginBottom: 16 }} />
             )}
             <Typography.Title level={5}>Mapping hiện tại</Typography.Title>
             <Table<LessonCourseMapping>
+                className="lesson-course-mapping-table"
                 size="small"
                 loading={loading}
                 rowKey="id"
                 dataSource={rows}
-                pagination={{ pageSize: 8 }}
+                pagination={false}
+                scroll={{ x: 560, y: "calc(100dvh - 480px)" }}
+                tableLayout="fixed"
                 columns={[
                     { title: "Bài", dataIndex: "learn_number", width: 70 },
                     { title: "Tên bài", dataIndex: "lesson_name" },
-                    { title: "Package ID", dataIndex: "package_id" },
-                    { title: "Course ID", dataIndex: "course_id" },
+                    { title: "Package ID", dataIndex: "package_id", width: 130 },
+                    { title: "Course ID", dataIndex: "course_id", width: 120 },
                 ]}
             />
         </Modal>
