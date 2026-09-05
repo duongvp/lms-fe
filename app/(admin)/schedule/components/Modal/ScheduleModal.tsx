@@ -788,9 +788,9 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                             .filter(Boolean),
                     },
                     update_mode: 'makeup',
-                    canceled_lesson_name_prefix: '[Nghỉ] ',
+                    canceled_lesson_name_prefix: '[NGHỈ HỌC] ',
                     canceled_lesson_name_suffix: '',
-                    new_lesson_name_prefix: '[Học Bù] ',
+                    new_lesson_name_prefix: '[HỌC BÙ] ',
                     new_lesson_name_suffix: '',
                 });
                 setUpdateMode("makeup");
@@ -1707,7 +1707,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                         <Row gutter={12} style={{ marginTop: 8 }}>
                                             <Col flex="180px">
                                                 <Form.Item label="Tiền tố" name="canceled_lesson_name_prefix">
-                                                    <Input placeholder="[Nghỉ] " maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
+                                                    <Input placeholder="[NGHỈ HỌC] " maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
                                                 </Form.Item>
                                             </Col>
                                             <Col flex="180px">
@@ -1723,7 +1723,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             <Row gutter={12} style={{ marginTop: 8 }}>
                                                 <Col flex="180px">
                                                     <Form.Item label="Tiền tố" name="new_lesson_name_prefix">
-                                                        <Input placeholder="[Học Bù] " maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
+                                                        <Input placeholder="[HỌC BÙ] " maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
                                                     </Form.Item>
                                                 </Col>
                                                 <Col flex="180px">
@@ -1856,7 +1856,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                 <Row gutter={24}>
                                     <Col flex="180px">
                                         <Form.Item label="Tiền tố" name="canceled_lesson_name_prefix">
-                                            <Input placeholder="[Nghỉ] " maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
+                                            <Input placeholder="[NGHỈ HỌC] " maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
                                         </Form.Item>
                                     </Col>
                                     <Col flex="180px">

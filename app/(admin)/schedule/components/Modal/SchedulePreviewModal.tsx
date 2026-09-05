@@ -136,7 +136,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
         initialData?.lesson_name,
         formValues?.canceled_lesson_name_prefix,
         formValues?.canceled_lesson_name_suffix,
-        '[Nghỉ] ',
+        '[NGHỈ HỌC] ',
     );
     const [loadingFollowingPreview, setLoadingFollowingPreview] = useState(false);
     const [followingPreviewError, setFollowingPreviewError] = useState<string | null>(null);
@@ -212,7 +212,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 sourceSession?.lesson_name,
                 formValues?.new_lesson_name_prefix,
                 formValues?.new_lesson_name_suffix,
-                '[Học Bù] ',
+                '[HỌC BÙ] ',
             ),
         isSkipped: false,
         isGenerated: true,

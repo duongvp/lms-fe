@@ -36,7 +36,9 @@ export const normalizeLessonTitle = (value: unknown) => {
     return title
         .replace(/^bai\s*\d+\s*[:.\-–—]*\s*/, '')
         // (P2), P2 và "phần 2" cùng biểu diễn một vế của tên đề cương.
-        .replace(/\bphan\s+(\d+)\b/g, 'p$1')
+        // `_` trong tên HMO (ví dụ "Phần 3_Cô Mai") là dấu phân cách
+        // metadata giáo viên, dù regex coi `_` là một ký tự thuộc từ.
+        .replace(/\bphan\s+(\d+)(?=$|[^a-z0-9])/g, 'p$1')
         // Dấu ., .., _, -, ... chỉ là khác biệt trình bày.
         .replace(/[^a-z0-9]+/g, ' ')
         .trim();
@@ -214,11 +216,19 @@ export const matchHmoLessonsByCourse = (
             || left.evaluated.length - right.evaluated.length
             || left.row.index - right.row.index
         ));
-        const claimedLessonIds = new Set<string>();
+        // TopClass có thể có nhiều calendar cho cùng một bài và cùng giáo viên
+        // (lịch thường, [Lịch 2]...). Khi HMO chỉ có một Lesson ID cho giáo viên
+        // đó, các calendar được phép dùng lại ID. Với giáo viên khác nhau vẫn
+        // phải chọn ID riêng theo hậu tố Cô/Thầy.
+        const claimedLessonIds = new Map<string, string>();
         evaluatedByRow.forEach(({ row, evaluated }) => {
-            const selected = evaluated.find((item) => !claimedLessonIds.has(item.candidate.lessonId));
+            const selected = evaluated.find((item) => {
+                const claimedTeacher = claimedLessonIds.get(item.candidate.lessonId);
+                return claimedTeacher === undefined
+                    || (Boolean(row.normalizedTeacher) && claimedTeacher === row.normalizedTeacher);
+            });
             if (!selected) return;
-            claimedLessonIds.add(selected.candidate.lessonId);
+            claimedLessonIds.set(selected.candidate.lessonId, row.normalizedTeacher);
             matchesByRow.get(row.key)!.set(courseId, {
                 lessonId: selected.candidate.lessonId,
                 options: selected.candidate.options,

@@ -99,6 +99,15 @@ const teacherValue = (value: unknown) => {
     return String(value || '').trim() || undefined;
 };
 
+const hmoTeacherSuffix = (value: unknown) => {
+    const match = /_\s*((?:Cô|Thầy)\s+.+?)\s*$/iu.exec(String(value || '').trim());
+    return match?.[1]?.trim() || '';
+};
+
+const hmoCoreTitle = (value: unknown) => String(value || '')
+    .replace(/_\s*(?:Cô|Thầy)\s+.+?\s*$/iu, '')
+    .trim();
+
 const assistantValues = (value: unknown) => {
     const values = Array.isArray(value) ? value : String(value || '').split(',');
     return Array.from(new Set(values
@@ -119,8 +128,8 @@ const renderNamePattern = (pattern: unknown, occurrence: number) => (
     String(pattern || '').replaceAll('{n}', String(occurrence))
 );
 
-const DEFAULT_CANCELED_LESSON_PREFIX = '[Nghỉ] ';
-const DEFAULT_MAKEUP_LESSON_PREFIX = '[Học Bù] ';
+const DEFAULT_CANCELED_LESSON_PREFIX = '[NGHỈ HỌC] ';
+const DEFAULT_MAKEUP_LESSON_PREFIX = '[HỌC BÙ] ';
 
 const formatRescheduledLessonName = (
     lessonName: unknown,
@@ -882,9 +891,6 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         const syncNameSource = form.getFieldValue('hmo_sync_name_source') === 'calendar'
             ? 'calendar'
             : 'lesson';
-        const syncModeLabel = configMode === 'common'
-            ? 'Dùng chung cho tất cả lịch'
-            : 'Cấu hình riêng từng lịch';
         if (!rows.length) {
             message.warning('Chưa chọn lịch học để đồng bộ Lesson ID HMO');
             return;
@@ -1022,9 +1028,30 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 }
 
                 orderedRows.forEach((row) => {
+                    const rowMatches = matching.matchesByRow.get(String(row.id));
+                    const unmatchedCourseIds = courseIds.filter((courseId) => !rowMatches?.has(courseId));
+                    const matchedCourseIdsForRow = courseIds.filter((courseId) => rowMatches?.has(courseId));
+                    const rowTeacher = teacherValue(row.teacher) || 'chưa xác định';
+                    const normalizedSourceTitle = normalizeLessonTitle(sourceLessonName);
+                    const details = unmatchedCourseIds.map((courseId) => {
+                        const sameTitleOptions = availableOptions.filter((option) => (
+                            String(option.course_id) === courseId
+                            && normalizeLessonTitle(hmoCoreTitle(option.lesson_name)) === normalizedSourceTitle
+                        ));
+                        const availableTeachers = Array.from(new Set(
+                            sameTitleOptions.map((option) => hmoTeacherSuffix(option.lesson_name)).filter(Boolean)
+                        ));
+                        if (availableTeachers.length) {
+                            return `Course ${courseId}: không có Lesson ID cho giáo viên “${rowTeacher}”; HMO chỉ có ${availableTeachers.join(', ')}`;
+                        }
+                        return `Course ${courseId}: không có Lesson ID cùng tên “${sourceLessonName}”`;
+                    });
+                    const matchedPrefix = matchedCourseIdsForRow.length
+                        ? `Đã tìm thấy ở Course ${matchedCourseIdsForRow.join(', ')} nhưng chưa gán vì các lịch của bài chưa khớp đủ. `
+                        : '';
                     notes[String(row.id)] = {
                         type: 'warning',
-                        message: `Có ${orderedRows.length} lịch. Đối chiếu theo từng Course cho “${sourceLessonName}”: ${hmoCourseMatchSummary(matching)}. Mỗi Course cần ghép đủ ${orderedRows.length} Lesson ID không trùng nhau.`,
+                        message: `${matchedPrefix}${details.join('; ')}.`,
                     };
                 });
             });
@@ -1052,15 +1079,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     },
                 });
             }
-            setHmoSyncNotes(Object.fromEntries(
-                Object.entries(notes).map(([calendarId, note]) => [
-                    calendarId,
-                    {
-                        ...note,
-                        message: `Kết quả đồng bộ ở tab “${syncModeLabel}”: ${note.message}`,
-                    },
-                ])
-            ));
+            setHmoSyncNotes(notes);
             setPreviewRows([]);
             syncedCount
                 ? message.success(`Đã đồng bộ Lesson ID HMO cho ${syncedCount} lịch`)
@@ -2254,7 +2273,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                 <Row gutter={12} style={{ marginTop: 8 }}>
                                     <Col flex="180px">
                                         <Form.Item label="Tiền tố" name="canceled_lesson_name_prefix">
-                                            <Input placeholder="[Nghỉ] " maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
+                                            <Input placeholder="[NGHỈ HỌC] " maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
                                         </Form.Item>
                                     </Col>
                                     <Col flex="180px">
@@ -2270,7 +2289,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                     <Row gutter={12} style={{ marginTop: 8 }}>
                                         <Col flex="180px">
                                             <Form.Item label="Tiền tố" name="new_lesson_name_prefix">
-                                                <Input placeholder="[Học Bù] " maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
+                                                <Input placeholder="[HỌC BÙ] " maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
                                             </Form.Item>
                                         </Col>
                                         <Col flex="180px">

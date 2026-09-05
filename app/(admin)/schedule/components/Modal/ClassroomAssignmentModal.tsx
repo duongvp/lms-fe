@@ -309,7 +309,7 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
                                 type="info"
                                 showIcon
                                 message="Đây là dữ liệu xem trước"
-                                description="Chưa có dữ liệu nào được lưu ở bước này. Phòng học của học sinh chỉ được cập nhật sau khi bạn bấm “Xác nhận chia lớp”; giáo viên và trợ giảng không bị thay đổi."
+                                description="Chưa có dữ liệu nào được lưu ở bước này. Phòng học và mã lớp của học sinh chỉ được cập nhật sau khi bạn bấm “Xác nhận chia lớp”; giáo viên và trợ giảng không bị thay đổi."
                             />
                             {topUniRoomLimitControl}
                             {preview.calendar.system_type === "topclass" && (
