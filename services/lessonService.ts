@@ -296,3 +296,10 @@ export const importLessonProgramFile = (
         credentials: "include",
     });
 };
+
+export type ScormNamePreview = { sheetName: string; rowNumber: number; type: "TOPCLASS" | "TOPUNI"; courseId: number; lessonId: number; teacherName: string; oldName: string; newName: string };
+export type ScormNameSyncPreviewResult = { sheetsProcessed: number; rowsRead: number; validLessons: number; skippedLessons: number; updates: ScormNamePreview[]; warnings: Array<{ message: string }> };
+export const getScormNameSyncSheets = () => fetchInstance(`${API_BASE_URL}/scorm-name-sync/sheets`, { method: "GET", headers: lessonHeaders(), credentials: "include", cache: "no-store" });
+export const previewScormNameSync = (sheet_names: string[]) => fetchInstance(`${API_BASE_URL}/scorm-name-sync/preview`, { method: "POST", body: JSON.stringify({ sheet_names }), headers: lessonHeaders(), credentials: "include" });
+export const applyScormNameSync = (sheet_names: string[]) => fetchInstance(`${API_BASE_URL}/scorm-name-sync/apply`, { method: "POST", body: JSON.stringify({ sheet_names }), headers: lessonHeaders(), credentials: "include" }, "json", 120_000);
+export const getScormNameSyncStatus = (jobId: string) => fetchInstance(`${API_BASE_URL}/scorm-name-sync/status/${encodeURIComponent(jobId)}`, { method: "GET", headers: lessonHeaders(), credentials: "include", cache: "no-store" });

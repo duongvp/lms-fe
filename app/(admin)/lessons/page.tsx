@@ -42,6 +42,7 @@ import LessonActions from "./components/LessonActions";
 import LessonFilterDrawer from "./components/LessonFilterDrawer";
 import LessonImportModal from "./components/LessonImportModal";
 import LessonCourseMappingModal from "./components/Modal/LessonCourseMappingModal";
+import ScormNameSyncModal from "./components/Modal/ScormNameSyncModal";
 import ProgramCreateModal from "./components/Modal/ProgramCreateModal";
 import ProgramImportModal from "./components/Modal/ProgramImportModal";
 import LessonTable from "./components/LessonTable";
@@ -132,6 +133,7 @@ const Page = () => {
     const [openProgramImportModal, setOpenProgramImportModal] = useState(false);
     const [openImportModal, setOpenImportModal] = useState(false);
     const [openCourseMappingModal, setOpenCourseMappingModal] = useState(false);
+    const [openScormNameSyncModal, setOpenScormNameSyncModal] = useState(false);
     const [openDetailDrawer, setOpenDetailDrawer] = useState(false);
     const [moduleFields, setModuleFields] = useState<ModuleField[]>(DEFAULT_MODULE_FIELDS);
     const [selectedRecord, setSelectedRecord] = useState<LessonDataType | null>(null);
@@ -179,6 +181,8 @@ const Page = () => {
     const [secondaryPassword, setSecondaryPassword] = useState("");
     const [secondaryLoading, setSecondaryLoading] = useState(false);
     const [api, contextHolder] = notification.useNotification({duration: 2.5});
+    const showScormSyncSuccess = useCallback((message: string) => api.success({ message }), [api]);
+    const showScormSyncError = useCallback((message: string) => api.error({ message }), [api]);
     const lessonPrograms = useLessonProgramOptions();
 
     const replaceLessonUrl = useCallback((values: LessonFilterValues, page = 1) => {
@@ -1108,6 +1112,7 @@ const Page = () => {
                 }}
                 canManageCourseIds={Boolean(submittedFilterValues.subject_code)}
                 onManageCourseIds={() => setOpenCourseMappingModal(true)}
+                onSyncScormNames={() => setOpenScormNameSyncModal(true)}
             />
 
             <LessonTable
@@ -1211,6 +1216,7 @@ const Page = () => {
                 selectedLessonIds={selectedRowKeys.map(String)}
                 onClose={() => setOpenCourseMappingModal(false)}
             />
+            <ScormNameSyncModal open={openScormNameSyncModal} onClose={() => setOpenScormNameSyncModal(false)} onSuccess={showScormSyncSuccess} onError={showScormSyncError} />
                 </>
             ) : (
                 <div

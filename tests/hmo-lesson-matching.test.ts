@@ -51,3 +51,24 @@ test('cho phép lịch thường và Lịch 2 cùng giáo viên dùng lại Less
     }
     assert.deepEqual(Object.fromEntries(result.matchedRowCountByCourse), { '3426': 2, '3392': 2 });
 });
+
+test('ghép đúng hậu tố HMO có đầy đủ họ tên giáo viên', () => {
+    const result = matchHmoLessonsByCourse([
+        { package_id: 'a', course_id: '1771', lesson_id: '171233', lesson_name: 'Từ phân chia theo cấu tạo_Cô Vũ Hồng Ngọc' },
+        { package_id: 'b', course_id: '1771', lesson_id: '171235', lesson_name: 'Từ phân chia theo cấu tạo_Cô Nguyễn Thị Liệu' },
+        { package_id: 'c', course_id: '3356', lesson_id: '173130', lesson_name: 'Từ phân chia theo cấu tạo_Cô Vũ Hồng Ngọc' },
+        { package_id: 'd', course_id: '3356', lesson_id: '173132', lesson_name: 'Từ phân chia theo cấu tạo_Cô Nguyễn Thị Liệu' },
+    ], [
+        { key: 'ngoc', title: 'Từ phân chia theo cấu tạo', teacher: 'Vũ Hồng Ngọc' },
+        { key: 'lieu', title: 'Từ phân chia theo cấu tạo', teacher: 'Nguyễn Thị Liệu' },
+    ]);
+
+    assert.deepEqual(
+        Object.fromEntries([...result.matchesByRow.get('ngoc')!].map(([courseId, match]) => [courseId, match.lessonId])),
+        { '1771': '171233', '3356': '173130' },
+    );
+    assert.deepEqual(
+        Object.fromEntries([...result.matchesByRow.get('lieu')!].map(([courseId, match]) => [courseId, match.lessonId])),
+        { '1771': '171235', '3356': '173132' },
+    );
+});

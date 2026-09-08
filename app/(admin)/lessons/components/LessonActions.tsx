@@ -44,6 +44,7 @@ interface LessonActionsProps {
     onReload: () => void;
     onManageCourseIds: () => void;
     canManageCourseIds: boolean;
+    onSyncScormNames: () => void;
 }
 
 const LessonActions = ({
@@ -68,6 +69,7 @@ const LessonActions = ({
     onReload,
     onManageCourseIds,
     canManageCourseIds,
+    onSyncScormNames,
 }: LessonActionsProps) => {
     const screens = Grid.useBreakpoint();
     const compact = !screens.md;
@@ -108,6 +110,7 @@ const LessonActions = ({
                     Course ID theo bài
                 </Button>
             )}
+            {canEdit && <Button onClick={onSyncScormNames}>Đồng bộ tên bài giảng</Button>}
             {canEdit && <Button icon={<UnorderedListOutlined />} onClick={onEnableReorder}>Sắp xếp thứ tự</Button>}
         </>
     );
@@ -121,6 +124,7 @@ const LessonActions = ({
                     { type: "divider" as const },
                     { key: "reload", icon: <ReloadOutlined />, label: "Làm mới" },
                     ...(canEdit ? [{ key: "manage-course-ids", icon: <LinkOutlined />, label: "Course ID theo bài", disabled: !canManageCourseIds }] : []),
+                    ...(canEdit ? [{ key: "sync-scorm", label: "Đồng bộ tên bài giảng" }] : []),
                     ...(canEdit ? [{ key: "reorder", icon: <UnorderedListOutlined />, label: "Sắp xếp thứ tự" }] : []),
                 ],
                 onClick: ({ key }) => {
@@ -132,6 +136,8 @@ const LessonActions = ({
                         onReload();
                     } else if (key === "manage-course-ids") {
                         onManageCourseIds();
+                    } else if (key === "sync-scorm") {
+                        onSyncScormNames();
                     } else if (key === "reorder") {
                         onEnableReorder();
                     }

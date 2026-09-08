@@ -49,19 +49,29 @@ const teacherLastName = (value: unknown) => {
     return parts.at(-1) || '';
 };
 
+const normalizeTeacherName = (value: unknown) => canonicalText(value)
+    .replace(/^\s*(?:co|thay)\s+/, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+const teacherMatches = (rowTeacher: string, hmoTeacher: string) => {
+    if (!rowTeacher || !hmoTeacher) return false;
+    // Dữ liệu HMO cũ chỉ có tên gọi (`_Cô Mai`), còn dữ liệu mới có thể chứa
+    // đầy đủ họ tên (`_Cô Vũ Hồng Ngọc`).
+    if (!hmoTeacher.includes(' ')) return teacherLastName(rowTeacher) === hmoTeacher;
+    return rowTeacher === hmoTeacher;
+};
+
 const parseHmoTitle = (value: unknown) => {
-    const normalized = normalizeLessonTitle(value);
-    const parts = normalized.split(' ').filter(Boolean);
-    if (
-        parts.length >= 3
-        && ['co', 'thay'].includes(parts[parts.length - 2])
-    ) {
+    const rawTitle = String(value || '').trim();
+    const teacherSuffix = /_\s*(?:Cô|Thầy)\s+(.+?)\s*$/iu.exec(rawTitle);
+    if (teacherSuffix?.index !== undefined) {
         return {
-            title: parts.slice(0, -2).join(' '),
-            teacher: parts[parts.length - 1],
+            title: normalizeLessonTitle(rawTitle.slice(0, teacherSuffix.index)),
+            teacher: normalizeTeacherName(teacherSuffix[1]),
         };
     }
-    return { title: normalized, teacher: '' };
+    return { title: normalizeLessonTitle(rawTitle), teacher: '' };
 };
 
 const partMarkers = (title: string) => Array.from(new Set(
@@ -136,14 +146,14 @@ const evaluateCandidate = (
     candidate.options.forEach((option) => {
         const parsed = parseHmoTitle(option.lesson_name);
         if (!parsed.title || !compatiblePartMarkers(rowTitle, parsed.title)) return;
-        if (parsed.teacher && (!rowTeacher || parsed.teacher !== rowTeacher)) return;
+        if (parsed.teacher && !teacherMatches(rowTeacher, parsed.teacher)) return;
         const similarity = titleSimilarity(rowTitle, parsed.title);
         if (similarity < 0.92) return;
         const evaluated: EvaluatedCandidate = {
             candidate,
             score: similarity,
             exactTitle: rowTitle === parsed.title,
-            teacherMatched: Boolean(parsed.teacher && parsed.teacher === rowTeacher),
+            teacherMatched: Boolean(parsed.teacher && teacherMatches(rowTeacher, parsed.teacher)),
             normalizedHmoTitle: parsed.title,
         };
         if (!best
@@ -167,7 +177,7 @@ export const matchHmoLessonsByCourse = (
         ...row,
         index,
         normalizedTitle: normalizeLessonTitle(row.title),
-        normalizedTeacher: teacherLastName(row.teacher),
+        normalizedTeacher: normalizeTeacherName(row.teacher),
     }));
 
     courseIds.forEach((courseId) => {
