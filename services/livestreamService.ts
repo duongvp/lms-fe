@@ -50,6 +50,9 @@ export interface AutoSchedulePayload {
     topuni_week_interval?: number;
     strategy?: "by_block" | "interleaved";
     holidays?: string[];
+    /** TopClass: dời đúng cùng thứ hoặc chuyển sang buổi kế tiếp trong lịch tuần. */
+    holiday_handling?: "create_canceled" | "next_session";
+    holiday_rules?: Array<{ date: string; handling: "create_canceled" | "next_session" }>;
     customize_lesson_names?: boolean;
     lesson_name_prefix?: string;
     lesson_name_suffix?: string;
@@ -211,7 +214,7 @@ export const createLivestreamBulk = (payload: BulkLivestreamPayload) =>
 export const exportLivestreams = (
     format: "csv" | "xlsx",
     ids?: Array<string | number>,
-    options?: { purpose?: "update"; programCode?: string }
+    options?: { purpose?: "update" | "all-programs"; programCode?: string }
 ) => {
     const query = new URLSearchParams({ format });
     if (ids?.length) query.set("ids", ids.join(","));
@@ -370,6 +373,25 @@ export const updateLivestream = (id: string, payload: any) =>
 
 export const syncMissingTeachingUsers = (ids?: number[]) =>
     fetchInstance(`${API_BASE_URL}/sync-missing-teaching-users`, {
+        method: "POST",
+        body: JSON.stringify({ ids }),
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+    }, "json", 120_000);
+
+export interface ResendHocmaiQueueResult {
+    requested: number;
+    queued: number;
+    skipped: number;
+    missing: number;
+    operation_id: string;
+    queued_ids: number[];
+    skipped_ids: number[];
+    missing_ids: number[];
+}
+
+export const resendLivestreamsToHocmai = (ids: number[]) =>
+    fetchInstance(`${API_BASE_URL}/hocmai-sync-queue/resend`, {
         method: "POST",
         body: JSON.stringify({ ids }),
         headers: { "Content-Type": "application/json" },

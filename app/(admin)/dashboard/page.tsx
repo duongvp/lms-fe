@@ -16,6 +16,7 @@ import {
     Modal,
     Progress,
     Row,
+    Select,
     Skeleton,
     Space,
     Statistic,
@@ -28,6 +29,7 @@ import {
     CheckCircleOutlined,
     ClockCircleOutlined,
     CloudSyncOutlined,
+    CopyOutlined,
     DashboardOutlined,
     ExclamationCircleOutlined,
     NotificationOutlined,
@@ -40,7 +42,7 @@ import {
 } from '@ant-design/icons';
 import { Column } from '@ant-design/charts';
 import dayjs, { Dayjs } from 'dayjs';
-import { DashboardOverview, getDashboardOverview } from '@/services/dashboardService';
+import { DashboardOverview, getDashboardOverview, getHmoLessonSyncIssues, runHmoLessonSync } from '@/services/dashboardService';
 import { useAuthStore } from '@/stores/authStore';
 import { withProgramContext } from '@/components/layouts/AdminLayout/SideMenu';
 import { PermissionKey } from '@/types/permissions';
@@ -50,6 +52,7 @@ const { Text, Title } = Typography;
 
 const EMPTY_DASHBOARD: DashboardOverview = {
     generatedAt: '',
+    hmoLessonSyncAvailable: true,
     summary: {
         courses: 0,
         lessons: 0,
@@ -70,6 +73,7 @@ const EMPTY_DASHBOARD: DashboardOverview = {
         teams: { pending: 0, failed: 0, sentToday: 0 },
         hocmai: { pending: 0, failed: 0, syncedToday: 0 },
     },
+    hmoLessonSync: null,
 };
 
 const actionLabels: Record<string, { label: string; color: string }> = {
@@ -131,6 +135,13 @@ const Page: React.FC = () => {
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState('');
     const [outlineModalType, setOutlineModalType] = useState<'withQuiz' | 'withoutQuiz' | null>(null);
+    const [hmoIssuesOpen, setHmoIssuesOpen] = useState(false);
+    const [hmoIssueProgram, setHmoIssueProgram] = useState<string>();
+    const [hmoIssueType, setHmoIssueType] = useState<string>();
+    const [hmoIssuesCopied, setHmoIssuesCopied] = useState(false);
+    const [programHmoIssues, setProgramHmoIssues] = useState<NonNullable<DashboardOverview['hmoLessonSync']>['issues']>([]);
+    const [loadingProgramHmoIssues, setLoadingProgramHmoIssues] = useState(false);
+    const [startingHmoSync, setStartingHmoSync] = useState(false);
     const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>([
         dayjs().startOf('week'),
         dayjs().endOf('week'),
@@ -162,25 +173,47 @@ const Page: React.FC = () => {
         }
     }, [searchParams]);
 
-    const loadDashboard = useCallback(async (manual = false) => {
-        manual ? setRefreshing(true) : setLoading(true);
-        setError('');
+    const loadDashboard = useCallback(async (manual = false, background = false) => {
+        if (!background) {
+            manual ? setRefreshing(true) : setLoading(true);
+            setError('');
+        }
         try {
             setData(await getDashboardOverview({
                 from: dateRange[0].startOf('day').format('YYYY-MM-DDTHH:mm:ss.SSS[Z]'),
                 to: dateRange[1].endOf('day').format('YYYY-MM-DDTHH:mm:ss.SSS[Z]'),
             }));
         } catch (loadError: any) {
-            setError(loadError?.message || 'Không thể tải dữ liệu tổng quan.');
+            if (!background) setError(loadError?.message || 'Không thể tải dữ liệu tổng quan.');
         } finally {
-            setLoading(false);
-            setRefreshing(false);
+            if (!background) {
+                setLoading(false);
+                setRefreshing(false);
+            }
         }
     }, [dateRange]);
 
     useEffect(() => {
         void loadDashboard();
     }, [loadDashboard]);
+
+    useEffect(() => {
+        if (data.hmoLessonSync?.status !== 'running') return;
+        const timer = window.setInterval(() => void loadDashboard(false, true), 5000);
+        return () => window.clearInterval(timer);
+    }, [data.hmoLessonSync?.status, loadDashboard]);
+
+    const handleRunHmoSync = async () => {
+        try {
+            setStartingHmoSync(true);
+            await runHmoLessonSync();
+            await loadDashboard(true);
+        } catch (runError: any) {
+            setError(runError?.message || 'Không thể bắt đầu quét Lesson ID HMO.');
+        } finally {
+            setStartingHmoSync(false);
+        }
+    };
 
     const chartData = useMemo(() => data.nextSevenDays.flatMap((item) => [
         {
@@ -231,6 +264,39 @@ const Page: React.FC = () => {
         ? Math.round((data.today.completed / activeToday) * 100)
         : 0;
     const outlineModalRows = outlineModalType ? data.outlineQuizDetails[outlineModalType] : [];
+    const dashboardHmoIssues = data.hmoLessonSync?.issues || [];
+    const hmoIssues = hmoIssueProgram ? programHmoIssues : dashboardHmoIssues;
+    const hmoProgramOptions = useMemo(() => (data.hmoLessonSync?.issuePrograms || []).map((item) => ({
+        value: item.programCode,
+        label: `${item.programCode} (${item.lessonCount} bài · ${item.issueCount} lỗi)`,
+    })), [data.hmoLessonSync?.issuePrograms]);
+    const hmoIssueTypeOptions = useMemo(() => Array.from(new Map(
+        hmoIssues.map((item) => [item.errorCode, { value: item.errorCode, label: item.message.split('.')[0] }])
+    ).values()), [hmoIssues]);
+    const filteredHmoIssues = hmoIssues.filter((item) => (
+        (!hmoIssueProgram || item.programCode === hmoIssueProgram)
+        && (!hmoIssueType || item.errorCode === hmoIssueType)
+    ));
+
+    useEffect(() => {
+        if (!hmoIssuesOpen || !hmoIssueProgram) {
+            setProgramHmoIssues([]);
+            setLoadingProgramHmoIssues(false);
+            return;
+        }
+        let active = true;
+        setLoadingProgramHmoIssues(true);
+        void getHmoLessonSyncIssues({ programCode: hmoIssueProgram })
+            .then((issues) => { if (active) setProgramHmoIssues(issues); })
+            .catch(() => { if (active) setProgramHmoIssues([]); })
+            .finally(() => { if (active) setLoadingProgramHmoIssues(false); });
+        return () => { active = false; };
+    }, [hmoIssueProgram, hmoIssuesOpen, data.hmoLessonSync?.id]);
+    const copyHmoProgram = async (programCode: string) => {
+        await navigator.clipboard.writeText(programCode);
+        setHmoIssuesCopied(true);
+        window.setTimeout(() => setHmoIssuesCopied(false), 1800);
+    };
     const outlineModalTitle = outlineModalType === 'withQuiz'
         ? 'Bài đã gắn Quiz'
         : 'Bài chưa gắn Quiz';
@@ -342,6 +408,117 @@ const Page: React.FC = () => {
                             />
                         </Col>
                     </Row>
+                    <Card
+                        title={<Space><CloudSyncOutlined /> Đồng bộ Lesson ID HMO</Space>}
+                        className={styles.panelCard}
+                        style={{ marginTop: 16 }}
+                        extra={data.hmoLessonSyncAvailable && hasPermission(PermissionKey.SCHEDULE_EDIT) && (
+                            <Button
+                                type="primary"
+                                icon={<ReloadOutlined spin={startingHmoSync || data.hmoLessonSync?.status === 'running'} />}
+                                loading={startingHmoSync}
+                                disabled={data.hmoLessonSync?.status === 'running'}
+                                onClick={() => void handleRunHmoSync()}
+                            >Quét lại toàn bộ</Button>
+                        )}
+                    >
+                        {!data.hmoLessonSyncAvailable ? (
+                            <Alert
+                                type="warning"
+                                showIcon
+                                message="Chưa sẵn sàng chức năng đồng bộ Lesson ID HMO"
+                                description="Backend chưa được chạy migration tạo bảng theo dõi. Dashboard vẫn hoạt động bình thường; hãy chạy migration trước khi bật cron hoặc quét thủ công."
+                            />
+                        ) : data.hmoLessonSync ? (
+                            <>
+                                <Row gutter={[16, 12]}>
+                                    <Col xs={12} md={6}><Statistic title="Chương trình lỗi" value={data.hmoLessonSync.programsFailed} valueStyle={{ color: data.hmoLessonSync.programsFailed ? '#ff4d4f' : '#52c41a' }} /></Col>
+                                    <Col xs={12} md={6}><Statistic title="Bài lỗi" value={data.hmoLessonSync.lessonsFailed} valueStyle={{ color: data.hmoLessonSync.lessonsFailed ? '#ff4d4f' : '#52c41a' }} /></Col>
+                                    <Col xs={12} md={6}><Statistic title="Bài đồng bộ" value={data.hmoLessonSync.lessonsSynced} /></Col>
+                                    <Col xs={12} md={6}><Statistic title="Lịch đã cập nhật" value={data.hmoLessonSync.calendarsSynced} /></Col>
+                                </Row>
+                                {data.hmoLessonSync.status === 'running' && (
+                                    <>
+                                        <Progress percent={data.hmoLessonSync.programsTotal ? Math.round(data.hmoLessonSync.programsProcessed * 100 / data.hmoLessonSync.programsTotal) : 0} status="active" />
+                                        <Text type="secondary">
+                                            {data.hmoLessonSync.currentProgram
+                                                ? `Đang xử lý chương trình: ${data.hmoLessonSync.currentProgram}`
+                                                : 'Đang chuẩn bị dữ liệu từ HMO...'}
+                                        </Text>
+                                    </>
+                                )}
+                                <Flex justify="space-between" align="center" wrap="wrap" gap={8} style={{ marginTop: 12 }}>
+                                    <Text type="secondary">Lần chạy: {dayjs(data.hmoLessonSync.startedAt).format('HH:mm DD/MM/YYYY')} · {data.hmoLessonSync.triggerType === 'cron' ? 'Tự động' : 'Thủ công'}</Text>
+                                    <Button disabled={!data.hmoLessonSync.issues.length} danger={data.hmoLessonSync.issues.length > 0} onClick={() => setHmoIssuesOpen(true)}>Xem {data.hmoLessonSync.issues.length} lỗi</Button>
+                                </Flex>
+                                {data.hmoLessonSync.lastError && (
+                                    <Alert
+                                        type={data.hmoLessonSync.status === 'interrupted' ? 'warning' : 'error'}
+                                        showIcon
+                                        message={data.hmoLessonSync.status === 'interrupted' ? 'Lượt quét đã bị gián đoạn' : 'Lượt quét thất bại'}
+                                        description={data.hmoLessonSync.lastError}
+                                        style={{ marginTop: 12 }}
+                                    />
+                                )}
+                            </>
+                        ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Chưa có lượt quét Lesson ID HMO" />}
+                    </Card>
+                    <Modal title="Các bài chưa đồng bộ được Lesson ID HMO" open={hmoIssuesOpen} onCancel={() => setHmoIssuesOpen(false)} footer={<Button onClick={() => setHmoIssuesOpen(false)}>Đóng</Button>} width={1000}>
+                        <Flex gap={12} wrap="wrap" align="center" style={{ marginBottom: 16 }}>
+                            <Select
+                                allowClear
+                                showSearch
+                                optionFilterProp="label"
+                                placeholder="Tất cả chương trình"
+                                style={{ minWidth: 280 }}
+                                value={hmoIssueProgram}
+                                options={hmoProgramOptions}
+                                onChange={setHmoIssueProgram}
+                                optionRender={(option) => (
+                                    <Flex justify="space-between" align="center" gap={8} style={{ width: '100%' }}>
+                                        <span>{option.label}</span>
+                                        <Button
+                                            type="text"
+                                            size="small"
+                                            icon={<CopyOutlined />}
+                                            title={`Sao chép ${String(option.value)}`}
+                                            onMouseDown={(event) => event.preventDefault()}
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                void copyHmoProgram(String(option.value));
+                                            }}
+                                        />
+                                    </Flex>
+                                )}
+                            />
+                            <Select
+                                allowClear
+                                placeholder="Tất cả nguyên nhân"
+                                style={{ minWidth: 300 }}
+                                value={hmoIssueType}
+                                options={hmoIssueTypeOptions}
+                                onChange={setHmoIssueType}
+                            />
+                            <Tag color={filteredHmoIssues.length ? "red" : "green"}>{filteredHmoIssues.length} lỗi đang hiển thị</Tag>
+                            {hmoIssuesCopied && <Tag color="green">Đã sao chép mã chương trình</Tag>}
+                        </Flex>
+                        <List
+                            loading={loadingProgramHmoIssues}
+                            dataSource={filteredHmoIssues}
+                            pagination={filteredHmoIssues.length > 20 ? { pageSize: 20, showSizeChanger: false } : false}
+                            locale={{ emptyText: 'Không có lỗi' }}
+                            renderItem={(item) => (
+                                <List.Item
+                                    actions={[<Button key="open" type="link" onClick={() => router.push(`/lessons?subject_code=${encodeURIComponent(item.programCode)}${item.learnNumber ? `&from_learn_number=${item.learnNumber}&to_learn_number=${item.learnNumber}` : ''}`)}>Mở đề cương</Button>]}
+                                >
+                                    <List.Item.Meta
+                                        title={<><Tag color="blue">{item.programCode}</Tag> {item.learnNumber ? `Bài ${item.learnNumber}` : 'Chưa xác định bài'}: {item.lessonName || 'Chưa có tên bài'}</>}
+                                        description={<Space direction="vertical" size={2}><Text type="danger">{item.message}</Text><Text type="secondary">GV: {item.teacher || 'Chưa xác định'}{item.courseId ? ` · Course ${item.courseId}` : ''}{item.packageId ? ` · Package ${item.packageId}` : ''}</Text></Space>}
+                                    />
+                                </List.Item>
+                            )}
+                        />
+                    </Modal>
                     <Modal
                         title={outlineModalTitle}
                         open={outlineModalType !== null}

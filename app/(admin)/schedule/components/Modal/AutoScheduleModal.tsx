@@ -102,11 +102,45 @@ const weekdayFromDate = (value: unknown) => {
 };
 
 const previewLessonIds = (row: any) => {
+    if (row.auto_schedule?.preview_holiday || row.preview_only_holiday) return "-";
     const lessonIds = (row.package_lesson_mappings || [])
         .flatMap((mapping: any) => mapping.lesson_ids || [])
         .map((lessonId: unknown) => String(lessonId).trim())
         .filter(Boolean);
     return Array.from(new Set(lessonIds)).join(", ") || row.auto_schedule?.hmo_section_id || "-";
+};
+
+const isHolidayPreviewRow = (row: any) => Boolean(
+    row?.auto_schedule?.preview_holiday || row?.preview_only_holiday
+);
+
+const addSkippedHolidayPreviewRows = (calendars: any[], payload: AutoSchedulePayload) => {
+    const skippedHolidays = (payload.holiday_rules || [])
+        .filter((rule) => rule.handling === "next_session")
+        .map((rule) => rule.date);
+    if (!calendars.length || !skippedHolidays.length) return calendars;
+    const weekdays = new Set(payload.blocks.flatMap((block) => block.lessons.flatMap(
+        (lesson) => lesson.sessions.map((session) => Number(session.weekday))
+    )));
+    const firstDate = dayjs(payload.start_date).startOf("day");
+    const lastDate = calendars.reduce((latest, row) => {
+        const value = dayjs(String(row.start_time || "").replace(/Z$/, ""));
+        return value.isValid() && value.isAfter(latest) ? value : latest;
+    }, firstDate);
+    const holidayRows = skippedHolidays.flatMap((holiday) => {
+        const date = dayjs(holiday, "YYYY-MM-DD", true);
+        const weekday = date.day() === 0 ? 7 : date.day();
+        if (!date.isValid() || date.isBefore(firstDate) || date.isAfter(lastDate, "day") || !weekdays.has(weekday)) return [];
+        return [{
+            preview_only_holiday: true,
+            start_time: `${holiday}T00:00:00.000Z`,
+            end_time: `${holiday}T00:00:00.000Z`,
+            lesson_name: "Ngày nghỉ – buổi học được chuyển sang ngày kế tiếp",
+        }];
+    });
+    return [...calendars, ...holidayRows].sort((left, right) => (
+        String(left.start_time).localeCompare(String(right.start_time))
+    ));
 };
 
 const buildSessions = (position: number) => [
@@ -154,6 +188,24 @@ const normalizeHolidayDates = (value: unknown) => String(value || "")
         if (!parsed.isValid()) throw new Error(`Ngày nghỉ ${item} không hợp lệ. Dùng định dạng DD/MM/YYYY`);
         return parsed.format("YYYY-MM-DD");
     });
+
+const normalizeHolidayPeriods = (periods: any[]) => {
+    const rules = new Map<string, "create_canceled" | "next_session">();
+    (periods || []).forEach((period, index) => {
+        const range = period?.date_range;
+        const start = Array.isArray(range) ? dayjs(range[0]).startOf("day") : null;
+        const end = Array.isArray(range) ? dayjs(range[1]).startOf("day") : null;
+        if (!start?.isValid() || !end?.isValid() || end.isBefore(start)) {
+            throw new Error(`Đợt nghỉ ${index + 1} chưa có khoảng ngày hợp lệ`);
+        }
+        const handling = period?.handling === "next_session" ? "next_session" : "create_canceled";
+        for (let cursor = start; !cursor.isAfter(end); cursor = cursor.add(1, "day")) {
+            rules.set(cursor.format("YYYY-MM-DD"), handling);
+        }
+    });
+    return [...rules].sort(([left], [right]) => left.localeCompare(right))
+        .map(([date, handling]) => ({ date, handling }));
+};
 
 const buildTopuniTemplateSequence = (
     startDate: Dayjs | null | undefined,
@@ -203,7 +255,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     const [loading, setLoading] = useState(false);
     const [loadingLessons, setLoadingLessons] = useState(false);
     const [loadedLessonsProgramCode, setLoadedLessonsProgramCode] = useState<string | null>(null);
-    const [blockSize, setBlockSize] = useState<1 | 2>(1);
+    const [blockSize, setBlockSize] = useState<1 | 2>(2);
     const [lessonLimit, setLessonLimit] = useState(0);
     const [visibleBlockCount, setVisibleBlockCount] = useState(8);
     const [commitProgress, setCommitProgress] = useState<CreateProgress | null>(null);
@@ -234,6 +286,17 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
         : null;
     const selectedSystemType = Form.useWatch("system_type", form);
     const isTopuni = selectedSystemType === "topuni" || programSystemType === "topuni";
+
+    const templateHolidayDates = () => {
+        try {
+            return normalizeHolidayPeriods(form.getFieldValue("holiday_periods") || [])
+                .filter((rule) => rule.handling === "next_session")
+                .map((rule) => rule.date)
+                .join(",");
+        } catch {
+            return "";
+        }
+    };
 
     useEffect(() => {
         if (!preview.length) return;
@@ -307,10 +370,8 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                 .filter((item) => selectedWeekdays.has(Number(item.weekday)));
             return template.length ? template : singleSessionTemplate([]);
         }
-        const mode = form.getFieldValue("template_mode") || "common";
-        const fieldName = mode === "odd_even"
-            ? (blockIndex % 2 === 0 ? "odd_schedule_template" : "even_schedule_template")
-            : mode === "within_block"
+        const mode = form.getFieldValue("template_mode") === "within_block" ? "within_block" : "common";
+        const fieldName = mode === "within_block"
                 ? (lessonIndex % 2 === 0 ? "first_lesson_schedule_template" : "second_lesson_schedule_template")
                 : "schedule_template";
         const template = cloneScheduleTemplate(form.getFieldValue(fieldName) || []);
@@ -335,6 +396,14 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     };
 
     const divideIntoBlocks = (source: SchedulingLesson[], size: 1 | 2, requestedLimit = lessonLimit) => {
+        const currentBlocks = form.getFieldValue("blocks") || [];
+        const mappingKeysByLesson = new Map<string, string[][]>();
+        currentBlocks.forEach((block: any) => (block.lessons || []).forEach((lesson: any) => {
+            mappingKeysByLesson.set(
+                String(lesson.session_id || lesson.learn_number),
+                (lesson.sessions || []).map((session: any) => session.hmo_mapping_keys || [])
+            );
+        }));
         const remaining = source.filter((lesson) => Number(lesson.scheduled_count || 0) === 0);
         const topuni = form.getFieldValue("system_type") === "topuni";
         const normalizedLimit = Math.min(
@@ -347,7 +416,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
         const topuniSequence = topuni
             ? buildTopuniTemplateSequence(
                 form.getFieldValue("start_date"),
-                form.getFieldValue("holidays"),
+                templateHolidayDates(),
                 getScheduleTemplate(0, 0) || [],
                 available.length,
                 Number(form.getFieldValue("topuni_week_interval") || 1)
@@ -361,9 +430,14 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                     learn_number: lesson.learn_number,
                     session_id: lesson.id,
                     lesson_name: lesson.lesson_name,
-                    sessions: topuni
+                    sessions: (topuni
                         ? [topuniSequence[index + lessonIndex] || buildSessions(lessonIndex)[0]]
-                        : getScheduleTemplate(blocks.length, lessonIndex) || buildSessions(lessonIndex),
+                        : getScheduleTemplate(blocks.length, lessonIndex) || buildSessions(lessonIndex)
+                    ).map((session: any, sessionIndex: number) => ({
+                        ...session,
+                        hmo_mapping_keys: mappingKeysByLesson
+                            .get(String(lesson.id || lesson.learn_number))?.[sessionIndex] || session.hmo_mapping_keys || [],
+                    })),
                 })),
             });
         }
@@ -376,10 +450,8 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
 
     const applyScheduleTemplateToAllLessons = async () => {
         try {
-            const mode = form.getFieldValue("template_mode") || "common";
-            await form.validateFields(mode === "odd_even"
-                ? ["odd_schedule_template", "even_schedule_template"]
-                : mode === "within_block"
+            const mode = form.getFieldValue("template_mode") === "within_block" ? "within_block" : "common";
+            await form.validateFields(mode === "within_block"
                     ? ["first_lesson_schedule_template", "second_lesson_schedule_template"]
                     : ["schedule_template"]);
             const blocks = form.getFieldValue("blocks") || [];
@@ -387,7 +459,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             const topuniSequence = topuni
                 ? buildTopuniTemplateSequence(
                     form.getFieldValue("start_date"),
-                    form.getFieldValue("holidays"),
+                    templateHolidayDates(),
                     form.getFieldValue("schedule_template") || [],
                     blocks.reduce((total: number, block: any) => total + (block.lessons || []).length, 0),
                     Number(form.getFieldValue("topuni_week_interval") || 1)
@@ -416,7 +488,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             setPayload(null);
             message.success(topuni
                 ? "Đã áp dụng lịch tuần cho toàn bộ bài TopUni"
-                : "Đã áp dụng mẫu lịch cho toàn bộ Block đã chọn");
+                : "Đã áp dụng lịch mẫu cho toàn bộ nhóm bài");
         } catch {
             // Ant Design đã hiển thị lỗi ngay tại dòng mẫu không hợp lệ.
         }
@@ -441,7 +513,9 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                 hmoOptionsRef.current = {};
                 setHmoSyncNotes({});
                 requestedHmoLessonIds.current.clear();
-                divideIntoBlocks(rows, 1, remainingCount);
+                const initialBlockSize: 1 | 2 = programSystemType === "topuni" ? 1 : 2;
+                setBlockSize(initialBlockSize);
+                divideIntoBlocks(rows, initialBlockSize, remainingCount);
             })
             .catch((error: any) => {
                 if (!active) return;
@@ -533,16 +607,24 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
         try {
             const optionsByLesson = new Map<string, HocmaiSectionOption[]>();
             const failedLessonIds = new Set<string>();
-            await Promise.all(blockLessons.map(async (lesson: any) => {
-                const lessonId = String(lesson.session_id || "");
-                if (!lessonId) return;
-                try {
-                    optionsByLesson.set(lessonId, await loadHmoOptions(lessonId));
-                } catch (error: any) {
-                    failedLessonIds.add(lessonId);
-                    optionsByLesson.set(lessonId, []);
+            let nextLessonIndex = 0;
+            const loadWorker = async () => {
+                while (nextLessonIndex < blockLessons.length) {
+                    const lesson = blockLessons[nextLessonIndex++];
+                    const lessonId = String(lesson.session_id || "");
+                    if (!lessonId) continue;
+                    try {
+                        optionsByLesson.set(lessonId, await loadHmoOptions(lessonId));
+                    } catch (error: any) {
+                        failedLessonIds.add(lessonId);
+                        optionsByLesson.set(lessonId, []);
+                    }
                 }
-            }));
+            };
+            await Promise.all(Array.from(
+                { length: Math.min(4, blockLessons.length) },
+                () => loadWorker()
+            ));
 
             let syncedCount = 0;
             let syncedSessionCount = 0;
@@ -646,7 +728,15 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                 }),
             }));
 
-            form.setFieldValue("blocks", nextBlocks);
+            form.setFieldsValue({ blocks: nextBlocks });
+            form.setFields(nextBlocks.flatMap((block: any, blockIndex: number) => (
+                (block.lessons || []).flatMap((lesson: any, lessonIndex: number) => (
+                    (lesson.sessions || []).map((session: any, sessionIndex: number) => ({
+                        name: ["blocks", blockIndex, "lessons", lessonIndex, "sessions", sessionIndex, "hmo_mapping_keys"],
+                        value: session.hmo_mapping_keys || [],
+                    }))
+                ))
+            )));
             setHmoSyncNotes(notes);
             setPreview([]);
             setPayload(null);
@@ -725,6 +815,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                     })),
             }]
             : (values.blocks || []);
+        const holidayRules = normalizeHolidayPeriods(values.holiday_periods || []);
         return {
             program_code: programCode,
             system_type: values.system_type,
@@ -733,7 +824,8 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             ...(values.system_type === "topuni" ? { topuni_weekdays: topuniWeekdays } : {}),
             ...(values.system_type === "topuni" ? { topuni_per_lesson_schedule: true } : {}),
             ...(values.system_type === "topuni" ? { topuni_week_interval: topuniWeekInterval } : {}),
-            holidays: normalizeHolidayDates(values.holidays),
+            holidays: holidayRules.map((rule) => rule.date),
+            holiday_rules: holidayRules,
             customize_lesson_names: Boolean(values.customize_lesson_names),
             lesson_name_prefix: values.customize_lesson_names ? String(values.lesson_name_prefix || "") : "",
             lesson_name_suffix: values.customize_lesson_names ? String(values.lesson_name_suffix || "") : "",
@@ -782,7 +874,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             const nextPayload = await buildPayload();
             const response: any = await previewAutoSchedule(nextPayload);
             setPayload(nextPayload);
-            setPreview(response?.data?.calendars || []);
+            setPreview(addSkippedHolidayPreviewRows(response?.data?.calendars || [], nextPayload));
         } catch (error: any) {
             const firstError = Array.isArray(error?.errorFields) ? error.errorFields[0] : null;
             if (firstError?.name) {
@@ -802,7 +894,8 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     const handleCommit = async () => {
         if (!payload) return;
         setLoading(true);
-        const total = preview.length;
+        // Dòng ngày nghỉ chỉ phục vụ xem trước, không tính vào số lịch gửi tạo.
+        const total = preview.filter((row) => !row.preview_only_holiday).length;
         setCommitProgress({
             total,
             completed: 0,
@@ -892,11 +985,19 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                     label="Giáo viên"
                                     rules={lockToOneSession ? [{ required: true, message: "Chọn giáo viên" }] : undefined}
                                 >
-                                    <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" allowClear placeholder="Chọn giáo viên" style={{ width: 220 }} />
+                                    <TeachingStaffSelect
+                                        teacherType={1}
+                                        teacherValueMode="displayName"
+                                        knownValues={(form.getFieldValue(name) || []).map((session: any) => session.teacher)}
+                                        allowClear
+                                        placeholder="Chọn giáo viên"
+                                        style={{ width: 220 }}
+                                    />
                                 </Form.Item>
                                 <Form.Item name={[field.name, "assistant_teachers"]} label="Trợ giảng">
                                     <TeachingStaffSelect
                                         teacherType={0}
+                                        knownValues={(form.getFieldValue(name) || []).flatMap((session: any) => session.assistant_teachers || [])}
                                         mode="multiple"
                                         allowClear
                                         placeholder="Chọn một hoặc nhiều trợ giảng"
@@ -924,7 +1025,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
         <Modal
             rootClassName="schedule-responsive-modal"
             open={open}
-            title={`Tạo lịch tự động · ${programCode}`}
+            title={`Tạo lịch học tự động · ${programCode}`}
             width={fullscreen ? "100%" : 1100}
             style={fullscreen ? { top: 0, maxWidth: "none", paddingBottom: 0 } : undefined}
             styles={fullscreen ? { content: { height: "100dvh", display: "flex", flexDirection: "column" }, body: { flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden" } } : undefined}
@@ -956,6 +1057,9 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                         start_date: dayjs(),
                         topuni_weekdays: [],
                         topuni_week_interval: 1,
+                        topuni_gap_weeks: 0,
+                        holiday_handling: "create_canceled",
+                        holiday_periods: [],
                         customize_lesson_names: false,
                         hmo_sync_name_source: "lesson",
                         lesson_name_prefix: "[Lịch {n}] - ",
@@ -983,7 +1087,12 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                         ],
                         blocks: [],
                     }}
-                    onValuesChange={() => { setHmoSyncNotes({}); setPreview([]); setPreviewError(""); setPayload(null); }}
+                    onValuesChange={() => {
+                        if (Object.keys(hmoSyncNotes).length) setHmoSyncNotes({});
+                        if (preview.length) setPreview([]);
+                        if (previewError) setPreviewError("");
+                        if (payload) setPayload(null);
+                    }}
                 >
                     <Space align="start" wrap>
                         <Form.Item
@@ -1015,14 +1124,8 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                         </Form.Item>
                         {!isTopuni && (
                             <>
-                                <Form.Item name="strategy" label="Cách xếp" rules={[{ required: true }]}>
-                                    <Select style={{ width: 230 }} options={[{ value: "interleaved", label: "Xen kẽ trong Block" }, { value: "by_block", label: "Lần lượt từng bài" }]} />
-                                </Form.Item>
-                                <Form.Item label="Chia Block">
-                                    <Space.Compact>
-                                        <Select value={blockSize} style={{ width: 160 }} onChange={(value: 1 | 2) => setBlockSize(value)} options={[{ value: 1, label: "1 bài / Block" }, { value: 2, label: "2 bài / Block" }]} />
-                                        <Button disabled={remainingCount === 0} onClick={() => divideIntoBlocks(lessons, blockSize)}>Chia lại</Button>
-                                    </Space.Compact>
+                                <Form.Item name="strategy" label="Thứ tự lên lịch" rules={[{ required: true }]}>
+                                    <Select style={{ width: 280 }} options={[{ value: "interleaved", label: "Xen kẽ hai bài trong từng nhóm" }, { value: "by_block", label: "Hoàn thành từng bài lần lượt" }]} />
                                 </Form.Item>
                                 <Form.Item label="Số bài muốn tạo">
                                     <InputNumber
@@ -1061,15 +1164,19 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                         onChange={(checked) => syncTopuniScheduleWeekdays(checked as Array<number | string>)}
                                     />
                                 </Form.Item>
-                                <Form.Item name="topuni_week_interval" label="Nhịp học">
-                                    <Select
-                                        style={{ width: 130 }}
-                                        options={[
-                                            { value: 1, label: "Hàng tuần" },
-                                            { value: 2, label: "Cách tuần" },
-                                        ]}
+                                <Form.Item
+                                    name="topuni_gap_weeks"
+                                    label="Số tuần nghỉ giữa hai lần học"
+                                    tooltip="Nhập 0 để học hằng tuần; nhập 1 để nghỉ một tuần rồi học tuần kế tiếp."
+                                >
+                                    <InputNumber
+                                        min={0}
+                                        max={51}
+                                        precision={0}
+                                        addonAfter="tuần"
+                                        style={{ width: 180 }}
                                         onChange={(value) => {
-                                            form.setFieldValue("topuni_week_interval", value);
+                                            form.setFieldValue("topuni_week_interval", Math.max(1, Number(value ?? 0) + 1));
                                             divideIntoBlocks(lessons, 1, lessons.filter(
                                                 (lesson) => Number(lesson.scheduled_count || 0) === 0
                                             ).length);
@@ -1078,10 +1185,60 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                 </Form.Item>
                             </>
                         )}
-                        <Form.Item name="holidays" label="Ngày nghỉ (DD/MM/YYYY, cách nhau dấu phẩy)">
-                            <Input style={{ width: 320 }} placeholder="19/12/2026, 01/01/2027" />
-                        </Form.Item>
                     </Space>
+
+                    <Card size="small" title="Các đợt nghỉ" style={{ marginBottom: 12 }}>
+                            <Form.List name="holiday_periods">
+                                {(fields, { add, remove }) => (
+                                    <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                                        {fields.map((field, index) => (
+                                            <Space key={field.key} wrap align="start">
+                                                <Form.Item
+                                                    name={[field.name, "date_range"]}
+                                                    label={`Đợt ${index + 1}`}
+                                                    rules={[{ required: true, message: "Chọn ngày hoặc khoảng ngày nghỉ" }]}
+                                                    style={{ marginBottom: 0 }}
+                                                >
+                                                    <DatePicker.RangePicker
+                                                        format="DD/MM/YYYY"
+                                                        allowEmpty={[false, false]}
+                                                        placeholder={["Từ ngày", "Đến ngày"]}
+                                                    />
+                                                </Form.Item>
+                                                <Form.Item
+                                                    name={[field.name, "handling"]}
+                                                    label="Cách xử lý"
+                                                    initialValue="create_canceled"
+                                                    style={{ marginBottom: 0 }}
+                                                >
+                                                    <Select
+                                                        style={{ width: 330 }}
+                                                        options={[
+                                                            { value: "create_canceled", label: "Tạo lịch ngày nghỉ và đánh dấu Nghỉ" },
+                                                            { value: "next_session", label: "Không tạo ngày nghỉ, giữ nguyên thứ tự bài" },
+                                                        ]}
+                                                    />
+                                                </Form.Item>
+                                                <Button danger type="text" onClick={() => remove(field.name)} style={{ marginTop: 30 }}>
+                                                    Xóa
+                                                </Button>
+                                            </Space>
+                                        ))}
+                                        <Button
+                                            type="dashed"
+                                            icon={<PlusOutlined />}
+                                            onClick={() => add({ date_range: null, handling: "create_canceled" })}
+                                            style={{ alignSelf: "flex-start" }}
+                                        >
+                                            Thêm ngày hoặc đợt nghỉ
+                                        </Button>
+                                        <Typography.Text type="secondary">
+                                            Chọn cùng ngày ở hai đầu để tạo nghỉ một ngày; chọn một khoảng để nhập nhanh nhiều ngày liên tiếp.
+                                        </Typography.Text>
+                                    </Space>
+                                )}
+                            </Form.List>
+                    </Card>
 
                     <Card size="small" style={{ marginBottom: 12, background: "#fafafa" }}>
                         <Form.Item name="customize_lesson_names" valuePropName="checked" style={{ marginBottom: 0 }}>
@@ -1157,7 +1314,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
 
                     <Card
                         size="small"
-                        title={isTopuni ? "Mẫu lịch chung" : "Mẫu lịch theo Block"}
+                        title={isTopuni ? "Lịch học hằng tuần" : "Thiết lập lịch cho từng nhóm bài"}
                         extra={<Typography.Text type="secondary">{isTopuni ? "Một buổi áp dụng cho mỗi bài" : "Gồm thời gian và nhân sự giảng dạy"}</Typography.Text>}
                         style={{ marginBottom: 12 }}
                     >
@@ -1170,30 +1327,24 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                             </>
                         ) : (
                             <>
-                                <Form.Item name="template_mode" label="Cách dùng mẫu" initialValue="common" style={{ marginBottom: 12 }}>
+                                <Form.Item name="template_mode" label="Cách áp dụng lịch mẫu" initialValue="common" style={{ marginBottom: 12 }}>
                                     <Select style={{ width: 300 }} options={[
-                                        { value: "common", label: "Một mẫu cho mọi Block" },
-                                        { value: "odd_even", label: "Mẫu Block lẻ và Block chẵn khác nhau" },
-                                        { value: "within_block", label: "Xen kẽ Bài 1/Bài 2 khi Block có 2 bài" },
+                                        { value: "common", label: "Dùng chung cho tất cả nhóm bài" },
+                                        { value: "within_block", label: "Đặt riêng cho hai bài trong nhóm" },
                                     ]} />
                                 </Form.Item>
                                 <Form.Item noStyle shouldUpdate={(previous, current) => previous.template_mode !== current.template_mode}>
-                                    {({ getFieldValue }) => getFieldValue("template_mode") === "odd_even" ? (
+                                    {({ getFieldValue }) => getFieldValue("template_mode") === "within_block" ? (
                                         <>
-                                            {renderTemplateFields("odd_schedule_template", "Mẫu Block lẻ (Block 1, 3, 5...)")}
-                                            {renderTemplateFields("even_schedule_template", "Mẫu Block chẵn (Block 2, 4, 6...)")}
-                                        </>
-                                    ) : getFieldValue("template_mode") === "within_block" ? (
-                                        <>
-                                            {renderTemplateFields("first_lesson_schedule_template", "Mẫu Bài 1 trong Block (ví dụ Thứ 2, Thứ 7)")}
-                                            {renderTemplateFields("second_lesson_schedule_template", "Mẫu Bài 2 trong Block (ví dụ Thứ 3, Thứ 5)")}
+                                            {renderTemplateFields("first_lesson_schedule_template", "Lịch mẫu cho bài thứ nhất (ví dụ Thứ 2, Thứ 7)")}
+                                            {renderTemplateFields("second_lesson_schedule_template", "Lịch mẫu cho bài thứ hai (ví dụ Thứ 3, Thứ 5)")}
                                         </>
                                     ) : renderTemplateFields("schedule_template", "Mẫu chung")}
                                 </Form.Item>
                             </>
                         )}
                         <Button type="primary" onClick={() => void applyScheduleTemplateToAllLessons()} disabled={remainingCount === 0}>
-                            {isTopuni ? "Áp dụng lịch tuần cho tất cả bài" : "Áp dụng mẫu cho tất cả Block"}
+                            {isTopuni ? "Áp dụng lịch tuần cho tất cả bài" : "Áp dụng lịch mẫu cho tất cả nhóm bài"}
                         </Button>
                     </Card>
 
@@ -1382,7 +1533,13 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                 {blockFields.slice(0, visibleBlockCount).map((blockField) => {
                                     const blockIndex = blockField.name;
                                     return (
-                                    <Card key={blockField.key} size="small" title={`Block ${blockIndex + 1}`}>
+                                    <Card
+                                        key={blockField.key}
+                                        size="small"
+                                        title={`Nhóm ${blockIndex + 1}: ${(form.getFieldValue(["blocks", blockIndex, "lessons"]) || [])
+                                            .map((lesson: any) => `Bài ${lesson.learn_number}`)
+                                            .join(" và ")}`}
+                                    >
                                         <Form.List name={[blockField.name, "lessons"]}>
                                             {(lessonFields) => (
                                                 <Space direction="vertical" style={{ width: "100%" }}>
@@ -1502,11 +1659,11 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                         type="dashed"
                                         onClick={() => setVisibleBlockCount((count) => Math.min(blockFields.length, count + 8))}
                                     >
-                                        Hiển thị thêm {Math.min(8, blockFields.length - visibleBlockCount)} Block
+                                        Hiển thị thêm {Math.min(8, blockFields.length - visibleBlockCount)} nhóm bài
                                     </Button>
                                 )}
                             </Space>
-                        ) : <Empty description={remainingCount === 0 ? "Tất cả bài đã được gán lịch" : "Chưa chọn bài để tạo Block"} />}
+                        ) : <Empty description={remainingCount === 0 ? "Tất cả bài đã được gán lịch" : "Chưa có nhóm bài để tạo lịch"} />}
                     </Form.List>}
                 </Form>
             </Spin>}
@@ -1525,17 +1682,19 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
 
             {preview.length > 0 && (
                 <div ref={previewRef} style={{ scrollMarginTop: 16 }}>
-                    <Typography.Title level={5} style={{ marginTop: 16 }}>Xem trước {preview.length} lịch</Typography.Title>
+                    <Typography.Title level={5} style={{ marginTop: 16 }}>
+                        Xem trước {preview.filter((row) => !row.preview_only_holiday).length} lịch
+                    </Typography.Title>
                     <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
-                        Hiển thị toàn bộ để kiểm tra trước khi xác nhận, không chia thành các trang.
+                        Dòng màu đỏ có bài học sẽ được lưu ở trạng thái Nghỉ; dòng ghi “buổi học được chuyển” chỉ để xem và không được tạo.
                     </Typography.Text>
                     {isDesktopPreview ? <div className="auto-schedule-preview-desktop">
-                        <Table size="small" rowKey={(_, index) => String(index)} pagination={false} scroll={{ x: "max-content" }} dataSource={preview} columns={[
-                            { title: "Thứ", dataIndex: "start_time", render: (value) => previewWeekdayLabel(value) },
+                        <Table size="small" rowKey={(_, index) => String(index)} pagination={false} scroll={{ x: "max-content" }} dataSource={preview} rowClassName={(row) => isHolidayPreviewRow(row) ? "auto-schedule-holiday-row" : ""} columns={[
+                            { title: "Thứ", dataIndex: "start_time", render: (value, row) => `${isHolidayPreviewRow(row) ? "Nghỉ - " : ""}${previewWeekdayLabel(value)}` },
                             { title: "Ngày live", dataIndex: "start_time", render: (value) => dayjs(String(value).replace(/Z$/, "")).format("DD/MM/YYYY") },
                             {
                                 title: "Khung giờ",
-                                render: (_value, row) => `${dayjs(String(row.start_time).replace(/Z$/, "")).format("HH:mm")}–${dayjs(String(row.end_time).replace(/Z$/, "")).format("HH:mm")}`,
+                                render: (_value, row) => row.preview_only_holiday ? "-" : `${dayjs(String(row.start_time).replace(/Z$/, "")).format("HH:mm")}–${dayjs(String(row.end_time).replace(/Z$/, "")).format("HH:mm")}`,
                             },
                             { title: "Bài", dataIndex: "learn_number" },
                             { title: "Tên bài", dataIndex: "lesson_name" },
@@ -1548,20 +1707,29 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                             <Card
                                 key={`${row.id || row.start_time}-${index}`}
                                 size="small"
-                                title={<Typography.Text strong>{row.lesson_name || `Bài ${row.learn_number}`}</Typography.Text>}
-                                extra={<Typography.Text type="secondary">Bài {row.learn_number}</Typography.Text>}
+                                style={isHolidayPreviewRow(row) ? { background: "#fff1f0", borderColor: "#ff7875" } : undefined}
+                                title={<Typography.Text strong type={isHolidayPreviewRow(row) ? "danger" : undefined}>{row.lesson_name || `Bài ${row.learn_number}`}</Typography.Text>}
+                                extra={!row.preview_only_holiday && <Typography.Text type="secondary">Bài {row.learn_number}</Typography.Text>}
                             >
                                 <Space direction="vertical" size={6} style={{ width: "100%" }}>
-                                    <Typography.Text><Typography.Text type="secondary">Thời gian: </Typography.Text>{previewWeekdayLabel(row.start_time)} · {dayjs(String(row.start_time).replace(/Z$/, "")).format("DD/MM/YYYY HH:mm")} – {dayjs(String(row.end_time).replace(/Z$/, "")).format("HH:mm")}</Typography.Text>
-                                    <Typography.Text><Typography.Text type="secondary">Lesson ID HMO: </Typography.Text>{previewLessonIds(row)}</Typography.Text>
-                                    <Typography.Text><Typography.Text type="secondary">Giáo viên: </Typography.Text>{row.teacher || "-"}</Typography.Text>
-                                    <Typography.Text><Typography.Text type="secondary">Trợ giảng: </Typography.Text>{row.assistant_teacher || "-"}</Typography.Text>
+                                    <Typography.Text type={isHolidayPreviewRow(row) ? "danger" : undefined}><Typography.Text type="secondary">Thời gian: </Typography.Text>{isHolidayPreviewRow(row) ? "Nghỉ - " : ""}{previewWeekdayLabel(row.start_time)} · {dayjs(String(row.start_time).replace(/Z$/, "")).format(row.preview_only_holiday ? "DD/MM/YYYY" : "DD/MM/YYYY HH:mm")}{!row.preview_only_holiday && ` – ${dayjs(String(row.end_time).replace(/Z$/, "")).format("HH:mm")}`}</Typography.Text>
+                                    {!isHolidayPreviewRow(row) && <>
+                                        <Typography.Text><Typography.Text type="secondary">Lesson ID HMO: </Typography.Text>{previewLessonIds(row)}</Typography.Text>
+                                        <Typography.Text><Typography.Text type="secondary">Giáo viên: </Typography.Text>{row.teacher || "-"}</Typography.Text>
+                                        <Typography.Text><Typography.Text type="secondary">Trợ giảng: </Typography.Text>{row.assistant_teacher || "-"}</Typography.Text>
+                                    </>}
                                 </Space>
                             </Card>
                         ))}
                     </div>}
                 </div>
             )}
+            <style jsx global>{`
+                .auto-schedule-holiday-row > td {
+                    background: #fff1f0 !important;
+                    color: #cf1322 !important;
+                }
+            `}</style>
         </Modal>
         <Modal
             title="Tiến trình tạo lịch học"

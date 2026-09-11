@@ -730,8 +730,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             const errorMessage = getScheduleSubmitError(error);
             setSubmitError(errorMessage);
             messageApi.error({
-                content: errorMessage,
-                duration: 7,
+                content: 'Không thể cập nhật. Xem thông tin chi tiết phía dưới bảng.',
+                duration: 5,
             });
         } finally {
             setLoading(false);

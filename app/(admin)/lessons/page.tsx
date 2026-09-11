@@ -144,6 +144,8 @@ const Page = () => {
     const [reorderMode, setReorderMode] = useState(false);
     const [reorderStrategy, setReorderStrategy] = useState<LessonReorderStrategy>("insert");
     const [savingReorder, setSavingReorder] = useState(false);
+    const [renumberEnabled, setRenumberEnabled] = useState(false);
+    const originalLearnNumbersRef = useRef<number[]>([]);
     const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
     const [editingLessonName, setEditingLessonName] = useState("");
     const [savingInlineName, setSavingInlineName] = useState(false);
@@ -807,6 +809,8 @@ const Page = () => {
         }
 
         setSelectedRowKeys([]);
+        originalLearnNumbersRef.current = [];
+        setRenumberEnabled(false);
         setReorderMode(true);
         setReorderStrategy("insert");
         setCurrentPage(1);
@@ -816,10 +820,30 @@ const Page = () => {
 
     const handleCancelReorder = () => {
         setReorderMode(false);
+        setRenumberEnabled(false);
+        originalLearnNumbersRef.current = [];
         setDragRowKey(null);
         if (hasSearched) {
             void refreshLessons();
         }
+    };
+
+    const handleToggleRenumber = () => {
+        setData((current) => {
+            if (!current.length) return current;
+            if (renumberEnabled) {
+                const originals = originalLearnNumbersRef.current;
+                return current.map((item, index) => ({
+                    ...item,
+                    learn_number: originals[index] ?? Number(item.learn_number),
+                }));
+            }
+
+            originalLearnNumbersRef.current = current.map((item) => Number(item.learn_number));
+            const firstNumber = Math.min(...current.map((item) => Number(item.learn_number)));
+            return current.map((item, index) => ({ ...item, learn_number: firstNumber + index }));
+        });
+        setRenumberEnabled((enabled) => !enabled);
     };
 
     const handleDropRow = (targetKey: React.Key) => {
@@ -830,9 +854,7 @@ const Page = () => {
             const targetIndex = prev.findIndex((item) => item.key === targetKey);
             if (sourceIndex < 0 || targetIndex < 0) return prev;
 
-            const learnNumbers = prev
-                .map((item) => Number(item.learn_number))
-                .sort((left, right) => left - right);
+            const learnNumbers = prev.map((item) => Number(item.learn_number)).sort((left, right) => left - right);
             const next = [...prev];
             if (reorderStrategy === "swap") {
                 [next[sourceIndex], next[targetIndex]] = [next[targetIndex], next[sourceIndex]];
@@ -851,9 +873,10 @@ const Page = () => {
                 });
                 return prev;
             }
+            const firstNumber = learnNumbers[0];
             return next.map((item, index) => ({
                 ...item,
-                learn_number: learnNumbers[index],
+                learn_number: renumberEnabled ? firstNumber + index : learnNumbers[index],
             }));
         });
         setDragRowKey(null);
@@ -875,10 +898,13 @@ const Page = () => {
                 grade: filterValues.grade === undefined ? undefined : Number(filterValues.grade),
                 subject_code: String(filterValues.subject_code),
                 mode: reorderStrategy,
+                renumber: renumberEnabled,
                 ordered_ids: data.map((item) => item.id),
             });
             api.success({ message: "Đã lưu thứ tự bài học" });
             setReorderMode(false);
+            setRenumberEnabled(false);
+            originalLearnNumbersRef.current = [];
             if (hasSearched) {
                 await Promise.all([refreshLessons(), refreshSchedules()]);
             }
@@ -1090,6 +1116,7 @@ const Page = () => {
                 reorderMode={reorderMode}
                 reorderStrategy={reorderStrategy}
                 savingReorder={savingReorder}
+                renumberEnabled={renumberEnabled}
                 onSearch={handleSearch}
                 onCreate={handleOpenCreate}
                 onCreateProgram={() => setOpenProgramModal(true)}
@@ -1106,6 +1133,7 @@ const Page = () => {
                 onEnableReorder={handleEnableReorder}
                 onCancelReorder={handleCancelReorder}
                 onSaveReorder={handleSaveReorder}
+                onToggleRenumber={handleToggleRenumber}
                 onReorderStrategyChange={setReorderStrategy}
                 onReload={() => {
                     if (hasSearched) void refreshLessons();
@@ -1216,7 +1244,7 @@ const Page = () => {
                 selectedLessonIds={selectedRowKeys.map(String)}
                 onClose={() => setOpenCourseMappingModal(false)}
             />
-            <ScormNameSyncModal open={openScormNameSyncModal} onClose={() => setOpenScormNameSyncModal(false)} onSuccess={showScormSyncSuccess} onError={showScormSyncError} />
+            <ScormNameSyncModal programCode={String(submittedFilterValues.subject_code || "")} open={openScormNameSyncModal} onClose={() => setOpenScormNameSyncModal(false)} onSuccess={showScormSyncSuccess} onError={showScormSyncError} />
                 </>
             ) : (
                 <div

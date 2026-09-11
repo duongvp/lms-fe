@@ -4,6 +4,7 @@ export type HmoLessonMatchRow = {
     key: string;
     title: unknown;
     teacher?: unknown;
+    occurrence?: number;
 };
 
 export type HmoLessonMatch = {
@@ -42,6 +43,16 @@ export const normalizeLessonTitle = (value: unknown) => {
         // Dấu ., .., _, -, ... chỉ là khác biệt trình bày.
         .replace(/[^a-z0-9]+/g, ' ')
         .trim();
+};
+
+export const hmoCalendarOccurrence = (value: unknown, lessonCount?: unknown) => {
+    if (lessonCount !== undefined && lessonCount !== null && lessonCount !== '') {
+        const count = Number(lessonCount);
+        if (Number.isInteger(count) && count >= 0) return count + 1;
+    }
+    const match = /^\s*\[\s*Lịch\s*(\d+)\s*\]/iu.exec(String(value || ''));
+    const occurrence = Number(match?.[1] || 1);
+    return Number.isInteger(occurrence) && occurrence > 0 ? occurrence : 1;
 };
 
 const teacherLastName = (value: unknown) => {
@@ -226,19 +237,25 @@ export const matchHmoLessonsByCourse = (
             || left.evaluated.length - right.evaluated.length
             || left.row.index - right.row.index
         ));
-        // TopClass có thể có nhiều calendar cho cùng một bài và cùng giáo viên
-        // (lịch thường, [Lịch 2]...). Khi HMO chỉ có một Lesson ID cho giáo viên
-        // đó, các calendar được phép dùng lại ID. Với giáo viên khác nhau vẫn
-        // phải chọn ID riêng theo hậu tố Cô/Thầy.
-        const claimedLessonIds = new Map<string, string>();
+        // Mỗi calendar là một lịch HMO độc lập. Lịch thường và [Lịch 2] phải
+        // lần lượt nhận các Lesson ID khác nhau, kể cả khi cùng giáo viên.
+        const claimedLessonIds = new Set<string>();
         evaluatedByRow.forEach(({ row, evaluated }) => {
-            const selected = evaluated.find((item) => {
-                const claimedTeacher = claimedLessonIds.get(item.candidate.lessonId);
-                return claimedTeacher === undefined
-                    || (Boolean(row.normalizedTeacher) && claimedTeacher === row.normalizedTeacher);
-            });
+            // `[Lịch n]` là vị trí tuyệt đối trong nhóm Lesson ID cùng tên. Nhờ
+            // vậy chỉ chọn riêng Lịch 2 vẫn lấy ứng viên thứ hai, thay vì khởi
+            // động lại phép chia từ Lesson ID nhỏ nhất như trước.
+            const requestedIndex = Number(row.occurrence) > 1 ? Number(row.occurrence) - 1 : -1;
+            const requested = requestedIndex >= 0 ? evaluated[requestedIndex] : undefined;
+            // Nếu Course chỉ có đúng một ID phù hợp với tên + giáo viên thì đó
+            // là mapping dùng chung cho các occurrence. Chỉ áp dụng ordinal khi
+            // HMO thực sự có nhiều ID tương đương để chia cho Lịch 1/2/3.
+            const selected = evaluated.length === 1
+                ? evaluated[0]
+                : requestedIndex >= 0
+                    ? (requested && !claimedLessonIds.has(requested.candidate.lessonId) ? requested : undefined)
+                    : evaluated.find((item) => !claimedLessonIds.has(item.candidate.lessonId));
             if (!selected) return;
-            claimedLessonIds.set(selected.candidate.lessonId, row.normalizedTeacher);
+            claimedLessonIds.add(selected.candidate.lessonId);
             matchesByRow.get(row.key)!.set(courseId, {
                 lessonId: selected.candidate.lessonId,
                 options: selected.candidate.options,
@@ -258,9 +275,11 @@ export const matchHmoLessonsByCourse = (
 export const hmoCourseMatchSummary = (
     result: HmoLessonMatchingResult,
     courseIds: string[] = result.courseIds,
-) => courseIds.map((courseId) => (
-    `Course ${courseId}: ${result.matchedRowCountByCourse.get(courseId) || 0} lịch`
-)).join('; ');
+) => courseIds.length
+    ? courseIds.map((courseId) => (
+        `Course ${courseId}: ${result.matchedRowCountByCourse.get(courseId) || 0} lịch`
+    )).join('; ')
+    : 'Không tìm thấy Lesson ID HMO nào từ Course ID/Package ID của bài này';
 
 // LOGIC CŨ - giữ lại để rollback nhanh nếu luồng fuzzy phát sinh lỗi:
 //

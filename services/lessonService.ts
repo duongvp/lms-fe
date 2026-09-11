@@ -110,6 +110,7 @@ export interface LessonReorderPayload {
     grade?: number;
     subject_code: string;
     mode?: "insert" | "swap";
+    renumber?: boolean;
     ordered_ids: Array<string | number>;
 }
 
@@ -303,3 +304,29 @@ export const getScormNameSyncSheets = () => fetchInstance(`${API_BASE_URL}/scorm
 export const previewScormNameSync = (sheet_names: string[]) => fetchInstance(`${API_BASE_URL}/scorm-name-sync/preview`, { method: "POST", body: JSON.stringify({ sheet_names }), headers: lessonHeaders(), credentials: "include" });
 export const applyScormNameSync = (sheet_names: string[]) => fetchInstance(`${API_BASE_URL}/scorm-name-sync/apply`, { method: "POST", body: JSON.stringify({ sheet_names }), headers: lessonHeaders(), credentials: "include" }, "json", 120_000);
 export const getScormNameSyncStatus = (jobId: string) => fetchInstance(`${API_BASE_URL}/scorm-name-sync/status/${encodeURIComponent(jobId)}`, { method: "GET", headers: lessonHeaders(), credentials: "include", cache: "no-store" });
+export type ScormCourseMappingItem = { packageId: string; courseId: string };
+export type ScormCourseMappingPreviewRow = {
+    lessonId: string;
+    learnNumber: number;
+    lessonName: string;
+    sheetNames: string[];
+    currentMappings: ScormCourseMappingItem[];
+    sheetMappings: ScormCourseMappingItem[];
+    additions: ScormCourseMappingItem[];
+    removals: ScormCourseMappingItem[];
+};
+export type ScormCourseMappingPreviewResult = {
+    programCode: string;
+    sheetsProcessed: number;
+    lessonsTotal: number;
+    matchedLessons: number;
+    unmatchedLessons: number;
+    updatesNeeded: number;
+    rows: ScormCourseMappingPreviewRow[];
+    warnings: Array<{ message: string }>;
+    added?: number;
+    removed?: number;
+};
+const scormCourseMappingBody = (program_code: string, sheet_names: string[]) => ({ program_code, sheet_names });
+export const previewScormCourseMappings = (programCode: string, sheetNames: string[]) => fetchInstance(`${API_BASE_URL}/scorm-name-sync/course-mappings/preview`, { method: "POST", body: JSON.stringify(scormCourseMappingBody(programCode, sheetNames)), headers: lessonHeaders(), credentials: "include" }, "json", 120_000);
+export const applyScormCourseMappings = (programCode: string, sheetNames: string[]) => fetchInstance(`${API_BASE_URL}/scorm-name-sync/course-mappings/apply`, { method: "POST", body: JSON.stringify(scormCourseMappingBody(programCode, sheetNames)), headers: lessonHeaders(), credentials: "include" }, "json", 120_000);

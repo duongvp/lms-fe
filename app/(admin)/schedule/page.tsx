@@ -5,7 +5,7 @@ import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
 import { notification, Alert, Form, Input, InputNumber, Select, Button, Checkbox, Space, Modal, Row, Col, DatePicker, TimePicker, Drawer, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress, Table, Spin } from "antd";
-import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, MoreOutlined, ApartmentOutlined } from "@ant-design/icons";
+import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, MoreOutlined, ApartmentOutlined, CloudUploadOutlined } from "@ant-design/icons";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -24,6 +24,7 @@ import {
     exportLivestreams,
     getLivestreams,
     importLivestreamsFile,
+    resendLivestreamsToHocmai,
     syncMissingTeachingUsers,
     updateLivestreamsFile,
     updateLivestream,
@@ -440,6 +441,15 @@ const canModifySchedule = (record: ScheduleDataType) => {
     const startTime = dayjs(record.start_time);
 
     return startTime.isValid() && startTime.isAfter(dayjs());
+};
+
+// Checkbox còn phục vụ thao tác gửi lại HMO, vì vậy cho chọn cả buổi đang
+// diễn ra. Buổi đã kết thúc và buổi đã đánh dấu nghỉ vẫn không được chọn.
+const canSelectScheduleForSync = (record: ScheduleDataType) => {
+    if (Number(record.lesson_status) === 1) return false;
+    if (!record.end_time) return canModifySchedule(record);
+    const endTime = dayjs(record.end_time);
+    return endTime.isValid() && !endTime.isBefore(dayjs());
 };
 
 const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
@@ -875,6 +885,7 @@ const Page = () => {
     const [showPageInfo, setShowPageInfo] = useState(false);
     const [pageInfoReady, setPageInfoReady] = useState(false);
     const [syncingTeachingUsers, setSyncingTeachingUsers] = useState(false);
+    const [resendingToHocmai, setResendingToHocmai] = useState(false);
     const [refreshingScheduleList, setRefreshingScheduleList] = useState(false);
     const [classroomAssignmentCalendarId, setClassroomAssignmentCalendarId] = useState<string | number | null>(null);
     const [classroomAssignmentSystemType, setClassroomAssignmentSystemType] = useState<"topclass" | "topuni" | null>(null);
@@ -1088,8 +1099,12 @@ const Page = () => {
     }, [data]);
 
     const selectableRowKeys = useMemo(() => new Set(
-        data.filter(canModifySchedule).map((record) => String(record.id))
+        data.filter(canSelectScheduleForSync).map((record) => String(record.id))
     ), [data]);
+    const selectedRowsAllModifiable = selectedRowKeys.length > 0 && selectedRowKeys.every((key) => {
+        const record = selectedRowsCacheRef.current.get(String(key));
+        return Boolean(record && canModifySchedule(record));
+    });
     const handleRowSelectionChange = useCallback((newSelectedRowKeys: React.Key[], info?: { type?: string }) => {
         if (info?.type === "all") return;
         selectAllRequestRef.current += 1;
@@ -1110,7 +1125,7 @@ const Page = () => {
         setAllRowsSelected(true);
         setSelectingAllRows(true);
         const selectableKeysOnPage = data
-            .filter(canModifySchedule)
+            .filter(canSelectScheduleForSync)
             .map((record) => String(record.id));
         const nextVisibleSelection = (current: React.Key[]) => Array.from(new Set([
             ...current,
@@ -1141,7 +1156,7 @@ const Page = () => {
                 },
             });
             if (requestId !== selectAllRequestRef.current) return;
-            const selectableRows = mapScheduleRows(rows).filter(canModifySchedule);
+            const selectableRows = mapScheduleRows(rows).filter(canSelectScheduleForSync);
             selectableRows.forEach((record) => {
                 selectedRowsCacheRef.current.set(String(record.id), record);
             });
@@ -1187,7 +1202,7 @@ const Page = () => {
                 disabled: !canSelect,
                 title: canSelect
                     ? undefined
-                    : "Buổi học đã bắt đầu, không thể chọn để cập nhật",
+                    : "Buổi học đã kết thúc hoặc đã nghỉ, không thể chọn",
             };
         },
         columnWidth: 32,
@@ -1557,13 +1572,15 @@ const Page = () => {
 
     const handleExportSchedule = async (
         format: "csv" | "xlsx",
-        purpose?: "update"
+        purpose?: "update" | "all-programs"
     ) => {
         try {
-            const selectedIds = selectedRowKeys.length
+            const selectedIds = purpose === "all-programs" ? undefined : selectedRowKeys.length
                 ? selectedRowKeys.map(String)
                 : undefined;
-            const programCode = String(submittedFilterValues.code || "").trim() || undefined;
+            const programCode = purpose === "all-programs"
+                ? undefined
+                : String(submittedFilterValues.code || "").trim() || undefined;
             if (purpose === "update" && !selectedIds?.length && !programCode) {
                 api.warning({
                     message: "Vui lòng chọn Chương trình",
@@ -1574,7 +1591,9 @@ const Page = () => {
             const blob = await exportLivestreams(format, selectedIds, { purpose, programCode });
             downloadBlob(
                 blob,
-                purpose === "update"
+                purpose === "all-programs"
+                    ? "calendar-all-programs.xlsx"
+                    : purpose === "update"
                     ? `calendar-update-assistants-${programCode || (selectedIds?.length ? "selected" : "all")}.xlsx`
                     : `calendar-${selectedIds?.length ? "selected" : programCode || "all"}.${format}`
             );
@@ -1650,6 +1669,66 @@ const Page = () => {
         });
     };
 
+    const handleResendToHocmai = () => {
+        const targetIds = Array.from(new Set(
+            selectedRowKeys.map(Number).filter((id) => Number.isInteger(id) && id > 0)
+        ));
+        if (!targetIds.length) {
+            api.warning({
+                message: "Chưa chọn lịch",
+                description: "Vui lòng chọn ít nhất 1 lịch để gửi lại dữ liệu tới HMO.",
+            });
+            return;
+        }
+
+        Modal.confirm({
+            title: `Gửi lại ${targetIds.length} lịch tới HMO?`,
+            content: "Hệ thống sẽ tạo yêu cầu cập nhật từ thông tin hiện tại của các lịch đã chọn. Dữ liệu trong bảng lịch học không bị thay đổi.",
+            okText: "Gửi lại HMO",
+            cancelText: "Hủy",
+            onOk: async () => {
+                setResendingToHocmai(true);
+                try {
+                    let queued = 0;
+                    let skipped = 0;
+                    let missing = 0;
+                    for (let index = 0; index < targetIds.length; index += 500) {
+                        const response: any = await resendLivestreamsToHocmai(
+                            targetIds.slice(index, index + 500)
+                        );
+                        const result = response?.data ?? response ?? {};
+                        queued += Number(result.queued || 0);
+                        skipped += Number(result.skipped || 0);
+                        missing += Number(result.missing || 0);
+                    }
+                    if (queued) {
+                        api.success({
+                            message: `Đã đưa ${queued} lịch vào hàng đợi HMO`,
+                            description: skipped || missing
+                                ? `${skipped} lịch bị bỏ qua do chưa có Key hoặc Package/Lesson ID${missing ? `; ${missing} lịch không còn tồn tại` : ""}.`
+                                : "HMO sẽ xử lý các yêu cầu cập nhật theo hàng đợi.",
+                            duration: 6,
+                        });
+                    } else {
+                        api.warning({
+                            message: "Không có lịch nào được đưa vào hàng đợi",
+                            description: `${skipped} lịch chưa có Key hoặc Package/Lesson ID${missing ? `; ${missing} lịch không còn tồn tại` : ""}.`,
+                            duration: 6,
+                        });
+                    }
+                } catch (error: any) {
+                    api.error({
+                        message: "Gửi lại HMO thất bại",
+                        description: error?.message || "Không thể tạo hàng đợi đồng bộ HMO.",
+                    });
+                    throw error;
+                } finally {
+                    setResendingToHocmai(false);
+                }
+            },
+        });
+    };
+
     const handleOpenClassroomAssignment = () => {
         if (selectedRowKeys.length !== 1) {
             api.warning({
@@ -1659,7 +1738,15 @@ const Page = () => {
             return;
         }
         const selectedKey = String(selectedRowKeys[0]);
-        const selectedSchedule = data.find((record) => String(record.id) === selectedKey);
+        const selectedSchedule = selectedRowsCacheRef.current.get(selectedKey)
+            || data.find((record) => String(record.id) === selectedKey);
+        if (!selectedSchedule || !canModifySchedule(selectedSchedule)) {
+            api.warning({
+                message: "Không thể chia lớp",
+                description: "Lịch đang diễn ra chỉ có thể dùng thao tác Gửi lại HMO.",
+            });
+            return;
+        }
         setClassroomAssignmentSystemType(
             selectedSchedule?.system_type === "topuni"
                 ? "topuni"
@@ -1748,6 +1835,13 @@ const Page = () => {
             api.warning({
                 message: "Chưa chọn lịch",
                 description: "Hãy tick các lịch cần tự động chia lớp trước khi thực hiện.",
+            });
+            return;
+        }
+        if (!selectedRowsAllModifiable) {
+            api.warning({
+                message: "Có lịch đã bắt đầu",
+                description: "Lịch đang diễn ra chỉ có thể dùng thao tác Gửi lại HMO. Hãy bỏ chọn lịch đó trước khi chia lớp.",
             });
             return;
         }
@@ -2630,12 +2724,18 @@ const Page = () => {
 
     const exportMenu = {
         items: [
+            { key: "all-programs", label: "Excel toàn bộ chương trình (theo mẫu gốc)" },
+            { type: "divider" as const },
             { key: "xlsx", label: "Xuất Excel (.xlsx)" },
             { key: "csv", label: "Xuất CSV (.csv)" },
             { type: "divider" as const },
             { key: "update-assistants", label: "Excel để bổ sung trợ giảng" },
         ],
         onClick: ({ key }: { key: string }) => {
+            if (key === "all-programs") {
+                void handleExportSchedule("xlsx", "all-programs");
+                return;
+            }
             if (key === "update-assistants") {
                 void handleExportSchedule("xlsx", "update");
                 return;
@@ -2653,19 +2753,25 @@ const Page = () => {
                 disabled: syncingTeachingUsers,
             },
             ...(canEditSchedule ? [{
+                key: "resend-to-hocmai",
+                icon: <CloudUploadOutlined />,
+                label: `Gửi lại HMO${selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}`,
+                disabled: !selectedRowKeys.length || resendingToHocmai,
+            }, {
                 key: "assign-student-classrooms",
                 icon: <ApartmentOutlined />,
                 label: "Xem trước & chia 1 lịch",
-                disabled: batchClassroomAssigning,
+                disabled: batchClassroomAssigning || selectedRowKeys.length !== 1 || !selectedRowsAllModifiable,
             }, {
                 key: "batch-assign-student-classrooms",
                 icon: <ApartmentOutlined />,
                 label: `Tự động chia lớp đã chọn${selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}`,
-                disabled: !selectedRowKeys.length || batchClassroomAssigning,
+                disabled: !selectedRowKeys.length || batchClassroomAssigning || !selectedRowsAllModifiable,
             }] : []),
         ],
         onClick: ({ key }: { key: string }) => {
             if (key === "sync-teaching-users") handleSyncMissingTeachingUsers();
+            if (key === "resend-to-hocmai") handleResendToHocmai();
             if (key === "assign-student-classrooms") handleOpenClassroomAssignment();
             if (key === "batch-assign-student-classrooms") handleOpenBatchClassroomAssignment();
         },
@@ -2797,7 +2903,7 @@ const Page = () => {
                                     </Space.Compact>
                                 )}
                                 <Dropdown trigger={["click"]} menu={syncMenu}>
-                                    <Button icon={<DatabaseOutlined />} loading={syncingTeachingUsers || batchClassroomAssigning}>
+                                    <Button icon={<DatabaseOutlined />} loading={syncingTeachingUsers || batchClassroomAssigning || resendingToHocmai}>
                                         Đồng bộ <DownOutlined />
                                     </Button>
                                 </Dropdown>
@@ -2839,7 +2945,7 @@ const Page = () => {
                                 </Dropdown>
                             )}
                             <Dropdown trigger={["click"]} menu={syncMenu}>
-                                <Button icon={<DatabaseOutlined />} loading={syncingTeachingUsers || batchClassroomAssigning}>
+                                <Button icon={<DatabaseOutlined />} loading={syncingTeachingUsers || batchClassroomAssigning || resendingToHocmai}>
                                     Đồng bộ <DownOutlined />
                                 </Button>
                             </Dropdown>

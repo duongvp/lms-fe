@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     Alert,
     Button,
@@ -116,6 +116,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
     loading,
     errorMessage,
 }) => {
+    const errorRef = useRef<HTMLDivElement>(null);
     const [sessions, setSessions] = useState<PreviewSession[]>([]);
     const [requiredSessions, setRequiredSessions] = useState(0);
     const [lessons, setLessons] = useState<LessonApiResponse[]>([]);
@@ -140,6 +141,13 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
     );
     const [loadingFollowingPreview, setLoadingFollowingPreview] = useState(false);
     const [followingPreviewError, setFollowingPreviewError] = useState<string | null>(null);
+    useEffect(() => {
+        if (!errorMessage) return;
+        const frame = requestAnimationFrame(() => {
+            errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [errorMessage]);
     const packageCoursesQuery = usePackageCoursesQuery();
     const packageCourses: PackageCourseOption[] = packageCoursesQuery.data?.data ?? [];
     const loadingPackageCourses = packageCoursesQuery.isLoading || packageCoursesQuery.isValidating;
@@ -1269,17 +1277,6 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     />
                 )}
 
-                {errorMessage && (
-                    <Alert
-                        type="error"
-                        showIcon
-                        closable={false}
-                        message="Không thể lưu lịch học"
-                        description={errorMessage}
-                        style={{ marginBottom: 16 }}
-                    />
-                )}
-
                 {isFollowingPreview && (
                     <Alert
                         type={followingPreviewError ? 'warning' : 'info'}
@@ -1343,6 +1340,19 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                         return '';
                     }}
                 />
+
+                {errorMessage && (
+                    <div ref={errorRef} style={{ scrollMargin: 24 }}>
+                        <Alert
+                            type="error"
+                            showIcon
+                            closable={false}
+                            message="Không thể cập nhật lịch"
+                            description={<div style={{ whiteSpace: 'pre-line' }}>{errorMessage}</div>}
+                            style={{ marginTop: 12, marginBottom: 16 }}
+                        />
+                    </div>
+                )}
 
                 {SHOW_LEGACY_HMO_MAPPING_EDITOR && !isEdit && (
                     <div style={{ marginTop: 16 }}>

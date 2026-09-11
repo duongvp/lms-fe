@@ -1,15 +1,63 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+    hmoCalendarOccurrence,
     matchHmoLessonsByCourse,
     normalizeLessonTitle,
 } from '../helper/hmoLessonMatching';
+
+test('lấy occurrence tuyệt đối từ tiền tố Lịch n', () => {
+    assert.equal(hmoCalendarOccurrence('Bài 14: Unit 2'), 1);
+    assert.equal(hmoCalendarOccurrence(' [Lịch 2] - Unit 2'), 2);
+    assert.equal(hmoCalendarOccurrence('Tên lấy nguyên từ đề cương', 0), 1);
+    assert.equal(hmoCalendarOccurrence('Tên lấy nguyên từ đề cương', 1), 2);
+    assert.equal(hmoCalendarOccurrence('[Lịch 2] - Tên bài', 2), 3);
+});
+
+test('tên lịch giống đề cương vẫn lấy đúng ID theo lesson_count', () => {
+    const result = matchHmoLessonsByCourse([
+        { package_id: 'a', course_id: '3426', lesson_id: '171067', lesson_name: 'Unit 2: The Generation Gap - Language Focus.' },
+        { package_id: 'a', course_id: '3426', lesson_id: '171068', lesson_name: 'Unit 2: The Generation Gap - Language Focus.' },
+        { package_id: 'a', course_id: '3426', lesson_id: '171069', lesson_name: 'Unit 2: The Generation Gap - Language Focus.' },
+    ], [{
+        key: 'third',
+        title: 'Unit 2: The Generation Gap - Language Focus.',
+        occurrence: hmoCalendarOccurrence('Unit 2: The Generation Gap - Language Focus.', 2),
+    }]);
+
+    assert.equal(result.matchesByRow.get('third')?.get('3426')?.lessonId, '171069');
+});
 
 test('coi phần trước hậu tố _Cô/_Thầy là tên đề cương', () => {
     assert.equal(
         normalizeLessonTitle('Ôn tập viết nghị luận xã hội - Phần 3_Cô Mai'),
         'on tap viet nghi luan xa hoi p3 co mai',
     );
+});
+
+test('chỉ chọn Lịch 2 vẫn nhận Lesson ID thứ hai', () => {
+    const result = matchHmoLessonsByCourse([
+        { package_id: 'a', course_id: '3426', lesson_id: '171067', lesson_name: 'Unit 2: The Generation Gap - Language Focus.' },
+        { package_id: 'a', course_id: '3426', lesson_id: '171068', lesson_name: 'Unit 2: The Generation Gap - Language Focus.' },
+    ], [{
+        key: 'second',
+        title: 'Unit 2: The Generation Gap - Language Focus.',
+        occurrence: hmoCalendarOccurrence('[Lịch 2] - Unit 2: The Generation Gap - Language Focus.'),
+    }]);
+
+    assert.equal(result.matchesByRow.get('second')?.get('3426')?.lessonId, '171068');
+});
+
+test('dùng chung ID khi HMO chỉ có một ứng viên đúng tên và giáo viên', () => {
+    const result = matchHmoLessonsByCourse([
+        { package_id: 'a', course_id: '3426', lesson_id: '171067', lesson_name: 'Unit 2: The Generation Gap - Language Focus.' },
+    ], [{
+        key: 'second',
+        title: 'Unit 2: The Generation Gap - Language Focus.',
+        occurrence: 2,
+    }]);
+
+    assert.equal(result.matchesByRow.get('second')?.get('3426')?.lessonId, '171067');
 });
 
 test('ghép Lesson ID theo hậu tố giáo viên trong từng Course', () => {
@@ -34,21 +82,25 @@ test('ghép Lesson ID theo hậu tố giáo viên trong từng Course', () => {
     assert.deepEqual(Object.fromEntries(result.matchedRowCountByCourse), { '3426': 2, '3391': 2 });
 });
 
-test('cho phép lịch thường và Lịch 2 cùng giáo viên dùng lại Lesson ID của mỗi Course', () => {
+test('gán Lesson ID khác nhau cho lịch thường và Lịch 2 dù cùng giáo viên', () => {
     const result = matchHmoLessonsByCourse([
         { package_id: '9200', course_id: '3426', lesson_id: '175500', lesson_name: 'Ôn tập giữa kì I - Phần 2_Cô Mai' },
+        { package_id: '9200', course_id: '3426', lesson_id: '175501', lesson_name: 'Ôn tập giữa kì I - Phần 2_Cô Mai' },
         { package_id: '9209', course_id: '3392', lesson_id: '175757', lesson_name: 'Ôn tập giữa kì I - Phần 2_Cô Mai' },
+        { package_id: '9209', course_id: '3392', lesson_id: '175758', lesson_name: 'Ôn tập giữa kì I - Phần 2_Cô Mai' },
     ], [
         { key: 'normal', title: 'Ôn tập giữa kì I - Phần 2.', teacher: 'Mai Thị Phương Mai' },
         { key: 'second', title: '[Lịch 2] - Ôn tập giữa kì I - Phần 2.', teacher: 'Mai Thị Phương Mai' },
     ]);
 
-    for (const rowKey of ['normal', 'second']) {
-        assert.deepEqual(
-            Object.fromEntries([...result.matchesByRow.get(rowKey)!].map(([courseId, match]) => [courseId, match.lessonId])),
-            { '3426': '175500', '3392': '175757' },
-        );
-    }
+    assert.deepEqual(
+        Object.fromEntries([...result.matchesByRow.get('normal')!].map(([courseId, match]) => [courseId, match.lessonId])),
+        { '3426': '175500', '3392': '175757' },
+    );
+    assert.deepEqual(
+        Object.fromEntries([...result.matchesByRow.get('second')!].map(([courseId, match]) => [courseId, match.lessonId])),
+        { '3426': '175501', '3392': '175758' },
+    );
     assert.deepEqual(Object.fromEntries(result.matchedRowCountByCourse), { '3426': 2, '3392': 2 });
 });
 

@@ -29,6 +29,7 @@ interface LessonActionsProps {
     reorderMode: boolean;
     reorderStrategy: LessonReorderStrategy;
     savingReorder: boolean;
+    renumberEnabled: boolean;
     onSearch: (value: string) => Promise<void>;
     searchValue: string;
     onCreate: () => void;
@@ -40,6 +41,7 @@ interface LessonActionsProps {
     onEnableReorder: () => void;
     onCancelReorder: () => void;
     onSaveReorder: () => void;
+    onToggleRenumber: () => void;
     onReorderStrategyChange: (strategy: LessonReorderStrategy) => void;
     onReload: () => void;
     onManageCourseIds: () => void;
@@ -54,6 +56,7 @@ const LessonActions = ({
     reorderMode,
     reorderStrategy,
     savingReorder,
+    renumberEnabled,
     onSearch,
     searchValue,
     onCreate,
@@ -65,6 +68,7 @@ const LessonActions = ({
     onEnableReorder,
     onCancelReorder,
     onSaveReorder,
+    onToggleRenumber,
     onReorderStrategyChange,
     onReload,
     onManageCourseIds,
@@ -110,7 +114,7 @@ const LessonActions = ({
                     Course ID theo bài
                 </Button>
             )}
-            {canEdit && <Button onClick={onSyncScormNames}>Đồng bộ tên bài giảng</Button>}
+            {canEdit && <Button onClick={onSyncScormNames}>Đồng bộ từ Google Sheets</Button>}
             {canEdit && <Button icon={<UnorderedListOutlined />} onClick={onEnableReorder}>Sắp xếp thứ tự</Button>}
         </>
     );
@@ -124,7 +128,7 @@ const LessonActions = ({
                     { type: "divider" as const },
                     { key: "reload", icon: <ReloadOutlined />, label: "Làm mới" },
                     ...(canEdit ? [{ key: "manage-course-ids", icon: <LinkOutlined />, label: "Course ID theo bài", disabled: !canManageCourseIds }] : []),
-                    ...(canEdit ? [{ key: "sync-scorm", label: "Đồng bộ tên bài giảng" }] : []),
+                    ...(canEdit ? [{ key: "sync-scorm", label: "Đồng bộ từ Google Sheets" }] : []),
                     ...(canEdit ? [{ key: "reorder", icon: <UnorderedListOutlined />, label: "Sắp xếp thứ tự" }] : []),
                 ],
                 onClick: ({ key }) => {
@@ -181,6 +185,14 @@ const LessonActions = ({
                                 Hủy sắp xếp
                             </Button>
                             <Button
+                                type={renumberEnabled ? "primary" : "default"}
+                                ghost={renumberEnabled}
+                                icon={<ReloadOutlined />}
+                                onClick={onToggleRenumber}
+                            >
+                                {renumberEnabled ? "Khôi phục số bài" : "Đánh lại số bài"}
+                            </Button>
+                            <Button
                                 type="primary"
                                 icon={<SaveOutlined />}
                                 loading={savingReorder}
@@ -200,8 +212,8 @@ const LessonActions = ({
                 showIcon
                 style={{ marginBottom: 12 }}
                 message={reorderStrategy === "insert"
-                    ? "Kiểu Chèn vị trí: bài được kéo sẽ chèn vào vị trí mới, các bài ở giữa tự dịch chuyển."
-                    : "Kiểu Đổi chỗ: bài được kéo và bài tại vị trí thả sẽ đổi vị trí trực tiếp."}
+                    ? `Kiểu Chèn vị trí: bài được kéo sẽ chèn vào vị trí mới, các bài ở giữa tự dịch chuyển.${renumberEnabled ? " Số bài đang được đánh liên tục theo thứ tự mới; chọn Khôi phục số bài để hoàn tác." : ""}`
+                    : `Kiểu Đổi chỗ: bài được kéo và bài tại vị trí thả sẽ đổi vị trí trực tiếp.${renumberEnabled ? " Số bài đang được đánh liên tục theo thứ tự mới; chọn Khôi phục số bài để hoàn tác." : ""}`}
             />
         )}
     </>

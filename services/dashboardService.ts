@@ -4,6 +4,7 @@ const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/api/dashboard`;
 
 export interface DashboardOverview {
     generatedAt: string;
+    hmoLessonSyncAvailable: boolean;
     summary: {
         courses: number;
         lessons: number;
@@ -68,6 +69,23 @@ export interface DashboardOverview {
         teams: { pending: number; failed: number; sentToday: number };
         hocmai: { pending: number; failed: number; syncedToday: number };
     };
+    hmoLessonSync: null | {
+        id: string;
+        triggerType: 'cron' | 'manual';
+        status: 'running' | 'completed' | 'completed_with_errors' | 'failed' | 'interrupted';
+        programsTotal: number; programsProcessed: number; programsFailed: number;
+        lessonsTotal: number; lessonsSynced: number; lessonsFailed: number;
+        calendarsSynced: number; lastError: string | null;
+        heartbeatAt: string | null; currentProgram: string | null;
+        startedAt: string; finishedAt: string | null;
+        issues: Array<{
+            id: string; programCode: string; calendarId: number | null;
+            learnNumber: number | null; lessonName: string | null; teacher: string | null;
+            courseId: string | null; packageId: string | null;
+            errorCode: string; message: string; createdAt: string;
+        }>;
+        issuePrograms: Array<{ programCode: string; issueCount: number; lessonCount: number }>;
+    };
 }
 
 export const getDashboardOverview = async (params?: { from?: string; to?: string }): Promise<DashboardOverview> => {
@@ -79,4 +97,20 @@ export const getDashboardOverview = async (params?: { from?: string; to?: string
         headers: { 'Content-Type': 'application/json' },
     });
     return response.data;
+};
+
+export const runHmoLessonSync = async () => fetchInstance(`${API_BASE_URL}/hmo-lesson-sync/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+});
+
+export const getHmoLessonSyncIssues = async (params?: { programCode?: string; errorCode?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.programCode) query.set('program_code', params.programCode);
+    if (params?.errorCode) query.set('error_code', params.errorCode);
+    const response = await fetchInstance(`${API_BASE_URL}/hmo-lesson-sync/issues?${query.toString()}`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+    });
+    return response.data as NonNullable<DashboardOverview['hmoLessonSync']>['issues'];
 };

@@ -44,6 +44,7 @@ import {
     type HocmaiSectionOption,
 } from '@/services/livestreamService';
 import {
+    hmoCalendarOccurrence,
     hmoCourseMatchSummary,
     matchHmoLessonsByCourse,
     normalizeLessonTitle,
@@ -262,6 +263,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     const [selectedRows, setSelectedRows] = React.useState<any[]>([]);
     const [selectedRowKeys, setSelectedRowKeys] = React.useState<React.Key[]>([]);
     const [previewRows, setPreviewRows] = React.useState<any[]>([]);
+    const [submitError, setSubmitError] = React.useState<string | null>(null);
     const [hmoOptionsByLesson, setHmoOptionsByLesson] = React.useState<Record<string, HocmaiSectionOption[]>>({});
     const [loadingHmoLessons, setLoadingHmoLessons] = React.useState<Set<string>>(new Set());
     const [syncingHmoLessonIds, setSyncingHmoLessonIds] = React.useState(false);
@@ -275,6 +277,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     const [autoFillWeekdays, setAutoFillWeekdays] = React.useState<number[]>([]);
     const [autoFillHolidays, setAutoFillHolidays] = React.useState<string>("");
     const previewRef = React.useRef<HTMLDivElement>(null);
+    const submitErrorRef = React.useRef<HTMLDivElement>(null);
     const separateLoadMoreRef = React.useRef<HTMLDivElement>(null);
     const modalRenderRef = React.useRef<HTMLDivElement>(null);
     const leavingPageRef = React.useRef(false);
@@ -293,6 +296,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         setPendingConfigMode(null);
         setRenderedSeparateCount(0);
         setLoadingMoreSeparate(false);
+        setSubmitError(null);
         hmoOptionsCacheRef.current = {};
         loadingHmoLessonIdsRef.current.clear();
         setHmoOptionsByLesson({});
@@ -309,6 +313,14 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         });
         return () => cancelAnimationFrame(frame);
     }, [previewRows.length]);
+
+    useEffect(() => {
+        if (!submitError) return;
+        const frame = requestAnimationFrame(() => {
+            submitErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [submitError]);
 
     // Bulk update được commit trong một transaction nên backend không thể báo
     // từng dòng đã hoàn tất trước khi commit. Thanh này tiến dần để thể hiện
@@ -961,6 +973,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     key: String(row.id),
                     title: syncNameSource === 'calendar' ? row.lesson_name : sourceLessonName,
                     teacher: teacherValue(row.teacher),
+                    occurrence: hmoCalendarOccurrence(row.lesson_name, row.lesson_count),
                 }));
 
                 if (matchingRows.some((row) => !normalizeLessonTitle(row.title))) {
@@ -1049,9 +1062,12 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     const matchedPrefix = matchedCourseIdsForRow.length
                         ? `Đã tìm thấy ở Course ${matchedCourseIdsForRow.join(', ')} nhưng chưa gán vì các lịch của bài chưa khớp đủ. `
                         : '';
+                    const warningDetails = details.length
+                        ? details.join('; ')
+                        : hmoCourseMatchSummary(matching);
                     notes[String(row.id)] = {
                         type: 'warning',
-                        message: `${matchedPrefix}${details.join('; ')}.`,
+                        message: `${matchedPrefix}${warningDetails}.`,
                     };
                 });
             });
@@ -1094,6 +1110,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     const handleFinish = async (values: any) => {
         try {
             setLoading(true);
+            setSubmitError(null);
 
             if (values.operation !== 'update') {
                 if (previewRows.length === 0) {
@@ -1442,9 +1459,11 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             hideModalImmediately();
         } catch (err) {
             console.error("Lỗi cập nhật hàng loạt:", err);
+            const errorMessage = getErrorMessage(err);
+            setSubmitError(errorMessage);
             message.error({
-                content: getErrorMessage(err),
-                duration: 8,
+                content: 'Không thể cập nhật. Xem thông tin chi tiết phía dưới bảng.',
+                duration: 5,
             });
         } finally {
             if (!leavingPageRef.current) {
@@ -1549,6 +1568,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 }}
                 onValuesChange={(changedValues) => {
                     if (previewRows.length) setPreviewRows([]);
+                    if (submitError) setSubmitError(null);
                     // Ghi chú chỉ mô tả lần đồng bộ ở tab hiện tại. Khi đổi
                     // chế độ, mapping vẫn được giữ trong form nhưng không
                     // hiển thị lại kết quả của tab trước để tránh gây nhiễu.
@@ -2322,6 +2342,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                             style={{ marginTop: 16 }}
                             message={operation === 'update' ? 'Xem trước thay đổi trước khi cập nhật' : 'Xem trước thao tác hàng loạt'}
                             description={
+                                <Space direction="vertical" size={12} style={{ width: '100%' }}>
                                 <Table
                                     scroll={{ x: "max-content" }}
                                     size="small"
@@ -2373,6 +2394,17 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                         ...(operation === 'update' ? [] : [{ title: 'Sau thao tác', dataIndex: 'next' }]),
                                     ]}
                                 />
+                                {submitError && (
+                                    <div ref={submitErrorRef} style={{ width: '100%', scrollMargin: 24 }}>
+                                        <Alert
+                                            type="error"
+                                            showIcon
+                                            message="Không thể cập nhật lịch"
+                                            description={<div style={{ whiteSpace: 'pre-line' }}>{submitError}</div>}
+                                        />
+                                    </div>
+                                )}
+                                </Space>
                             }
                         />
                     </div>
