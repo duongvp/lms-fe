@@ -32,6 +32,7 @@ interface LessonTableProps {
     selectingAllRows: boolean;
     reorderMode: boolean;
     dragRowKey: React.Key;
+    highlightedRowKeys: React.Key[];
     canEdit: boolean;
     canEditTitle: boolean;
     canDelete: boolean;
@@ -67,6 +68,7 @@ const LessonTable = ({
     selectingAllRows,
     reorderMode,
     dragRowKey,
+    highlightedRowKeys,
     canEdit,
     canEditTitle,
     canDelete,
@@ -308,7 +310,13 @@ const LessonTable = ({
                                 opacity: isPastLesson(record) ? 0.65 : 1,
                                 backgroundColor: dragRowKey === record.key
                                     ? "rgba(22, 119, 255, 0.06)"
+                                    : highlightedRowKeys.includes(record.key)
+                                        ? "rgba(82, 196, 26, 0.16)"
+                                        : undefined,
+                                boxShadow: highlightedRowKeys.includes(record.key)
+                                    ? "inset 4px 0 0 #52c41a"
                                     : undefined,
+                                transition: "background-color 300ms ease, box-shadow 300ms ease",
                             }
                             : undefined,
                     })}

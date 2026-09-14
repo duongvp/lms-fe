@@ -1,7 +1,7 @@
 'use client';
 import React from 'react';
 import { Row, Col, Typography, Space, Button } from 'antd';
-import { CheckCircleOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/icons';
+import { CopyOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/icons';
 import ConfirmModal from '@/components/templates/ConfirmModal';
 import { showErrorMessage, showSuccessMessage } from '@/ultils/message';
 import { deleteRole, getRoleById, RoleApiResponse } from '@/services/roleService';
@@ -17,12 +17,14 @@ interface RoleDetailProps {
 }
 
 const RoleDetail: React.FC<RoleDetailProps> = ({ record }) => {
-    console.log("🚀 ~ record:", record)
     const { setModal, setShouldReload } = useRoleStore();
     const [confirmOpen, setConfirmOpen] = React.useState(false);
     const [loading, setLoading] = React.useState(false);
     const canUpdate = useAuthStore((state) =>
         state.hasPermission(PermissionKey.ROLE_EDIT)
+    );
+    const canCreate = useAuthStore((state) =>
+        state.hasPermission(PermissionKey.ROLE_CREATE)
     );
     const canDelete = useAuthStore((state) =>
         state.hasPermission(PermissionKey.ROLE_DELETE)
@@ -35,6 +37,23 @@ const RoleDetail: React.FC<RoleDetailProps> = ({ record }) => {
             type: ActionType.UPDATE,
             role: res,
         });
+    };
+
+    const handleCopy = async () => {
+        setLoading(true);
+        try {
+            const sourceRole = await getRoleById(record.id);
+            setModal({
+                open: true,
+                type: ActionType.CREATE,
+                title: 'Sao chép vai trò',
+                role: sourceRole,
+            });
+        } catch (error: any) {
+            showErrorMessage(error.message || 'Không tải được vai trò cần sao chép');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleDeleteClick = () => {
@@ -88,6 +107,15 @@ const RoleDetail: React.FC<RoleDetailProps> = ({ record }) => {
             <Row justify="end" align="middle" style={{ marginTop: 16 }}>
                 <Col>
                     <Space>
+                        {canCreate && (
+                            <Button
+                                icon={<CopyOutlined />}
+                                loading={loading}
+                                onClick={handleCopy}
+                            >
+                                Sao chép
+                            </Button>
+                        )}
                         {canUpdate && (
                             <Button
                                 type="primary"

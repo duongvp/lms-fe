@@ -362,7 +362,9 @@ const RoleModal = () => {
             return;
 
         form.setFieldsValue({
-            roleName: modal.role.name,
+            roleName: modal.type === ActionType.CREATE
+                ? `${modal.role.name} - Bản sao`
+                : modal.role.name,
             description: modal.role.description,
         });
 

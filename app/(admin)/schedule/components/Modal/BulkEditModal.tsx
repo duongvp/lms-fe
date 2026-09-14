@@ -275,10 +275,8 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     const [loadingSourceLessonNames, setLoadingSourceLessonNames] = React.useState(false);
     const [autoFillStartDate, setAutoFillStartDate] = React.useState<Dayjs | null>(null);
     const [autoFillWeekdays, setAutoFillWeekdays] = React.useState<number[]>([]);
-    const [autoFillHolidays, setAutoFillHolidays] = React.useState<string>("");
     const previewRef = React.useRef<HTMLDivElement>(null);
     const submitErrorRef = React.useRef<HTMLDivElement>(null);
-    const separateLoadMoreRef = React.useRef<HTMLDivElement>(null);
     const modalRenderRef = React.useRef<HTMLDivElement>(null);
     const leavingPageRef = React.useRef(false);
     const hmoOptionsCacheRef = React.useRef<Record<string, HocmaiSectionOption[]>>({});
@@ -301,6 +299,8 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         loadingHmoLessonIdsRef.current.clear();
         setHmoOptionsByLesson({});
         setLoadingHmoLessons(new Set());
+        setAutoFillStartDate(null);
+        setAutoFillWeekdays([]);
         if (!open) return;
         const timer = window.setTimeout(() => setLoadRelatedData(true), 50);
         return () => window.clearTimeout(timer);
@@ -564,6 +564,18 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         () => Array.isArray(selectedLessons) ? selectedLessons as (string | number)[] : [],
         [selectedLessons]
     );
+    const autoFillLessonKeys = React.useMemo(() => {
+        const selectedIds = new Set(selectedLessonKeys.map(String));
+        return selectedRows
+            .filter((row) => selectedIds.has(String(row.id)))
+            .sort((left, right) => (
+                dayjs(left.start_time).valueOf() - dayjs(right.start_time).valueOf()
+                || Number(left.learn_number || 0) - Number(right.learn_number || 0)
+                || Number(left.lesson_count || 0) - Number(right.lesson_count || 0)
+                || Number(left.id || 0) - Number(right.id || 0)
+            ))
+            .map((row) => String(row.id));
+    }, [selectedLessonKeys, selectedRows]);
     const commonStartTime = Form.useWatch('common_start_time', form) as Dayjs | undefined;
 
     const handleConfigModeChange = React.useCallback((value: string | number) => {
@@ -618,35 +630,16 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         };
     }, [configMode, form, pendingConfigMode, renderedSeparateCount, selectedLessonKeys.length]);
 
-    // Chỉ dựng thêm 25 card khi người dùng cuộn gần cuối danh sách. Không tự
-    // động mount toàn bộ field ở nền khi người dùng chưa cần xem tới chúng.
-    useEffect(() => {
-        if (configMode !== 'separate' || switchingConfigMode) return;
-        if (renderedSeparateCount >= selectedLessonKeys.length) return;
-        if (loadingMoreSeparate || !separateLoadMoreRef.current) return;
-
-        let firstFrame = 0;
-        let secondFrame = 0;
-        const observer = new IntersectionObserver(([entry]) => {
-            if (!entry?.isIntersecting) return;
-            observer.disconnect();
-            setLoadingMoreSeparate(true);
-            firstFrame = window.requestAnimationFrame(() => {
-                secondFrame = window.requestAnimationFrame(() => {
-                    setRenderedSeparateCount((current) => (
-                        Math.min(selectedLessonKeys.length, current + SEPARATE_RENDER_BATCH_SIZE)
-                    ));
-                    setLoadingMoreSeparate(false);
-                });
-            });
-        }, { rootMargin: '120px 0px' });
-        observer.observe(separateLoadMoreRef.current);
-        return () => {
-            observer.disconnect();
-            if (firstFrame) window.cancelAnimationFrame(firstFrame);
-            if (secondFrame) window.cancelAnimationFrame(secondFrame);
-        };
-    }, [configMode, renderedSeparateCount, selectedLessonKeys.length, switchingConfigMode]);
+    const handleLoadMoreSeparate = React.useCallback(() => {
+        if (loadingMoreSeparate || renderedSeparateCount >= selectedLessonKeys.length) return;
+        setLoadingMoreSeparate(true);
+        window.requestAnimationFrame(() => {
+            setRenderedSeparateCount((current) => (
+                Math.min(selectedLessonKeys.length, current + SEPARATE_RENDER_BATCH_SIZE)
+            ));
+            setLoadingMoreSeparate(false);
+        });
+    }, [loadingMoreSeparate, renderedSeparateCount, selectedLessonKeys.length]);
 
     useEffect(() => {
         if (renderedSeparateCount <= selectedLessonKeys.length) return;
@@ -726,6 +719,8 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 canceled_lesson_name_suffix: '',
                 new_lesson_name_prefix: DEFAULT_MAKEUP_LESSON_PREFIX,
                 new_lesson_name_suffix: '',
+                auto_fill_holiday_periods: [],
+                auto_fill_weekday_times: {},
                 selected_lessons: selectedRowKeys,
                 separate_config: separateConfig,
                 ...commonConfig,
@@ -743,27 +738,50 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             message.warning("Vui lòng chọn ít nhất 1 thứ trong tuần.");
             return;
         }
-        const holidayList = autoFillHolidays.split(',').map(d => d.trim()).filter(Boolean);
-        const validHolidays: Dayjs[] = [];
-        for (const d of holidayList) {
-            const parsed = dayjs(d, "DD/MM/YYYY", true);
-            if (!parsed.isValid()) {
-                message.error(`Ngày nghỉ ${d} không hợp lệ. Dùng định dạng DD/MM/YYYY`);
+        const skippedHolidays = new Set<string>();
+        const holidayPeriods = form.getFieldValue('auto_fill_holiday_periods') || [];
+        for (let index = 0; index < holidayPeriods.length; index += 1) {
+            const range = holidayPeriods[index]?.date_range;
+            const start = Array.isArray(range) ? dayjs(range[0]).startOf('day') : null;
+            const end = Array.isArray(range) ? dayjs(range[1]).startOf('day') : null;
+            if (!start?.isValid() || !end?.isValid() || end.isBefore(start)) {
+                message.error(`Đợt nghỉ ${index + 1} chưa có khoảng ngày hợp lệ.`);
                 return;
             }
-            validHolidays.push(parsed.startOf('day'));
+            if (holidayPeriods[index]?.handling === 'next_session') {
+                for (let cursor = start; !cursor.isAfter(end); cursor = cursor.add(1, 'day')) {
+                    skippedHolidays.add(cursor.format('YYYY-MM-DD'));
+                }
+            }
+        }
+
+        const weekdayTimes = form.getFieldValue('auto_fill_weekday_times') || {};
+        for (const weekday of autoFillWeekdays) {
+            const range = weekdayTimes[String(weekday)];
+            if (!range) continue;
+            const start = Array.isArray(range) ? dayjs(range[0]) : null;
+            const end = Array.isArray(range) ? dayjs(range[1]) : null;
+            if (!start?.isValid() || !end?.isValid()) {
+                message.error(`Vui lòng chọn khung giờ cho ${weekday === 7 ? 'Chủ Nhật' : `Thứ ${weekday + 1}`}.`);
+                return;
+            }
+            if (!isEndAfterStart(start, end)) {
+                message.error(`Giờ kết thúc của ${weekday === 7 ? 'Chủ Nhật' : `Thứ ${weekday + 1}`} phải sau giờ bắt đầu.`);
+                return;
+            }
         }
 
         let currentDate = autoFillStartDate.clone().startOf('day');
         const newDates: Record<string, Dayjs> = {};
-        const selectedKeys = Array.isArray(selectedLessons) ? selectedLessons : [];
-
-        const keysToProcess = [...selectedKeys];
+        // Tập chọn có thể bắt đầu từ bất kỳ occurrence nào (ví dụ Lịch 2).
+        // Giữ thứ tự thời gian hiện tại của chính tập được chọn, không giả định
+        // người dùng đang cập nhật toàn bộ chương trình từ Bài 1/Lịch 1.
+        const keysToProcess = autoFillLessonKeys;
 
         for (const key of keysToProcess) {
             let attempts = 0;
-            while (attempts < 365) {
-                const isHoliday = validHolidays.some(h => h.isSame(currentDate, 'day'));
+            while (attempts < 3660) {
+                const isHoliday = skippedHolidays.has(currentDate.format('YYYY-MM-DD'));
                 const currentDayNum = currentDate.day() === 0 ? 7 : currentDate.day();
                 const isMatchWeekday = autoFillWeekdays.includes(currentDayNum);
                 if (!isHoliday && isMatchWeekday) {
@@ -774,16 +792,42 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 currentDate = currentDate.add(1, 'day');
                 attempts++;
             }
+            if (!newDates[String(key)]) {
+                message.error('Không tìm được ngày học phù hợp trong phạm vi 10 năm. Hãy kiểm tra lịch học hàng tuần và các đợt nghỉ.');
+                return;
+            }
         }
 
         const currentConfig = form.getFieldValue('separate_config') || {};
+        const nextConfig: Record<string, any> = { ...currentConfig };
         for (const key of keysToProcess) {
             const strKey = String(key);
-            if (!currentConfig[strKey]) currentConfig[strKey] = {};
-            currentConfig[strKey].start_date = newDates[strKey];
+            const nextRowConfig = {
+                ...(currentConfig[strKey] || {}),
+                start_date: newDates[strKey],
+            };
+            nextRowConfig.mark_as_holiday = holidayPeriods.some((period: any) => {
+                if (period?.handling !== 'create_canceled' || !newDates[strKey]) return false;
+                const range = period.date_range;
+                const start = Array.isArray(range) ? dayjs(range[0]).startOf('day') : null;
+                const end = Array.isArray(range) ? dayjs(range[1]).startOf('day') : null;
+                return Boolean(start?.isValid() && end?.isValid()
+                    && !newDates[strKey].isBefore(start)
+                    && !newDates[strKey].isAfter(end));
+            });
+            const weekday = newDates[strKey]?.day() === 0 ? 7 : newDates[strKey]?.day();
+            const timeRange = weekday ? weekdayTimes[String(weekday)] : null;
+            if (Array.isArray(timeRange)) {
+                nextRowConfig.start_time = timeRange[0];
+                nextRowConfig.end_time = timeRange[1];
+            }
+            nextConfig[strKey] = nextRowConfig;
         }
-        form.setFieldValue('separate_config', { ...currentConfig });
-        message.success("Đã điền tự động ngày học.");
+        // Không mutate object con đang được Form.Item giữ reference. Cập nhật
+        // bất biến để cả field chưa mount cũng nhận đúng ngày khi submit/preview.
+        form.setFieldsValue({ separate_config: nextConfig });
+        setPreviewRows([]);
+        message.success("Đã điền tự động ngày học và khung giờ theo từng thứ.");
     };
 
     const hideModalImmediately = React.useCallback(() => {
@@ -1011,7 +1055,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         notes[String(row.id)] = {
                             type: matchedCourseIds.length === courseIds.length ? 'success' : 'warning',
                             message: matchedCourseIds.length === courseIds.length
-                                ? `Đã gán Lesson ID HMO theo tên lịch trong ${courseIds.length} Course.`
+                                ? `Đã gán tạm Lesson ID HMO theo tên lịch trong ${courseIds.length} Course; cần Xem trước và Xác nhận để lưu.`
                                 : `Đã gán Lesson ID HMO trong ${matchedCourseIds.length}/${courseIds.length} Course. Chưa gán: ${hmoCourseMatchSummary(matching, courseIds.filter((courseId) => !matchedCourseIds.includes(courseId)))}.`,
                         };
                     });
@@ -1033,7 +1077,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         notes[String(row.id)] = {
                             type: matchedCourseIds.length === courseIds.length ? 'success' : 'warning',
                             message: matchedCourseIds.length === courseIds.length
-                                ? `Đã gán ${summarizeSelectedHmoMappings(nextMappings[String(row.id)])} theo tên bài và giáo viên của lịch.`
+                                ? `Đã gán tạm ${summarizeSelectedHmoMappings(nextMappings[String(row.id)])} theo tên bài và giáo viên; cần Xem trước và Xác nhận để lưu.`
                                 : `Đã gán Lesson ID cho ${matchedCourseIds.length}/${courseIds.length} Course. Chưa gán: ${hmoCourseMatchSummary(matching, courseIds.filter((courseId) => !matchedCourseIds.includes(courseId)))}.`,
                         };
                     });
@@ -1098,7 +1142,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             setHmoSyncNotes(notes);
             setPreviewRows([]);
             syncedCount
-                ? message.success(`Đã đồng bộ Lesson ID HMO cho ${syncedCount} lịch`)
+                ? message.success(`Đã gán tạm Lesson ID HMO cho ${syncedCount} lịch. Bấm Xem trước rồi Xác nhận cập nhật để lưu.`)
                 : message.warning('Không có lịch nào đủ điều kiện tự đồng bộ; vui lòng chọn thủ công.');
         } catch (error: any) {
             message.error(error?.message || 'Không thể đồng bộ Lesson ID HMO');
@@ -1109,6 +1153,15 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
 
     const handleFinish = async (values: any) => {
         try {
+            // `onFinish` chỉ đảm bảo trả field đang mount. Ở chế độ cấu hình
+            // riêng, phần lớn lịch được tải theo nút "Tải thêm" nên phải đọc
+            // lại store đầy đủ; nếu không các lịch phía dưới sẽ quay về giờ/
+            // ngày cũ khi preview dù Auto-fill đã gán đúng giá trị cho chúng.
+            values = {
+                ...values,
+                selected_lessons: form.getFieldValue('selected_lessons') || values.selected_lessons,
+                separate_config: form.getFieldValue('separate_config') || values.separate_config,
+            };
             setLoading(true);
             setSubmitError(null);
 
@@ -1349,6 +1402,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     if (config.start_date && config.start_date !== dayjs(record.start_time).format('YYYY-MM-DD')) update.start_date = config.start_date;
                     if (config.start_time && config.start_time !== dayjs(record.start_time).format('HH:mm')) update.start_time = config.start_time;
                     if (config.end_time && config.end_time !== dayjs(record.end_time).format('HH:mm')) update.end_time = config.end_time;
+                    if (config.mark_as_holiday) update.mark_as_holiday = true;
                     const nextLessonName = lessonNameByCalendarId.get(id);
                     if (nextLessonName && nextLessonName !== String(record.lesson_name || '')) {
                         update.lesson_name = nextLessonName;
@@ -1411,8 +1465,9 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         label: record?.learn_number ? `Bài ${record.learn_number}` : `ID ${lessonKey}`,
                         current_schedule: formatScheduleDateTime(record),
                         next_schedule: updatedStart && updatedEnd
-                            ? `${updatedStart.format('DD/MM/YYYY HH:mm')} - ${updatedEnd.format('HH:mm')}`
+                            ? `${updatedStart.format('DD/MM/YYYY HH:mm')} - ${updatedEnd.format('HH:mm')}${update.mark_as_holiday ? ' · Nghỉ học' : ''}`
                             : formatScheduleDateTime(record),
+                        is_holiday: update.mark_as_holiday === true,
                         current_weekday: formatWeekday(record?.start_time),
                         next_weekday: formatWeekday(updatedStart ?? record?.start_time),
                         current: formatMappings(record?.package_lesson_mappings || []),
@@ -1476,9 +1531,6 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     const preparingRelatedData = !selectionReady
         || !loadRelatedData
         || !sourceDataReady;
-    const separateFieldsReady = configMode !== 'separate'
-        || renderedSeparateCount >= selectedLessonKeys.length;
-
     return (
         <>
         <Modal
@@ -1512,15 +1564,11 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     type="primary"
                     onClick={() => form.submit()}
                     loading={loading}
-                    disabled={switchingConfigMode || !separateFieldsReady}
+                    disabled={switchingConfigMode}
                     icon={<EditOutlined />}
                     style={!previewRows.length ? { background: '#52c41a', borderColor: '#52c41a' } : undefined}
                 >
-                    {!separateFieldsReady
-                        ? loadingMoreSeparate
-                            ? `Đang tải ${renderedSeparateCount}/${selectedLessonKeys.length}`
-                            : `Cuộn để tải đủ ${renderedSeparateCount}/${selectedLessonKeys.length}`
-                        : previewRows.length
+                    {previewRows.length
                         ? (operation === 'update' ? 'Xác nhận cập nhật' : 'Xác nhận thực hiện')
                         : 'Xem trước'}
                 </Button>
@@ -1972,7 +2020,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                             ? 'Đang tải danh sách Lesson ID HMO'
                                             : `Đã hiển thị ${renderedSeparateCount}/${selectedLessonKeys.length} lịch học`}
                                         description={renderedSeparateCount < selectedLessonKeys.length
-                                            ? `Cuộn xuống cuối danh sách để tải thêm ${Math.min(SEPARATE_RENDER_BATCH_SIZE, selectedLessonKeys.length - renderedSeparateCount)} lịch tiếp theo.`
+                                            ? `Bạn có thể xem trước ngay. Chỉ cần cuộn xuống khi muốn sửa riêng; hệ thống sẽ tải thêm ${Math.min(SEPARATE_RENDER_BATCH_SIZE, selectedLessonKeys.length - renderedSeparateCount)} lịch mỗi lượt.`
                                             : 'Dữ liệu HMO đang được tải theo nhóm Package/Course.'}
                                         style={{ marginBottom: 16 }}
                                     />
@@ -2012,7 +2060,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                 <Text strong style={{ fontSize: 15, color: '#1677ff' }}>Công cụ tự động điền ngày học</Text>
                                             </div>
                                             <Row gutter={[24, 16]} align="bottom">
-                                                <Col xs={24} md={8} xl={5}>
+                                                <Col xs={24} md={8} xl={6}>
                                                     <div style={{ marginBottom: 8 }}><Text strong style={{ fontSize: 13 }}>Ngày bắt đầu</Text></div>
                                                     <DatePicker
                                                         format="DD/MM/YYYY"
@@ -2022,7 +2070,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                         placeholder="Chọn ngày bắt đầu"
                                                     />
                                                 </Col>
-                                                <Col xs={24} md={16} xl={10}>
+                                                <Col xs={24} md={16} xl={12}>
                                                     <div style={{ marginBottom: 8 }}><Text strong style={{ fontSize: 13 }}>Lịch học hàng tuần</Text></div>
                                                     <Checkbox.Group
                                                         options={[
@@ -2035,24 +2083,94 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                             { label: 'CN', value: 7 },
                                                         ]}
                                                         value={autoFillWeekdays}
-                                                        onChange={checked => setAutoFillWeekdays(checked as number[])}
+                                                        onChange={checked => {
+                                                            const weekdays = checked as number[];
+                                                            setAutoFillWeekdays(weekdays);
+                                                        }}
                                                     />
                                                 </Col>
-                                                <Col xs={24} xl={6}>
-                                                    <div style={{ marginBottom: 8 }}>
-                                                        <Text strong style={{ fontSize: 13 }}>Ngày nghỉ</Text>{' '}
-                                                        <Text type="secondary" style={{ fontSize: 12 }}>(Cách nhau dấu phẩy)</Text>
-                                                    </div>
-                                                    <Input
-                                                        placeholder="VD: 30/04/2027, 01/05/2027"
-                                                        value={autoFillHolidays}
-                                                        onChange={e => setAutoFillHolidays(e.target.value)}
-                                                    />
-                                                </Col>
-                                                <Col xs={24} xl={3} style={{ textAlign: 'right' }}>
+                                                <Col xs={24} xl={6} style={{ textAlign: 'right' }}>
                                                     <Button type="primary" onClick={handleAutoFillDates} style={{ width: '100%' }}>Áp dụng</Button>
                                                 </Col>
                                             </Row>
+                                            {!!autoFillWeekdays.length && (
+                                                <Card size="small" title="Khung giờ (tùy chọn)" style={{ marginTop: 12, maxWidth: 900 }}>
+                                                    <Space wrap size={[12, 8]} align="start">
+                                                        {[...autoFillWeekdays].sort((left, right) => left - right).map((weekday) => (
+                                                            <Form.Item
+                                                                key={weekday}
+                                                                name={['auto_fill_weekday_times', String(weekday)]}
+                                                                label={weekday === 7 ? 'Chủ Nhật' : `Thứ ${weekday + 1}`}
+                                                                style={{ marginBottom: 0, width: 260 }}
+                                                            >
+                                                                <TimePicker.RangePicker
+                                                                    size="small"
+                                                                    format="HH:mm"
+                                                                    minuteStep={5}
+                                                                    allowClear
+                                                                    placeholder={['Giữ giờ cũ', 'Giữ giờ cũ']}
+                                                                    style={{ width: '100%' }}
+                                                                />
+                                                            </Form.Item>
+                                                        ))}
+                                                    </Space>
+                                                    <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
+                                                        Để trống để chỉ đổi ngày và giữ nguyên giờ hiện tại; chỉ nhập cho những thứ cần đổi giờ.
+                                                    </Text>
+                                                </Card>
+                                            )}
+                                            <Card size="small" title="Các đợt nghỉ" style={{ marginTop: 16 }}>
+                                                <Form.List name="auto_fill_holiday_periods">
+                                                    {(fields, { add, remove }) => (
+                                                        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                                                            {fields.map((field, index) => (
+                                                                <Space key={field.key} wrap align="start">
+                                                                    <Form.Item
+                                                                        name={[field.name, 'date_range']}
+                                                                        label={`Đợt ${index + 1}`}
+                                                                        rules={[{ required: true, message: 'Chọn ngày hoặc khoảng ngày nghỉ' }]}
+                                                                        style={{ marginBottom: 0 }}
+                                                                    >
+                                                                        <DatePicker.RangePicker
+                                                                            format="DD/MM/YYYY"
+                                                                            allowEmpty={[false, false]}
+                                                                            placeholder={['Từ ngày', 'Đến ngày']}
+                                                                        />
+                                                                    </Form.Item>
+                                                                    <Form.Item
+                                                                        name={[field.name, 'handling']}
+                                                                        label="Cách xử lý"
+                                                                        initialValue="create_canceled"
+                                                                        style={{ marginBottom: 0 }}
+                                                                    >
+                                                                        <Select
+                                                                            style={{ width: 290 }}
+                                                                            options={[
+                                                                                { value: 'create_canceled', label: 'Tạo lịch ngày nghỉ và đánh dấu Nghỉ' },
+                                                                                { value: 'next_session', label: 'Không tạo ngày nghỉ, giữ nguyên thứ tự bài' },
+                                                                            ]}
+                                                                        />
+                                                                    </Form.Item>
+                                                                    <Button danger type="text" onClick={() => remove(field.name)} style={{ marginTop: 30 }}>
+                                                                        Xóa
+                                                                    </Button>
+                                                                </Space>
+                                                            ))}
+                                                            <Button
+                                                                type="dashed"
+                                                                icon={<PlusOutlined />}
+                                                                onClick={() => add({ date_range: null, handling: 'create_canceled' })}
+                                                                style={{ alignSelf: 'flex-start' }}
+                                                            >
+                                                                Thêm ngày hoặc đợt nghỉ
+                                                            </Button>
+                                                            <Text type="secondary">
+                                                                Chọn cùng ngày ở hai đầu để nghỉ một ngày. Mỗi đợt sẽ được tạo lịch Nghỉ hoặc bỏ qua theo đúng cách xử lý đã chọn.
+                                                            </Text>
+                                                        </Space>
+                                                    )}
+                                                </Form.List>
+                                            </Card>
                                         </div>
                                         {selectedLessonKeys.slice(0, renderedSeparateCount).map((lessonKey) => (
                                             <Card
@@ -2234,7 +2352,6 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                         ))}
                                         {renderedSeparateCount < selectedLessonKeys.length && (
                                             <div
-                                                ref={separateLoadMoreRef}
                                                 style={{
                                                     minHeight: 72,
                                                     display: 'grid',
@@ -2242,16 +2359,13 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                     marginBottom: 16,
                                                 }}
                                             >
-                                                {loadingMoreSeparate ? (
-                                                    <Spin
-                                                        size="small"
-                                                        tip={`Đang tải thêm ${Math.min(SEPARATE_RENDER_BATCH_SIZE, selectedLessonKeys.length - renderedSeparateCount)} lịch...`}
-                                                    >
-                                                        <div style={{ width: 240, height: 48 }} />
-                                                    </Spin>
-                                                ) : (
-                                                    <Text type="secondary">Cuộn xuống để tải thêm lịch học</Text>
-                                                )}
+                                                <Button
+                                                    type="dashed"
+                                                    loading={loadingMoreSeparate}
+                                                    onClick={handleLoadMoreSeparate}
+                                                >
+                                                    Tải thêm {Math.min(SEPARATE_RENDER_BATCH_SIZE, selectedLessonKeys.length - renderedSeparateCount)} lịch để chỉnh riêng
+                                                </Button>
                                             </div>
                                         )}
                                     </>
@@ -2349,6 +2463,9 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                     pagination={false}
                                     rowKey="id"
                                     dataSource={previewRows}
+                                    onRow={(row) => ({
+                                        style: row.is_holiday ? { backgroundColor: '#fff1f0' } : undefined,
+                                    })}
                                     columns={[
                                         { title: 'Bài', dataIndex: 'label', width: 90 },
                                         {
@@ -2382,7 +2499,20 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                         {
                                             title: 'Thời gian',
                                             hidden: operation !== 'update',
-                                            render: (_, row) => renderPreviewChange(row.current_schedule, row.next_schedule),
+                                            render: (_, row) => row.is_holiday
+                                                ? (
+                                                    <Space direction="vertical" size={0} style={{ lineHeight: 1.35 }}>
+                                                        <Text delete type="secondary">{row.current_schedule}</Text>
+                                                        <Text strong type="danger">{row.next_schedule}</Text>
+                                                    </Space>
+                                                )
+                                                : renderPreviewChange(row.current_schedule, row.next_schedule),
+                                        },
+                                        {
+                                            title: 'Trạng thái',
+                                            width: 110,
+                                            hidden: operation !== 'update',
+                                            render: (_, row) => row.is_holiday ? <Tag color="red">Nghỉ học</Tag> : <Text type="secondary">Giữ nguyên</Text>,
                                         },
                                         operation === 'update'
                                             ? {

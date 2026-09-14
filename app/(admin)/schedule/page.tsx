@@ -4,8 +4,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
-import { notification, Alert, Form, Input, InputNumber, Select, Button, Checkbox, Space, Modal, Row, Col, DatePicker, TimePicker, Drawer, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress, Table, Spin } from "antd";
-import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, MoreOutlined, ApartmentOutlined, CloudUploadOutlined } from "@ant-design/icons";
+import { notification, Alert, Card, Form, Input, InputNumber, List, Select, Button, Checkbox, Space, Modal, Radio, Row, Col, DatePicker, TimePicker, Drawer, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress, Table, Spin } from "antd";
+import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, MoreOutlined, ApartmentOutlined, CloudUploadOutlined, SwapOutlined } from "@ant-design/icons";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -13,6 +13,7 @@ import interactionPlugin from "@fullcalendar/interaction";
 import viLocale from "@fullcalendar/core/locales/vi";
 import ScheduleModal from "./components/Modal/ScheduleModal";
 import CopyScheduleModal from "./components/Modal/CopyScheduleModal";
+import SwapScheduleModal from "./components/Modal/SwapScheduleModal";
 import ScheduleImportModal, { type ScheduleImportError } from "./components/Modal/ScheduleImportModal";
 import ClassroomAssignmentModal from "./components/Modal/ClassroomAssignmentModal";
 import { useAuthStore } from "@/stores/authStore";
@@ -24,6 +25,7 @@ import {
     exportLivestreams,
     getLivestreams,
     importLivestreamsFile,
+    provisionLivestreamEvg,
     resendLivestreamsToHocmai,
     syncMissingTeachingUsers,
     updateLivestreamsFile,
@@ -34,6 +36,7 @@ import type { ModuleField, ResolvedFieldPermission } from "@/types/fieldPolicy";
 import { canEditAnyField, resolveModuleFieldPermissions, sanitizeEditablePayload } from "@/helper/fieldPolicy";
 import { useLmsCache, useModuleFieldsQuery, useSchedulesQuery, useSchedulingProgramsQuery, useTeachingStaffQuery } from "@/hooks/useLmsQueries";
 import type { LivestreamListParams } from "@/services/livestreamService";
+import type { EvgProvisionMode } from "@/services/livestreamService";
 import TeachingStaffSelect from "@/components/shared/TeachingStaffSelect";
 import { rememberProgramContextUrl } from "@/components/layouts/AdminLayout/SideMenu";
 import { fetchAllPages } from "@/lib/fetchAllPages";
@@ -880,12 +883,31 @@ const Page = () => {
     // Nó chỉ tồn tại trong lúc modal tạo mới đang mở, không phải dữ liệu đã lưu.
     const [calendarDraftPreview, setCalendarDraftPreview] = useState<ScheduleDataType | null>(null);
     const [copySource, setCopySource] = useState<ScheduleDataType | null>(null);
+    const [swapSource, setSwapSource] = useState<ScheduleDataType | null>(null);
     // Khởi tạo thu gọn để không chớp phần hướng dẫn trước khi đọc thiết lập
     // localStorage. Nếu người dùng chọn hiển thị, effect bên dưới sẽ mở ra.
     const [showPageInfo, setShowPageInfo] = useState(false);
     const [pageInfoReady, setPageInfoReady] = useState(false);
     const [syncingTeachingUsers, setSyncingTeachingUsers] = useState(false);
     const [resendingToHocmai, setResendingToHocmai] = useState(false);
+    const [provisioningEvgBulk, setProvisioningEvgBulk] = useState(false);
+    const [evgProgress, setEvgProgress] = useState<null | {
+        current: number;
+        total: number;
+        created: number;
+        skipped: number;
+        failed: number;
+        errors: Array<{
+            calendar_id: number;
+            code?: string;
+            learn_number?: number;
+            lesson_name?: string;
+            teacher?: string;
+            start_time?: string;
+            message: string;
+        }>;
+    }>(null);
+    const [evgProgressOpen, setEvgProgressOpen] = useState(false);
     const [refreshingScheduleList, setRefreshingScheduleList] = useState(false);
     const [classroomAssignmentCalendarId, setClassroomAssignmentCalendarId] = useState<string | number | null>(null);
     const [classroomAssignmentSystemType, setClassroomAssignmentSystemType] = useState<"topclass" | "topuni" | null>(null);
@@ -2024,6 +2046,85 @@ const Page = () => {
         });
     };
 
+    const handleProvisionEvgBulk = () => {
+        const ids = selectedRowKeys.map(Number).filter((id) => Number.isInteger(id) && id > 0);
+        if (!ids.length) return;
+        const selectedMetadata = new Map(ids.map((id) => {
+            const record = selectedRowsCacheRef.current.get(String(id));
+            return [id, record] as const;
+        }));
+        let selectedMode: EvgProvisionMode = "skip_existing";
+        Modal.confirm({
+            title: `Xử lý EVG cho ${ids.length} lịch`,
+            width: 620,
+            content: <Space direction="vertical" size={10} style={{ width: "100%" }}>
+                <Alert type="info" showIcon message="Mỗi lịch được xử lý độc lập; một lịch lỗi không làm dừng các lịch còn lại." />
+                <Radio.Group defaultValue={selectedMode} onChange={(event) => {
+                    selectedMode = event.target.value as EvgProvisionMode;
+                }}>
+                    <Space direction="vertical" size={10}>
+                        <Radio value="skip_existing">
+                            <b>Bỏ qua nếu đã có EVG (khuyến nghị)</b><br />
+                            <Typography.Text type="secondary">Chỉ tạo EVG cho lịch chưa có; lịch đã có EVG được giữ nguyên.</Typography.Text>
+                        </Radio>
+                        <Radio value="overwrite">
+                            <b>Ghi đè</b><br />
+                            <Typography.Text type="danger">Tạo EVG mới cho tất cả lịch đã chọn và thay thế dữ liệu EVG hiện tại.</Typography.Text>
+                        </Radio>
+                    </Space>
+                </Radio.Group>
+            </Space>,
+            okText: "Thực hiện",
+            cancelText: "Hủy",
+            onOk: () => {
+                setEvgProgress({ current: 0, total: ids.length, created: 0, skipped: 0, failed: 0, errors: [] });
+                setEvgProgressOpen(true);
+                setProvisioningEvgBulk(true);
+                void (async () => {
+                    let progress = { current: 0, total: ids.length, created: 0, skipped: 0, failed: 0, errors: [] as NonNullable<typeof evgProgress>["errors"] };
+                    try {
+                        // EVG trả 429 khi tạo dồn nhiều stream. Xử lý tuần tự
+                        // để tiến trình ổn định và không vượt rate limit.
+                        for (let index = 0; index < ids.length; index += 1) {
+                            const batch = ids.slice(index, index + 1);
+                            const results = await Promise.all(batch.map(async (calendarId) => {
+                                try {
+                                    const response: any = await provisionLivestreamEvg(calendarId, selectedMode);
+                                    return { calendarId, result: response?.data || {}, error: null };
+                                } catch (error: any) {
+                                    return { calendarId, result: null, error: String(error?.message || error) };
+                                }
+                            }));
+                            results.forEach(({ calendarId, result, error }) => {
+                                progress.current += 1;
+                                if (error) {
+                                    progress.failed += 1;
+                                    const metadata = selectedMetadata.get(calendarId);
+                                    progress.errors.push({
+                                        calendar_id: calendarId,
+                                        code: metadata?.code,
+                                        learn_number: metadata?.learn_number,
+                                        lesson_name: metadata?.lesson_name,
+                                        teacher: metadata?.teacher,
+                                        start_time: metadata?.start_time,
+                                        message: error,
+                                    });
+                                } else if (result?.skipped) progress.skipped += 1;
+                                else progress.created += 1;
+                            });
+                            progress = { ...progress, errors: [...progress.errors] };
+                            setEvgProgress(progress);
+                        }
+                        setSelectedRowKeys([]);
+                        if (hasSearched) await refreshSchedules();
+                    } finally {
+                        setProvisioningEvgBulk(false);
+                    }
+                })();
+            },
+        });
+    };
+
     const save = async (key: string) => {
         if (savingKey) return;
         setSavingKey(key);
@@ -2144,6 +2245,8 @@ const Page = () => {
         ))
         .map((item) => item.field.fieldCode), [canEditTeachingAssignment, fieldPermissions]);
     const editableFieldCodeSet = useMemo(() => new Set(editableFieldCodes), [editableFieldCodes]);
+    const canSwapScheduleTimes = editableFieldCodeSet.has("start_time")
+        && editableFieldCodeSet.has("end_time");
 
     const getTableFilterValue = useCallback((fieldCode: string, record: ScheduleDataType) => {
         if (fieldCode === "live_weekday") return liveWeekdayLabel(record.start_time);
@@ -2517,7 +2620,7 @@ const Page = () => {
             title: "Thao tác",
             key: "action",
             fixed: "right",
-            width: 112,
+            width: 144,
             align: "center",
             shouldCellUpdate: shouldUpdateActionCell,
             render: (_: any, record: ScheduleDataType) => {
@@ -2577,6 +2680,21 @@ const Page = () => {
                         )}
                         {canModify && canEditSchedule && editableFieldCodes.length > 0 && (
                             <>
+                                {canSwapScheduleTimes && (
+                                    <Tooltip title="Hoán đổi với lịch khác">
+                                        <Button
+                                            type="link"
+                                            aria-label="Hoán đổi lịch"
+                                            disabled={editingKey !== ""}
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                setSwapSource(record);
+                                            }}
+                                            icon={<SwapOutlined />}
+                                            size="small"
+                                        />
+                                    </Tooltip>
+                                )}
                                 <Tooltip title="Dời lịch">
                                     <Button
                                         type="link"
@@ -2758,6 +2876,11 @@ const Page = () => {
                 label: `Gửi lại HMO${selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}`,
                 disabled: !selectedRowKeys.length || resendingToHocmai,
             }, {
+                key: "provision-evg",
+                icon: <CloudUploadOutlined />,
+                label: `Tạo/đồng bộ EVG${selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}`,
+                disabled: !selectedRowKeys.length || provisioningEvgBulk || !selectedRowsAllModifiable,
+            }, {
                 key: "assign-student-classrooms",
                 icon: <ApartmentOutlined />,
                 label: "Xem trước & chia 1 lịch",
@@ -2772,6 +2895,7 @@ const Page = () => {
         onClick: ({ key }: { key: string }) => {
             if (key === "sync-teaching-users") handleSyncMissingTeachingUsers();
             if (key === "resend-to-hocmai") handleResendToHocmai();
+            if (key === "provision-evg") handleProvisionEvgBulk();
             if (key === "assign-student-classrooms") handleOpenClassroomAssignment();
             if (key === "batch-assign-student-classrooms") handleOpenBatchClassroomAssignment();
         },
@@ -2903,7 +3027,7 @@ const Page = () => {
                                     </Space.Compact>
                                 )}
                                 <Dropdown trigger={["click"]} menu={syncMenu}>
-                                    <Button icon={<DatabaseOutlined />} loading={syncingTeachingUsers || batchClassroomAssigning || resendingToHocmai}>
+                                    <Button icon={<DatabaseOutlined />} loading={syncingTeachingUsers || batchClassroomAssigning || resendingToHocmai || provisioningEvgBulk}>
                                         Đồng bộ <DownOutlined />
                                     </Button>
                                 </Dropdown>
@@ -2945,7 +3069,7 @@ const Page = () => {
                                 </Dropdown>
                             )}
                             <Dropdown trigger={["click"]} menu={syncMenu}>
-                                <Button icon={<DatabaseOutlined />} loading={syncingTeachingUsers || batchClassroomAssigning || resendingToHocmai}>
+                                <Button icon={<DatabaseOutlined />} loading={syncingTeachingUsers || batchClassroomAssigning || resendingToHocmai || provisioningEvgBulk}>
                                     Đồng bộ <DownOutlined />
                                 </Button>
                             </Dropdown>
@@ -3350,6 +3474,20 @@ const Page = () => {
                         });
                     }}
                 />
+                <SwapScheduleModal
+                    open={Boolean(swapSource)}
+                    source={swapSource}
+                    programs={programOptions}
+                    onClose={() => setSwapSource(null)}
+                    onSuccess={() => {
+                        setSwapSource(null);
+                        if (hasSearched) void refreshSchedules();
+                        api.success({
+                            message: "Hoán đổi lịch thành công",
+                            description: "Hai buổi học đã nhận khung giờ mới và được kiểm tra xung đột.",
+                        });
+                    }}
+                />
                 <ScheduleImportModal
                     open={openImportModal}
                     loading={importing}
@@ -3546,6 +3684,55 @@ const Page = () => {
                             </div>
                         </div>
                     )}
+                </Modal>
+                <Modal
+                    title="Tiến trình tạo/đồng bộ EVG"
+                    open={evgProgressOpen}
+                    footer={<Button type="primary" disabled={provisioningEvgBulk} onClick={() => setEvgProgressOpen(false)}>Đóng</Button>}
+                    closable={!provisioningEvgBulk}
+                    maskClosable={!provisioningEvgBulk}
+                    onCancel={() => { if (!provisioningEvgBulk) setEvgProgressOpen(false); }}
+                >
+                    {evgProgress && <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                        <div style={{ textAlign: "center" }}>
+                            <Progress
+                                type="circle"
+                                percent={Math.round(evgProgress.current * 100 / Math.max(1, evgProgress.total))}
+                                status={evgProgress.current === evgProgress.total
+                                    ? (evgProgress.failed ? "exception" : "success")
+                                    : "active"}
+                            />
+                        </div>
+                        <Card size="small">
+                            <Row gutter={[12, 8]}>
+                                <Col span={12}><Typography.Text>Đã xử lý: <b>{evgProgress.current}/{evgProgress.total}</b></Typography.Text></Col>
+                                <Col span={12}><Typography.Text type="success">Tạo mới: <b>{evgProgress.created}</b></Typography.Text></Col>
+                                <Col span={12}><Typography.Text type="secondary">Đã có/bỏ qua: <b>{evgProgress.skipped}</b></Typography.Text></Col>
+                                <Col span={12}><Typography.Text type={evgProgress.failed ? "danger" : "secondary"}>Thất bại: <b>{evgProgress.failed}</b></Typography.Text></Col>
+                            </Row>
+                        </Card>
+                        {evgProgress.errors.length > 0 && <div style={{ maxHeight: 220, overflowY: "auto" }}>
+                            <List
+                                size="small"
+                                dataSource={evgProgress.errors}
+                                renderItem={(item) => <List.Item>
+                                    <Space direction="vertical" size={2} style={{ width: "100%" }}>
+                                        <Space size={6} wrap>
+                                            <Tag color="blue">{item.code || "Chưa rõ chương trình"}</Tag>
+                                            <Typography.Text strong>
+                                                {item.learn_number ? `Bài ${item.learn_number}` : "Chưa rõ bài"} · {item.lesson_name || "Chưa có tên bài"}
+                                            </Typography.Text>
+                                        </Space>
+                                        <Typography.Text type="secondary">
+                                            ID lịch {item.calendar_id} · GV: {item.teacher || "-"}
+                                            {item.start_time ? ` · ${dayjs(item.start_time).format("DD/MM/YYYY HH:mm")}` : ""}
+                                        </Typography.Text>
+                                        <Typography.Text type="danger">{item.message}</Typography.Text>
+                                    </Space>
+                                </List.Item>}
+                            />
+                        </div>}
+                    </Space>}
                 </Modal>
             </Form>
         </div>

@@ -34,11 +34,11 @@ const useRoleStore = create<RoleStore>((set, get) => ({
             ...state.modal,
             ...partial,
             // Auto-update title based on type
-            title: partial.type === ActionType.CREATE
+            title: partial.title || (partial.type === ActionType.CREATE
                 ? 'Thêm vai trò'
                 : partial.type === ActionType.UPDATE
                     ? 'Cập nhật vai trò'
-                    : state.modal.title
+                    : state.modal.title)
         };
         return { modal: newModal };
     }),
@@ -58,4 +58,3 @@ const useRoleStore = create<RoleStore>((set, get) => ({
 }));
 
 export default useRoleStore;
-

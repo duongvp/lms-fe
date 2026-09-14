@@ -492,6 +492,41 @@ export const rescheduleLivestream = (id: string, payload: any) =>
         credentials: "include",
     });
 
+export const swapLivestreamTimes = (payload: {
+    first_id: string | number;
+    second_id: string | number;
+    first_start_time?: string;
+    first_end_time?: string;
+    second_start_time?: string;
+    second_end_time?: string;
+    reason?: string;
+}) => fetchInstance(`${API_BASE_URL}/swap`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+});
+
+export type EvgProvisionMode = "skip_existing" | "overwrite";
+
+export const provisionLivestreamEvg = (id: string | number, mode: EvgProvisionMode = "skip_existing") =>
+    fetchInstance(`${API_BASE_URL}/${id}/evg-stream`, {
+        method: "POST",
+        body: JSON.stringify({ mode }),
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+    }, "json", 90_000);
+
+export const provisionLivestreamsEvgBulk = (
+    ids: Array<string | number>,
+    mode: EvgProvisionMode = "skip_existing"
+) => fetchInstance(`${API_BASE_URL}/evg-stream/bulk`, {
+    method: "POST",
+    body: JSON.stringify({ ids, mode }),
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+}, "json", 10 * 60_000);
+
 export const cancelLivestream = (id: string) =>
     fetchInstance(`${API_BASE_URL}/${id}/cancel`, {
         method: "PUT",
@@ -534,7 +569,7 @@ export const toLivestreamPayload = (values: any): LivestreamPayload => {
         learn_number: Number(payload.learn_number ?? 1),
         // Internal lesson record only. HMO lesson_id is carried
         // by package_lesson_mappings and must never be used as session_id.
-        session_id: payload.session_id,
+        session_id: payload.session_id ?? payload.lesson_id,
         grade: payload.grade,
         subject_name: payload.subject_name,
         lesson_name: payload.lesson_name,
@@ -614,6 +649,7 @@ export const toRescheduleLivestreamPayload = (values: any): any => {
     if (mode === "cancel") {
         return {
             mode: "cancel",
+            send_notification: payload.send_notification !== false,
             reason: String(payload.change_reason || payload.reason || "").trim(),
             canceled_lesson_name_prefix: payload.canceled_lesson_name_prefix,
             canceled_lesson_name_suffix: payload.canceled_lesson_name_suffix,
@@ -622,6 +658,7 @@ export const toRescheduleLivestreamPayload = (values: any): any => {
 
     return {
         mode,
+        send_notification: payload.send_notification !== false,
         reason: String(payload.change_reason || payload.reason || "").trim(),
         canceled_lesson_name_prefix: payload.canceled_lesson_name_prefix,
         canceled_lesson_name_suffix: payload.canceled_lesson_name_suffix,

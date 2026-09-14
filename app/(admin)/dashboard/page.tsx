@@ -9,6 +9,7 @@ import {
     Button,
     Card,
     Col,
+    Collapse,
     DatePicker,
     Empty,
     Flex,
@@ -47,11 +48,41 @@ import { useAuthStore } from '@/stores/authStore';
 import { withProgramContext } from '@/components/layouts/AdminLayout/SideMenu';
 import { PermissionKey } from '@/types/permissions';
 import styles from './dashboard.module.css';
+import { formatVietnamDateTime } from '@/helper/convertDate';
 
 const { Text, Title } = Typography;
 
+const hmoIssueDefinitions: Record<string, { label: string; description: string; color: string }> = {
+    MISSING_COURSE_MAPPING: {
+        label: 'Thiếu Course/Package',
+        description: 'Bài LMS chưa được cấu hình Course ID hoặc Package ID để đối chiếu với HMO.',
+        color: 'orange',
+    },
+    HMO_EMPTY: {
+        label: 'Course không có Lesson HMO',
+        description: 'HMO trả về Course nhưng Course này không có Lesson ID để hệ thống đồng bộ.',
+        color: 'red',
+    },
+    NO_MATCH: {
+        label: 'Không tìm thấy Lesson phù hợp',
+        description: 'Course có dữ liệu Lesson nhưng không có bài khớp đủ tên bài và giáo viên.',
+        color: 'volcano',
+    },
+    AMBIGUOUS: {
+        label: 'Có nhiều Lesson cùng khớp',
+        description: 'Hệ thống tìm thấy nhiều Lesson gần giống nhau nên cần chọn thủ công.',
+        color: 'gold',
+    },
+    HMO_REQUEST_FAILED: {
+        label: 'Không gọi được HMO',
+        description: 'Không lấy được đề cương Course từ HMO do lỗi kết nối, timeout hoặc phản hồi lỗi.',
+        color: 'magenta',
+    },
+};
+
 const EMPTY_DASHBOARD: DashboardOverview = {
     generatedAt: '',
+    hmoLessonSyncCron: { enabled: false, hour: 6, minute: 0, timeZone: 'Asia/Ho_Chi_Minh', lastRunAt: null },
     hmoLessonSyncAvailable: true,
     summary: {
         courses: 0,
@@ -271,12 +302,46 @@ const Page: React.FC = () => {
         label: `${item.programCode} (${item.lessonCount} bài · ${item.issueCount} lỗi)`,
     })), [data.hmoLessonSync?.issuePrograms]);
     const hmoIssueTypeOptions = useMemo(() => Array.from(new Map(
-        hmoIssues.map((item) => [item.errorCode, { value: item.errorCode, label: item.message.split('.')[0] }])
+        hmoIssues.map((item) => [item.errorCode, {
+            value: item.errorCode,
+            label: hmoIssueDefinitions[item.errorCode]?.label || item.errorCode,
+        }])
     ).values()), [hmoIssues]);
     const filteredHmoIssues = hmoIssues.filter((item) => (
         (!hmoIssueProgram || item.programCode === hmoIssueProgram)
         && (!hmoIssueType || item.errorCode === hmoIssueType)
     ));
+    const groupedHmoIssues = useMemo(() => {
+        const groups = new Map<string, {
+            key: string;
+            programCode: string;
+            courseId: string | null;
+            packageIds: string[];
+            errorCode: string;
+            issues: typeof filteredHmoIssues;
+        }>();
+        filteredHmoIssues.forEach((issue) => {
+            const key = [issue.programCode, issue.courseId || '-', issue.errorCode].join('::');
+            const current = groups.get(key) || {
+                key,
+                programCode: issue.programCode,
+                courseId: issue.courseId,
+                packageIds: [],
+                errorCode: issue.errorCode,
+                issues: [],
+            };
+            current.issues.push(issue);
+            if (issue.packageId && !current.packageIds.includes(issue.packageId)) {
+                current.packageIds.push(issue.packageId);
+            }
+            groups.set(key, current);
+        });
+        return Array.from(groups.values()).sort((left, right) => (
+            left.programCode.localeCompare(right.programCode)
+            || String(left.courseId || '').localeCompare(String(right.courseId || ''))
+            || left.errorCode.localeCompare(right.errorCode)
+        ));
+    }, [filteredHmoIssues]);
 
     useEffect(() => {
         if (!hmoIssuesOpen || !hmoIssueProgram) {
@@ -448,7 +513,21 @@ const Page: React.FC = () => {
                                     </>
                                 )}
                                 <Flex justify="space-between" align="center" wrap="wrap" gap={8} style={{ marginTop: 12 }}>
-                                    <Text type="secondary">Lần chạy: {dayjs(data.hmoLessonSync.startedAt).format('HH:mm DD/MM/YYYY')} · {data.hmoLessonSync.triggerType === 'cron' ? 'Tự động' : 'Thủ công'}</Text>
+                                    <Space direction="vertical" size={2}>
+                                        <Text type="secondary">
+                                            Lần chạy: {formatVietnamDateTime(data.hmoLessonSync.startedAt, 'HH:mm DD/MM/YYYY')} · {data.hmoLessonSync.triggerType === 'cron' ? 'Tự động' : 'Thủ công'}
+                                        </Text>
+                                        <Text type={data.hmoLessonSyncCron.enabled ? 'success' : 'warning'}>
+                                            Cron: {data.hmoLessonSyncCron.enabled
+                                                ? `Đang bật · chạy hằng ngày lúc ${String(data.hmoLessonSyncCron.hour).padStart(2, '0')}:${String(data.hmoLessonSyncCron.minute).padStart(2, '0')} (${data.hmoLessonSyncCron.timeZone})`
+                                                : 'Đang tắt'}
+                                        </Text>
+                                        {data.hmoLessonSyncCron.enabled && <Text type="secondary">
+                                            {data.hmoLessonSyncCron.lastRunAt
+                                                ? `Lần chạy tự động gần nhất: ${formatVietnamDateTime(data.hmoLessonSyncCron.lastRunAt, 'HH:mm DD/MM/YYYY')}`
+                                                : 'Chưa ghi nhận lần chạy tự động nào'}
+                                        </Text>}
+                                    </Space>
                                     <Button disabled={!data.hmoLessonSync.issues.length} danger={data.hmoLessonSync.issues.length > 0} onClick={() => setHmoIssuesOpen(true)}>Xem {data.hmoLessonSync.issues.length} lỗi</Button>
                                 </Flex>
                                 {data.hmoLessonSync.lastError && (
@@ -471,17 +550,25 @@ const Page: React.FC = () => {
                                 optionFilterProp="label"
                                 placeholder="Tất cả chương trình"
                                 style={{ minWidth: 280 }}
+                                popupMatchSelectWidth={360}
                                 value={hmoIssueProgram}
                                 options={hmoProgramOptions}
                                 onChange={setHmoIssueProgram}
                                 optionRender={(option) => (
-                                    <Flex justify="space-between" align="center" gap={8} style={{ width: '100%' }}>
-                                        <span>{option.label}</span>
+                                    <Flex align="center" gap={8} style={{ width: '100%', minWidth: 0 }}>
+                                        <Text
+                                            ellipsis={{ tooltip: String(option.label) }}
+                                            style={{ flex: 1, minWidth: 0 }}
+                                        >
+                                            {option.label}
+                                        </Text>
                                         <Button
                                             type="text"
                                             size="small"
                                             icon={<CopyOutlined />}
                                             title={`Sao chép ${String(option.value)}`}
+                                            aria-label={`Sao chép mã chương trình ${String(option.value)}`}
+                                            style={{ flex: '0 0 auto' }}
                                             onMouseDown={(event) => event.preventDefault()}
                                             onClick={(event) => {
                                                 event.stopPropagation();
@@ -499,25 +586,74 @@ const Page: React.FC = () => {
                                 options={hmoIssueTypeOptions}
                                 onChange={setHmoIssueType}
                             />
-                            <Tag color={filteredHmoIssues.length ? "red" : "green"}>{filteredHmoIssues.length} lỗi đang hiển thị</Tag>
+                            <Tag color={filteredHmoIssues.length ? "red" : "green"}>
+                                {groupedHmoIssues.length} nhóm · {filteredHmoIssues.length} lỗi
+                            </Tag>
                             {hmoIssuesCopied && <Tag color="green">Đã sao chép mã chương trình</Tag>}
                         </Flex>
-                        <List
-                            loading={loadingProgramHmoIssues}
-                            dataSource={filteredHmoIssues}
-                            pagination={filteredHmoIssues.length > 20 ? { pageSize: 20, showSizeChanger: false } : false}
-                            locale={{ emptyText: 'Không có lỗi' }}
-                            renderItem={(item) => (
-                                <List.Item
-                                    actions={[<Button key="open" type="link" onClick={() => router.push(`/lessons?subject_code=${encodeURIComponent(item.programCode)}${item.learnNumber ? `&from_learn_number=${item.learnNumber}&to_learn_number=${item.learnNumber}` : ''}`)}>Mở đề cương</Button>]}
-                                >
-                                    <List.Item.Meta
-                                        title={<><Tag color="blue">{item.programCode}</Tag> {item.learnNumber ? `Bài ${item.learnNumber}` : 'Chưa xác định bài'}: {item.lessonName || 'Chưa có tên bài'}</>}
-                                        description={<Space direction="vertical" size={2}><Text type="danger">{item.message}</Text><Text type="secondary">GV: {item.teacher || 'Chưa xác định'}{item.courseId ? ` · Course ${item.courseId}` : ''}{item.packageId ? ` · Package ${item.packageId}` : ''}</Text></Space>}
-                                    />
-                                </List.Item>
-                            )}
-                        />
+                        {loadingProgramHmoIssues ? <Skeleton active /> : groupedHmoIssues.length ? (
+                            <Collapse
+                                accordion
+                                items={groupedHmoIssues.map((group) => {
+                                    const definition = hmoIssueDefinitions[group.errorCode] || {
+                                        label: group.errorCode,
+                                        description: group.issues[0]?.message || 'Lỗi đồng bộ chưa xác định.',
+                                        color: 'red',
+                                    };
+                                    const lessonCount = new Set(group.issues.map((item) => (
+                                        item.learnNumber ?? item.calendarId ?? item.id
+                                    ))).size;
+                                    return {
+                                        key: group.key,
+                                        label: (
+                                            <Flex align="center" gap={8} wrap="wrap">
+                                                <Tag color="blue">{group.programCode}</Tag>
+                                                <Text strong>{group.courseId ? `Course ${group.courseId}` : 'Chưa có Course'}</Text>
+                                                <Tag color={definition.color}>{definition.label}</Tag>
+                                                <Text type="secondary">{lessonCount} bài · {group.issues.length} lỗi</Text>
+                                            </Flex>
+                                        ),
+                                        children: (
+                                            <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                                                <Alert
+                                                    type={group.errorCode === 'HMO_REQUEST_FAILED' ? 'warning' : 'error'}
+                                                    showIcon
+                                                    message={definition.label}
+                                                    description={definition.description}
+                                                />
+                                                <Flex gap={6} wrap="wrap">
+                                                    {group.packageIds.map((packageId) => (
+                                                        <Tag key={packageId}>Package {packageId}</Tag>
+                                                    ))}
+                                                </Flex>
+                                                <List
+                                                    size="small"
+                                                    dataSource={group.issues}
+                                                    renderItem={(item) => (
+                                                        <List.Item actions={[
+                                                            <Button key="open" type="link" onClick={() => router.push(
+                                                                `/lessons?subject_code=${encodeURIComponent(item.programCode)}`
+                                                                + `${item.learnNumber ? `&from_learn_number=${item.learnNumber}&to_learn_number=${item.learnNumber}` : ''}`
+                                                            )}>Mở bài</Button>,
+                                                        ]}>
+                                                            <List.Item.Meta
+                                                                title={`${item.learnNumber ? `Bài ${item.learnNumber}` : 'Chưa xác định bài'} · ${item.lessonName || 'Chưa có tên bài'}`}
+                                                                description={
+                                                                    <Space direction="vertical" size={1}>
+                                                                        <Text type="secondary">Giáo viên: {item.teacher || 'Chưa xác định'}</Text>
+                                                                        <Text type="danger">Chi tiết: {item.message}</Text>
+                                                                    </Space>
+                                                                }
+                                                            />
+                                                        </List.Item>
+                                                    )}
+                                                />
+                                            </Space>
+                                        ),
+                                    };
+                                })}
+                            />
+                        ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không có lỗi phù hợp" />}
                     </Modal>
                     <Modal
                         title={outlineModalTitle}

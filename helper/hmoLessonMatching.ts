@@ -73,6 +73,12 @@ const teacherMatches = (rowTeacher: string, hmoTeacher: string) => {
     return rowTeacher === hmoTeacher;
 };
 
+const teacherMatchQuality = (rowTeacher: string, hmoTeacher: string) => {
+    if (!hmoTeacher) return 0;
+    if (rowTeacher === hmoTeacher) return 2;
+    return teacherMatches(rowTeacher, hmoTeacher) ? 1 : -1;
+};
+
 const parseHmoTitle = (value: unknown) => {
     const rawTitle = String(value || '').trim();
     const teacherSuffix = /_\s*(?:Cô|Thầy)\s+(.+?)\s*$/iu.exec(rawTitle);
@@ -145,6 +151,7 @@ type EvaluatedCandidate = {
     score: number;
     exactTitle: boolean;
     teacherMatched: boolean;
+    teacherMatchQuality: number;
     normalizedHmoTitle: string;
 };
 
@@ -157,7 +164,8 @@ const evaluateCandidate = (
     candidate.options.forEach((option) => {
         const parsed = parseHmoTitle(option.lesson_name);
         if (!parsed.title || !compatiblePartMarkers(rowTitle, parsed.title)) return;
-        if (parsed.teacher && !teacherMatches(rowTeacher, parsed.teacher)) return;
+        const matchQuality = teacherMatchQuality(rowTeacher, parsed.teacher);
+        if (matchQuality < 0) return;
         const similarity = titleSimilarity(rowTitle, parsed.title);
         if (similarity < 0.92) return;
         const evaluated: EvaluatedCandidate = {
@@ -165,11 +173,12 @@ const evaluateCandidate = (
             score: similarity,
             exactTitle: rowTitle === parsed.title,
             teacherMatched: Boolean(parsed.teacher && teacherMatches(rowTeacher, parsed.teacher)),
+            teacherMatchQuality: matchQuality,
             normalizedHmoTitle: parsed.title,
         };
         if (!best
-            || Number(evaluated.teacherMatched) > Number(best.teacherMatched)
-            || (evaluated.teacherMatched === best.teacherMatched && evaluated.score > best.score)) {
+            || evaluated.teacherMatchQuality > best.teacherMatchQuality
+            || (evaluated.teacherMatchQuality === best.teacherMatchQuality && evaluated.score > best.score)) {
             best = evaluated;
         }
     });
@@ -203,7 +212,7 @@ export const matchHmoLessonsByCourse = (
             }, new Map<string, Candidate>()).values());
 
         const evaluatedByRow = normalizedRows.map((row) => {
-            const evaluated = candidates
+            const allEvaluated = candidates
                 .map((candidate) => evaluateCandidate(
                     row.normalizedTitle,
                     row.normalizedTeacher,
@@ -211,11 +220,15 @@ export const matchHmoLessonsByCourse = (
                 ))
                 .filter((candidate): candidate is EvaluatedCandidate => Boolean(candidate))
                 .sort((left, right) => (
-                    Number(right.teacherMatched) - Number(left.teacherMatched)
+                    right.teacherMatchQuality - left.teacherMatchQuality
                     || Number(right.exactTitle) - Number(left.exactTitle)
                     || right.score - left.score
                     || left.candidate.lessonId.localeCompare(right.candidate.lessonId, 'vi', { numeric: true })
                 ));
+            const bestTeacherQuality = allEvaluated[0]?.teacherMatchQuality;
+            let evaluated = bestTeacherQuality === undefined
+                ? allEvaluated
+                : allEvaluated.filter((item) => item.teacherMatchQuality === bestTeacherQuality);
 
             // Hai tên lõi fuzzy khác nhau có điểm sát nhau là trường hợp mơ hồ.
             // Nhiều Lesson ID có cùng một tên lõi vẫn hợp lệ và sẽ được chia theo thứ tự.
@@ -226,6 +239,14 @@ export const matchHmoLessonsByCourse = (
                     && item.normalizedHmoTitle !== evaluated[0].normalizedHmoTitle
                 ));
                 if (competing && evaluated[0].score - competing.score < 0.05) return { row, evaluated: [] };
+            }
+            // Occurrence chỉ được chia giữa các Lesson ID có cùng tên lõi tốt
+            // nhất. Nếu không khóa nhóm này, Lịch 2 của “SỐ 1” có thể lấy ứng
+            // viên fuzzy “SỐ 2” ở vị trí thứ hai.
+            if (evaluated[0]) {
+                evaluated = evaluated.filter(
+                    (item) => item.normalizedHmoTitle === evaluated[0].normalizedHmoTitle
+                );
             }
             return { row, evaluated };
         });

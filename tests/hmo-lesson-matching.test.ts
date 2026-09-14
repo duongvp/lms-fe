@@ -124,3 +124,44 @@ test('ghép đúng hậu tố HMO có đầy đủ họ tên giáo viên', () =>
         { '1771': '171235', '3356': '173132' },
     );
 });
+
+test('ưu tiên đủ họ tên trước tên gọi ngắn dù lesson_count là Lịch 2', () => {
+    const result = matchHmoLessonsByCourse([
+        { package_id: '9149', course_id: '1768', lesson_id: '168443', lesson_name: 'Hình tam giác đều, hình vuông, hình lục giác đều_Cô Nguyễn Thị Chi' },
+        { package_id: '9149', course_id: '1768', lesson_id: '168758', lesson_name: 'Hình tam giác đều, hình vuông, hình lục giác đều_Cô Chi' },
+    ], [{
+        key: 'chi',
+        title: 'Hình tam giác đều, hình vuông, hình lục giác đều',
+        teacher: 'Nguyễn Thị Chi',
+        occurrence: 2,
+    }]);
+
+    assert.equal(result.matchesByRow.get('chi')?.get('1768')?.lessonId, '168443');
+});
+
+test('vẫn dùng tên gọi ngắn khi HMO không có bản đủ họ tên', () => {
+    const result = matchHmoLessonsByCourse([
+        { package_id: '9149', course_id: '1768', lesson_id: '168758', lesson_name: 'Hình tam giác đều, hình vuông, hình lục giác đều_Cô Chi' },
+    ], [{
+        key: 'chi',
+        title: 'Hình tam giác đều, hình vuông, hình lục giác đều',
+        teacher: 'Nguyễn Thị Chi',
+        occurrence: 2,
+    }]);
+
+    assert.equal(result.matchesByRow.get('chi')?.get('1768')?.lessonId, '168758');
+});
+
+test('Lịch 2 của đề số 1 không được lấy ứng viên fuzzy đề số 2', () => {
+    const result = matchHmoLessonsByCourse([
+        { package_id: '9169', course_id: '2434', lesson_id: '167996', lesson_name: 'ĐỀ ÔN TẬP GIỮA HỌC KÌ 1 - SỐ 1_Cô Nguyễn Thị Thìn' },
+        { package_id: '9169', course_id: '2434', lesson_id: '168001', lesson_name: 'ĐỀ ÔN TẬP GIỮA HỌC KÌ 1 - SỐ 2_Cô Nguyễn Thị Thìn' },
+    ], [{
+        key: 'second-calendar',
+        title: 'ĐỀ ÔN TẬP GIỮA HỌC KÌ 1 - SỐ 1',
+        teacher: 'Nguyễn Thị Thìn',
+        occurrence: 2,
+    }]);
+
+    assert.equal(result.matchesByRow.get('second-calendar')?.get('2434')?.lessonId, '167996');
+});

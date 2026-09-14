@@ -152,6 +152,8 @@ const Page = () => {
     const [importing, setImporting] = useState(false);
     const [importErrors, setImportErrors] = useState<LessonImportError[]>([]);
     const [dragRowKey, setDragRowKey] = useState<React.Key | null>(null);
+    const [highlightedRowKeys, setHighlightedRowKeys] = useState<React.Key[]>([]);
+    const reorderHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Khởi tạo thu gọn để không chớp phần hướng dẫn trước khi đọc thiết lập
     // localStorage. Nếu người dùng chọn hiển thị, effect bên dưới sẽ mở ra.
     const [showPageInfo, setShowPageInfo] = useState(false);
@@ -174,6 +176,9 @@ const Page = () => {
             window.cancelAnimationFrame(firstFrame);
             if (secondFrame) window.cancelAnimationFrame(secondFrame);
         };
+    }, []);
+    useEffect(() => () => {
+        if (reorderHighlightTimerRef.current) clearTimeout(reorderHighlightTimerRef.current);
     }, []);
     // Dùng token sẵn có ngay khi quay lại trang để tránh nháy trạng thái chưa xác thực.
     // API vẫn kiểm tra token và sẽ khóa lại nếu token đã hết hạn.
@@ -823,6 +828,7 @@ const Page = () => {
         setRenumberEnabled(false);
         originalLearnNumbersRef.current = [];
         setDragRowKey(null);
+        setHighlightedRowKeys([]);
         if (hasSearched) {
             void refreshLessons();
         }
@@ -848,37 +854,40 @@ const Page = () => {
 
     const handleDropRow = (targetKey: React.Key) => {
         if (!dragRowKey || dragRowKey === targetKey) return;
-
-        setData((prev) => {
-            const sourceIndex = prev.findIndex((item) => item.key === dragRowKey);
-            const targetIndex = prev.findIndex((item) => item.key === targetKey);
-            if (sourceIndex < 0 || targetIndex < 0) return prev;
-
-            const learnNumbers = prev.map((item) => Number(item.learn_number)).sort((left, right) => left - right);
-            const next = [...prev];
-            if (reorderStrategy === "swap") {
-                [next[sourceIndex], next[targetIndex]] = [next[targetIndex], next[sourceIndex]];
-            } else {
-                const [moved] = next.splice(sourceIndex, 1);
-                next.splice(targetIndex, 0, moved);
-            }
-            const movedPastLesson = next.some((item, index) => (
-                Number(item.past_scheduled_count || 0) > 0
-                && item.key !== prev[index]?.key
-            ));
-            if (movedPastLesson) {
-                api.warning({
-                    message: "Không thể sắp xếp qua bài đã dạy",
-                    description: "Thứ tự của bài đã dạy phải được giữ nguyên.",
-                });
-                return prev;
-            }
-            const firstNumber = learnNumbers[0];
-            return next.map((item, index) => ({
-                ...item,
-                learn_number: renumberEnabled ? firstNumber + index : learnNumbers[index],
-            }));
-        });
+        const sourceIndex = data.findIndex((item) => item.key === dragRowKey);
+        const targetIndex = data.findIndex((item) => item.key === targetKey);
+        if (sourceIndex < 0 || targetIndex < 0) return;
+        const learnNumbers = data.map((item) => Number(item.learn_number)).sort((left, right) => left - right);
+        const next = [...data];
+        if (reorderStrategy === "swap") {
+            [next[sourceIndex], next[targetIndex]] = [next[targetIndex], next[sourceIndex]];
+        } else {
+            const [moved] = next.splice(sourceIndex, 1);
+            next.splice(targetIndex, 0, moved);
+        }
+        const movedPastLesson = next.some((item, index) => (
+            Number(item.past_scheduled_count || 0) > 0
+            && item.key !== data[index]?.key
+        ));
+        if (movedPastLesson) {
+            api.warning({
+                message: "Không thể sắp xếp qua bài đã dạy",
+                description: "Thứ tự của bài đã dạy phải được giữ nguyên.",
+            });
+            setDragRowKey(null);
+            return;
+        }
+        const firstNumber = learnNumbers[0];
+        setData(next.map((item, index) => ({
+            ...item,
+            learn_number: renumberEnabled ? firstNumber + index : learnNumbers[index],
+        })));
+        const nextHighlightedKeys = reorderStrategy === "swap"
+            ? [dragRowKey, targetKey]
+            : [dragRowKey];
+        setHighlightedRowKeys(nextHighlightedKeys);
+        if (reorderHighlightTimerRef.current) clearTimeout(reorderHighlightTimerRef.current);
+        reorderHighlightTimerRef.current = setTimeout(() => setHighlightedRowKeys([]), 5000);
         setDragRowKey(null);
     };
 
@@ -1156,6 +1165,7 @@ const Page = () => {
                 selectingAllRows={selectingAllRows}
                 reorderMode={reorderMode}
                 dragRowKey={dragRowKey as React.Key}
+                highlightedRowKeys={highlightedRowKeys}
                 canEdit={canEdit}
                 canEditTitle={canEditTitle}
                 canDelete={canDelete}

@@ -228,6 +228,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const draftEndTime = Form.useWatch('end_time', form) as Dayjs | undefined;
     const draftLessonName = Form.useWatch('lesson_name', form) as string | undefined;
     const draftTeacher = Form.useWatch('teacher', form) as string | undefined;
+    const sendNotification = Form.useWatch('send_notification', form) !== false;
     const bulkStartTime = Form.useWatch('bulk_start_time', form) as Dayjs | undefined;
     const [lessonOptions, setLessonOptions] = useState<LessonApiResponse[]>([]);
     const [hmoOptions, setHmoOptions] = useState<HocmaiSectionOption[]>([]);
@@ -739,29 +740,34 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     };
 
     const renderChangeReason = () => (
-        <FormSection title="Lý do thay đổi">
-            <Form.Item
-                label="Lý do"
-                name="change_reason"
-                rules={[
-                    {
-                        required: true,
-                        whitespace: true,
-                        message: "Vui lòng nhập lý do thay đổi lịch học",
-                    },
-                    {
-                        max: 500,
-                        message: "Lý do không được vượt quá 500 ký tự",
-                    },
-                ]}
-            >
-                <Input.TextArea
-                    rows={3}
-                    maxLength={500}
-                    showCount
-                    placeholder="Nhập lý do nghỉ học, tạo lịch bù hoặc dời chuỗi..."
-                />
+        <FormSection title="Thông báo nghỉ học">
+            <Form.Item name="send_notification" valuePropName="checked">
+                <Checkbox>Gửi thông báo tới người dùng</Checkbox>
             </Form.Item>
+            {sendNotification && (
+                <Form.Item
+                    label="Lý do thay đổi"
+                    name="change_reason"
+                    rules={[
+                        {
+                            required: true,
+                            whitespace: true,
+                            message: "Vui lòng nhập lý do thay đổi lịch học",
+                        },
+                        {
+                            max: 500,
+                            message: "Lý do không được vượt quá 500 ký tự",
+                        },
+                    ]}
+                    >
+                    <Input.TextArea
+                        rows={3}
+                        maxLength={500}
+                        showCount
+                        placeholder="Nhập nội dung thông báo nghỉ học, tạo lịch bù hoặc dời chuỗi..."
+                    />
+                </Form.Item>
+            )}
         </FormSection>
     );
 
@@ -788,6 +794,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                             .filter(Boolean),
                     },
                     update_mode: 'makeup',
+                    send_notification: true,
                     canceled_lesson_name_prefix: '[NGHỈ HỌC] ',
                     canceled_lesson_name_suffix: '',
                     new_lesson_name_prefix: '[HỌC BÙ] ',

@@ -69,6 +69,13 @@ export interface DashboardOverview {
         teams: { pending: number; failed: number; sentToday: number };
         hocmai: { pending: number; failed: number; syncedToday: number };
     };
+    hmoLessonSyncCron: {
+        enabled: boolean;
+        hour: number;
+        minute: number;
+        timeZone: string;
+        lastRunAt: string | null;
+    };
     hmoLessonSync: null | {
         id: string;
         triggerType: 'cron' | 'manual';
