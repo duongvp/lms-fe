@@ -296,6 +296,13 @@ const Page: React.FC = () => {
         : 0;
     const outlineModalRows = outlineModalType ? data.outlineQuizDetails[outlineModalType] : [];
     const dashboardHmoIssues = data.hmoLessonSync?.issues || [];
+    const hmoSyncCron = data.hmoLessonSyncCron ?? {
+        enabled: false,
+        hour: 6,
+        minute: 0,
+        timeZone: 'Asia/Ho_Chi_Minh',
+        lastRunAt: null,
+    };
     const hmoIssues = hmoIssueProgram ? programHmoIssues : dashboardHmoIssues;
     const hmoProgramOptions = useMemo(() => (data.hmoLessonSync?.issuePrograms || []).map((item) => ({
         value: item.programCode,
@@ -517,14 +524,16 @@ const Page: React.FC = () => {
                                         <Text type="secondary">
                                             Lần chạy: {formatVietnamDateTime(data.hmoLessonSync.startedAt, 'HH:mm DD/MM/YYYY')} · {data.hmoLessonSync.triggerType === 'cron' ? 'Tự động' : 'Thủ công'}
                                         </Text>
-                                        <Text type={data.hmoLessonSyncCron.enabled ? 'success' : 'warning'}>
-                                            Cron: {data.hmoLessonSyncCron.enabled
-                                                ? `Đang bật · chạy hằng ngày lúc ${String(data.hmoLessonSyncCron.hour).padStart(2, '0')}:${String(data.hmoLessonSyncCron.minute).padStart(2, '0')} (${data.hmoLessonSyncCron.timeZone})`
-                                                : 'Đang tắt'}
+                                        <Text type={hmoSyncCron.enabled ? 'success' : 'secondary'}>
+                                            Cron: {data.hmoLessonSyncCron === undefined
+                                                ? 'Chưa có thông tin từ backend'
+                                                : hmoSyncCron.enabled
+                                                    ? `Đang bật · chạy hằng ngày lúc ${String(hmoSyncCron.hour).padStart(2, '0')}:${String(hmoSyncCron.minute).padStart(2, '0')} (${hmoSyncCron.timeZone})`
+                                                    : 'Đang tắt'}
                                         </Text>
-                                        {data.hmoLessonSyncCron.enabled && <Text type="secondary">
-                                            {data.hmoLessonSyncCron.lastRunAt
-                                                ? `Lần chạy tự động gần nhất: ${formatVietnamDateTime(data.hmoLessonSyncCron.lastRunAt, 'HH:mm DD/MM/YYYY')}`
+                                        {hmoSyncCron.enabled && <Text type="secondary">
+                                            {hmoSyncCron.lastRunAt
+                                                ? `Lần chạy tự động gần nhất: ${formatVietnamDateTime(hmoSyncCron.lastRunAt, 'HH:mm DD/MM/YYYY')}`
                                                 : 'Chưa ghi nhận lần chạy tự động nào'}
                                         </Text>}
                                     </Space>

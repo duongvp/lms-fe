@@ -69,7 +69,7 @@ export interface DashboardOverview {
         teams: { pending: number; failed: number; sentToday: number };
         hocmai: { pending: number; failed: number; syncedToday: number };
     };
-    hmoLessonSyncCron: {
+    hmoLessonSyncCron?: {
         enabled: boolean;
         hour: number;
         minute: number;
