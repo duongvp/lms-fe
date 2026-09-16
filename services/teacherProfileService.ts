@@ -11,6 +11,10 @@ export interface TeacherProfile {
     display_name?: string | null;
     can_view_stream_key: CanViewStreamKey;
     status: TeacherProfileStatus;
+    student_hmid?: string | null;
+    hmid_sync_status?: 'pending' | 'synced' | 'not_found' | 'failed';
+    hmid_synced_at?: string | null;
+    hmid_sync_error?: string | null;
     created_at?: string;
     updated_at?: string;
 }
@@ -78,6 +82,19 @@ export const updateTeacherProfileStatus = (
     body: JSON.stringify({ status }),
     headers: { 'Content-Type': 'application/json' },
 });
+
+export const syncTeacherProfileHmid = (id: number) =>
+    fetchInstance(`${API_BASE_URL}/${id}/sync-hmid`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+    }, 'json', 30_000);
+
+export const syncTeacherProfilesHmidBulk = (ids: number[]) =>
+    fetchInstance(`${API_BASE_URL}/sync-hmid/bulk`, {
+        method: 'POST',
+        body: JSON.stringify({ ids }),
+        headers: { 'Content-Type': 'application/json' },
+    }, 'json', 120_000);
 
 export const deleteTeacherProfile = (id: number) =>
     fetchInstance(`${API_BASE_URL}/${id}`, { method: 'DELETE' });

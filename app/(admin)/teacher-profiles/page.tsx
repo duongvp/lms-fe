@@ -17,6 +17,8 @@ import {
     exportTeacherProfiles,
     getTeacherProfiles,
     importTeacherProfiles,
+    syncTeacherProfileHmid,
+    syncTeacherProfilesHmidBulk,
     TeacherProfile,
     TeacherProfilePayload,
     updateTeacherProfile,
@@ -29,6 +31,7 @@ import TeacherProfileTable from '../teacher-profiles/components/TeacherProfileTa
 import TeacherProfileFormModal from '../teacher-profiles/components/TeacherProfileFormModal';
 import TeacherProfileImportModal from '../teacher-profiles/components/TeacherProfileImportModal';
 import CustomSearchInput from '@/components/ui/Inputs/CustomSearchInput';
+import { fetchAllPages } from '@/lib/fetchAllPages';
 
 const downloadBlob = (
     blob: Blob,
@@ -102,6 +105,12 @@ const TeacherProfilesPage = () => {
         updatingStatusId,
         setUpdatingStatusId,
     ] = React.useState<number | null>(null);
+
+    const [syncingHmidId, setSyncingHmidId] =
+        React.useState<number | null>(null);
+    const [syncingHmidBulk, setSyncingHmidBulk] = React.useState(false);
+    const [selectedHmidProfileIds, setSelectedHmidProfileIds] = React.useState<React.Key[]>([]);
+    const [selectingAllHmid, setSelectingAllHmid] = React.useState(false);
 
     const [pagination, setPagination] =
         React.useState(() => {
@@ -431,6 +440,97 @@ const TeacherProfilesPage = () => {
         }
     };
 
+    const syncHmid = async (record: TeacherProfile) => {
+        try {
+            setSyncingHmidId(record.id);
+            const response: any = await syncTeacherProfileHmid(record.id);
+            const updated: TeacherProfile | undefined = response?.data;
+            if (updated) {
+                setRows((current) => current.map((item) =>
+                    item.id === record.id ? { ...item, ...updated } : item
+                ));
+            }
+            if (updated?.hmid_sync_status === 'synced') {
+                api.success({ message: 'Đã đồng bộ HMID', description: updated.student_hmid || undefined });
+            } else if (updated?.hmid_sync_status === 'not_found') {
+                api.warning({ message: 'HOCMAI không tìm thấy username này' });
+            } else {
+                api.warning({
+                    message: 'Chưa đồng bộ được HMID',
+                    description: updated?.hmid_sync_error || 'Kiểm tra cấu hình kết nối HOCMAI',
+                });
+            }
+        } catch (error: any) {
+            api.error({ message: 'Không thể đồng bộ HMID', description: error?.message || 'Có lỗi xảy ra' });
+        } finally {
+            setSyncingHmidId(null);
+        }
+    };
+
+    const selectedHmidIds = selectedHmidProfileIds
+        .map((id) => Number(id))
+        .filter((id) => Number.isInteger(id) && id > 0);
+    const syncHmidBulk = async () => {
+        if (!selectedHmidIds.length) return;
+        try {
+            setSyncingHmidBulk(true);
+            const totals = { synced: 0, not_found: 0, failed: 0, pending: 0 };
+            for (let index = 0; index < selectedHmidIds.length; index += 100) {
+                const response: any = await syncTeacherProfilesHmidBulk(
+                    selectedHmidIds.slice(index, index + 100)
+                );
+                const result = response?.data || {};
+                totals.synced += Number(result.synced || 0);
+                totals.not_found += Number(result.not_found || 0);
+                totals.failed += Number(result.failed || 0);
+                totals.pending += Number(result.pending || 0);
+            }
+            api.success({
+                message: 'Đã hoàn tất đồng bộ HMID',
+                description: `Đã đồng bộ ${totals.synced}, không tìm thấy ${totals.not_found}, lỗi ${totals.failed}, đang chờ ${totals.pending}.`,
+            });
+            setSelectedHmidProfileIds([]);
+            await loadData();
+        } catch (error: any) {
+            api.error({ message: 'Không thể đồng bộ HMID hàng loạt', description: error?.message || 'Có lỗi xảy ra' });
+        } finally {
+            setSyncingHmidBulk(false);
+        }
+    };
+
+    const selectAllHmidAcrossPages = async (selected: boolean) => {
+        if (!selected) {
+            setSelectedHmidProfileIds([]);
+            return;
+        }
+        try {
+            setSelectingAllHmid(true);
+            const allRows = await fetchAllPages<TeacherProfile>({
+                total: pagination.total,
+                pageSize: 100,
+                concurrency: 4,
+                fetchPage: async (page, pageSize) => {
+                    const response: any = await getTeacherProfiles({
+                        page,
+                        limit: pageSize,
+                        search: search || undefined,
+                        can_view_stream_key: teacherType,
+                        status,
+                    });
+                    return response?.data?.data || [];
+                },
+            });
+            setSelectedHmidProfileIds(allRows.map((row) => String(row.id)));
+        } catch (error: any) {
+            api.error({
+                message: 'Không thể chọn toàn bộ nhân sự',
+                description: error?.message || 'Có lỗi xảy ra',
+            });
+        } finally {
+            setSelectingAllHmid(false);
+        }
+    };
+
     /**
      * DELETE
      */
@@ -648,6 +748,10 @@ const TeacherProfilesPage = () => {
                 canCreate={canCreate}
                 onOpenImport={openImport}
                 onCreate={openCreate}
+                canSyncHmid={canUpdate}
+                syncingHmid={syncingHmidBulk || selectingAllHmid}
+                selectedHmidCount={selectedHmidIds.length}
+                onSyncHmid={() => void syncHmidBulk()}
                 onExport={
                     handleExport
                 }
@@ -662,18 +766,21 @@ const TeacherProfilesPage = () => {
                 onSearchChange={
                     (value) => {
                         setSearch(value);
+                        setSelectedHmidProfileIds([]);
                         setPagination((current) => ({ ...current, current: 1 }));
                     }
                 }
                 onTeacherTypeChange={
                     (value) => {
                         setTeacherType(value);
+                        setSelectedHmidProfileIds([]);
                         setPagination((current) => ({ ...current, current: 1 }));
                     }
                 }
                 onStatusChange={
                     (value) => {
                         setStatus(value);
+                        setSelectedHmidProfileIds([]);
                         setPagination((current) => ({ ...current, current: 1 }));
                     }
                 }
@@ -694,6 +801,7 @@ const TeacherProfilesPage = () => {
                 updatingStatusId={
                     updatingStatusId
                 }
+                syncingHmidId={syncingHmidId}
                 pagination={
                     pagination
                 }
@@ -711,6 +819,12 @@ const TeacherProfilesPage = () => {
                 }
                 onEdit={openEdit}
                 onDelete={remove}
+                onSyncHmid={syncHmid}
+                selectedRowKeys={selectedHmidProfileIds}
+                onSelectedRowKeysChange={setSelectedHmidProfileIds}
+                onSelectAllAcrossPages={(selected) => void selectAllHmidAcrossPages(selected)}
+                totalRowCount={pagination.total}
+                selectingAll={selectingAllHmid}
             />
 
             <TeacherProfileFormModal

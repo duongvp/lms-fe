@@ -3,6 +3,7 @@
 import React from 'react';
 import {
     Button,
+    Checkbox,
     Popconfirm,
     Space,
     Switch,
@@ -12,6 +13,7 @@ import CustomTable from '@/components/ui/Table';
 import {
     DeleteOutlined,
     EditOutlined,
+    SyncOutlined,
 } from '@ant-design/icons';
 import { formatVietnamDateTime } from '@/helper/convertDate';
 import type { TeacherProfile } from '@/services/teacherProfileService';
@@ -25,6 +27,7 @@ interface TeacherProfileTableProps {
     canDelete: boolean;
 
     updatingStatusId: number | null;
+    syncingHmidId: number | null;
 
     pagination: {
         current: number;
@@ -49,6 +52,14 @@ interface TeacherProfileTableProps {
     onDelete: (
         record: TeacherProfile
     ) => Promise<void>;
+    onSyncHmid: (
+        record: TeacherProfile
+    ) => Promise<void>;
+    selectedRowKeys: React.Key[];
+    onSelectedRowKeysChange: (keys: React.Key[]) => void;
+    onSelectAllAcrossPages: (selected: boolean) => void;
+    totalRowCount: number;
+    selectingAll: boolean;
 }
 
 const TeacherProfileTable = ({
@@ -58,11 +69,18 @@ const TeacherProfileTable = ({
     canUpdate,
     canDelete,
     updatingStatusId,
+    syncingHmidId,
     pagination,
     onPageChange,
     onChangeStatus,
     onEdit,
     onDelete,
+    onSyncHmid,
+    selectedRowKeys,
+    onSelectedRowKeysChange,
+    onSelectAllAcrossPages,
+    totalRowCount,
+    selectingAll,
 }: TeacherProfileTableProps) => {
     const containerRef =
         React.useRef<HTMLDivElement>(null);
@@ -112,6 +130,20 @@ const TeacherProfileTable = ({
                 }
                 loading={loading}
                 dataSource={rows}
+                rowSelection={{
+                    selectedRowKeys,
+                    preserveSelectedRowKeys: true,
+                    onChange: (keys) => onSelectedRowKeysChange(keys.map(String)),
+                    columnTitle: (
+                        <Checkbox
+                            aria-label="Chọn toàn bộ nhân sự ở tất cả các trang"
+                            checked={totalRowCount > 0 && selectedRowKeys.length >= totalRowCount}
+                            indeterminate={selectedRowKeys.length > 0 && selectedRowKeys.length < totalRowCount}
+                            disabled={selectingAll || totalRowCount === 0}
+                            onChange={(event) => onSelectAllAcrossPages(event.target.checked)}
+                        />
+                    ),
+                }}
                 pagination={{
                     ...pagination,
                     showSizeChanger: true,
@@ -126,7 +158,7 @@ const TeacherProfileTable = ({
                         ),
                 }}
                 scroll={{
-                    x: 900,
+                    x: 1180,
                     y: tableScrollY,
                 }}
                 columns={[
@@ -158,6 +190,34 @@ const TeacherProfileTable = ({
                                 Giáo viên
                             </Tag>
                         ),
+                },
+
+                {
+                    title: 'HMID',
+                    dataIndex: 'student_hmid',
+                    width: 130,
+                    render: (value) => value || '-',
+                },
+
+                {
+                    title: 'Đồng bộ HMID',
+                    dataIndex: 'hmid_sync_status',
+                    width: 150,
+                    render: (value, record) => {
+                        const status = value || 'pending';
+                        const config = status === 'synced'
+                            ? { color: 'success', label: 'Đã đồng bộ' }
+                            : status === 'not_found'
+                                ? { color: 'warning', label: 'Không tìm thấy' }
+                                : status === 'failed'
+                                    ? { color: 'error', label: 'Lỗi' }
+                                    : { color: 'default', label: 'Chờ đồng bộ' };
+                        return (
+                            <Tag color={config.color} title={record.hmid_sync_error || undefined}>
+                                {config.label}
+                            </Tag>
+                        );
+                    },
                 },
 
                 {
@@ -216,13 +276,23 @@ const TeacherProfileTable = ({
                     title: 'Thao tác',
                     key: 'actions',
                     fixed: 'right',
-                    width: 130,
+                    width: 175,
 
                     render: (
                         _,
                         record
                     ) => (
                         <Space>
+                            {canUpdate && (
+                                <Button
+                                    type="text"
+                                    icon={<SyncOutlined spin={syncingHmidId === record.id} />}
+                                    aria-label="Đồng bộ HMID"
+                                    title="Đồng bộ HMID từ HOCMAI"
+                                    disabled={syncingHmidId !== null}
+                                    onClick={() => void onSyncHmid(record)}
+                                />
+                            )}
                             {canUpdate && (
                                 <Button
                                     type="text"

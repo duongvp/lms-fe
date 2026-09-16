@@ -12,6 +12,7 @@ import {
     FileExcelOutlined,
     PlusOutlined,
     UploadOutlined,
+    SyncOutlined,
 } from '@ant-design/icons';
 
 const { Title } = Typography;
@@ -22,6 +23,10 @@ interface TeacherProfileHeaderProps {
     canCreate: boolean;
     onOpenImport: () => void;
     onCreate: () => void;
+    canSyncHmid: boolean;
+    syncingHmid: boolean;
+    selectedHmidCount: number;
+    onSyncHmid: () => void;
     onExport: (
         format: 'xlsx' | 'csv'
     ) => Promise<void>;
@@ -33,6 +38,10 @@ const TeacherProfileHeader = ({
     canCreate,
     onOpenImport,
     onCreate,
+    canSyncHmid,
+    syncingHmid,
+    selectedHmidCount,
+    onSyncHmid,
     onExport,
 }: TeacherProfileHeaderProps) => {
     return (
@@ -52,6 +61,16 @@ const TeacherProfileHeader = ({
             </Title>
 
             <Space className="responsive-action-buttons" wrap>
+                {canSyncHmid && (
+                    <Button
+                        icon={<SyncOutlined spin={syncingHmid} />}
+                        loading={syncingHmid}
+                        disabled={selectedHmidCount === 0}
+                        onClick={onSyncHmid}
+                    >
+                        Đồng bộ HMID đã chọn ({selectedHmidCount})
+                    </Button>
+                )}
                 {canImport && (
                     <>
                         <Button

@@ -102,7 +102,7 @@ export const getDashboardOverview = async (params?: { from?: string; to?: string
     const response = await fetchInstance(`${API_BASE_URL}/overview?${query.toString()}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
-    });
+    }, 'json', 30_000);
     return response.data;
 };
 

@@ -484,6 +484,57 @@ export const applyStudentClassroomAssignment = (
         credentials: "include",
     }, "json", 120_000);
 
+export interface CalendarStudentSyncResult {
+    apiUsers: number;
+    mappedRows: number;
+    unmatched: number;
+    inserted: number;
+    updated: number;
+    skipped: number;
+    failed: number;
+}
+
+export interface CalendarStudentSyncItem {
+    calendarId: number;
+    code: string;
+    learnNumber: number;
+    lessonName: string;
+    startTime: string | null;
+    systemType: string | null;
+    status: "pending" | "running" | "success" | "error";
+    progress: number;
+    message: string;
+    result?: CalendarStudentSyncResult;
+}
+
+export interface CalendarStudentSyncJob {
+    jobId: string;
+    status: "queued" | "running" | "completed" | "failed";
+    progress: number;
+    message: string;
+    items: CalendarStudentSyncItem[];
+    result?: CalendarStudentSyncResult;
+    error?: string;
+}
+
+export const syncCalendarStudents = (
+    ids: Array<string | number>,
+    registeredAt?: string
+) =>
+    fetchInstance(`${API_BASE_URL}/students/sync`, {
+        method: "POST",
+        body: JSON.stringify({ ids, ...(registeredAt ? { registeredAt } : {}) }),
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+    }, "json", 10 * 60_000);
+
+export const getCalendarStudentSyncProgress = (jobId: string) =>
+    fetchInstance(`${API_BASE_URL}/students/sync/${encodeURIComponent(jobId)}`, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+    });
+
 export const rescheduleLivestream = (id: string, payload: any) =>
     fetchInstance(`${API_BASE_URL}/${id}/reschedule`, {
         method: "PUT",
@@ -658,6 +709,7 @@ export const toRescheduleLivestreamPayload = (values: any): any => {
 
     return {
         mode,
+        source_state: payload.source_state,
         send_notification: payload.send_notification !== false,
         reason: String(payload.change_reason || payload.reason || "").trim(),
         canceled_lesson_name_prefix: payload.canceled_lesson_name_prefix,

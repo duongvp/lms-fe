@@ -81,6 +81,8 @@ interface ScheduleModalProps {
     fieldPolicy?: any;
     moduleCode?: string;
     programCode?: string;
+    afterCancel?: boolean;
+    allowFollowingAfterCancel?: boolean;
     onDraftChange?: (draft: {
         date?: Dayjs;
         start_time?: Dayjs;
@@ -181,6 +183,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     fieldPolicy,
     moduleCode = 'calendar',
     programCode,
+    afterCancel = false,
+    allowFollowingAfterCancel = true,
     onDraftChange,
 }) => {
     const [form] = Form.useForm();
@@ -692,6 +696,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             }
         } else {
             finalValues.update_mode = updateMode;
+            if (afterCancel) finalValues.source_state = 'canceled_without_makeup';
             if (updateMode === 'cancel') {
                 finalValues.lesson_status = 1;
             } else if (updateMode === 'makeup' || updateMode === 'following') {
@@ -739,10 +744,23 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         }
     };
 
-    const renderChangeReason = () => (
-        <FormSection title="Thông báo nghỉ học">
+    const renderChangeReason = () => {
+        const notificationTitle = afterCancel
+            ? updateMode === 'following' ? 'Thông báo dời chuỗi' : 'Thông báo lịch học bù'
+            : 'Thông báo nghỉ học';
+        const notificationLabel = afterCancel
+            ? updateMode === 'following' ? 'Gửi thông báo dời lịch tới người dùng' : 'Gửi thông báo lịch học bù tới người dùng'
+            : 'Gửi thông báo tới người dùng';
+        const notificationPlaceholder = afterCancel
+            ? updateMode === 'following'
+                ? 'Nhập nội dung thông báo dời chuỗi...'
+                : 'Nhập nội dung thông báo lịch học bù...'
+            : 'Nhập nội dung thông báo nghỉ học, tạo lịch bù hoặc dời chuỗi...';
+
+        return (
+        <FormSection title={notificationTitle}>
             <Form.Item name="send_notification" valuePropName="checked">
-                <Checkbox>Gửi thông báo tới người dùng</Checkbox>
+                <Checkbox>{notificationLabel}</Checkbox>
             </Form.Item>
             {sendNotification && (
                 <Form.Item
@@ -764,12 +782,13 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                         rows={3}
                         maxLength={500}
                         showCount
-                        placeholder="Nhập nội dung thông báo nghỉ học, tạo lịch bù hoặc dời chuỗi..."
+                        placeholder={notificationPlaceholder}
                     />
                 </Form.Item>
             )}
         </FormSection>
-    );
+        );
+    };
 
 
     React.useEffect(() => {
@@ -1005,10 +1024,21 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                             }}
                             buttonStyle="solid"
                         >
-                            <Radio.Button value="makeup">Nghỉ học & Tạo lịch bù</Radio.Button>
-                            <Radio.Button value="following">Nghỉ học & Dời chuỗi</Radio.Button>
-                            <Radio.Button value="cancel">Nghỉ học (Không dời)</Radio.Button>
+                            <Radio.Button value="makeup">{afterCancel ? 'Tạo lịch bù' : 'Nghỉ học & Tạo lịch bù'}</Radio.Button>
+                            {(!afterCancel || allowFollowingAfterCancel) && (
+                                <Radio.Button value="following">{afterCancel ? 'Dời chuỗi' : 'Nghỉ học & Dời chuỗi'}</Radio.Button>
+                            )}
+                            {!afterCancel && <Radio.Button value="cancel">Nghỉ học (Không dời)</Radio.Button>}
                         </Radio.Group>
+                        {afterCancel && !allowFollowingAfterCancel && (
+                            <Alert
+                                showIcon
+                                type="info"
+                                message="Không thể dời chuỗi"
+                                description="Buổi học tiếp theo đã bắt đầu, đã diễn ra hoặc khóa học không còn buổi tiếp theo. Bạn vẫn có thể tạo một lịch học bù riêng."
+                                style={{ marginTop: 12 }}
+                            />
+                        )}
                     </div>
                 )}
 
@@ -1685,7 +1715,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                     {/* Form fields for Update Makeup / Following */}
                     {isEdit && (updateMode === 'makeup' || updateMode === 'following') && (
                         <>
-                            <FormSection title="Thông tin buổi học sẽ nghỉ">
+                            <FormSection title={afterCancel ? 'Thông tin buổi đã nghỉ' : 'Thông tin buổi học sẽ nghỉ'}>
                                 <Row gutter={24}>
                                     <Col span={12}>
                                         <Form.Item label="Chương trình">
@@ -1700,14 +1730,18 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                 </Row>
                                 <div style={{ padding: '12px 16px', background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 6, marginBottom: 16 }}>
                                     <Text type="warning">
-                                        {updateMode === 'following'
-                                            ? 'Lưu ý: Hành động này sẽ đánh dấu buổi học hiện tại là Nghỉ học, dời toàn bộ đề cương của khóa học xuống các buổi tiếp theo và tạo thêm 1 buổi mới ở cuối khóa.'
-                                            : 'Lưu ý: Hành động này sẽ đánh dấu buổi học hiện tại là Nghỉ học và tạo thêm một buổi học bù cho cùng bài học. Các buổi sau không bị thay đổi.'}
+                                        {afterCancel
+                                            ? updateMode === 'following'
+                                                ? 'Buổi này đã nghỉ. Hành động sẽ dời đề cương xuống các buổi tiếp theo và tạo thêm một buổi ở cuối khóa.'
+                                                : 'Buổi này đã nghỉ. Hành động sẽ tạo một buổi học bù cùng bài; các buổi sau giữ nguyên.'
+                                            : updateMode === 'following'
+                                                ? 'Lưu ý: Hành động này sẽ đánh dấu buổi học hiện tại là Nghỉ học, dời toàn bộ đề cương của khóa học xuống các buổi tiếp theo và tạo thêm 1 buổi mới ở cuối khóa.'
+                                                : 'Lưu ý: Hành động này sẽ đánh dấu buổi học hiện tại là Nghỉ học và tạo thêm một buổi học bù cho cùng bài học. Các buổi sau không bị thay đổi.'}
                                     </Text>
                                 </div>
                             </FormSection>
 
-                            <FormSection title="Tên bài hiển thị sau khi dời lịch">
+                            {!afterCancel && <FormSection title="Tên bài hiển thị sau khi dời lịch">
                                 <Row gutter={24}>
                                     <Col span={12}>
                                         <Text strong>Buổi nghỉ</Text>
@@ -1749,7 +1783,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                         </Col>
                                     )}
                                 </Row>
-                            </FormSection>
+                            </FormSection>}
 
                             <FormSection title={updateMode === 'following' ? 'Thông tin buổi mới ở cuối khóa' : 'Thông tin buổi học bù'}>
                                 <Row gutter={24}>
@@ -1827,12 +1861,12 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                             />
                                         </Form.Item>
                                     </Col>
-                                    <Col flex="180px">
+                                    <Col xs={24} md={12} style={{ minWidth: 0 }}>
                                         <Form.Item label="Giáo viên dạy bù" name={['new_session', 'teacher']} rules={requiredWhenEditable('teacher', 'Chọn giáo viên')}>
                                             <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" showSearch optionFilterProp="label" placeholder="Chọn giáo viên" disabled={!isFieldEditable('teacher')} />
                                         </Form.Item>
                                     </Col>
-                                    <Col flex="180px">
+                                    <Col xs={24} md={12} style={{ minWidth: 0 }}>
                                         <Form.Item label="Trợ giảng" name={['new_session', 'assistant_teacher']}>
                                             <TeachingStaffSelect teacherType={0} mode="multiple" showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" disabled={!isFieldEditable('assistant_teacher')} />
                                         </Form.Item>
