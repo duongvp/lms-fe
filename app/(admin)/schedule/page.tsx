@@ -39,6 +39,7 @@ import { canEditAnyField, resolveModuleFieldPermissions, sanitizeEditablePayload
 import { useLmsCache, useModuleFieldsQuery, useSchedulesQuery, useSchedulingProgramsQuery, useTeachingStaffQuery } from "@/hooks/useLmsQueries";
 import type { LivestreamListParams } from "@/services/livestreamService";
 import type { EvgProvisionMode } from "@/services/livestreamService";
+import type { ScanTeachingUser } from "@/services/livestreamService";
 import type { CalendarStudentSyncItem } from "@/services/livestreamService";
 import TeachingStaffSelect from "@/components/shared/TeachingStaffSelect";
 import { rememberProgramContextUrl } from "@/components/layouts/AdminLayout/SideMenu";
@@ -50,6 +51,46 @@ const { RangePicker } = DatePicker;
 type ScheduleDocument = {
     url: string;
     label: string;
+};
+
+const ScanTeachingUsersOptions = ({ onChange }: { onChange: (users: ScanTeachingUser[]) => void }) => {
+    const [usernames, setUsernames] = useState<string[]>(["loandtt3@hocmai.vn"]);
+    const teachersQuery = useTeachingStaffQuery(1);
+    const assistantsQuery = useTeachingStaffQuery(0);
+    const options = useMemo(() => {
+        const byUsername = new Map(
+            [...(teachersQuery.data ?? []), ...(assistantsQuery.data ?? [])]
+                .map((option) => [option.username, { value: option.username, label: option.label }])
+        );
+        usernames.forEach((username) => {
+            if (!byUsername.has(username)) byUsername.set(username, { value: username, label: username });
+        });
+        return Array.from(byUsername.values());
+    }, [teachersQuery.data, assistantsQuery.data, usernames]);
+    return (
+        <Space direction="vertical" style={{ width: "100%", marginTop: 12 }}>
+            <Typography.Text strong>Tài khoản bổ sung</Typography.Text>
+            <Select
+                aria-label="Tài khoản bổ sung"
+                style={{ width: "100%" }}
+                showSearch
+                optionFilterProp="label"
+                options={options}
+                loading={teachersQuery.isLoading || assistantsQuery.isLoading}
+                mode="multiple"
+                allowClear
+                value={usernames}
+                placeholder="Chọn tài khoản giáo viên hoặc trợ giảng"
+                onChange={(values: string[]) => {
+                    setUsernames(values);
+                    onChange(values.map((username) => ({ username, role: "assistant" })));
+                }}
+            />
+            <Typography.Text type="secondary">
+                Có thể chọn cả giáo viên và trợ giảng. Tài khoản bổ sung được xử lý như trợ giảng, tên theo mẫu student_hmid - Giáo viên. Đã có thì cập nhật.
+            </Typography.Text>
+        </Space>
+    );
 };
 
 type ImmediateSelectAllCheckboxProps = {
@@ -1678,9 +1719,16 @@ const Page = () => {
             return;
         }
 
+        let additionalUsers: ScanTeachingUser[] = [{ username: "loandtt3@hocmai.vn", role: "assistant" }];
         Modal.confirm({
             title: "Quét user giáo viên và trợ giảng",
-            content: `Hệ thống sẽ quét ${targetIds.length} lịch đã chọn, thêm user nhân sự còn thiếu và bổ sung student_hmid hoặc sửa tên vai trò cho user hiện có khi cần. Lịch học không bị thay đổi.`,
+            width: 560,
+            content: (
+                <>
+                    <Typography.Text>Quét nhân sự đã gán trên {targetIds.length} lịch đã chọn và các tài khoản bổ sung bên dưới.</Typography.Text>
+                    <ScanTeachingUsersOptions onChange={(users) => { additionalUsers = users; }} />
+                </>
+            ),
             okText: "Bắt đầu quét",
             cancelText: "Hủy",
             onOk: async () => {
@@ -1696,7 +1744,7 @@ const Page = () => {
                     const chunkSize = 10;
                     for (let i = 0; i < targetIds.length; i += chunkSize) {
                         const chunk = targetIds.slice(i, i + chunkSize);
-                        const response: any = await syncMissingTeachingUsers(chunk);
+                        const response: any = await syncMissingTeachingUsers(chunk, additionalUsers);
                         const result = response?.data ?? response ?? {};
                         totalScanned += Number(result.scanned ?? 0);
                         totalCreated += Number(result.created ?? 0);

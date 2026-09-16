@@ -371,10 +371,12 @@ export const updateLivestream = (id: string, payload: any) =>
         credentials: "include",
     });
 
-export const syncMissingTeachingUsers = (ids?: number[]) =>
+export type ScanTeachingUser = { username: string; role: "teacher" | "assistant" };
+
+export const syncMissingTeachingUsers = (ids?: number[], additionalUsers?: ScanTeachingUser[]) =>
     fetchInstance(`${API_BASE_URL}/sync-missing-teaching-users`, {
         method: "POST",
-        body: JSON.stringify({ ids }),
+        body: JSON.stringify({ ids, additionalUsers }),
         headers: { "Content-Type": "application/json" },
         credentials: "include",
     }, "json", 120_000);
