@@ -4,7 +4,7 @@ const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/api/dashboard`;
 
 export interface DashboardOverview {
     generatedAt: string;
-    calendarTeachingUserSyncCron: {
+    calendarTeachingUserSyncCron?: {
         enabled: boolean;
         hour: number;
         minute: number;

@@ -311,6 +311,14 @@ const Page: React.FC = () => {
         timeZone: 'Asia/Ho_Chi_Minh',
         lastRunAt: null,
     };
+    const teachingUserSyncCron = data.calendarTeachingUserSyncCron ?? {
+        enabled: false,
+        hour: 3,
+        minute: 0,
+        timeZone: 'Asia/Ho_Chi_Minh',
+        windowDays: 7,
+        latest: null,
+    };
     const hmoIssues = hmoIssueProgram ? programHmoIssues : dashboardHmoIssues;
     const hmoProgramOptions = useMemo(() => (data.hmoLessonSync?.issuePrograms || []).map((item) => ({
         value: item.programCode,
@@ -495,29 +503,31 @@ const Page: React.FC = () => {
                     >
                         <Alert
                             showIcon
-                            type={!data.calendarTeachingUserSyncCron.enabled
+                            type={!teachingUserSyncCron.enabled
                                 ? 'warning'
-                                : ['failed', 'interrupted'].includes(data.calendarTeachingUserSyncCron.latest?.status || '')
+                                : ['failed', 'interrupted'].includes(teachingUserSyncCron.latest?.status || '')
                                     ? 'error'
-                                    : data.calendarTeachingUserSyncCron.latest?.status === 'running'
+                                    : teachingUserSyncCron.latest?.status === 'running'
                                         ? 'info'
-                                        : data.calendarTeachingUserSyncCron.latest?.failed ? 'warning' : 'success'}
-                            message={`Cron ${data.calendarTeachingUserSyncCron.enabled ? 'đang bật' : 'đã tắt'} · Chạy lúc ${String(data.calendarTeachingUserSyncCron.hour).padStart(2, '0')}:${String(data.calendarTeachingUserSyncCron.minute).padStart(2, '0')} hằng ngày · Quét ${data.calendarTeachingUserSyncCron.windowDays} ngày`}
-                            description={data.calendarTeachingUserSyncCron.latest
-                                ? `${data.calendarTeachingUserSyncCron.latest.status === 'running' ? 'Đang chạy từ' : 'Lần gần nhất'}: ${formatVietnamDateTime(data.calendarTeachingUserSyncCron.latest.startedAt, 'HH:mm DD/MM/YYYY')} · Quét ${data.calendarTeachingUserSyncCron.latest.scanned} lịch · Tạo ${data.calendarTeachingUserSyncCron.latest.created} · Cập nhật ${data.calendarTeachingUserSyncCron.latest.updated} · Lỗi ${data.calendarTeachingUserSyncCron.latest.failed}${data.calendarTeachingUserSyncCron.latest.errors[0]?.message ? ` · ${data.calendarTeachingUserSyncCron.latest.errors[0].message}` : ''}`
-                                : 'Chưa có lịch sử chạy. Có thể quét thủ công tại trang Lịch học khi cần đồng bộ ngay.'}
+                                        : teachingUserSyncCron.latest?.failed ? 'warning' : 'success'}
+                            message={`Cron ${teachingUserSyncCron.enabled ? 'đang bật' : 'đã tắt'} · Chạy lúc ${String(teachingUserSyncCron.hour).padStart(2, '0')}:${String(teachingUserSyncCron.minute).padStart(2, '0')} hằng ngày · Quét ${teachingUserSyncCron.windowDays} ngày`}
+                            description={teachingUserSyncCron.latest
+                                ? `${teachingUserSyncCron.latest.status === 'running' ? 'Đang chạy từ' : 'Lần gần nhất'}: ${formatVietnamDateTime(teachingUserSyncCron.latest.startedAt, 'HH:mm DD/MM/YYYY')} · Quét ${teachingUserSyncCron.latest.scanned} lịch · Tạo ${teachingUserSyncCron.latest.created} · Cập nhật ${teachingUserSyncCron.latest.updated} · Lỗi ${teachingUserSyncCron.latest.failed}${teachingUserSyncCron.latest.errors[0]?.message ? ` · ${teachingUserSyncCron.latest.errors[0].message}` : ''}`
+                                : teachingUserSyncCron.enabled
+                                    ? 'Chưa có lịch sử chạy. Có thể quét thủ công tại trang Lịch học khi cần đồng bộ ngay.'
+                                    : 'Backend chưa cung cấp trạng thái cron hoặc cron đang tắt.'}
                         />
-                        {!!data.calendarTeachingUserSyncCron.latest?.errors.length && (
+                        {!!teachingUserSyncCron.latest?.errors.length && (
                             <Collapse
                                 style={{ marginTop: 12 }}
                                 items={[{
                                     key: 'teaching-user-sync-errors',
-                                    label: `Chi tiết ${data.calendarTeachingUserSyncCron.latest.errors.length} lỗi`,
+                                    label: `Chi tiết ${teachingUserSyncCron.latest.errors.length} lỗi`,
                                     children: (
                                         <List
                                             size="small"
                                             style={{ maxHeight: 420, overflow: 'auto' }}
-                                            dataSource={data.calendarTeachingUserSyncCron.latest.errors}
+                                            dataSource={teachingUserSyncCron.latest.errors}
                                             renderItem={(item) => (
                                                 <List.Item>
                                                     <Space align="start">
