@@ -35,7 +35,7 @@ const defaultUser = {
     warehouseId: -1,
     warehouseName: '',
     permissions: [],
-    programScope: { mode: 'ALL' as const, programs: [] }
+    programScope: { mode: 'DENY' as const, programs: [] }
 }
 
 const mergeFieldPolicies = (policies: any[]) => {
@@ -146,8 +146,8 @@ export const useAuthStore = create<AuthState>()(
                 if (!user.permissions.includes(permission)) return false;
                 if (!programCode) return true;
                 const scope = user.programScope;
-                // Missing policy is the explicit legacy compatibility mode.
-                if (!scope || scope.mode === 'ALL') return true;
+                if (!scope) return false;
+                if (scope.mode === 'ALL') return true;
                 if (scope.mode === 'DENY') return false;
                 return scope.programs.includes(String(programCode).trim());
             },

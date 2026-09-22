@@ -21,6 +21,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
 import {
     applyStudentClassroomAssignment,
+    type ClassroomAssignmentUpdateMode,
     deleteLivestream,
     downloadLivestreamImportTemplate,
     exportLivestreams,
@@ -2101,7 +2102,10 @@ const Page = () => {
         setClassroomAssignmentCalendarId(selectedKey);
     };
 
-    const runBatchClassroomAssignment = async (items: BatchClassroomAssignmentItem[]) => {
+    const runBatchClassroomAssignment = async (
+        items: BatchClassroomAssignmentItem[],
+        updateMode: ClassroomAssignmentUpdateMode
+    ) => {
         setBatchClassroomItems(items);
         setBatchClassroomAssignmentOpen(true);
         setBatchClassroomAssigning(true);
@@ -2118,11 +2122,16 @@ const Page = () => {
             try {
                 // Endpoint apply tự dựng lại phương án ngay trong transaction,
                 // vì vậy thuật toán giống hệt thao tác xác nhận ở modal đơn lẻ.
-                const response: any = await applyStudentClassroomAssignment(item.calendarId);
+                const response: any = await applyStudentClassroomAssignment(
+                    item.calendarId,
+                    undefined,
+                    updateMode
+                );
                 const result = response?.data ?? response;
                 const totalStudents = Number(result?.total_students || 0);
+                const eligibleStudents = Number(result?.eligible_students || 0);
                 const movedCount = Number(result?.moved_count || 0);
-                if (totalStudents === 0) {
+                if (totalStudents === 0 || (updateMode === "unlearned_only" && eligibleStudents === 0)) {
                     skippedCount += 1;
                     setBatchClassroomItems((current) => current.map((row) => (
                         row.calendarId === item.calendarId
@@ -2130,7 +2139,9 @@ const Page = () => {
                                 ...row,
                                 status: "skipped",
                                 movedCount: 0,
-                                message: "Chưa có danh sách học sinh nên chưa thể chia lớp.",
+                                message: totalStudents === 0
+                                    ? "Chưa có danh sách học sinh nên chưa thể chia lớp."
+                                    : "Toàn bộ học sinh đã học (islearn = 1), giữ nguyên phân lớp.",
                             }
                             : row
                     )));
@@ -2171,7 +2182,7 @@ const Page = () => {
         }
         api[failedCount || skippedCount ? "warning" : "success"]({
             message: "Đã hoàn tất tự động chia lớp",
-            description: `Thành công ${successCount}/${items.length} lịch${skippedCount ? `, bỏ qua ${skippedCount} lịch chưa có học sinh` : ""}${failedCount ? `, lỗi ${failedCount} lịch` : ""}.`,
+            description: `Thành công ${successCount}/${items.length} lịch${skippedCount ? `, bỏ qua ${skippedCount} lịch không có học sinh cần cập nhật` : ""}${failedCount ? `, lỗi ${failedCount} lịch` : ""}.`,
             duration: 6,
         });
     };
@@ -2212,6 +2223,7 @@ const Page = () => {
             return left.calendarId.localeCompare(right.calendarId, "vi", { numeric: true });
         });
 
+        let updateMode: ClassroomAssignmentUpdateMode = "all";
         Modal.confirm({
             title: `Tự động chia lớp cho ${items.length} lịch?`,
             icon: <ApartmentOutlined />,
@@ -2223,12 +2235,37 @@ const Page = () => {
                     <Typography.Text type="secondary">
                         Thuật toán chia lớp hiện tại được giữ nguyên. Lịch TopUni dùng giới hạn mặc định 500 học sinh/phòng; lịch lỗi không làm dừng các lịch còn lại.
                     </Typography.Text>
+                    <Card size="small" title="Phạm vi cập nhật" style={{ marginTop: 8 }}>
+                        <Radio.Group
+                            defaultValue="all"
+                            onChange={(event) => {
+                                updateMode = event.target.value as ClassroomAssignmentUpdateMode;
+                            }}
+                        >
+                            <Space direction="vertical" size={10}>
+                                <Radio value="all">
+                                    <Typography.Text strong>Cập nhật tất cả học sinh</Typography.Text>
+                                    <br />
+                                    <Typography.Text type="secondary">
+                                        Nghiệp vụ hiện tại: cập nhật lại room_id và class_id cho toàn bộ học sinh.
+                                    </Typography.Text>
+                                </Radio>
+                                <Radio value="unlearned_only">
+                                    <Typography.Text strong>Chỉ cập nhật học sinh chưa học</Typography.Text>
+                                    <br />
+                                    <Typography.Text type="secondary">
+                                        Chỉ cập nhật islearn = 0; islearn = 1 của đúng code + learn_number được giữ nguyên.
+                                    </Typography.Text>
+                                </Radio>
+                            </Space>
+                        </Radio.Group>
+                    </Card>
                 </Space>
             ),
             okText: "Bắt đầu chia lớp",
             cancelText: "Hủy",
             onOk: () => {
-                void runBatchClassroomAssignment(items);
+                void runBatchClassroomAssignment(items, updateMode);
             },
         });
     };
@@ -4318,7 +4355,7 @@ const Page = () => {
                                     type="info"
                                     showIcon
                                     message={`Đã chọn ${selectedRowKeys.length} lịch học`}
-                                    description="Học viên đã tồn tại sẽ được tự động bỏ qua, không tạo dữ liệu trùng."
+                                    description="Chỉ thêm học viên mới theo username + code + learn_number. Học viên đã tồn tại được giữ nguyên class_id, room_id và islearn."
                                 />
                                 <Radio.Group
                                     value={studentSyncMode}
@@ -4419,8 +4456,8 @@ const Page = () => {
                                     description={`${studentSyncItems.filter((item) => item.status === "error").length} chương trình lỗi. ${studentSyncMode === "today"
                                         ? `Đã kiểm tra học viên đăng ký ngày ${dayjs().format("DD/MM/YYYY")}.`
                                         : "Đã xử lý các lịch hợp lệ."} ${studentSyncResult.preview
-                                            ? `Preview: sẽ insert ${studentSyncResult.plannedInserted.toLocaleString("vi-VN")}, sẽ cập nhật ${studentSyncResult.plannedUpdated.toLocaleString("vi-VN")}; chưa ghi bảng users.`
-                                            : "Kết quả đã được ghi vào bảng users."}`}
+                                            ? `Preview: sẽ thêm ${studentSyncResult.plannedInserted.toLocaleString("vi-VN")} học viên mới; chưa ghi bảng users.`
+                                            : "Chỉ học viên mới được thêm vào bảng users với islearn = 0; dữ liệu học viên cũ không bị cập nhật."}`}
                                 />
                                 <Card size="small">
                                     <Row gutter={[16, 14]}>
@@ -4439,8 +4476,8 @@ const Page = () => {
                                             </Typography.Text>
                                         </Col>
                                         <Col span={12}><Typography.Text type="success">{studentSyncResult.preview ? "Sẽ insert" : "Số dòng insert"}</Typography.Text><div><Typography.Title level={4} style={{ margin: 0, color: "#389e0d" }}>{(studentSyncResult.preview ? studentSyncResult.plannedInserted : studentSyncResult.inserted).toLocaleString("vi-VN")}</Typography.Title></div></Col>
-                                        <Col span={12}><Typography.Text style={{ color: "#1677ff" }}>{studentSyncResult.preview ? "Sẽ cập nhật lớp" : "Cập nhật lớp"}</Typography.Text><div><Typography.Title level={4} style={{ margin: 0, color: "#1677ff" }}>{(studentSyncResult.preview ? studentSyncResult.plannedUpdated : studentSyncResult.updated).toLocaleString("vi-VN")}</Typography.Title></div></Col>
-                                        <Col span={12}><Typography.Text type="secondary">Số dòng bỏ qua</Typography.Text><div><Typography.Title level={4} style={{ margin: 0 }}>{studentSyncResult.skipped.toLocaleString("vi-VN")}</Typography.Title></div><Typography.Text type="secondary" style={{ fontSize: 12 }}>Enrollment đã tồn tại và đúng lớp, hoặc bị trùng khi ghi đồng thời.</Typography.Text></Col>
+                                        <Col span={12}><Typography.Text style={{ color: "#1677ff" }}>Dữ liệu cũ bị cập nhật</Typography.Text><div><Typography.Title level={4} style={{ margin: 0, color: "#1677ff" }}>{studentSyncResult.updated.toLocaleString("vi-VN")}</Typography.Title></div><Typography.Text type="secondary" style={{ fontSize: 12 }}>Luôn bằng 0 trong chế độ chỉ bổ sung.</Typography.Text></Col>
+                                        <Col span={12}><Typography.Text type="secondary">Đã tồn tại – giữ nguyên</Typography.Text><div><Typography.Title level={4} style={{ margin: 0 }}>{studentSyncResult.skipped.toLocaleString("vi-VN")}</Typography.Title></div><Typography.Text type="secondary" style={{ fontSize: 12 }}>Giữ nguyên class_id, room_id và islearn theo code + learn_number.</Typography.Text></Col>
                                         <Col span={12}><Typography.Text type="secondary">Không có mapping</Typography.Text><div><Typography.Title level={4} style={{ margin: 0 }}>{studentSyncResult.unmatched.toLocaleString("vi-VN")}</Typography.Title></div></Col>
                                         <Col span={12}><Typography.Text type={studentSyncResult.failed ? "danger" : "secondary"}>Thất bại</Typography.Text><div><Typography.Title level={4} style={{ margin: 0, color: studentSyncResult.failed ? "#cf1322" : undefined }}>{studentSyncResult.failed.toLocaleString("vi-VN")}</Typography.Title></div></Col>
                                     </Row>

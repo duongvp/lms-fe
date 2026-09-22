@@ -25,6 +25,13 @@ export interface UserApiResponse {
     created_at: string;
     updated_at: string;
     roles: RoleInfo[];
+    programScope: UserProgramScope;
+}
+
+export type UserProgramScopeMode = "ALL" | "RESTRICTED" | "DENY";
+export interface UserProgramScope {
+    mode: UserProgramScopeMode;
+    programs: string[];
 }
 
 // Payload dùng cho update user
@@ -37,6 +44,7 @@ export interface UpdateUserPayload {
     class_id?: string;
     room_id?: number;
     roleIds?: number[];
+    programScope?: UserProgramScope;
 }
 
 export interface CreateUserPayload {
@@ -45,6 +53,7 @@ export interface CreateUserPayload {
     email?: string;
     phone?: string;
     roleIds: number[];
+    programScope?: UserProgramScope;
 }
 
 // ---------- API functions ----------

@@ -430,6 +430,7 @@ export interface ClassroomAssignmentSummary {
 
 export interface ClassroomAssignmentResult {
     operation_id?: string;
+    update_mode: ClassroomAssignmentUpdateMode;
     calendar: {
         id: number;
         code: string;
@@ -438,6 +439,8 @@ export interface ClassroomAssignmentResult {
         start_time: string;
     };
     total_students: number;
+    eligible_students: number;
+    protected_learned_students: number;
     classroom_count: number;
     moved_count: number;
     max_students_per_classroom: number | null;
@@ -477,24 +480,34 @@ export interface ClassroomAssignmentResult {
     classrooms: ClassroomAssignmentSummary[];
 }
 
+export type ClassroomAssignmentUpdateMode = "all" | "unlearned_only";
+
 export const previewStudentClassroomAssignment = (
     calendarId: string | number,
-    maxStudentsPerClassroom?: number
+    maxStudentsPerClassroom?: number,
+    updateMode: ClassroomAssignmentUpdateMode = "all"
 ) =>
     fetchInstance(`${API_BASE_URL}/${calendarId}/classroom-assignment/preview`, {
         method: "POST",
-        body: JSON.stringify({ max_students_per_classroom: maxStudentsPerClassroom }),
+        body: JSON.stringify({
+            max_students_per_classroom: maxStudentsPerClassroom,
+            update_mode: updateMode,
+        }),
         headers: { "Content-Type": "application/json" },
         credentials: "include",
     }, "json", 120_000);
 
 export const applyStudentClassroomAssignment = (
     calendarId: string | number,
-    maxStudentsPerClassroom?: number
+    maxStudentsPerClassroom?: number,
+    updateMode: ClassroomAssignmentUpdateMode = "all"
 ) =>
     fetchInstance(`${API_BASE_URL}/${calendarId}/classroom-assignment/apply`, {
         method: "POST",
-        body: JSON.stringify({ max_students_per_classroom: maxStudentsPerClassroom }),
+        body: JSON.stringify({
+            max_students_per_classroom: maxStudentsPerClassroom,
+            update_mode: updateMode,
+        }),
         headers: { "Content-Type": "application/json" },
         credentials: "include",
     }, "json", 120_000);

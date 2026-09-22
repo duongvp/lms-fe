@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Button, Card, Col, Descriptions, Empty, InputNumber, Modal, Progress, Row, Space, Spin, Statistic, Table, Tag, Typography, notification } from "antd";
+import { Alert, Button, Card, Col, Descriptions, Empty, InputNumber, Modal, Progress, Radio, Row, Space, Spin, Statistic, Table, Tag, Typography, notification } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import {
     applyStudentClassroomAssignment,
     ClassroomAssignmentResult,
     ClassroomAssignmentSummary,
+    ClassroomAssignmentUpdateMode,
     previewStudentClassroomAssignment,
 } from "@/services/livestreamService";
 
@@ -37,15 +38,20 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
         DEFAULT_TOPUNI_MAX_STUDENTS_PER_ROOM
     );
     const [useSuggestedTopUniLimit, setUseSuggestedTopUniLimit] = useState(true);
+    const [updateMode, setUpdateMode] = useState<ClassroomAssignmentUpdateMode>("all");
 
-    const loadPreview = useCallback(async (requestedMaxStudentsPerRoom?: number) => {
+    const loadPreview = useCallback(async (
+        requestedMaxStudentsPerRoom?: number,
+        requestedUpdateMode: ClassroomAssignmentUpdateMode = "all"
+    ) => {
         if (!calendarId) return;
         setLoading(true);
         setError("");
         try {
             const response = await previewStudentClassroomAssignment(
                 calendarId,
-                requestedMaxStudentsPerRoom
+                requestedMaxStudentsPerRoom,
+                requestedUpdateMode
             );
             const result = unwrapResult(response);
             setPreview(result);
@@ -65,7 +71,8 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
             setPreview(null);
             setMaxStudentsPerRoom(DEFAULT_TOPUNI_MAX_STUDENTS_PER_ROOM);
             setUseSuggestedTopUniLimit(true);
-            void loadPreview();
+            setUpdateMode("all");
+            void loadPreview(undefined, "all");
         }
         else {
             setPreview(null);
@@ -81,13 +88,16 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
                 calendarId,
                 useSuggestedTopUniLimit
                     ? undefined
-                    : preview.max_students_per_classroom ?? undefined
+                    : preview.max_students_per_classroom ?? undefined,
+                updateMode
             );
             const result = unwrapResult(response);
             api.success({
                 message: "Chia lớp học sinh thành công",
                 description: result.moved_count
                     ? `Đã cập nhật phân lớp cho ${result.moved_count} học sinh.`
+                    : result.update_mode === "unlearned_only" && result.eligible_students === 0
+                    ? "Không có học sinh islearn = 0 cần cập nhật; toàn bộ học sinh đã học được giữ nguyên."
                     : "Phân lớp hiện tại đã phù hợp, không có học sinh cần cập nhật.",
             });
             onApplied?.();
@@ -233,7 +243,8 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
                         }
                     }}
                     onPressEnter={() => void loadPreview(
-                        useSuggestedTopUniLimit ? undefined : maxStudentsPerRoom
+                        useSuggestedTopUniLimit ? undefined : maxStudentsPerRoom,
+                        updateMode
                     )}
                 />
                 <Button
@@ -241,7 +252,8 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
                     loading={loading}
                     disabled={!maxStudentsPerRoomChanged || applying}
                     onClick={() => void loadPreview(
-                        useSuggestedTopUniLimit ? undefined : maxStudentsPerRoom
+                        useSuggestedTopUniLimit ? undefined : maxStudentsPerRoom,
+                        updateMode
                     )}
                 >
                     Tính lại phương án
@@ -277,7 +289,8 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
                 footer={[
                     <Button key="cancel" onClick={onClose} disabled={applying}>Hủy</Button>,
                     <Button key="reload" onClick={() => void loadPreview(
-                        useSuggestedTopUniLimit ? undefined : maxStudentsPerRoom
+                        useSuggestedTopUniLimit ? undefined : maxStudentsPerRoom,
+                        updateMode
                     )} disabled={loading || applying}>
                         Tải lại xem trước
                     </Button>,
@@ -285,7 +298,7 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
                         key="apply"
                         type="primary"
                         loading={applying}
-                        disabled={!preview || preview.total_students === 0 || loading || Boolean(error) || maxStudentsPerRoomChanged}
+                        disabled={!preview || preview.eligible_students === 0 || loading || Boolean(error) || maxStudentsPerRoomChanged}
                         onClick={handleApply}
                     >
                         Xác nhận chia lớp
@@ -305,12 +318,52 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
                         </Space>
                     ) : preview ? (
                         <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                            <Card size="small" title="Phạm vi cập nhật">
+                                <Radio.Group
+                                    value={updateMode}
+                                    disabled={loading || applying}
+                                    onChange={(event) => {
+                                        const nextMode = event.target.value as ClassroomAssignmentUpdateMode;
+                                        setUpdateMode(nextMode);
+                                        setPreview(null);
+                                        void loadPreview(
+                                            useSuggestedTopUniLimit ? undefined : maxStudentsPerRoom,
+                                            nextMode
+                                        );
+                                    }}
+                                >
+                                    <Space direction="vertical" size={10}>
+                                        <Radio value="all">
+                                            <Typography.Text strong>Cập nhật tất cả học sinh</Typography.Text>
+                                            <br />
+                                            <Typography.Text type="secondary">
+                                                Giữ nguyên nghiệp vụ hiện tại: cập nhật lại room_id và class_id theo phương án mới.
+                                            </Typography.Text>
+                                        </Radio>
+                                        <Radio value="unlearned_only">
+                                            <Typography.Text strong>Chỉ cập nhật học sinh chưa học</Typography.Text>
+                                            <br />
+                                            <Typography.Text type="secondary">
+                                                Chỉ cập nhật bản ghi islearn = 0; học sinh islearn = 1 của đúng code + learn_number được giữ nguyên.
+                                            </Typography.Text>
+                                        </Radio>
+                                    </Space>
+                                </Radio.Group>
+                            </Card>
                             <Alert
                                 type="info"
                                 showIcon
                                 message="Đây là dữ liệu xem trước"
                                 description="Chưa có dữ liệu nào được lưu ở bước này. Phòng học và mã lớp của học sinh chỉ được cập nhật sau khi bạn bấm “Xác nhận chia lớp”; giáo viên và trợ giảng không bị thay đổi."
                             />
+                            {preview.update_mode === "unlearned_only" && preview.eligible_students === 0 && (
+                                <Alert
+                                    type="success"
+                                    showIcon
+                                    message="Không có học sinh chưa học cần cập nhật"
+                                    description="Toàn bộ học sinh của code + learn_number này có islearn = 1 nên room_id và class_id sẽ được giữ nguyên."
+                                />
+                            )}
                             {topUniRoomLimitControl}
                             {preview.calendar.system_type === "topclass" && (
                                 <Alert
@@ -359,6 +412,16 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
                                 <Descriptions.Item label="Tổng học sinh">
                                     {preview.total_students.toLocaleString("vi-VN")}
                                 </Descriptions.Item>
+                                <Descriptions.Item label="Có thể cập nhật">
+                                    {preview.eligible_students.toLocaleString("vi-VN")} học sinh
+                                </Descriptions.Item>
+                                {preview.update_mode === "unlearned_only" && (
+                                    <Descriptions.Item label="Giữ nguyên vì đã học">
+                                        <Typography.Text type="success" strong>
+                                            {preview.protected_learned_students.toLocaleString("vi-VN")} học sinh
+                                        </Typography.Text>
+                                    </Descriptions.Item>
+                                )}
                                 <Descriptions.Item label="Số phòng">{preview.classroom_count}</Descriptions.Item>
                                 <Descriptions.Item label="Cần cập nhật phân lớp">
                                     <Space direction="vertical" size={0}>

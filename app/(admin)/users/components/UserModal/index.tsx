@@ -1,5 +1,5 @@
 "use client";
-import { Modal, Form, Input, Button, Row, Col, Select } from "antd";
+import { Modal, Form, Input, Button, Row, Col, Select, Radio, Alert, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { CloseCircleOutlined, SaveOutlined } from "@ant-design/icons";
 import CustomSpin from "@/components/ui/Spins";
@@ -7,7 +7,7 @@ import { showErrorMessage, showSuccessMessage } from "@/ultils/message";
 import useUserStore from "@/stores/userStore";
 import useRoleStore from "@/stores/roleStore";
 import { ActionType } from "@/enums/action";
-import { getRoles } from "@/services/roleService";
+import { getProgramResources, getRoles, ProgramResource } from "@/services/roleService";
 import { createUser, updateUser } from "@/services/userService";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -22,8 +22,11 @@ const UserModal = () => {
     const { shouldReload: shouldReloadRole, setShouldReload: setShouldReloadRole, setModal: setRoleModal } = useRoleStore();
     const [loadingModalVisible, setLoadingModalVisible] = useState(false);
     const [roleOptions, setRoleOptions] = useState<{ label: string; value: number }[]>([]);
+    const [programs, setPrograms] = useState<ProgramResource[]>([]);
+    const [loadingPrograms, setLoadingPrograms] = useState(false);
     const { userId } = useAuthStore(state => state.user);
     const { user, setUser } = useAuthStore();
+    const scopeMode = Form.useWatch(['programScope', 'mode'], form);
 
     const onCloseModal = () => {
         form.resetFields();
@@ -43,6 +46,12 @@ const UserModal = () => {
                 phone: dataToSend.phone,
                 password: dataToSend.password || undefined,
                 roleIds: dataToSend.roleIds || [],
+                programScope: {
+                    mode: dataToSend.programScope?.mode || 'DENY',
+                    programs: dataToSend.programScope?.mode === 'RESTRICTED'
+                        ? dataToSend.programScope?.programs || []
+                        : [],
+                },
             };
 
             if (modal.type === ActionType.CREATE) {
@@ -69,6 +78,18 @@ const UserModal = () => {
         }
     };
 
+    const fetchPrograms = async () => {
+        setLoadingPrograms(true);
+        try {
+            setPrograms(await getProgramResources());
+        } catch (error) {
+            console.error("Lỗi tải chương trình:", error);
+            showErrorMessage("Không thể tải danh sách chương trình");
+        } finally {
+            setLoadingPrograms(false);
+        }
+    };
+
     const fetchRoles = async (reload = false) => {
         try {
             const apiData = await getRoles();
@@ -90,12 +111,18 @@ const UserModal = () => {
         if (modal.open) {
             form.resetFields();
             fetchRoles();
+            void fetchPrograms();
             // Set giá trị ban đầu cho form
             const initialValues: any = {
                 username: modal.user?.username,
                 full_name: modal.user?.name,
                 email: modal.user?.email,
                 phone: modal.user?.phone,
+                programScope: modal.user?.programScope || (
+                    modal.type === ActionType.CREATE
+                        ? { mode: 'RESTRICTED', programs: [] }
+                        : { mode: 'DENY', programs: [] }
+                ),
             };
             // Nếu là edit, set roleIds từ mảng roles
             if (modal.user?.roles) {
@@ -121,7 +148,7 @@ const UserModal = () => {
                 title={modal.title}
                 open={modal.open}
                 onCancel={onCloseModal}
-                width={800}
+                width={860}
                 centered
                 footer={[
                     <Button key="back" onClick={onCloseModal} icon={<CloseCircleOutlined />}>
@@ -197,6 +224,52 @@ const UserModal = () => {
                             <Form.Item label="Điện thoại" name="phone">
                                 <Input />
                             </Form.Item>
+                        </Col>
+                        <Col span={24}>
+                            <div style={{ borderTop: '1px solid #f0f0f0', margin: '8px 0 20px' }} />
+                            <Typography.Title level={5} style={{ marginBottom: 4 }}>Phạm vi chương trình</Typography.Title>
+                            <Typography.Text type="secondary">
+                                Phạm vi được cấu hình riêng cho tài khoản và không phụ thuộc vào vai trò.
+                            </Typography.Text>
+                            <Form.Item
+                                name={['programScope', 'mode']}
+                                style={{ marginTop: 16, marginBottom: 12 }}
+                                rules={[{ required: true, message: 'Vui lòng chọn phạm vi chương trình' }]}
+                            >
+                                <Radio.Group buttonStyle="solid">
+                                    <Radio.Button value="ALL">Tất cả chương trình</Radio.Button>
+                                    <Radio.Button value="RESTRICTED">Chỉ chương trình đã chọn</Radio.Button>
+                                    <Radio.Button value="DENY">Không truy cập</Radio.Button>
+                                </Radio.Group>
+                            </Form.Item>
+                            {scopeMode === 'ALL' && <Alert type="warning" showIcon message="Tài khoản có thể thao tác trên toàn bộ chương trình hiện tại và được tạo sau này." />}
+                            {scopeMode === 'DENY' && <Alert type="warning" showIcon message="Tài khoản vẫn đăng nhập được nhưng không thể xem dữ liệu theo chương trình." />}
+                            {scopeMode === 'RESTRICTED' && (
+                                <Form.Item
+                                    name={['programScope', 'programs']}
+                                    label="Chương trình được phép"
+                                    labelCol={{ span: 24 }}
+                                    wrapperCol={{ span: 24 }}
+                                    rules={[{ required: true, type: 'array', min: 1, message: 'Vui lòng chọn ít nhất một chương trình' }]}
+                                    style={{ marginTop: 12, marginBottom: 0 }}
+                                >
+                                    <Select
+                                        mode="multiple"
+                                        allowClear
+                                        showSearch
+                                        optionFilterProp="label"
+                                        loading={loadingPrograms}
+                                        placeholder="Tìm và chọn chương trình"
+                                        maxTagCount="responsive"
+                                        options={programs.map(program => ({
+                                            value: program.code,
+                                            label: program.displayName && program.displayName !== program.code
+                                                ? `${program.displayName} (${program.code})`
+                                                : program.code,
+                                        }))}
+                                    />
+                                </Form.Item>
+                            )}
                         </Col>
                     </Row>
                 </Form>

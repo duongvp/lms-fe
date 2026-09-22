@@ -72,19 +72,19 @@ export const menuConfig: IMenuItem[] = [
         permission: PermissionKey.QUIZ_VIEW,
     },
     {
-        key: "5",
+        key: "schedule_management",
         icon: <BankOutlined />,
         label: "Quản lý lịch học",
         permission: PermissionKey.SCHEDULE_VIEW,
         children: [
             {
-                key: "5_schedule",
+                key: "schedule_calendar",
                 label: "Lịch học",
                 path: "/schedule",
                 permission: PermissionKey.SCHEDULE_VIEW,
             },
             {
-                key: "5_banner",
+                key: "schedule_banners",
                 label: "Banner lịch học",
                 path: "/program-teacher-banners",
                 permission: PermissionKey.PROGRAM_TEACHER_BANNER_VIEW,
@@ -92,7 +92,7 @@ export const menuConfig: IMenuItem[] = [
         ],
     },
     {
-        key: "5_room",
+        key: "room_config",
         icon: <SettingOutlined />,
         label: "Cấu hình phòng học",
         path: "/room-config",

@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import { Row, Col, Typography, Space, Button } from 'antd';
+import { Row, Col, Typography, Space, Button, Tag } from 'antd';
 import { DeleteOutlined, UploadOutlined } from '@ant-design/icons';
 import { deleteUser, UserApiResponse } from '@/services/userService';
 import useUserStore from '@/stores/userStore';
@@ -52,6 +52,12 @@ const UserDetail: React.FC<UserDetailProps> = ({ record }) => {
         { label: 'Số điện thoại:', value: record.phone },
         { label: 'Email:', value: record.email },
     ];
+    const scope = record.programScope || { mode: 'DENY', programs: [] };
+    const scopeLabel = scope.mode === 'ALL'
+        ? 'Tất cả chương trình'
+        : scope.mode === 'DENY'
+            ? 'Không truy cập chương trình'
+            : `${scope.programs.length} chương trình`;
 
     return (
         <div>
@@ -68,6 +74,19 @@ const UserDetail: React.FC<UserDetailProps> = ({ record }) => {
                                 </Col>
                             </Row>
                         ))}
+                        <Row gutter={[8, 8]} style={{ marginBottom: 8 }}>
+                            <Col xs={24} sm={6}><Text strong>Vai trò:</Text></Col>
+                            <Col xs={24} sm={18}>
+                                <Space size={[4, 4]} wrap>{record.roles.map(role => <Tag key={role.role_id}>{role.role_name}</Tag>)}</Space>
+                            </Col>
+                        </Row>
+                        <Row gutter={[8, 8]}>
+                            <Col xs={24} sm={6}><Text strong>Phạm vi:</Text></Col>
+                            <Col xs={24} sm={18}>
+                                <Text>{scopeLabel}</Text>
+                                {scope.mode === 'RESTRICTED' && <div style={{ marginTop: 6 }}><Space size={[4, 4]} wrap>{scope.programs.map(code => <Tag color="blue" key={code}>{code}</Tag>)}</Space></div>}
+                            </Col>
+                        </Row>
                     </Col>
                 </Row>
             </div>

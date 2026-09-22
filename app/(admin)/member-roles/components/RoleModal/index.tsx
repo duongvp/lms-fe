@@ -13,7 +13,6 @@ import {
     Table,
     Alert,
     Skeleton,
-    Select,
     TableProps,
 } from "antd";
 import React, { useEffect, useState, useCallback, useRef } from "react";
@@ -36,11 +35,6 @@ import {
     updateRoleFieldPolicy,
     getPermissionsStructure,
     type PermissionStructure,
-    getProgramResources,
-    getRoleProgramScope,
-    updateRoleProgramScope,
-    type ProgramResource,
-    type RoleProgramScope,
 } from "@/services/roleService";
 import type { ModuleStructure } from "@/types/fieldPolicy";
 
@@ -183,8 +177,6 @@ const RoleModal = () => {
     const [permissionsStructure, setPermissionsStructure] = useState<PermissionStructure>({});
     const [structuresLoaded, setStructuresLoaded] = useState(false);
     const [structuresError, setStructuresError] = useState<string | null>(null);
-    const [programResources, setProgramResources] = useState<ProgramResource[]>([]);
-    const [programScope, setProgramScope] = useState<RoleProgramScope>({ mode: "ALL", programs: [] });
 
     // 🆕 Fetch ngầm ngay khi component mount lần đầu
     const hasFetchedInitially = useRef(false);
@@ -196,12 +188,10 @@ const RoleModal = () => {
         const fetchStructures = async () => {
             try {
                 setStructuresLoaded(false);
-                const [modulesResponse, permissionsResponse, programsResponse] = await Promise.all([
+                const [modulesResponse, permissionsResponse] = await Promise.all([
                     getModules(),
                     getPermissionsStructure(),
-                    getProgramResources(),
                 ]);
-                setProgramResources(programsResponse);
 
                 // Modules + ModuleField
                 let modulesArray: ModuleStructure[] = [];
@@ -249,7 +239,6 @@ const RoleModal = () => {
         setCheckedGroups({});
         setExpandedGroups({});
         setFieldPolicy({});
-        setProgramScope({ mode: "ALL", programs: [] });
     };
 
     const toggleGroup = (key: string) => {
@@ -405,9 +394,6 @@ const RoleModal = () => {
         };
 
         loadFieldPolicy();
-        getRoleProgramScope(Number(modal.role?.id))
-            .then(setProgramScope)
-            .catch((error) => console.error("Lỗi lấy program scope:", error));
     }, [modal.role, form, modal.open, permissionsStructure, modulesStructure]);
 
     const handleFormSubmit = async (values: any) => {
@@ -423,12 +409,10 @@ const RoleModal = () => {
                 permissions: permissions.map((code) => ({ code })),
             };
 
-            let savedRoleId = Number(modal.role?.id || 0);
             if (modal.type === ActionType.CREATE) {
-                const created: any = await createRole({ ...roleData, fieldPolicy: fieldPolicyBE });
-                savedRoleId = Number(created?.data?.role_id ?? created?.role_id ?? 0);
+                await createRole({ ...roleData, fieldPolicy: fieldPolicyBE });
             } else if (modal.type === ActionType.UPDATE) {
-                const roleId = savedRoleId;
+                const roleId = Number(modal.role?.id || 0);
                 await updateRole(roleId, roleData);
                 try {
                     await updateRoleFieldPolicy(roleId, fieldPolicyBE);
@@ -436,10 +420,6 @@ const RoleModal = () => {
                     console.warn("Không thể cập nhật fieldPolicy qua endpoint riêng, fallback update role:", fieldPolicyError);
                     await updateRole(roleId, { fieldPolicy: fieldPolicyBE });
                 }
-            }
-
-            if (savedRoleId > 0) {
-                await updateRoleProgramScope(savedRoleId, programScope);
             }
 
             showSuccessMessage(`${modal.title} thành công!`);
@@ -756,50 +736,6 @@ const RoleModal = () => {
                                         );
                                     })}
                                 </Collapse>
-                            </Tabs.TabPane>
-                            <Tabs.TabPane tab="Phạm vi Chương trình" key="3">
-                                <Alert
-                                    type="info"
-                                    showIcon
-                                    message="Phạm vi Chương trình này dùng chung cho tất cả quyền thao tác của vai trò."
-                                    style={{ marginBottom: 16 }}
-                                />
-                                <div style={{ padding: 12, border: "1px solid #f0f0f0", borderRadius: 8 }}>
-                                            <Row gutter={12} style={{ marginTop: 8 }}>
-                                                <Col xs={24} md={7}>
-                                                    <Select
-                                                        value={programScope.mode}
-                                                        style={{ width: "100%" }}
-                                                        options={[
-                                                            { value: "ALL", label: "Tất cả Chương trình" },
-                                                            { value: "RESTRICTED", label: "Chỉ Chương trình đã chọn" },
-                                                            { value: "DENY", label: "Không Chương trình nào" },
-                                                        ]}
-                                                        onChange={(mode) => setProgramScope((prev) => ({
-                                                            ...prev,
-                                                            mode,
-                                                            programs: mode === "RESTRICTED" ? prev.programs : [],
-                                                        }))}
-                                                    />
-                                                </Col>
-                                                <Col xs={24} md={17}>
-                                                    <Select
-                                                        mode="multiple"
-                                                        allowClear
-                                                        showSearch
-                                                        disabled={programScope.mode !== "RESTRICTED"}
-                                                        value={programScope.programs}
-                                                        style={{ width: "100%" }}
-                                                        placeholder="Chọn Chương trình"
-                                                        options={programResources.map((program) => ({
-                                                            value: program.code,
-                                                            label: `${program.code}${program.displayName ? ` · ${program.displayName}` : ""}`,
-                                                        }))}
-                                                        onChange={(programs) => setProgramScope((prev) => ({ ...prev, programs }))}
-                                                    />
-                                                </Col>
-                                            </Row>
-                                </div>
                             </Tabs.TabPane>
                         </Tabs>
                     </Form>

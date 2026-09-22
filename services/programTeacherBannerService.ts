@@ -1,6 +1,7 @@
 import { fetchInstance } from '@/ultils/fetchInstance';
 
 const API = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/api/program-teacher-banners`;
+const SAVE_TIMEOUT_MS = 30_000;
 export interface ProgramTeacherBanner {
   id: number;
   program_code: string;
@@ -17,8 +18,8 @@ export const getProgramTeacherBanners = (params: Record<string, string | number 
   Object.entries(params).forEach(([key, value]) => value !== undefined && value !== '' && query.set(key, String(value)));
   return fetchInstance(`${API}?${query}`);
 };
-export const createProgramTeacherBanner = (payload: ProgramTeacherBannerPayload) => fetchInstance(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-export const updateProgramTeacherBanner = (id: number, payload: ProgramTeacherBannerPayload) => fetchInstance(`${API}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+export const createProgramTeacherBanner = (payload: ProgramTeacherBannerPayload) => fetchInstance(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 'json', SAVE_TIMEOUT_MS);
+export const updateProgramTeacherBanner = (id: number, payload: ProgramTeacherBannerPayload) => fetchInstance(`${API}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 'json', SAVE_TIMEOUT_MS);
 export const deleteProgramTeacherBanner = (id: number) => fetchInstance(`${API}/${id}`, { method: 'DELETE' });
 export const getProgramTeacherBannerOptions = (programCode?: string, teacherProfileId?: number) => {
   const query = new URLSearchParams();
@@ -31,3 +32,8 @@ export const importProgramTeacherBanners = (file: File, mode: 'skip' | 'overwrit
   return fetchInstance(`${API}/import`, { method: 'POST', body }, 'json', 120_000);
 };
 export const downloadProgramTeacherBannerTemplate = () => fetchInstance(`${API}/template`, { method: 'GET' }, 'blob');
+export const exportProgramTeacherBanners = (search?: string) => {
+  const query = new URLSearchParams();
+  if (search?.trim()) query.set('search', search.trim());
+  return fetchInstance(`${API}/export?${query}`, { method: 'GET' }, 'blob', 30_000);
+};

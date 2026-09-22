@@ -64,6 +64,14 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
 
   // Get active key based on current URL path
   const { activeTopKey, activeSideKey } = getActiveKeys(pathname);
+  // Menu ngang chỉ nhận một key được chọn. Khi đang ở route con, Ant Design
+  // tự đánh dấu submenu cha; truyền đồng thời cả cha và con có thể làm nhóm
+  // Lịch học tiếp tục mang trạng thái active khi đã chuyển sang menu khác.
+  const selectedMenuKeys = activeSideKey
+    ? [activeSideKey]
+    : activeTopKey
+      ? [activeTopKey]
+      : [];
 
   // Get allowed top level menu items for the desktop header (exclude Logout '9')
     const headerItems = menuConfig
@@ -83,7 +91,16 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
       return {
         key: item.key,
         // Dùng link thật để menu chuột phải của trình duyệt có thể mở tab mới.
-        label: <Link href={targetPath} onClick={notifyRouteNavigationStart}>{item.label}</Link>,
+        // Submenu của Ant Design có trạng thái hover/focus nội bộ và có thể giữ
+        // màu primary sau khi đã chuyển route. Khóa màu menu cha theo URL để
+        // "Quản lý lịch học" chỉ xanh khi một route con của nó đang active.
+        label: <Link
+          href={targetPath}
+          onClick={notifyRouteNavigationStart}
+          style={item.children ? {
+            color: activeTopKey === item.key ? '#1677ff' : 'rgba(0, 0, 0, 0.88)',
+          } : undefined}
+        >{item.label}</Link>,
         children: allowedChildren && allowedChildren.length > 0
           ? allowedChildren.map(child => ({
             key: child.key,
@@ -165,7 +182,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
             </Flex>
             <Menu
               mode="horizontal"
-              selectedKeys={[activeTopKey, activeSideKey]}
+              selectedKeys={selectedMenuKeys}
               items={headerItems}
               style={{
                 borderBottom: 'none',
@@ -203,8 +220,9 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
           </Flex>
           {!isMobile && (
             <Menu
+              key={pathname}
               mode="horizontal"
-              selectedKeys={[activeTopKey, activeSideKey]}
+              selectedKeys={selectedMenuKeys}
               items={headerItems}
               style={{
                 borderBottom: 'none',
