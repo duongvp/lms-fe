@@ -75,8 +75,21 @@ export const menuConfig: IMenuItem[] = [
         key: "5",
         icon: <BankOutlined />,
         label: "Quản lý lịch học",
-        path: "/schedule",
         permission: PermissionKey.SCHEDULE_VIEW,
+        children: [
+            {
+                key: "5_schedule",
+                label: "Lịch học",
+                path: "/schedule",
+                permission: PermissionKey.SCHEDULE_VIEW,
+            },
+            {
+                key: "5_banner",
+                label: "Banner lịch học",
+                path: "/program-teacher-banners",
+                permission: PermissionKey.PROGRAM_TEACHER_BANNER_VIEW,
+            },
+        ],
     },
     {
         key: "5_room",

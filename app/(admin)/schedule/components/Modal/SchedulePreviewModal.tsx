@@ -446,6 +446,8 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
             setSessions([{
                 key: 'current',
                 index: 1,
+                learn_number: Number(initialData?.learn_number),
+                lesson_name: initialData?.lesson_name,
                 date: formValues.date,
                 start_time: formValues.start_time,
                 end_time: formValues.end_time,

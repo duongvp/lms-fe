@@ -745,13 +745,13 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     };
 
     const renderChangeReason = () => {
-        const notificationTitle = afterCancel
+        const notificationTitle = updateMode === 'current' ? 'Thông báo cập nhật thời gian' : afterCancel
             ? updateMode === 'following' ? 'Thông báo dời chuỗi' : 'Thông báo lịch học bù'
             : 'Thông báo nghỉ học';
         const notificationLabel = afterCancel
             ? updateMode === 'following' ? 'Gửi thông báo dời lịch tới người dùng' : 'Gửi thông báo lịch học bù tới người dùng'
             : 'Gửi thông báo tới người dùng';
-        const notificationPlaceholder = afterCancel
+        const notificationPlaceholder = updateMode === 'current' ? 'Ví dụ: Buổi học chuyển từ 19:00 sang 20:00 ngày 20/09.' : afterCancel
             ? updateMode === 'following'
                 ? 'Nhập nội dung thông báo dời chuỗi...'
                 : 'Nhập nội dung thông báo lịch học bù...'
@@ -764,7 +764,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             </Form.Item>
             {sendNotification && (
                 <Form.Item
-                    label="Lý do thay đổi"
+                    label={updateMode === 'current' ? 'Nội dung thông báo' : 'Lý do thay đổi'}
                     name="change_reason"
                     rules={[
                         {
@@ -812,6 +812,11 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                             .map((username) => username.trim())
                             .filter(Boolean),
                     },
+                    class_code: initialData?.code || initialData?.class_code,
+                    subject_name: initialData?.subject,
+                    date: parseCalendarWallTime(initialData?.start_time)?.startOf('day'),
+                    start_time: parseCalendarWallTime(initialData?.start_time),
+                    end_time: parseCalendarWallTime(initialData?.end_time),
                     update_mode: 'makeup',
                     send_notification: true,
                     canceled_lesson_name_prefix: '[NGHỈ HỌC] ',
@@ -851,7 +856,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                 }
             }
         }
-    }, [open, modalContentReady, initialData, form, isEdit, programCode, selectedProgram]);
+    }, [open, modalContentReady, initialData, form, isEdit, afterCancel, programCode, selectedProgram]);
 
     React.useEffect(() => {
         const rows: any[] = courseEndQuery.data?.data?.data ?? [];
@@ -1062,7 +1067,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                     {/* Form fields for Single Add and Current Update */}
                     {((!isEdit && addMode === 'single') || (isEdit && updateMode === 'current')) && (
                         <>
-                            <FormSection title="Thông tin lớp học">
+                            {!isEdit && <FormSection title="Thông tin lớp học">
                                 {usesProgramContext && (
                                     <>
                                         <Form.Item name="grade" hidden><Input /></Form.Item>
@@ -1313,7 +1318,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                         options={buildGroupedHmoOptions(hmoOptions)}
                                     />
                                 </Form.Item>}
-                            </FormSection>
+                            </FormSection>}
+                            {isEdit && <Alert showIcon type="info" message={initialData?.lesson_name || 'Cập nhật thời gian buổi học'} description="Cập nhật trực tiếp buổi học hiện tại và giữ nguyên trạng thái buổi học." style={{ marginBottom: 16 }} />}
 
                             <FormSection title="Chi tiết thời gian">
                                 <Row gutter={24}>

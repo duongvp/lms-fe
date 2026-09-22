@@ -4,6 +4,26 @@ const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/api/dashboard`;
 
 export interface DashboardOverview {
     generatedAt: string;
+    calendarTeachingUserSyncCron: {
+        enabled: boolean;
+        hour: number;
+        minute: number;
+        timeZone: string;
+        windowDays: number;
+        latest: null | {
+            id: string;
+            status: 'running' | 'completed' | 'completed_with_errors' | 'failed' | 'interrupted';
+            windowStart: string;
+            windowEnd: string;
+            scanned: number;
+            created: number;
+            updated: number;
+            failed: number;
+            errors: Array<{ calendar_id: number; message: string }>;
+            startedAt: string;
+            finishedAt: string | null;
+        };
+    };
     hmoLessonSyncAvailable: boolean;
     summary: {
         courses: number;

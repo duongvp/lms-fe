@@ -1,11 +1,12 @@
 "use client";
+import type { FormInstance } from 'antd';
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
 import { notification, Alert, Card, Form, Input, InputNumber, List, Select, Button, Checkbox, Space, Modal, Radio, Row, Col, DatePicker, TimePicker, Drawer, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress, Table, Spin } from "antd";
-import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, MoreOutlined, ApartmentOutlined, CloudUploadOutlined, SwapOutlined } from "@ant-design/icons";
+import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, MoreOutlined, ApartmentOutlined, CloudUploadOutlined, SwapOutlined, LinkOutlined } from "@ant-design/icons";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -23,6 +24,8 @@ import {
     deleteLivestream,
     downloadLivestreamImportTemplate,
     exportLivestreams,
+    exportLivestreamsToGoogleSheet,
+    getGoogleSheetExportProgress,
     getCalendarStudentSyncProgress,
     getLivestreams,
     importLivestreamsFile,
@@ -41,12 +44,26 @@ import type { LivestreamListParams } from "@/services/livestreamService";
 import type { EvgProvisionMode } from "@/services/livestreamService";
 import type { ScanTeachingUser } from "@/services/livestreamService";
 import type { CalendarStudentSyncItem } from "@/services/livestreamService";
+import type { CalendarStudentSyncDuplicate } from "@/services/livestreamService";
 import TeachingStaffSelect from "@/components/shared/TeachingStaffSelect";
 import { rememberProgramContextUrl } from "@/components/layouts/AdminLayout/SideMenu";
 import { fetchAllPages } from "@/lib/fetchAllPages";
 
 const SCHEDULE_MODULE_CODE = "calendar";
 const { RangePicker } = DatePicker;
+
+const googleSheetLink = (value: string) => {
+    try {
+        const url = new URL(value.trim());
+        return url.protocol === "https:"
+            && url.hostname === "docs.google.com"
+            && /^\/spreadsheets\/d\/[A-Za-z0-9_-]+(?:\/|$)/.test(url.pathname)
+            ? url.toString()
+            : undefined;
+    } catch {
+        return undefined;
+    }
+};
 
 type ScheduleDocument = {
     url: string;
@@ -503,6 +520,11 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
     const time = record.start_time && record.end_time
         ? `${dayjs(record.start_time).format("HH:mm")} – ${dayjs(record.end_time).format("HH:mm")}`
         : "Chưa có thời gian";
+    const mappingIds = (value: unknown): string => {
+        const values = Array.isArray(value) ? value : [value];
+        return values.map((id) => String(id ?? '').trim()).filter(Boolean).join(', ') || '-';
+    };
+    const mappings = Array.isArray(record.package_lesson_mappings) ? record.package_lesson_mappings : [];
     const DetailItem = ({ label, children }: { label: string; children: React.ReactNode }) => (
         <div style={{ minWidth: 0 }}>
             <Typography.Text type="secondary" style={{ display: "block", fontSize: 12, marginBottom: 3 }}>
@@ -516,7 +538,10 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
         <div style={{ padding: "4px 8px 8px" }}>
             <div style={{ padding: "4px 0 18px", borderBottom: "1px solid #f0f0f0", marginBottom: 18 }}>
                 <Space direction="vertical" size={6} style={{ width: "100%" }}>
-                    <Typography.Text type="secondary">Bài {record.learn_number ?? "-"}</Typography.Text>
+                    <Space size={16} wrap>
+                        <Typography.Text type="secondary">Bài {record.learn_number ?? "-"}</Typography.Text>
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>Lesson ID (nội bộ): <Typography.Text code>{record.session_id ?? "-"}</Typography.Text></Typography.Text>
+                    </Space>
                     <Typography.Title level={4} style={{ margin: 0, lineHeight: 1.4 }}>
                         {record.lesson_name || "Chưa có tên bài học"}
                     </Typography.Title>
@@ -528,16 +553,16 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
                 </Space>
             </div>
 
-            <Row gutter={[32, 18]}>
-                <Col xs={24} sm={12}><DetailItem label="Chương trình"><Tag color="blue">{record.code || "-"}</Tag></DetailItem></Col>
-                <Col xs={24} sm={12}><DetailItem label="Hệ thống">{record.system_type || "-"}</DetailItem></Col>
-                <Col xs={24} sm={12}><DetailItem label="Lớp học">{record.class_name || "-"}</DetailItem></Col>
-                <Col xs={24} sm={12}><DetailItem label="Môn học">{record.subject || "-"}</DetailItem></Col>
-                <Col xs={24} sm={12}><DetailItem label="Giáo viên">{record.teacher || "-"}</DetailItem></Col>
-                <Col xs={24} sm={12}><DetailItem label="Trợ giảng">{record.assistant_teacher || "-"}</DetailItem></Col>
-                <Col xs={24} sm={12}><DetailItem label="Phòng/Kênh học">{record.room || "-"}</DetailItem></Col>
+            <Row gutter={[24, 16]}>
+                <Col xs={24} sm={12} lg={6}><DetailItem label="Chương trình"><Tag color="blue">{record.code || "-"}</Tag></DetailItem></Col>
+                <Col xs={24} sm={12} lg={6}><DetailItem label="Hệ thống">{record.system_type || "-"}</DetailItem></Col>
+                <Col xs={24} sm={12} lg={6}><DetailItem label="Lớp học">{record.class_name || "-"}</DetailItem></Col>
+                <Col xs={24} sm={12} lg={6}><DetailItem label="Môn học">{record.subject || "-"}</DetailItem></Col>
+                <Col xs={24} sm={12} lg={6}><DetailItem label="Giáo viên">{record.teacher || "-"}</DetailItem></Col>
+                <Col xs={24} sm={12} lg={6}><DetailItem label="Trợ giảng">{record.assistant_teacher || "-"}</DetailItem></Col>
+                <Col xs={24} sm={12} lg={6}><DetailItem label="Phòng/Kênh học">{record.room || "-"}</DetailItem></Col>
                 {!isCancelled && (
-                    <Col xs={24} sm={12}><DetailItem label="Trạng thái phân lớp">
+                    <Col xs={24} sm={12} lg={6}><DetailItem label="Trạng thái phân lớp">
                         {record.classroom_assigned ? (
                             <Space size={6} wrap>
                                 <Tag color="green">Đã chia lớp</Tag>
@@ -550,11 +575,25 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
                         ) : <Tag>Chưa chia lớp</Tag>}
                     </DetailItem></Col>
                 )}
-                <Col xs={24} sm={12}><DetailItem label="Link học">
+                <Col xs={24} sm={12} lg={6}><DetailItem label="Link học">
                     {record.lesson_link ? <Typography.Link href={record.lesson_link} target="_blank" rel="noreferrer">Mở liên kết buổi học</Typography.Link> : "-"}
                 </DetailItem></Col>
                 {isCancelled && <Col span={24}><DetailItem label="Lý do nghỉ">{record.cancel_reason || "Chưa có lý do"}</DetailItem></Col>}
             </Row>
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #eee" }}>
+                <Typography.Text type="secondary" style={{ display: "block", fontSize: 12, marginBottom: 10 }}>Liên kết HOCMAI</Typography.Text>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                    {mappings.length ? mappings.map((mapping: any, index: number) => (
+                        <div key={index} style={{ background: "#fff", border: "1px solid #e8e8e8", borderRadius: 8, padding: "12px 16px", flex: "0 1 420px", minWidth: 0, maxWidth: "100%" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 16 }}>
+                                <DetailItem label="Lesson ID"><Typography.Text style={{ fontFamily: "monospace" }}>{mappingIds(mapping.lesson_ids ?? mapping.lesson_id)}</Typography.Text></DetailItem>
+                                <DetailItem label="Package ID"><Typography.Text style={{ fontFamily: "monospace" }}>{mappingIds(mapping.package_ids ?? mapping.package_id)}</Typography.Text></DetailItem>
+                                <DetailItem label="Course ID"><Typography.Text style={{ fontFamily: "monospace" }}>{mappingIds(mapping.course_id)}</Typography.Text></DetailItem>
+                            </div>
+                        </div>
+                    )) : <Typography.Text type="secondary">Chưa có liên kết HOCMAI</Typography.Text>}
+                </div>
+            </div>
         </div>
     );
 };
@@ -902,6 +941,19 @@ const Page = () => {
     const [moduleFields, setModuleFields] = useState<ModuleField[]>(DEFAULT_MODULE_FIELDS);
     const [form] = Form.useForm();
     const [api, contextHolder] = notification.useNotification({ duration: 2.5 });
+    const copyProgramCode = useCallback(async (rawCode: unknown) => {
+        const code = String(rawCode || "").trim();
+        if (!code) return;
+        try {
+            await navigator.clipboard.writeText(code);
+            api.success({
+                message: "Đã sao chép mã chương trình",
+                description: code,
+            });
+        } catch {
+            api.error({ message: "Không thể sao chép mã chương trình" });
+        }
+    }, [api]);
     const router = useRouter();
     const searchParams = useSearchParams();
     // router.replace là bất đồng bộ. Lưu cả URL đích (không chỉ program) để
@@ -910,6 +962,13 @@ const Page = () => {
     const pendingScheduleUrlRef = useRef<string | null>(null);
     const scheduleModalRef = useRef<ScheduleModalControllerRef>(null);
     const [openImportModal, setOpenImportModal] = useState(false);
+    const [sheetExportOpen, setSheetExportOpen] = useState(false);
+    const [sheetExportLoading, setSheetExportLoading] = useState(false);
+    const [sheetExportJobId, setSheetExportJobId] = useState<string | null>(null);
+    const [sheetExportProgress, setSheetExportProgress] = useState(0);
+    const [sheetExportMessage, setSheetExportMessage] = useState("");
+    const [sheetExportUrl, setSheetExportUrl] = useState("https://docs.google.com/spreadsheets/d/1NTrAeL-tEykqqm9R_kQxHVBS-xaGNgarsQ9xP-HM774/edit");
+    const [topuniSheetExportUrl, setTopuniSheetExportUrl] = useState("https://docs.google.com/spreadsheets/d/1DejptU8MU5Zvey_6Z5jtFHlwjGIgKpe3Woqq01IjJrw/edit");
     const [importing, setImporting] = useState(false);
     const [importErrors, setImportErrors] = useState<ScheduleImportError[]>([]);
     const [importMode, setImportMode] = useState<"create" | "update">("create");
@@ -943,11 +1002,18 @@ const Page = () => {
     const [studentSyncError, setStudentSyncError] = useState("");
     const [studentSyncItems, setStudentSyncItems] = useState<CalendarStudentSyncItem[]>([]);
     const [studentSyncResult, setStudentSyncResult] = useState<null | {
+        preview: boolean;
         apiUsers: number;
+        uniqueApiUsers: number;
         mappedRows: number;
+        uniqueEnrollments: number;
+        duplicateRows: number;
+        duplicateDetails: CalendarStudentSyncDuplicate[];
         unmatched: number;
         inserted: number;
         updated: number;
+        plannedInserted: number;
+        plannedUpdated: number;
         skipped: number;
         failed: number;
     }>(null);
@@ -1674,6 +1740,65 @@ const Page = () => {
 
     // ... (giữ nguyên các hàm xử lý danh sách, import, cập nhật, chỉnh sửa và xóa lịch)
 
+    useEffect(() => {
+        if (!sheetExportJobId) return;
+        let active = true;
+        let timer: ReturnType<typeof setTimeout>;
+        const poll = async () => {
+            try {
+                const response = await getGoogleSheetExportProgress(sheetExportJobId);
+                if (!active) return;
+                const job = response.data;
+                setSheetExportProgress(Math.round(job.progress));
+                setSheetExportMessage(job.message);
+                if (job.status === "completed") {
+                    setSheetExportLoading(false);
+                    setSheetExportJobId(null);
+                    setSheetExportOpen(false);
+                    api.success({ message: "Xuất Google Sheets thành công", description: <span>Đã cập nhật {job.result.rowCount} lịch học vào {job.result.sheetCount} tab chương trình. {(job.result.destinations || [{ systemType: "", sheetUrl: job.result.sheetUrl }]).map((destination: any) => <React.Fragment key={destination.sheetUrl}><a href={destination.sheetUrl} target="_blank" rel="noopener noreferrer">Mở {destination.systemType === "topuni" ? "Topuni" : "Topclass"}</a>{" "}</React.Fragment>)}</span>, duration: 10 });
+                    return;
+                }
+                if (job.status === "failed") {
+                    setSheetExportLoading(false);
+                    setSheetExportJobId(null);
+                    api.error({ message: "Xuất Google Sheets thất bại", description: job.error });
+                    return;
+                }
+                timer = setTimeout(poll, 1500);
+            } catch (error: any) {
+                if (!active) return;
+                if ([401, 403, 404].includes(error.status)) {
+                    setSheetExportLoading(false);
+                    setSheetExportJobId(null);
+                    api.error({ message: "Không thể theo dõi lượt xuất", description: error.message });
+                    return;
+                }
+                setSheetExportMessage("Đang kết nối lại để cập nhật tiến độ. Lượt xuất vẫn được xử lý…");
+                timer = setTimeout(poll, 5000);
+            }
+        };
+        void poll();
+        return () => { active = false; clearTimeout(timer); };
+    }, [sheetExportJobId, api]);
+
+    const handleExportGoogleSheet = async () => {
+        if (sheetExportLoading) return;
+        if ([sheetExportUrl, topuniSheetExportUrl].some((target) => !googleSheetLink(target))) {
+            api.warning({ message: "Vui lòng nhập link Google Sheets hợp lệ." });
+            return;
+        }
+        setSheetExportLoading(true);
+        setSheetExportProgress(0);
+        setSheetExportMessage("Đang chuẩn bị dữ liệu chương trình…");
+        try {
+            const result = await exportLivestreamsToGoogleSheet(sheetExportUrl.trim(), topuniSheetExportUrl.trim());
+            setSheetExportJobId(result.data.jobId);
+        } catch (error: any) {
+            setSheetExportLoading(false);
+            api.error({ message: "Xuất Google Sheets thất bại", description: error.message || "Không thể ghi dữ liệu vào sheet." });
+        }
+    };
+
     const handleExportSchedule = async (
         format: "csv" | "xlsx",
         purpose?: "update" | "all-programs"
@@ -1856,15 +1981,28 @@ const Page = () => {
         setStudentSyncMessage("");
         setStudentSyncError("");
         setStudentSyncResult(null);
-        setStudentSyncItems(targetIds.map((id) => {
+        const grouped = new Map<string, Array<{ id: number; record: ScheduleDataType | undefined }>>();
+        targetIds.forEach((id) => {
             const record = getSelectedSchedule(id);
-            return {
-                calendarId: id, code: record?.code || "Chưa tải được chương trình",
-                learnNumber: Number(record?.learn_number || 0), lessonName: record?.lesson_name || "",
-                startTime: record?.start_time || null, systemType: record?.system_type || null,
-                status: "pending", progress: 0, message: "Chờ xử lý",
-            };
-        }));
+            const code = String(record?.code || "Chưa tải được chương trình");
+            const group = grouped.get(code) || [];
+            group.push({ id, record });
+            grouped.set(code, group);
+        });
+        setStudentSyncItems([...grouped.entries()].map(([code, group]) => ({
+            calendarId: group[0].id,
+            calendarIds: group.map((item) => item.id),
+            calendarCount: group.length,
+            lessonCount: new Set(group.map((item) => Number(item.record?.learn_number || 0))).size,
+            code,
+            learnNumber: 0,
+            lessonName: `${group.length} lịch đã chọn`,
+            startTime: null,
+            systemType: group[0].record?.system_type || null,
+            status: "pending",
+            progress: 0,
+            message: "Chờ xử lý chương trình",
+        })));
         setStudentSyncOpen(true);
     };
 
@@ -1887,28 +2025,47 @@ const Page = () => {
             const started = startedResponse?.data ?? startedResponse ?? {};
             const jobId = String(started.jobId || "");
             if (!jobId) throw new Error("Backend không trả về mã tiến trình đồng bộ");
+            if (started.resumed) {
+                setStudentSyncMessage("Đã kết nối lại tiến trình đồng bộ đang chạy...");
+            }
 
             let job: any = started;
+            let consecutivePollingErrors = 0;
             while (!["completed", "failed"].includes(job.status)) {
                 setStudentSyncProgress(Number(job.progress || 0));
                 setStudentSyncMessage(job.message || "Đang xử lý...");
                 if (Array.isArray(job.items) && job.items.length) setStudentSyncItems(job.items);
-                await new Promise((resolve) => window.setTimeout(resolve, 750));
-                const progressResponse: any = await getCalendarStudentSyncProgress(jobId);
-                job = progressResponse?.data ?? progressResponse ?? {};
+                await new Promise((resolve) => window.setTimeout(resolve, 1500));
+                try {
+                    const progressResponse: any = await getCalendarStudentSyncProgress(jobId);
+                    job = progressResponse?.data ?? progressResponse ?? {};
+                    consecutivePollingErrors = 0;
+                } catch (pollingError: any) {
+                    consecutivePollingErrors += 1;
+                    if (consecutivePollingErrors >= 5 || Number(pollingError?.status) === 404) throw pollingError;
+                    setStudentSyncMessage(`Mất kết nối tạm thời, đang thử kết nối lại (${consecutivePollingErrors}/5)...`);
+                    await new Promise((resolve) => window.setTimeout(resolve, consecutivePollingErrors * 1000));
+                }
             }
             if (Array.isArray(job.items) && job.items.length) setStudentSyncItems(job.items);
             if (job.status === "failed") {
                 throw new Error(job.error || "Không thể hoàn tất đồng bộ học viên");
             }
             setStudentSyncProgress(100);
-            setStudentSyncMessage("Đồng bộ học viên hoàn tất");
+            setStudentSyncMessage(job.result?.preview ? "Đã hoàn tất preview học viên" : "Đồng bộ học viên hoàn tất");
             setStudentSyncResult({
+                preview: Boolean(job.result?.preview),
                 apiUsers: Number(job.result?.apiUsers || 0),
+                uniqueApiUsers: Number(job.result?.uniqueApiUsers || 0),
                 mappedRows: Number(job.result?.mappedRows || 0),
+                uniqueEnrollments: Number(job.result?.uniqueEnrollments || 0),
+                duplicateRows: Number(job.result?.duplicateRows || 0),
+                duplicateDetails: Array.isArray(job.result?.duplicateDetails) ? job.result.duplicateDetails : [],
                 unmatched: Number(job.result?.unmatched || 0),
                 inserted: Number(job.result?.inserted || 0),
                 updated: Number(job.result?.updated || 0),
+                plannedInserted: Number(job.result?.plannedInserted || 0),
+                plannedUpdated: Number(job.result?.plannedUpdated || 0),
                 skipped: Number(job.result?.skipped || 0),
                 failed: Number(job.result?.failed || 0),
             });
@@ -2416,6 +2573,65 @@ const Page = () => {
                     return;
                 }
 
+                // So sánh cả ngày và giờ: đổi ngày nhưng giữ giờ vẫn cần thông báo.
+                const dateOrTimeChanged = ["start_time", "end_time"].some((fieldCode) =>
+                    sanitizedRow[fieldCode] !== undefined
+                    && !parseCalendarWallTime(sanitizedRow[fieldCode]).isSame(
+                        parseCalendarWallTime(item[fieldCode as keyof ScheduleDataType])
+                    )
+                );
+                if (dateOrTimeChanged) {
+                    const notificationForm = React.createRef<FormInstance>();
+                    const content = await new Promise<string | null>((resolve) => {
+                        Modal.confirm({
+                            title: "Thông báo thay đổi ngày / giờ học",
+                            icon: null,
+                            width: 520,
+                            okText: "Lưu thay đổi",
+                            cancelText: "Hủy",
+                            maskClosable: false,
+                            content: (
+                                <Form ref={notificationForm} layout="vertical">
+                                    <Typography.Paragraph>
+                                        {item.lesson_name || "Buổi học"}
+                                    </Typography.Paragraph>
+                                    <Typography.Paragraph type="secondary">
+                                        Từ {parseCalendarWallTime(item.start_time).format("DD/MM/YYYY HH:mm")}
+                                        {" – "}{parseCalendarWallTime(item.end_time).format("HH:mm")}
+                                        {" → "}
+                                        {parseCalendarWallTime(sanitizedRow.start_time ?? item.start_time).format("DD/MM/YYYY HH:mm")}
+                                        {" – "}{parseCalendarWallTime(sanitizedRow.end_time ?? item.end_time).format("HH:mm")}
+                                    </Typography.Paragraph>
+                                    <Form.Item
+                                        name="lesson_noti"
+                                        label="Nội dung thông báo (tùy chọn)"
+                                        extra="Để trống để lưu thay đổi mà không tạo thông báo."
+                                        rules={[
+                                            { max: 500, message: "Nội dung không được vượt quá 500 ký tự" },
+                                        ]}
+                                    >
+                                        <Input.TextArea
+                                            autoFocus
+                                            rows={4}
+                                            maxLength={500}
+                                            showCount
+                                            placeholder="Ví dụ: Buổi học chuyển từ 19:00 sang 20:00 ngày 20/09."
+                                        />
+                                    </Form.Item>
+                                </Form>
+                            ),
+                            onOk: async () => {
+                                const values = await notificationForm.current!.validateFields();
+                                resolve(String(values.lesson_noti ?? '').trim());
+                            },
+                            onCancel: () => resolve(null),
+                        });
+                    });
+                    if (content === null) return;
+                    sanitizedRow.send_notification = Boolean(content);
+                    sanitizedRow.change_reason = content;
+                }
+
                 await updateLivestream(key, sanitizedRow);
                 setEditingKey("");
                 api.success({
@@ -2826,9 +3042,27 @@ const Page = () => {
             shouldCellUpdate: shouldUpdateScheduleCell,
             render: (code: string, record: ScheduleDataType) => (
                 <Space direction="vertical" size={0} style={{ lineHeight: 1.25 }}>
-                    <Tag color="blue" style={{ width: "fit-content", maxWidth: "100%", whiteSpace: "normal", overflowWrap: "anywhere", marginInlineEnd: 0 }}>
-                        {code || "Chưa xác định"}
-                    </Tag>
+                    <Tooltip title={code ? `Nhấn để sao chép ${code}` : undefined}>
+                        <Tag
+                            color="blue"
+                            role={code ? "button" : undefined}
+                            tabIndex={code ? 0 : undefined}
+                            aria-label={code ? `Sao chép mã chương trình ${code}` : undefined}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                void copyProgramCode(code);
+                            }}
+                            onKeyDown={(event) => {
+                                if (event.key !== "Enter" && event.key !== " ") return;
+                                event.preventDefault();
+                                event.stopPropagation();
+                                void copyProgramCode(code);
+                            }}
+                            style={{ width: "fit-content", maxWidth: "100%", whiteSpace: "normal", overflowWrap: "anywhere", marginInlineEnd: 0, cursor: code ? "copy" : "default" }}
+                        >
+                            {code || "Chưa xác định"}{code && <CopyOutlined style={{ marginInlineStart: 6, fontSize: 11 }} />}
+                        </Tag>
+                    </Tooltip>
                     {record.class_name && record.class_name !== code && (
                         <Typography.Text type="secondary" ellipsis style={{ maxWidth: 160, fontSize: 12 }}>
                             {record.class_name}
@@ -3138,6 +3372,7 @@ const Page = () => {
     const exportMenu = {
         items: [
             { key: "all-programs", label: "Excel toàn bộ chương trình (theo mẫu gốc)" },
+            { key: "google-sheet", label: "Google Sheets toàn bộ chương trình", disabled: sheetExportLoading },
             { type: "divider" as const },
             { key: "xlsx", label: "Xuất Excel (.xlsx)" },
             { key: "csv", label: "Xuất CSV (.csv)" },
@@ -3146,6 +3381,10 @@ const Page = () => {
         ],
         onClick: ({ key }: { key: string }) => {
             if (selectingAllRows) return;
+            if (key === "google-sheet") {
+                setSheetExportOpen(true);
+                return;
+            }
             if (key === "all-programs") {
                 void handleExportSchedule("xlsx", "all-programs");
                 return;
@@ -3720,7 +3959,29 @@ const Page = () => {
                                         className="schedule-data-table"
                                         responsiveCardTitle={(record) => (
                                             <Space size={6} style={{ maxWidth: "100%" }}>
-                                                {record.code && <Tag color="blue" style={{ marginInlineEnd: 0 }}>{record.code}</Tag>}
+                                                {record.code && (
+                                                    <Tooltip title={`Nhấn để sao chép ${record.code}`}>
+                                                        <Tag
+                                                            color="blue"
+                                                            role="button"
+                                                            tabIndex={0}
+                                                            aria-label={`Sao chép mã chương trình ${record.code}`}
+                                                            onClick={(event) => {
+                                                                event.stopPropagation();
+                                                                void copyProgramCode(record.code);
+                                                            }}
+                                                            onKeyDown={(event) => {
+                                                                if (event.key !== "Enter" && event.key !== " ") return;
+                                                                event.preventDefault();
+                                                                event.stopPropagation();
+                                                                void copyProgramCode(record.code);
+                                                            }}
+                                                            style={{ marginInlineEnd: 0, cursor: "copy" }}
+                                                        >
+                                                            {record.code}<CopyOutlined style={{ marginInlineStart: 6, fontSize: 11 }} />
+                                                        </Tag>
+                                                    </Tooltip>
+                                                )}
                                                 {Number(record.lesson_status) !== 1 && record.classroom_assigned && <Tag color="green" style={{ marginInlineEnd: 0 }}>Đã chia</Tag>}
                                                 <Typography.Text strong ellipsis style={{ maxWidth: 190 }}>
                                                     Bài {record.learn_number || "-"}{record.lesson_name ? ` · ${record.lesson_name}` : ""}
@@ -3865,6 +4126,18 @@ const Page = () => {
                         });
                     }}
                 />
+                <Modal title="Xuất toàn bộ chương trình vào Google Sheets" open={sheetExportOpen} onCancel={() => { if (!sheetExportLoading) setSheetExportOpen(false); }} onOk={handleExportGoogleSheet} confirmLoading={sheetExportLoading} okText="Xuất vào sheet" cancelText="Đóng" cancelButtonProps={{ disabled: sheetExportLoading }} closable={!sheetExportLoading} maskClosable={!sheetExportLoading} keyboard={!sheetExportLoading}>
+                    <Space direction="vertical" style={{ width: "100%" }}>
+                        <Typography.Text>Google Sheets Topclass</Typography.Text>
+                        <Input  value={sheetExportUrl} onChange={(event) => setSheetExportUrl(event.target.value)} disabled={true} placeholder="https://docs.google.com/spreadsheets/d/.../edit" />
+                        {googleSheetLink(sheetExportUrl) && <Typography.Link href={googleSheetLink(sheetExportUrl)} target="_blank" rel="noopener noreferrer"><LinkOutlined /> Mở Google Sheets Topclass</Typography.Link>}
+                        <Typography.Text>Google Sheets Topuni</Typography.Text>
+                        <Input  value={topuniSheetExportUrl} onChange={(event) => setTopuniSheetExportUrl(event.target.value)} disabled={true} placeholder="https://docs.google.com/spreadsheets/d/.../edit" />
+                        {googleSheetLink(topuniSheetExportUrl) && <Typography.Link href={googleSheetLink(topuniSheetExportUrl)} target="_blank" rel="noopener noreferrer"><LinkOutlined /> Mở Google Sheets Topuni</Typography.Link>}
+                        {sheetExportLoading && <div><Progress percent={sheetExportProgress} status="active" /><Typography.Text>{sheetExportMessage}</Typography.Text></div>}
+                        <Typography.Text type="secondary">Topclass và Topuni được xuất vào sheet riêng theo hệ của đề cương chương trình. Toàn bộ tab cũ trong hai sheet được thay bằng dữ liệu mới, gồm cả tab sai hệ và bản có hậu tố LMS. Tên tab chỉ giữ tên chương trình.</Typography.Text>
+                    </Space>
+                </Modal>
                 <ScheduleImportModal
                     open={openImportModal}
                     loading={importing}
@@ -4096,7 +4369,7 @@ const Page = () => {
                                 <div>
                                     <Space style={{ width: "100%", justifyContent: "space-between" }}>
                                         <Typography.Text strong>Tiến độ tổng</Typography.Text>
-                                        <Typography.Text>{studentSyncItems.filter((item) => ["success", "error"].includes(item.status)).length}/{studentSyncItems.length} lịch</Typography.Text>
+                                        <Typography.Text>{studentSyncItems.filter((item) => ["success", "error"].includes(item.status)).length}/{studentSyncItems.length} chương trình</Typography.Text>
                                     </Space>
                                     <Progress percent={studentSyncProgress} status={studentSyncError ? "exception" : syncingStudents ? "active" : "normal"} />
                                 </div>
@@ -4107,11 +4380,10 @@ const Page = () => {
                                     dataSource={studentSyncItems}
                                     scroll={{ x: 820, y: 380 }}
                                     columns={[
-                                        { title: "Lịch", width: 280, render: (_, item) => (
+                                        { title: "Chương trình", width: 280, render: (_, item) => (
                                             <Space direction="vertical" size={2}>
-                                                <Typography.Text strong>{item.code} · Bài {item.learnNumber || "-"}</Typography.Text>
-                                                <Typography.Text type="secondary" ellipsis={{ tooltip: item.lessonName }} style={{ maxWidth: 260 }}>{item.lessonName}</Typography.Text>
-                                                <Typography.Text type="secondary" style={{ fontSize: 12 }}>{item.startTime ? parseCalendarWallTime(item.startTime).format("DD/MM/YYYY HH:mm") : "Không còn dữ liệu lịch"}</Typography.Text>
+                                                <Typography.Text strong>{item.code}</Typography.Text>
+                                                <Typography.Text type="secondary">{item.calendarCount} lịch · {item.lessonCount} bài</Typography.Text>
                                             </Space>
                                         ) },
                                         { title: "Hệ thống", width: 100, render: (_, item) => <Tag color={item.systemType === "topuni" ? "purple" : "cyan"}>{item.systemType === "topuni" ? "TopUni" : item.systemType === "topclass" ? "TopClass" : "-"}</Tag> },
@@ -4143,22 +4415,60 @@ const Page = () => {
                                 <Alert
                                     type={studentSyncResult.failed || studentSyncItems.some((item) => item.status === "error") ? "warning" : "success"}
                                     showIcon
-                                    message="Đồng bộ học viên hoàn tất"
-                                    description={`${studentSyncItems.filter((item) => item.status === "error").length} lịch lỗi. ${studentSyncMode === "today"
+                                    message={studentSyncResult.preview ? "Preview đồng bộ học viên hoàn tất" : "Đồng bộ học viên hoàn tất"}
+                                    description={`${studentSyncItems.filter((item) => item.status === "error").length} chương trình lỗi. ${studentSyncMode === "today"
                                         ? `Đã kiểm tra học viên đăng ký ngày ${dayjs().format("DD/MM/YYYY")}.`
-                                        : "Đã xử lý các lịch hợp lệ; chi tiết từng lịch ở bảng phía trên."}`}
+                                        : "Đã xử lý các lịch hợp lệ."} ${studentSyncResult.preview
+                                            ? `Preview: sẽ insert ${studentSyncResult.plannedInserted.toLocaleString("vi-VN")}, sẽ cập nhật ${studentSyncResult.plannedUpdated.toLocaleString("vi-VN")}; chưa ghi bảng users.`
+                                            : "Kết quả đã được ghi vào bảng users."}`}
                                 />
                                 <Card size="small">
                                     <Row gutter={[16, 14]}>
-                                        <Col span={12}><Typography.Text type="secondary">API trả về</Typography.Text><div><Typography.Title level={4} style={{ margin: 0 }}>{studentSyncResult.apiUsers.toLocaleString("vi-VN")}</Typography.Title></div></Col>
-                                        <Col span={12}><Typography.Text type="secondary">Sau mapping</Typography.Text><div><Typography.Title level={4} style={{ margin: 0 }}>{studentSyncResult.mappedRows.toLocaleString("vi-VN")}</Typography.Title></div></Col>
-                                        <Col span={12}><Typography.Text type="success">Thêm mới</Typography.Text><div><Typography.Title level={4} style={{ margin: 0, color: "#389e0d" }}>{studentSyncResult.inserted.toLocaleString("vi-VN")}</Typography.Title></div></Col>
-                                        <Col span={12}><Typography.Text style={{ color: "#1677ff" }}>Cập nhật lớp</Typography.Text><div><Typography.Title level={4} style={{ margin: 0, color: "#1677ff" }}>{studentSyncResult.updated.toLocaleString("vi-VN")}</Typography.Title></div></Col>
-                                        <Col span={12}><Typography.Text type="secondary">Bỏ qua do trùng</Typography.Text><div><Typography.Title level={4} style={{ margin: 0 }}>{studentSyncResult.skipped.toLocaleString("vi-VN")}</Typography.Title></div></Col>
+                                        <Col span={12}>
+                                            <Typography.Text type="secondary">Dữ liệu API</Typography.Text>
+                                            <div><Typography.Title level={4} style={{ margin: 0 }}>{studentSyncResult.apiUsers.toLocaleString("vi-VN")}</Typography.Title></div>
+                                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                                {studentSyncResult.uniqueApiUsers.toLocaleString("vi-VN")} user duy nhất theo chương trình
+                                            </Typography.Text>
+                                        </Col>
+                                        <Col span={12}>
+                                            <Typography.Text type="secondary">Dòng học viên sau mapping</Typography.Text>
+                                            <div><Typography.Title level={4} style={{ margin: 0 }}>{studentSyncResult.uniqueEnrollments.toLocaleString("vi-VN")}</Typography.Title></div>
+                                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                                {studentSyncResult.mappedRows.toLocaleString("vi-VN")} dòng tạo ra · loại {studentSyncResult.duplicateRows.toLocaleString("vi-VN")} dòng trùng
+                                            </Typography.Text>
+                                        </Col>
+                                        <Col span={12}><Typography.Text type="success">{studentSyncResult.preview ? "Sẽ insert" : "Số dòng insert"}</Typography.Text><div><Typography.Title level={4} style={{ margin: 0, color: "#389e0d" }}>{(studentSyncResult.preview ? studentSyncResult.plannedInserted : studentSyncResult.inserted).toLocaleString("vi-VN")}</Typography.Title></div></Col>
+                                        <Col span={12}><Typography.Text style={{ color: "#1677ff" }}>{studentSyncResult.preview ? "Sẽ cập nhật lớp" : "Cập nhật lớp"}</Typography.Text><div><Typography.Title level={4} style={{ margin: 0, color: "#1677ff" }}>{(studentSyncResult.preview ? studentSyncResult.plannedUpdated : studentSyncResult.updated).toLocaleString("vi-VN")}</Typography.Title></div></Col>
+                                        <Col span={12}><Typography.Text type="secondary">Số dòng bỏ qua</Typography.Text><div><Typography.Title level={4} style={{ margin: 0 }}>{studentSyncResult.skipped.toLocaleString("vi-VN")}</Typography.Title></div><Typography.Text type="secondary" style={{ fontSize: 12 }}>Enrollment đã tồn tại và đúng lớp, hoặc bị trùng khi ghi đồng thời.</Typography.Text></Col>
                                         <Col span={12}><Typography.Text type="secondary">Không có mapping</Typography.Text><div><Typography.Title level={4} style={{ margin: 0 }}>{studentSyncResult.unmatched.toLocaleString("vi-VN")}</Typography.Title></div></Col>
                                         <Col span={12}><Typography.Text type={studentSyncResult.failed ? "danger" : "secondary"}>Thất bại</Typography.Text><div><Typography.Title level={4} style={{ margin: 0, color: studentSyncResult.failed ? "#cf1322" : undefined }}>{studentSyncResult.failed.toLocaleString("vi-VN")}</Typography.Title></div></Col>
                                     </Row>
                                 </Card>
+                                {studentSyncResult.duplicateRows > 0 && (
+                                    <details>
+                                        <summary style={{ cursor: "pointer", color: "#1677ff", fontWeight: 500 }}>
+                                            Xem {studentSyncResult.duplicateRows.toLocaleString("vi-VN")} dòng bị loại do trùng enrollment
+                                        </summary>
+                                        <Table<CalendarStudentSyncDuplicate>
+                                            style={{ marginTop: 12 }}
+                                            size="small"
+                                            rowKey={(row, index) => `${row.username}-${row.code}-${row.learnNumber}-${row.productId}-${index}`}
+                                            dataSource={studentSyncResult.duplicateDetails}
+                                            pagination={{ pageSize: 20, showSizeChanger: true }}
+                                            scroll={{ x: 900, y: 360 }}
+                                            columns={[
+                                                { title: "HMID", dataIndex: "studentHmid", width: 110 },
+                                                { title: "Username", dataIndex: "username", width: 180 },
+                                                { title: "Chương trình", dataIndex: "code", width: 190 },
+                                                { title: "Bài", dataIndex: "learnNumber", width: 70 },
+                                                { title: "Package bị loại", dataIndex: "productId", width: 130 },
+                                                { title: "Trùng với package", dataIndex: "duplicateOfProductId", width: 140 },
+                                                { title: "Class ID", dataIndex: "classId", width: 210 },
+                                            ]}
+                                        />
+                                    </details>
+                                )}
                             </>
                         )}
                     </Space>

@@ -45,6 +45,12 @@ export enum PermissionKey {
     TEACHER_PROFILE_IMPORT = 'teacher_profile.import',
     TEACHER_PROFILE_EXPORT = 'teacher_profile.export',
 
+    PROGRAM_TEACHER_BANNER_VIEW = 'program_teacher_banner.view',
+    PROGRAM_TEACHER_BANNER_CREATE = 'program_teacher_banner.create',
+    PROGRAM_TEACHER_BANNER_EDIT = 'program_teacher_banner.update',
+    PROGRAM_TEACHER_BANNER_DELETE = 'program_teacher_banner.delete',
+    PROGRAM_TEACHER_BANNER_IMPORT = 'program_teacher_banner.import',
+
     CALENDAR_TEACHER_MANAGE = 'calendar.teacher.manage',
 
     ROOM_CONFIG_VIEW = 'room_config.view',

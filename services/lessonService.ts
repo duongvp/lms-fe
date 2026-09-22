@@ -3,9 +3,20 @@ import { fetchInstance } from "@/ultils/fetchInstance";
 const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://localhost:5000"}/api/lessons`;
 const LESSON_REAUTH_STORAGE_KEY = "lms.lessons.reauth";
 
-const getLessonReauthToken = () => (
-    typeof window === "undefined" ? "" : sessionStorage.getItem(LESSON_REAUTH_STORAGE_KEY) || ""
-);
+// localStorage được chia sẻ giữa các tab cùng origin. Token vẫn được backend
+// buộc vào auth session hiện tại, nên logout hoặc session mới sẽ vô hiệu hóa nó.
+const getLessonReauthToken = () => {
+    if (typeof window === "undefined") return "";
+    const sharedToken = localStorage.getItem(LESSON_REAUTH_STORAGE_KEY) || "";
+    if (sharedToken) return sharedToken;
+    // Tương thích với token đã xác thực ở phiên bản trước (sessionStorage).
+    const legacyToken = sessionStorage.getItem(LESSON_REAUTH_STORAGE_KEY) || "";
+    if (legacyToken) {
+        localStorage.setItem(LESSON_REAUTH_STORAGE_KEY, legacyToken);
+        sessionStorage.removeItem(LESSON_REAUTH_STORAGE_KEY);
+    }
+    return legacyToken;
+};
 
 const lessonHeaders = (json = true) => ({
     ...(json ? { "Content-Type": "application/json" } : {}),
@@ -13,7 +24,10 @@ const lessonHeaders = (json = true) => ({
 });
 
 export const clearLessonReauthToken = () => {
-    if (typeof window !== "undefined") sessionStorage.removeItem(LESSON_REAUTH_STORAGE_KEY);
+    if (typeof window !== "undefined") {
+        localStorage.removeItem(LESSON_REAUTH_STORAGE_KEY);
+        sessionStorage.removeItem(LESSON_REAUTH_STORAGE_KEY);
+    }
 };
 
 export const hasLessonReauthToken = () => Boolean(getLessonReauthToken());
@@ -27,7 +41,7 @@ export const reauthenticateLessons = async (password: string) => {
     });
     const token = String(response?.data?.token || "");
     if (!token) throw new Error("Backend không trả token xác thực cấp 2");
-    sessionStorage.setItem(LESSON_REAUTH_STORAGE_KEY, token);
+    localStorage.setItem(LESSON_REAUTH_STORAGE_KEY, token);
     return response.data as { token: string; expiresInSeconds: number | null };
 };
 

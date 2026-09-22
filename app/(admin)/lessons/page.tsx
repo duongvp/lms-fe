@@ -423,6 +423,30 @@ const Page = () => {
         return () => { active = false; };
     }, []);
 
+    // Khi xác thực ở một tab khác cùng trình duyệt, localStorage phát sự kiện
+    // cho tab hiện tại. Mở khóa ngay mà không yêu cầu người dùng nhập lại.
+    useEffect(() => {
+        const onLessonReauthChanged = async (event: StorageEvent) => {
+            if (event.key !== 'lms.lessons.reauth') return;
+            if (!event.newValue) {
+                setSecondaryUnlocked(false);
+                setSecondaryPromptOpen(true);
+                return;
+            }
+            try {
+                await validateLessonReauthentication();
+                setSecondaryUnlocked(true);
+                setSecondaryPromptOpen(false);
+            } catch {
+                clearLessonReauthToken();
+                setSecondaryUnlocked(false);
+                setSecondaryPromptOpen(true);
+            }
+        };
+        window.addEventListener('storage', onLessonReauthChanged);
+        return () => window.removeEventListener('storage', onLessonReauthChanged);
+    }, []);
+
     useEffect(() => {
         if (!hasSearched) {
             setData([]);

@@ -5,6 +5,7 @@ export const protectedRoutes = [
     { path: '/lessons', permission: PermissionKey.LESSON_VIEW },
     { path: '/quizzes', permission: PermissionKey.QUIZ_VIEW },
     { path: '/teacher-profiles', permission: PermissionKey.TEACHER_PROFILE_VIEW },
+    { path: '/program-teacher-banners', permission: PermissionKey.PROGRAM_TEACHER_BANNER_VIEW },
     { path: '/schedule', permission: PermissionKey.SCHEDULE_VIEW },
     { path: '/room-config', permission: PermissionKey.ROOM_CONFIG_VIEW },
     { path: '/users', permission: PermissionKey.USER_VIEW },

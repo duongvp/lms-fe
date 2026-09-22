@@ -232,6 +232,19 @@ export const downloadLivestreamImportTemplate = (format: "csv" | "xlsx") =>
         credentials: "include",
     }, "blob");
 
+export const exportLivestreamsToGoogleSheet = (sheetUrl: string, topuniSheetUrl: string) =>
+    fetchInstance(`${API_BASE_URL}/export/google-sheet`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sheetUrl, topuniSheetUrl }),
+    }, "json", 120_000);
+
+export const getGoogleSheetExportProgress = (jobId: string) =>
+    fetchInstance(`${API_BASE_URL}/export/google-sheet/${encodeURIComponent(jobId)}`, {
+        method: "GET", credentials: "include",
+    });
+
 export const importLivestreamsFile = (file?: File, programCode?: string, sheetUrl?: string) => {
     const formData = new FormData();
     if (file) formData.append("file", file);
@@ -487,17 +500,37 @@ export const applyStudentClassroomAssignment = (
     }, "json", 120_000);
 
 export interface CalendarStudentSyncResult {
+    preview: boolean;
     apiUsers: number;
+    uniqueApiUsers: number;
     mappedRows: number;
+    uniqueEnrollments: number;
+    duplicateRows: number;
+    duplicateDetails: CalendarStudentSyncDuplicate[];
     unmatched: number;
     inserted: number;
     updated: number;
+    plannedInserted: number;
+    plannedUpdated: number;
     skipped: number;
     failed: number;
 }
 
+export interface CalendarStudentSyncDuplicate {
+    studentHmid: string;
+    username: string;
+    code: string;
+    learnNumber: number;
+    classId: string;
+    productId: string;
+    duplicateOfProductId: string;
+}
+
 export interface CalendarStudentSyncItem {
     calendarId: number;
+    calendarIds: number[];
+    calendarCount: number;
+    lessonCount: number;
     code: string;
     learnNumber: number;
     lessonName: string;
@@ -517,6 +550,7 @@ export interface CalendarStudentSyncJob {
     items: CalendarStudentSyncItem[];
     result?: CalendarStudentSyncResult;
     error?: string;
+    resumed?: boolean;
 }
 
 export const syncCalendarStudents = (
@@ -535,7 +569,7 @@ export const getCalendarStudentSyncProgress = (jobId: string) =>
         method: "GET",
         credentials: "include",
         cache: "no-store",
-    });
+    }, "json", 60_000);
 
 export const rescheduleLivestream = (id: string, payload: any) =>
     fetchInstance(`${API_BASE_URL}/${id}/reschedule`, {
@@ -687,6 +721,8 @@ export const toUpdateLivestreamPayload = (values: any): any => {
     // current mode
     return {
         update_mode: 'current',
+        send_notification: payload.send_notification !== false,
+        change_reason: String(payload.change_reason || payload.reason || '').trim(),
         teacher: payload.teacher,
         assistant_teacher: serializeAssistantTeachers(payload.assistant_teacher),
         start_time: payload.start_time,

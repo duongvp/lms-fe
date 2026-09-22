@@ -82,6 +82,14 @@ const hmoIssueDefinitions: Record<string, { label: string; description: string; 
 
 const EMPTY_DASHBOARD: DashboardOverview = {
     generatedAt: '',
+    calendarTeachingUserSyncCron: {
+        enabled: false,
+        hour: 3,
+        minute: 0,
+        timeZone: 'Asia/Ho_Chi_Minh',
+        windowDays: 7,
+        latest: null,
+    },
     hmoLessonSyncCron: { enabled: false, hour: 6, minute: 0, timeZone: 'Asia/Ho_Chi_Minh', lastRunAt: null },
     hmoLessonSyncAvailable: true,
     summary: {
@@ -480,6 +488,50 @@ const Page: React.FC = () => {
                             />
                         </Col>
                     </Row>
+                    <Card
+                        title={<Space><TeamOutlined /> Tự động quét user giáo viên/trợ giảng</Space>}
+                        className={styles.panelCard}
+                        style={{ marginTop: 16 }}
+                    >
+                        <Alert
+                            showIcon
+                            type={!data.calendarTeachingUserSyncCron.enabled
+                                ? 'warning'
+                                : ['failed', 'interrupted'].includes(data.calendarTeachingUserSyncCron.latest?.status || '')
+                                    ? 'error'
+                                    : data.calendarTeachingUserSyncCron.latest?.status === 'running'
+                                        ? 'info'
+                                        : data.calendarTeachingUserSyncCron.latest?.failed ? 'warning' : 'success'}
+                            message={`Cron ${data.calendarTeachingUserSyncCron.enabled ? 'đang bật' : 'đã tắt'} · Chạy lúc ${String(data.calendarTeachingUserSyncCron.hour).padStart(2, '0')}:${String(data.calendarTeachingUserSyncCron.minute).padStart(2, '0')} hằng ngày · Quét ${data.calendarTeachingUserSyncCron.windowDays} ngày`}
+                            description={data.calendarTeachingUserSyncCron.latest
+                                ? `${data.calendarTeachingUserSyncCron.latest.status === 'running' ? 'Đang chạy từ' : 'Lần gần nhất'}: ${formatVietnamDateTime(data.calendarTeachingUserSyncCron.latest.startedAt, 'HH:mm DD/MM/YYYY')} · Quét ${data.calendarTeachingUserSyncCron.latest.scanned} lịch · Tạo ${data.calendarTeachingUserSyncCron.latest.created} · Cập nhật ${data.calendarTeachingUserSyncCron.latest.updated} · Lỗi ${data.calendarTeachingUserSyncCron.latest.failed}${data.calendarTeachingUserSyncCron.latest.errors[0]?.message ? ` · ${data.calendarTeachingUserSyncCron.latest.errors[0].message}` : ''}`
+                                : 'Chưa có lịch sử chạy. Có thể quét thủ công tại trang Lịch học khi cần đồng bộ ngay.'}
+                        />
+                        {!!data.calendarTeachingUserSyncCron.latest?.errors.length && (
+                            <Collapse
+                                style={{ marginTop: 12 }}
+                                items={[{
+                                    key: 'teaching-user-sync-errors',
+                                    label: `Chi tiết ${data.calendarTeachingUserSyncCron.latest.errors.length} lỗi`,
+                                    children: (
+                                        <List
+                                            size="small"
+                                            style={{ maxHeight: 420, overflow: 'auto' }}
+                                            dataSource={data.calendarTeachingUserSyncCron.latest.errors}
+                                            renderItem={(item) => (
+                                                <List.Item>
+                                                    <Space align="start">
+                                                        <Tag color="red">Lịch #{item.calendar_id}</Tag>
+                                                        <Text>{item.message}</Text>
+                                                    </Space>
+                                                </List.Item>
+                                            )}
+                                        />
+                                    ),
+                                }]}
+                            />
+                        )}
+                    </Card>
                     <Card
                         title={<Space><CloudSyncOutlined /> Đồng bộ Lesson ID HMO</Space>}
                         className={styles.panelCard}
