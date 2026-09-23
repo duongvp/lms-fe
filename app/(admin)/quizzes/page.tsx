@@ -3,8 +3,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Key } from "react";
-import { Button, Form, Modal, notification, Drawer, Select, Space, Empty, Dropdown, Spin, Tag, Grid } from "antd";
-import { DownOutlined, InfoCircleOutlined, UpOutlined, EditOutlined, ReloadOutlined, DownloadOutlined, FilterOutlined, MoreOutlined } from "@ant-design/icons";
+import { Alert, Button, Form, Modal, notification, Select, Space, Empty, Dropdown, Spin, Tag, Grid, Radio } from "antd";
+import { DownOutlined, InfoCircleOutlined, UpOutlined, EditOutlined, ReloadOutlined, DownloadOutlined, FilterOutlined, MoreOutlined, SaveOutlined, StopOutlined, UploadOutlined } from "@ant-design/icons";
 import type { UploadFile } from "antd/es/upload/interface";
 import { useAuthStore } from "@/stores/authStore";
 import { rememberProgramContextUrl } from "@/components/layouts/AdminLayout/SideMenu";
@@ -52,6 +52,8 @@ import {
 } from "./quiz.utils";
 import { fetchAllPages } from "@/lib/fetchAllPages";
 import styles from "./quiz.module.css";
+
+type QuizReorderStrategy = "insert" | "swap";
 
 // ✅ Hook debounce
 function useDebounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
@@ -106,8 +108,13 @@ const QuizManagementPage = () => {
     const [form] = Form.useForm<QuizFormValues>();
     const [api, contextHolder] = notification.useNotification();
     const [page, setPage] = useState(1);
-    const [pageSize, setPageSize] = useState(10);
-    const previousPageSizeRef = useRef(10);
+    const [pageSize, setPageSize] = useState(20);
+    const previousPageSizeRef = useRef(20);
+    const [sortState, setSortState] = useState<{
+        sort_by: "learn_number" | "quiz_index";
+        sort_order: "asc" | "desc";
+    }>({ sort_by: "learn_number", sort_order: "asc" });
+    const [displaySortState, setDisplaySortState] = useState(sortState);
     const [keyword, setKeyword] = useState("");
     const [filters, setFilters] = useState<QuizFilterValues>({});
     const [submittedFilters, setSubmittedFilters] = useState<QuizFilterValues>({});
@@ -127,6 +134,7 @@ const QuizManagementPage = () => {
     const [importFiles, setImportFiles] = useState<UploadFile[]>([]);
     const [moduleFields, setModuleFields] = useState<ModuleField[]>(QUIZ_FIELDS);
     const [reorderMode, setReorderMode] = useState(false);
+    const [reorderStrategy, setReorderStrategy] = useState<QuizReorderStrategy>("insert");
     const [reorderRows, setReorderRows] = useState<QuizApiResponse[]>([]);
     const [dragRowKey, setDragRowKey] = useState<Key | null>(null);
     const [savingReorder, setSavingReorder] = useState(false);
@@ -134,13 +142,24 @@ const QuizManagementPage = () => {
     // localStorage. Nếu người dùng chọn hiển thị, effect bên dưới sẽ mở ra.
     const [showPageInfo, setShowPageInfo] = useState(false);
     const [pageInfoReady, setPageInfoReady] = useState(false);
-    const [openFilterDrawer, setOpenFilterDrawer] = useState(false);
 
     // Đồng bộ trước khi browser vẽ frame đầu tiên; đồng thời giữ transition
     // tắt cho lần đồng bộ này để trạng thái đã lưu không bị animate.
     useLayoutEffect(() => {
         setShowPageInfo(window.localStorage.getItem('lms:page-info:quizzes') !== 'hidden');
     }, []);
+    useEffect(() => {
+        if (
+            displaySortState.sort_by === sortState.sort_by
+            && displaySortState.sort_order === sortState.sort_order
+        ) return;
+
+        const timeoutId = window.setTimeout(() => {
+            setSortState(displaySortState);
+            setPage(1);
+        }, 250);
+        return () => window.clearTimeout(timeoutId);
+    }, [displaySortState, sortState]);
     useEffect(() => {
         // Chờ một frame đã được vẽ với transition = none trước khi bật lại
         // animation. Nếu bật ngay trong effect, React có thể gộp với cập nhật
@@ -238,10 +257,10 @@ const QuizManagementPage = () => {
             limit: pageSize,
             keyword: submittedKeyword || undefined,
             ...submittedFilters,
-            sort_by: "updated_at",
-            sort_order: "desc",
+            sort_by: sortState.sort_by,
+            sort_order: sortState.sort_order,
         };
-    }, [submittedFilters, submittedKeyword, page, pageSize, reorderMode, hasSearched]);
+    }, [submittedFilters, submittedKeyword, page, pageSize, reorderMode, hasSearched, sortState]);
 
     const quizzesQuery = useQuizzesQuery((hasSearched || reorderMode) ? params : null);
     const classesQuery = useQuizClassesQuery();
@@ -340,6 +359,9 @@ const QuizManagementPage = () => {
 
     useEffect(() => {
         if (!quizzesQuery.error) return;
+        // Request cũ bị hủy khi người dùng đổi nhanh bộ lọc/sắp xếp là hành vi
+        // bình thường, không phải lỗi cần hiển thị.
+        if (quizzesQuery.error.name === "AbortError") return;
         api.error({
             message: "Không thể tải câu hỏi",
             description: quizzesQuery.error.message,
@@ -432,7 +454,6 @@ const QuizManagementPage = () => {
         setHasSearched(true);
         setPage(1);
         replaceQuizUrl(filters, keyword);
-        setOpenFilterDrawer(false);
     };
 
     const handleResetFilter = () => {
@@ -451,18 +472,25 @@ const QuizManagementPage = () => {
         setHasSearched(Boolean(program));
         setPage(1);
         replaceQuizUrl(resetFilters);
-        setOpenFilterDrawer(false);
     };
 
     const handleOpenCreate = () => {
         if (!submittedFilters.code) {
             api.warning({ message: "Vui lòng chọn Chương trình trước khi thêm câu hỏi" });
-            setOpenFilterDrawer(true);
             return;
         }
         resetEditor();
         form.setFieldValue("code", submittedFilters.code);
         setFormOpen(true);
+    };
+
+    const handleOpenImport = () => {
+        if (!submittedFilters.code) {
+            api.warning({ message: "Vui lòng chọn Chương trình trước khi import" });
+            return;
+        }
+        setImportFiles([]);
+        setImportOpen(true);
     };
 
     const handleOpenEdit = (record: QuizApiResponse) => {
@@ -711,6 +739,7 @@ const QuizManagementPage = () => {
         setSelectedKeys([]);
         setPage(1);
         setPageSize(100);
+        setReorderStrategy("insert");
         setReorderMode(true);
     };
 
@@ -721,8 +750,12 @@ const QuizManagementPage = () => {
             const targetIndex = current.findIndex((item) => item.quiz_id === targetKey);
             if (sourceIndex < 0 || targetIndex < 0) return current;
             const next = [...current];
-            const [moved] = next.splice(sourceIndex, 1);
-            next.splice(targetIndex, 0, moved);
+            if (reorderStrategy === "swap") {
+                [next[sourceIndex], next[targetIndex]] = [next[targetIndex], next[sourceIndex]];
+            } else {
+                const [moved] = next.splice(sourceIndex, 1);
+                next.splice(targetIndex, 0, moved);
+            }
             return next.map((item, index) => ({ ...item, quiz_index: index + 1 }));
         });
         setDragRowKey(null);
@@ -768,29 +801,10 @@ const QuizManagementPage = () => {
         }
     };
 
-    // ✅ Filter drawer với đầy đủ 4 field
-    const filterDrawer = (
-        <Drawer
-            title="Bộ lọc câu hỏi"
-            placement="right"
-            open={openFilterDrawer}
-            onClose={() => setOpenFilterDrawer(false)}
-            width="min(92vw, 400px)"
-            footer={
-                <Space className="responsive-modal-footer" style={{ width: "100%", justifyContent: "flex-end" }}>
-                    <Button onClick={handleResetFilter}>Đặt lại</Button>
-                    <Button
-                        type="primary"
-                        onClick={handleFilterSubmit}
-                        loading={quizzesQuery.isLoading || quizzesQuery.isValidating}
-                    >
-                        Lọc
-                    </Button>
-                </Space>
-            }
-        >
-            <div>
-                <Form layout="vertical">
+    const inlineFilters = !reorderMode && (
+        <div className={styles.filters}>
+            <Form layout="vertical" className={styles.filterPanel}>
+                <div className={styles.filterGrid}>
                     <Form.Item label="Chương trình" required>
                         <Select
                             showSearch
@@ -798,43 +812,61 @@ const QuizManagementPage = () => {
                             placeholder="Chọn Chương trình"
                             loading={classesQuery.isLoading || classesQuery.isValidating}
                             filterOption={(input, option) =>
-                                (option?.label as string)?.toLowerCase().includes(input.toLowerCase())
+                                String(option?.label || "").toLowerCase().includes(input.toLowerCase())
                             }
                             options={classOptions}
                             value={filters.code || undefined}
-                            onChange={(value) => {
-                                setFilters((prev) => ({
-                                    ...prev,
-                                    code: value || undefined,
-                                    learn_number: undefined,
-                                }));
-                            }}
+                            onChange={(value) => setFilters((previous) => ({
+                                ...previous,
+                                code: value || undefined,
+                                learn_number: undefined,
+                            }))}
                         />
                     </Form.Item>
                     <Form.Item label="Bài học">
                         <Select
                             showSearch
                             allowClear
-                            placeholder="Chọn bài học"
+                            placeholder="Tất cả bài học"
                             loading={filterLessonsQuery.isLoading || filterLessonsQuery.isValidating}
                             disabled={!filters.code || filterLessonsQuery.isLoading || filterLessonsQuery.isValidating}
                             notFoundContent={filterLessonsQuery.isLoading || filterLessonsQuery.isValidating
                                 ? <Space><Spin size="small" /> Đang tải bài học...</Space>
                                 : "Không có bài học"}
                             filterOption={(input, option) =>
-                                (option?.label as string)?.toLowerCase().includes(input.toLowerCase())
+                                String(option?.label || "").toLowerCase().includes(input.toLowerCase())
                             }
                             options={filterLessons.map((item) => ({
                                 value: item.learn_number,
                                 label: `Bài ${item.learn_number}${item.lesson_name ? `: ${item.lesson_name}` : ""}`,
                             }))}
                             value={filters.learn_number !== undefined ? Number(filters.learn_number) : undefined}
-                            onChange={(value) => {
-                                setFilters((prev) => ({
-                                    ...prev,
-                                    learn_number: value !== undefined && value !== null ? String(value) : undefined,
-                                }));
-                            }}
+                            onChange={(value) => setFilters((previous) => ({
+                                ...previous,
+                                learn_number: value !== undefined && value !== null ? String(value) : undefined,
+                            }))}
+                        />
+                    </Form.Item>
+                    <Form.Item label="Loại câu hỏi">
+                        <Select
+                            mode="multiple"
+                            maxTagCount="responsive"
+                            allowClear
+                            placeholder="Tất cả loại"
+                            options={[
+                                { value: 1, label: "Trắc nghiệm" },
+                                { value: 2, label: "Điền từ" },
+                                { value: 3, label: "Tự luận" },
+                            ]}
+                            value={filters.quiz_type !== undefined
+                                ? (Array.isArray(filters.quiz_type)
+                                    ? filters.quiz_type
+                                    : String(filters.quiz_type).split(",").map(Number).filter((number) => !isNaN(number)))
+                                : undefined}
+                            onChange={(value) => setFilters((previous) => ({
+                                ...previous,
+                                quiz_type: value.length ? value as QuizFilterValues["quiz_type"] : undefined,
+                            }))}
                         />
                     </Form.Item>
                     <Form.Item label="Trạng thái">
@@ -843,49 +875,55 @@ const QuizManagementPage = () => {
                             placeholder="Tất cả trạng thái"
                             options={STATUS_OPTIONS}
                             value={filters.quiz_status || undefined}
-                            onChange={(value) => {
-                                setFilters((prev) => ({ ...prev, quiz_status: value || undefined }));
-                            }}
+                            onChange={(value) => setFilters((previous) => ({
+                                ...previous,
+                                quiz_status: value || undefined,
+                            }))}
                         />
                     </Form.Item>
-                    <Form.Item label="Loại câu hỏi">
-                        <Select
-                            mode="multiple"
-                            allowClear
-                            placeholder="Tất cả loại"
-                            options={[
-                                { value: 1, label: "Trắc nghiệm" },
-                                { value: 2, label: "Điền từ" },
-                                { value: 3, label: "Tự luận" },
-                            ]}
-                            value={
-                                filters.quiz_type !== undefined
-                                    ? (Array.isArray(filters.quiz_type)
-                                        ? filters.quiz_type
-                                        : String(filters.quiz_type)
-                                        .split(",")
-                                        .map(Number)
-                                        .filter((n) => !isNaN(n)))
-                                    : undefined
-                            }
-                            onChange={(value) => {
-                                setFilters((prev) => ({
-                                    ...prev,
-                                    quiz_type: (value && value.length > 0
-                                        ? value as QuizFilterValues["quiz_type"]
-                                        : undefined),
-                                }));
-                            }}
-                        />
+                    <Form.Item label=" ">
+                        <Space.Compact block>
+                            <Button onClick={handleResetFilter}>Đặt lại</Button>
+                            <Button
+                                type="primary"
+                                icon={<FilterOutlined />}
+                                onClick={handleFilterSubmit}
+                                loading={quizzesQuery.isLoading || quizzesQuery.isValidating}
+                            >
+                                Áp dụng
+                            </Button>
+                        </Space.Compact>
                     </Form.Item>
-                </Form>
-            </div>
-        </Drawer>
+                </div>
+            </Form>
+        </div>
+    );
+
+    const importExportButton = () => (canImport || canExport) && (
+        <Dropdown
+            trigger={["click"]}
+            menu={{
+                items: [
+                    ...(canImport ? [{ key: "import", icon: <UploadOutlined />, label: "Import câu hỏi" }] : []),
+                    ...(canExport ? [{
+                        key: "export",
+                        icon: <DownloadOutlined />,
+                        label: `Export Excel${selectedKeys.length ? ` (${selectedKeys.length})` : ""}`,
+                    }] : []),
+                ],
+                onClick: ({ key }) => {
+                    if (key === "import") handleOpenImport();
+                    if (key === "export") handleExport();
+                },
+            }}
+        >
+            <Button>Nhập / Xuất <DownOutlined /></Button>
+        </Dropdown>
     );
 
     return <div className={styles.page}>
         {contextHolder}
-        <div className={`${styles.pageInfo} ${showPageInfo ? styles.pageInfoExpanded : ""}`}>
+        {/* <div className={`${styles.pageInfo} ${showPageInfo ? styles.pageInfoExpanded : ""}`}>
             <div className={styles.pageInfoHeader}>
                 <div className={styles.pageInfoTitle}>
                     <InfoCircleOutlined />
@@ -920,36 +958,50 @@ const QuizManagementPage = () => {
                     </p>
                 </div>
             </div>
-        </div>
+        </div> */}
+
+        {inlineFilters}
 
         <SearchAndActionsBar
             onSearch={handleSearch}
             searchValue={keyword}
             placeholder="Tìm kiếm câu hỏi..."
             titleBtnAdd="Câu hỏi"
-            handleAddBtn={canCreate ? handleOpenCreate : undefined}
-            handleImportClick={canImport ? () => {
-                if (!submittedFilters.code) {
-                    api.warning({ message: "Vui lòng chọn Chương trình trước khi import" });
-                    setOpenFilterDrawer(true);
-                    return;
-                }
-                setImportFiles([]);
-                setImportOpen(true);
-            } : undefined}
+            handleAddBtn={canCreate && !reorderMode ? handleOpenCreate : undefined}
             actionClassName="quiz-action-buttons"
             secondaryActions={
-                compact ? <div className="quiz-mobile-actions">
+                reorderMode ? <Space wrap>
+                    <Radio.Group
+                        value={reorderStrategy}
+                        onChange={(event) => setReorderStrategy(event.target.value)}
+                        optionType="button"
+                        buttonStyle="solid"
+                        options={[
+                            { label: "Chèn vị trí", value: "insert" },
+                            { label: "Đổi chỗ", value: "swap" },
+                        ]}
+                    />
+                    <Button icon={<StopOutlined />} onClick={handleCancelReorder} disabled={savingReorder}>
+                        Hủy sắp xếp
+                    </Button>
+                    <Button
+                        type="primary"
+                        icon={<SaveOutlined />}
+                        loading={savingReorder}
+                        onClick={handleSaveReorder}
+                    >
+                        Lưu thứ tự
+                    </Button>
+                </Space> : compact ? <div className="quiz-mobile-actions">
+                    {importExportButton()}
                     <Dropdown
                         trigger={["click"]}
                         menu={{
                             items: [
-                                ...(canExport ? [{ key: "export", icon: <DownloadOutlined />, label: `Export${selectedKeys.length ? ` (${selectedKeys.length})` : ""}` }] : []),
                                 { key: "reload", icon: <ReloadOutlined />, label: "Làm mới" },
                                 ...(canEdit ? [{ key: "reorder", icon: <EditOutlined />, label: "Sắp xếp câu hỏi" }] : []),
                             ],
                             onClick: ({ key }) => {
-                                if (key === "export") handleExport();
                                 if (key === "reload" && (hasSearched || reorderMode)) void refreshQuizzes();
                                 if (key === "reorder") handleEnableReorder();
                             },
@@ -957,23 +1009,8 @@ const QuizManagementPage = () => {
                     >
                         <Button icon={<MoreOutlined />}>Thao tác khác</Button>
                     </Dropdown>
-                    <Button icon={<FilterOutlined />} onClick={() => setOpenFilterDrawer(true)}>Lọc</Button>
                 </div> : <Space>
-                    {canExport && (
-                        <Dropdown
-                            trigger={["click"]}
-                            menu={{
-                                items: [
-                                    { key: "xlsx", label: "Xuất Excel (.xlsx)" },
-                                ],
-                                onClick: () => handleExport(),
-                            }}
-                        >
-                            <Button icon={<DownloadOutlined />}>
-                                Export{selectedKeys.length ? ` (${selectedKeys.length})` : ""}
-                            </Button>
-                        </Dropdown>
-                    )}
+                    {importExportButton()}
                     <Button
                         icon={<ReloadOutlined />}
                         onClick={() => {
@@ -989,12 +1026,20 @@ const QuizManagementPage = () => {
                             Sắp xếp
                         </Button>
                     )}
-                    <Button icon={<FilterOutlined />} onClick={() => setOpenFilterDrawer(true)}>Lọc</Button>
                 </Space>
             }
         />
 
-        {filterDrawer}
+        {reorderMode && (
+            <Alert
+                type="info"
+                showIcon
+                style={{ marginBottom: 12 }}
+                message={reorderStrategy === "insert"
+                    ? "Kiểu Chèn vị trí: câu hỏi được kéo sẽ chèn vào vị trí mới, các câu ở giữa tự dịch chuyển."
+                    : "Kiểu Đổi chỗ: câu hỏi được kéo và câu hỏi tại vị trí thả sẽ đổi vị trí trực tiếp."}
+            />
+        )}
 
         {!hasSearched && !reorderMode ? (
             <Empty
@@ -1024,6 +1069,11 @@ const QuizManagementPage = () => {
                 filterCode={filters.code}
                 canViewField={canViewField}
                 hasSearched={hasSearched}
+                sortBy={displaySortState.sort_by}
+                sortOrder={displaySortState.sort_order}
+                onSortChange={(sortBy, sortOrder) => {
+                    setDisplaySortState({ sort_by: sortBy, sort_order: sortOrder });
+                }}
                 onSelectionChange={setSelectedKeys}
                 onSelectAll={handleSelectAll}
                 onPageChange={(nextPage, nextSize) => {

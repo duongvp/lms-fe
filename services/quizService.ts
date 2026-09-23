@@ -89,8 +89,12 @@ const buildQuery = (params: object) => {
     return query.toString();
 };
 
-export const getQuizzes = (params: QuizListParams) =>
-    fetchInstance(`${API_BASE_URL}?${buildQuery(params)}`, { method: "GET", credentials: "include" });
+export const getQuizzes = (params: QuizListParams, signal?: AbortSignal) =>
+    fetchInstance(`${API_BASE_URL}?${buildQuery(params)}`, {
+        method: "GET",
+        credentials: "include",
+        signal,
+    });
 
 export const getQuizById = (quizId: string) =>
     fetchInstance(`${API_BASE_URL}/${encodeURIComponent(quizId)}`, { method: "GET", credentials: "include" });

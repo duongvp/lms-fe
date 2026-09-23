@@ -34,10 +34,13 @@ interface QuizTableProps {
     canExport: boolean;
     lessons: QuizLessonOption[];
     filterCode?: string;
+    sortBy: "learn_number" | "quiz_index";
+    sortOrder: "asc" | "desc";
     canViewField: (field: string) => boolean;
     /** Khi false: hiển thị empty placeholder thay vì bảng */
     hasSearched: boolean;
     onSelectionChange: (keys: Key[]) => void;
+    onSortChange: (field: "learn_number" | "quiz_index", order: "asc" | "desc") => void;
     onSelectAll: (selected: boolean) => void;
     onPageChange: (page: number, pageSize: number) => void;
     onDragStart: (key: Key) => void;
@@ -62,9 +65,12 @@ const QuizTable = ({
     canExport,
     lessons,
     filterCode,
+    sortBy,
+    sortOrder,
     canViewField,
     hasSearched,
     onSelectionChange,
+    onSortChange,
     onSelectAll,
     onPageChange,
     onDragStart,
@@ -136,25 +142,35 @@ const QuizTable = ({
             dataIndex: "quiz_index" as const,
             width: 86,
             align: "center" as const,
+            sorter: reorderMode ? false : true,
+            sortDirections: ["ascend" as const, "descend" as const, "ascend" as const],
+            sortOrder: !reorderMode && sortBy === "quiz_index"
+                ? (sortOrder === "asc" ? "ascend" as const : "descend" as const)
+                : null,
         }] : []),
         ...(canViewField("learn_number") ? [{
             title: "Bài học",
             dataIndex: "learn_number" as const,
             width: 210,
+            sorter: reorderMode ? false : true,
+            sortDirections: ["ascend" as const, "descend" as const, "ascend" as const],
+            sortOrder: !reorderMode && sortBy === "learn_number"
+                ? (sortOrder === "asc" ? "ascend" as const : "descend" as const)
+                : null,
             render: (value: number, record: QuizApiResponse) => {
                 const lessonName = filterCode === record.code
                     ? lessonNameByNumber.get(Number(value))
                     : undefined;
                 return <div>
                     <Tag color="geekblue">Bài {value}</Tag>
-                    {lessonName && <div className={styles.tableSub}>{lessonName}</div>}
+                    {lessonName && <div className={styles.tableSub} title={lessonName}>{lessonName}</div>}
                 </div>;
             },
         }] : []),
         ...(canViewField("quiz_name") ? [{
             title: "Nội dung câu hỏi",
             dataIndex: "quiz_name" as const,
-            render: (value: string) => <div className={styles.tableQuestion}>{value || "—"}</div>,
+            render: (value: string) => <div className={styles.tableQuestion} title={value}>{value || "—"}</div>,
         }] : []),
         ...(canViewField("quiz_type") ? [{
             title: "Loại câu hỏi",
@@ -207,11 +223,11 @@ const QuizTable = ({
             render: (_: unknown, record: QuizApiResponse) => (
                 <Space size={4}>
                     <Tooltip title="Xem trước">
-                        <Button type="text" icon={<EyeOutlined />} onClick={() => onPreview(record)} />
+                        <Button size="small" type="text" icon={<EyeOutlined />} onClick={() => onPreview(record)} />
                     </Tooltip>
                     {canEdit && record.quiz_status !== "disable" && (
                         <Tooltip title="Chỉnh sửa">
-                            <Button type="text" icon={<EditOutlined />} onClick={() => onEdit(record)} />
+                            <Button size="small" type="text" icon={<EditOutlined />} onClick={() => onEdit(record)} />
                         </Tooltip>
                     )}
                     {canDelete && record.quiz_status !== "disable" && (
@@ -221,12 +237,12 @@ const QuizTable = ({
                             cancelText="Hủy"
                             onConfirm={() => onDisable(record)}
                         >
-                            <Tooltip title="Vô hiệu hóa"><Button type="text" danger icon={<DeleteOutlined />} /></Tooltip>
+                            <Tooltip title="Vô hiệu hóa"><Button size="small" type="text" danger icon={<DeleteOutlined />} /></Tooltip>
                         </Popconfirm>
                     )}
                     {canEdit && record.quiz_status === "disable" && (
                         <Tooltip title="Khôi phục">
-                            <Button type="text" icon={<UndoOutlined />} onClick={() => onRestore(record)} />
+                            <Button size="small" type="text" icon={<UndoOutlined />} onClick={() => onRestore(record)} />
                         </Tooltip>
                     )}
                 </Space>
@@ -263,6 +279,7 @@ const QuizTable = ({
             />
         ) : (
             <CustomTable<QuizApiResponse>
+                size="small"
                 responsiveCards
                 responsiveCardTitle={(record) => (
                     <Space size={6} wrap>
@@ -301,11 +318,18 @@ const QuizTable = ({
                             : undefined,
                     } : undefined,
                 })}
+                onChange={(_pagination, _filters, sorter, extra) => {
+                    if (extra.action !== "sort" || Array.isArray(sorter) || !sorter.order) return;
+                    const field = String(sorter.field || sorter.columnKey || "");
+                    if (field !== "learn_number" && field !== "quiz_index") return;
+                    onSortChange(field, sorter.order === "descend" ? "desc" : "asc");
+                }}
                 pagination={reorderMode ? false : {
                     current: page,
                     pageSize,
                     total,
                     showSizeChanger: true,
+                    pageSizeOptions: [10, 20, 50, 100],
                     showTotal: (value) => `Tổng ${value} câu hỏi`,
                     onChange: onPageChange,
                 }}

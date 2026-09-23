@@ -174,7 +174,15 @@ const makeRequest = async (
     timeoutMs: number
 ) => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+    }, timeoutMs);
+    const externalSignal = options.signal;
+    const abortFromCaller = () => controller.abort(externalSignal?.reason);
+    if (externalSignal?.aborted) abortFromCaller();
+    else externalSignal?.addEventListener('abort', abortFromCaller, { once: true });
     const isFormData = options.body instanceof FormData;
     const mergedHeaders = {
         ...(token && { Authorization: `Bearer ${token}` }),
@@ -190,8 +198,16 @@ const makeRequest = async (
             signal: controller.signal,
             credentials: 'include'
         });
+    } catch (error: any) {
+        if (error?.name === 'AbortError' && timedOut) {
+            const timeoutError = new Error('Request timeout');
+            timeoutError.name = 'TimeoutError';
+            throw timeoutError;
+        }
+        throw error;
     } finally {
         clearTimeout(timeoutId);
+        externalSignal?.removeEventListener('abort', abortFromCaller);
     }
 };
 
@@ -206,7 +222,7 @@ const handleErrorResponse = async (res: Response) => {
 
 // Xử lý lỗi fetch
 const handleFetchError = (error: any) => {
-    if (error.name === 'AbortError') {
+    if (error.name === 'TimeoutError') {
         throw new Error('Request timeout');
     }
     throw error;
