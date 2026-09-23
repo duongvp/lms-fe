@@ -17,7 +17,7 @@ import {
 import type { FormInstance } from "antd";
 import { EyeOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from "@ant-design/icons";
 import type { QuizApiResponse, QuizLessonOption, QuizType } from "@/services/quizService";
-import { QUIZ_TYPE_OPTIONS, SCORE_TYPE_OPTIONS, STATUS_OPTIONS } from "../quiz.constants";
+import { QUIZ_TYPE_OPTIONS, SCORE_TYPE_OPTIONS } from "../quiz.constants";
 import type { QuizClassSelectOption, QuizFormValues } from "../quiz.types";
 import { buildLessonSelectOptions, INITIAL_QUIZ_FORM_VALUES } from "../quiz.utils";
 import QuizAnswerEditor from "./QuizAnswerEditor";
@@ -81,7 +81,14 @@ const QuizFormModal = ({
 
     return (
         <Modal
-            title={editing ? `Cập nhật câu hỏi (${editing.quiz_id})` : "Thêm mới câu hỏi"}
+            title={editing ? (
+                <div>
+                    <div>Cập nhật câu hỏi</div>
+                    <div className={styles.modalSubtitle}>
+                        Bài {editing.learn_number} · Thứ tự {editing.quiz_index}
+                    </div>
+                </div>
+            ) : "Thêm mới câu hỏi"}
             open={open}
             onCancel={onClose}
             centered
@@ -187,17 +194,17 @@ const QuizFormModal = ({
                 </Form.Item>}
 
                 <Row gutter={14}>
-                    {canViewField("quiz_type") && <Col xs={24} lg={12}>
+                    {canViewField("quiz_type") && <Col xs={24} lg={8}>
                         <Form.Item name="quiz_type" label="Loại câu hỏi" rules={[{ required: true }]}>
                             <Select options={QUIZ_TYPE_OPTIONS} disabled={!canEditField("quiz_type")} onChange={handleTypeChange} />
                         </Form.Item>
                     </Col>}
-                    {canViewField("score_type") && <Col xs={24} lg={12}>
+                    {canViewField("score_type") && <Col xs={24} lg={8}>
                         <Form.Item name="score_type" label="Cách tính điểm" rules={[{ required: true }]}>
                             <Select options={SCORE_TYPE_OPTIONS} disabled={!canEditField("score_type")} />
                         </Form.Item>
                     </Col>}
-                    {canViewField("ans_duration") && <Col xs={12} lg={12}>
+                    {canViewField("ans_duration") && <Col xs={24} lg={8}>
                         <Form.Item name="ans_duration" label="Thời gian trả lời" rules={[{ required: true, message: "Nhập thời gian" }]}>
                             <InputNumber
                                 min={1}
@@ -207,11 +214,6 @@ const QuizFormModal = ({
                                 style={{ width: "100%" }}
                                 disabled={!canEditField("ans_duration")}
                             />
-                        </Form.Item>
-                    </Col>}
-                    {canViewField("quiz_status") && <Col xs={12} lg={12}>
-                        <Form.Item name="quiz_status" label="Trạng thái" rules={[{ required: true }]}>
-                            <Select options={STATUS_OPTIONS} disabled={!canEditField("quiz_status")} />
                         </Form.Item>
                     </Col>}
                 </Row>

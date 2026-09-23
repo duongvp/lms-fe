@@ -534,6 +534,9 @@ const QuizManagementPage = () => {
                 fieldPolicy,
                 QUIZ_MODULE_CODE
             );
+            // Trạng thái không còn là dữ liệu người dùng chọn trong form.
+            // Tạo mới để backend tự gán "done"; cập nhật giữ nguyên trạng thái hiện tại.
+            delete sanitized.quiz_status;
             if (!Object.keys(sanitized).length) {
                 throw new Error("Vai trò hiện tại không được chỉnh sửa trường dữ liệu nào.");
             }

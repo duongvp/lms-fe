@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import type { DragEvent, Key } from "react";
 import { Button, Empty, Popconfirm, Space, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { DeleteOutlined, DragOutlined, EditOutlined, EyeOutlined, FilterOutlined, UndoOutlined } from "@ant-design/icons";
+import { DragOutlined, EditOutlined, EyeOutlined, FilterOutlined, StopOutlined, UndoOutlined } from "@ant-design/icons";
 import type {
     QuizAnswerItem,
     QuizApiResponse,
@@ -237,7 +237,7 @@ const QuizTable = ({
                             cancelText="Hủy"
                             onConfirm={() => onDisable(record)}
                         >
-                            <Tooltip title="Vô hiệu hóa"><Button size="small" type="text" danger icon={<DeleteOutlined />} /></Tooltip>
+                            <Tooltip title="Vô hiệu hóa"><Button size="small" type="text" danger icon={<StopOutlined />} /></Tooltip>
                         </Popconfirm>
                     )}
                     {canEdit && record.quiz_status === "disable" && (
