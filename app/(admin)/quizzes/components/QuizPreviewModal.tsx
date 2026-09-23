@@ -6,6 +6,7 @@ import { quizTypeLabel, statusMeta } from "../quiz.constants";
 import type { QuizFormValues } from "../quiz.types";
 import { LETTERS } from "../quiz.utils";
 import styles from "../quiz.module.css";
+import MathText from "./MathText";
 
 const { Text } = Typography;
 
@@ -47,9 +48,12 @@ const QuizPreviewModal = ({
                     {canViewDuration && <Tag>{values.ans_duration || 0} giây</Tag>}
                     {canViewStatus && <Tag color={status.color}>{status.label}</Tag>}
                 </div>
-                <div className={styles.previewQuestion}>
-                    {values.quiz_name?.trim() || "Nội dung câu hỏi sẽ hiển thị tại đây."}
-                </div>
+                <MathText
+                    as="div"
+                    className={styles.previewQuestion}
+                    value={values.quiz_name?.trim()}
+                    fallback="Nội dung câu hỏi sẽ hiển thị tại đây."
+                />
                 {canViewAnswers && (quizType === 1 ? (
                     answers.length ? answers.map((item, index) => (
                         <div
@@ -57,7 +61,12 @@ const QuizPreviewModal = ({
                             className={`${styles.previewOption} ${item.correct ? styles.previewOptionCorrect : ""}`}
                         >
                             <span className={styles.optionKey}>{LETTERS[index]}.</span>
-                            <span style={{ flex: 1 }}>{item.text || "Lựa chọn chưa có nội dung"}</span>
+                            <MathText
+                                as="span"
+                                className={styles.previewOptionText}
+                                value={item.text}
+                                fallback="Lựa chọn chưa có nội dung"
+                            />
                             {item.correct && <CheckCircleFilled style={{ color: "#22a447", marginTop: 3 }} />}
                         </div>
                     )) : <div className={styles.emptyAnswer}>Chưa có lựa chọn</div>
@@ -66,15 +75,17 @@ const QuizPreviewModal = ({
                         <div key={index} className={styles.previewOption}>
                             <span className={styles.optionKey}>{index + 1}.</span>
                             <span>
-                                <Text type="secondary">{item.placeholder || "Vị trí trống"}</Text>
+                                <Text type="secondary">
+                                    <MathText value={item.placeholder} fallback="Vị trí trống" />
+                                </Text>
                                 <br />
-                                {item.text || "Chưa nhập đáp án"}
+                                <MathText value={item.text} fallback="Chưa nhập đáp án" />
                             </span>
                         </div>
                     )) : <div className={styles.emptyAnswer}>Chưa có ô điền từ</div>
                 ) : (
                     <div className={styles.previewOption}>
-                        <span>{values.short_answer || "Chưa nhập đáp án mẫu"}</span>
+                        <MathText value={values.short_answer} fallback="Chưa nhập đáp án mẫu" />
                     </div>
                 ))}
             </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { DragEvent, Key } from "react";
-import { Button, Empty, Popconfirm, Space, Tag, Tooltip, Typography } from "antd";
+import { Button, Empty, Grid, Popconfirm, Space, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { DragOutlined, EditOutlined, EyeOutlined, FilterOutlined, StopOutlined, UndoOutlined } from "@ant-design/icons";
 import type {
@@ -17,6 +17,7 @@ import { formatQuizDate } from "../quiz.utils";
 import { useTableViewport } from "@/hooks/useTableViewport";
 import styles from "../quiz.module.css";
 import CustomTable from "@/components/ui/Table";
+import MathText from "./MathText";
 
 const { Text } = Typography;
 
@@ -80,6 +81,7 @@ const QuizTable = ({
     onDisable,
     onRestore,
 }: QuizTableProps) => {
+    const screens = Grid.useBreakpoint();
     const { containerRef, scrollY } = useTableViewport(reorderMode ? 64 : 112);
     const dragPointerYRef = useRef<number | null>(null);
     const autoScrollFrameRef = useRef<number | null>(null);
@@ -170,7 +172,15 @@ const QuizTable = ({
         ...(canViewField("quiz_name") ? [{
             title: "Nội dung câu hỏi",
             dataIndex: "quiz_name" as const,
-            render: (value: string) => <div className={styles.tableQuestion} title={value}>{value || "—"}</div>,
+            render: (value: string) => (
+                <MathText
+                    as="div"
+                    className={styles.tableQuestion}
+                    value={value}
+                    fallback="—"
+                    title={value}
+                />
+            ),
         }] : []),
         ...(canViewField("quiz_type") ? [{
             title: "Loại câu hỏi",
@@ -324,6 +334,12 @@ const QuizTable = ({
                     if (field !== "learn_number" && field !== "quiz_index") return;
                     onSortChange(field, sorter.order === "descend" ? "desc" : "asc");
                 }}
+                sticky={!reorderMode ? {
+                    // Admin Content có padding 24px ở desktop và 12px ở laptop.
+                    // Offset âm giúp header bám sát mép vùng cuộn, không để các
+                    // dòng dữ liệu lộ ra phía trên header khi scroll ngoài.
+                    offsetHeader: screens.xl ? -24 : -12,
+                } : false}
                 pagination={reorderMode ? false : {
                     current: page,
                     pageSize,
@@ -333,7 +349,7 @@ const QuizTable = ({
                     showTotal: (value) => `Tổng ${value} câu hỏi`,
                     onChange: onPageChange,
                 }}
-                scroll={{ x: 1250, y: scrollY }}
+                scroll={reorderMode ? { x: 1250, y: scrollY } : { x: 1250 }}
             />
         )}
     </div>;

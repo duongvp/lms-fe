@@ -4,9 +4,10 @@ import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useR
 import { useRouter, useSearchParams } from "next/navigation";
 import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
+import type { FilterDropdownProps } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
 import { notification, Alert, Card, Form, Input, InputNumber, List, Select, Button, Checkbox, Space, Modal, Radio, Row, Col, DatePicker, TimePicker, Drawer, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress, Table, Spin } from "antd";
-import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, MoreOutlined, ApartmentOutlined, CloudUploadOutlined, SwapOutlined, LinkOutlined } from "@ant-design/icons";
+import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, SearchOutlined, SortAscendingOutlined, SortDescendingOutlined, MoreOutlined, ApartmentOutlined, CloudUploadOutlined, SwapOutlined, LinkOutlined } from "@ant-design/icons";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -52,6 +53,188 @@ import { fetchAllPages } from "@/lib/fetchAllPages";
 
 const SCHEDULE_MODULE_CODE = "calendar";
 const { RangePicker } = DatePicker;
+
+type ExcelFilterOption = {
+    text: string;
+    value: React.Key;
+};
+
+const normalizeFilterSearch = (value: unknown) => String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLocaleLowerCase("vi")
+    .trim();
+
+const ExcelColumnFilter = ({
+    options,
+    multiple = true,
+    selectedKeys,
+    setSelectedKeys,
+    confirm,
+    clearFilters,
+    close,
+    numericSort = false,
+}: FilterDropdownProps & {
+    options: ExcelFilterOption[];
+    multiple?: boolean;
+    numericSort?: boolean;
+}) => {
+    const [search, setSearch] = useState("");
+    const [descending, setDescending] = useState(false);
+    const normalizedSearch = normalizeFilterSearch(search);
+    const visibleOptions = options.filter((option) => (
+        !normalizedSearch || normalizeFilterSearch(option.text).includes(normalizedSearch)
+    )).sort((left, right) => descending && numericSort
+        ? right.text.localeCompare(left.text, "vi", { numeric: true })
+        : 0);
+    const selectedValues = new Set(selectedKeys.map(String));
+    const visibleValues = visibleOptions.map((option) => String(option.value));
+    const selectedVisibleCount = visibleValues.filter((value) => selectedValues.has(value)).length;
+    const allVisibleSelected = visibleValues.length > 0 && selectedVisibleCount === visibleValues.length;
+
+    const toggleOption = (value: React.Key, checked: boolean) => {
+        if (!multiple) {
+            setSelectedKeys(checked ? [value] : []);
+            return;
+        }
+        const valueKey = String(value);
+        const nextValues = checked
+            ? [...selectedKeys.filter((key) => String(key) !== valueKey), value]
+            : selectedKeys.filter((key) => String(key) !== valueKey);
+        setSelectedKeys(nextValues);
+    };
+
+    const toggleVisibleOptions = (checked: boolean) => {
+        const visibleSet = new Set(visibleValues);
+        const retained = selectedKeys.filter((key) => !visibleSet.has(String(key)));
+        setSelectedKeys(checked
+            ? [...retained, ...visibleOptions.map((option) => option.value)]
+            : retained);
+    };
+
+    const resetFilter = () => {
+        setSearch("");
+        setSelectedKeys([]);
+        if (clearFilters) {
+            clearFilters({ confirm: true, closeDropdown: true });
+        } else {
+            confirm({ closeDropdown: true });
+        }
+    };
+
+    return (
+        <div
+            style={{ width: 300, maxWidth: "calc(100vw - 32px)", padding: 12 }}
+            onKeyDown={(event) => event.stopPropagation()}
+        >
+            <Input
+                autoFocus
+                allowClear
+                value={search}
+                prefix={<SearchOutlined style={{ color: "#8c8c8c" }} />}
+                placeholder="Tìm trong danh sách..."
+                onChange={(event) => setSearch(event.target.value)}
+                onPressEnter={() => confirm({ closeDropdown: true })}
+            />
+
+            <div style={{ minHeight: 36, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 6 }}>
+                {multiple ? (
+                    <Checkbox
+                        checked={allVisibleSelected}
+                        indeterminate={selectedVisibleCount > 0 && !allVisibleSelected}
+                        disabled={!visibleOptions.length}
+                        onChange={(event) => toggleVisibleOptions(event.target.checked)}
+                    >
+                        Chọn tất cả{search ? " kết quả" : ""}
+                    </Checkbox>
+                ) : (
+                    <Typography.Text type="secondary">Chọn một giá trị</Typography.Text>
+                )}
+                <Space size={4}>
+                    {numericSort && (
+                        <Button
+                            type="text"
+                            size="small"
+                            icon={descending ? <SortDescendingOutlined /> : <SortAscendingOutlined />}
+                            title={descending ? "Sắp xếp giảm dần" : "Sắp xếp tăng dần"}
+                            aria-label={descending ? "Đang giảm dần, nhấn để tăng dần" : "Đang tăng dần, nhấn để giảm dần"}
+                            onClick={() => setDescending((current) => !current)}
+                        >
+                            {descending ? "Giảm" : "Tăng"}
+                        </Button>
+                    )}
+                    <Typography.Text type="secondary" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+                        {selectedKeys.length ? `Đã chọn ${selectedKeys.length}` : `${options.length} giá trị`}
+                    </Typography.Text>
+                </Space>
+            </div>
+
+            <div style={{ maxHeight: 260, overflowY: "auto", marginInline: -4, paddingInline: 4, borderBlock: "1px solid #f0f0f0" }}>
+                {visibleOptions.length ? visibleOptions.map((option) => {
+                    const checked = selectedValues.has(String(option.value));
+                    return (
+                        <Checkbox
+                            key={String(option.value)}
+                            checked={checked}
+                            onChange={(event) => toggleOption(option.value, event.target.checked)}
+                            style={{ display: "flex", alignItems: "center", width: "100%", minHeight: 36, padding: "6px 4px" }}
+                        >
+                            <span title={option.text} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {option.text}
+                            </span>
+                        </Checkbox>
+                    );
+                }) : (
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không có giá trị phù hợp" style={{ marginBlock: 20 }} />
+                )}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, paddingTop: 10 }}>
+                <Button type="link" danger disabled={!selectedKeys.length} style={{ paddingInline: 0 }} onClick={resetFilter}>
+                    Xóa bộ lọc
+                </Button>
+                <Space size={8}>
+                    <Button onClick={close}>Hủy</Button>
+                    <Button type="primary" onClick={() => confirm({ closeDropdown: true })}>
+                        Áp dụng{selectedKeys.length ? ` (${selectedKeys.length})` : ""}
+                    </Button>
+                </Space>
+            </div>
+        </div>
+    );
+};
+
+const excelFilterUi = (
+    options: ExcelFilterOption[],
+    selectedCount: number,
+    multiple = true,
+    numericSort = false
+) => ({
+    filterDropdown: (props: FilterDropdownProps) => (
+        <ExcelColumnFilter {...props} options={options} multiple={multiple} numericSort={numericSort} />
+    ),
+    filterIcon: (filtered: boolean) => (
+        <Tooltip title={filtered ? `Đang lọc ${selectedCount} giá trị` : "Lọc dữ liệu"}>
+            <span
+                aria-label={filtered ? `Đang lọc ${selectedCount} giá trị` : "Lọc dữ liệu"}
+                style={{
+                    width: 22,
+                    height: 22,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 5,
+                    background: filtered ? "#e6f4ff" : "transparent",
+                    color: filtered ? "#1677ff" : "#8c8c8c",
+                }}
+            >
+                <FilterOutlined style={{ fontSize: 13 }} />
+            </span>
+        </Tooltip>
+    ),
+});
 
 const googleSheetLink = (value: string) => {
     try {
@@ -2767,7 +2950,7 @@ const Page = () => {
                 data.map((record) => getTableFilterValue(fieldCode, record))
             ));
             result.set(fieldCode, values
-                .sort((left, right) => left.localeCompare(right, "vi"))
+                .sort((left, right) => left.localeCompare(right, "vi", { numeric: true }))
                 .map((value) => ({ text: value, value })));
         });
         return result;
@@ -2799,6 +2982,8 @@ const Page = () => {
 
     const columns: ColumnsType<ScheduleDataType> = visibleFieldPermissions.map(({ field }, columnIndex) => {
         const fieldCode = field.fieldCode;
+        const filterOptions = getTableFilters(fieldCode);
+        const selectedFilterCount = tableColumnFilters[fieldCode]?.length ?? 0;
         return {
             title: fieldCode === "lesson_status" ? "Tiến độ" : (field.fieldLabel || fieldCode),
             dataIndex: fieldCode,
@@ -2817,8 +3002,11 @@ const Page = () => {
                                             : fieldCode === "class_code" ? 120
                                                 : fieldCode === "subject" ? 120
                                                     : 150,
-            filters: filterableFieldCodes.has(fieldCode) ? getTableFilters(fieldCode) : undefined,
+            filters: filterableFieldCodes.has(fieldCode) ? filterOptions : undefined,
             filterMultiple: true,
+            ...(filterableFieldCodes.has(fieldCode)
+                ? excelFilterUi(filterOptions, selectedFilterCount, true, fieldCode === "learn_number")
+                : {}),
             filteredValue: filterableFieldCodes.has(fieldCode)
                 ? tableColumnFilters[fieldCode] ?? null
                 : undefined,
@@ -2952,6 +3140,10 @@ const Page = () => {
             fixed: "left",
             filters: getTableFilters("live_weekday"),
             filterMultiple: true,
+            ...excelFilterUi(
+                getTableFilters("live_weekday"),
+                tableColumnFilters.live_weekday?.length ?? 0
+            ),
             filteredValue: tableColumnFilters.live_weekday ?? null,
             onFilter: (value: React.Key | boolean, record: ScheduleDataType) => (
                 getTableFilterValue("live_weekday", record) === String(value)
@@ -2967,6 +3159,10 @@ const Page = () => {
             fixed: "left",
             filters: getTableFilters("live_date"),
             filterMultiple: true,
+            ...excelFilterUi(
+                getTableFilters("live_date"),
+                tableColumnFilters.live_date?.length ?? 0
+            ),
             filteredValue: tableColumnFilters.live_date ?? null,
             onFilter: (value: React.Key | boolean, record: ScheduleDataType) => (
                 getTableFilterValue("live_date", record) === String(value)
@@ -3058,6 +3254,12 @@ const Page = () => {
     // Khi admin xem lịch của nhiều chương trình, mã chương trình là ngữ cảnh
     // bắt buộc để tránh cập nhật nhầm lịch giữa các chương trình.
     if (isAdmin) {
+        const programFilterOptions = Array.from(new Set(
+            data.map((record) => String(record.code || '').trim()).filter(Boolean)
+        )).sort((left, right) => left.localeCompare(right, 'vi')).map((code) => ({
+            text: code,
+            value: code,
+        }));
         columns.splice(liveTimeColumns.length, 0, {
             title: "Chương trình",
             dataIndex: "code",
@@ -3065,13 +3267,9 @@ const Page = () => {
             className: "responsive-card-hidden",
             width: 180,
             fixed: "left",
-            filters: Array.from(new Set(
-                data.map((record) => String(record.code || '').trim()).filter(Boolean)
-            )).sort((left, right) => left.localeCompare(right, 'vi')).map((code) => ({
-                text: code,
-                value: code,
-            })),
+            filters: programFilterOptions,
             filterMultiple: false,
+            ...excelFilterUi(programFilterOptions, submittedFilterValues.code ? 1 : 0, false),
             filteredValue: submittedFilterValues.code ? [submittedFilterValues.code] : null,
             onFilter: (value: React.Key | boolean, record: ScheduleDataType) => (
                 String(record.code || '') === String(value)
@@ -3379,7 +3577,7 @@ const Page = () => {
         live_weekday: 72,
         live_date: 112,
         live_time_range: 132,
-        learn_number: 88,
+        learn_number: 116,
         lesson_status: 120,
         classroom_assignment_status: 112,
         action: 144,
@@ -3511,7 +3709,10 @@ const Page = () => {
             flex: viewMode === "calendar" && isDesktop ? "1 1 0" : "0 0 auto",
             height: viewMode === "calendar" && isDesktop ? "100%" : "auto",
             minHeight: 0,
-            overflowX: "hidden",
+            // `overflow-x: hidden` kết hợp `overflow-y: visible` sẽ tạo một
+            // scroll container ngầm và làm sticky table header bám sai vùng.
+            // `clip` vẫn chặn tràn ngang nhưng để header bám Admin Content.
+            overflowX: viewMode === "table" ? "clip" : "hidden",
             overflowY: viewMode === "calendar" && isDesktop ? "hidden" : "visible",
             WebkitOverflowScrolling: "touch",
         }}>
@@ -4090,10 +4291,10 @@ const Page = () => {
                                             style: { cursor: editingKey ? "default" : "pointer" },
                                         })}
                                         sticky={{
-                                            offsetHeader: 0,
-                                            getContainer: () => (
-                                                pageScrollRef.current?.closest(".ant-layout-content") as HTMLElement | null
-                                            ) ?? window,
+                                            // Dùng cùng cơ chế với bảng Quản lý câu hỏi. CSS sticky
+                                            // tự nhận Admin Content là vùng cuộn gần nhất; không ép
+                                            // container riêng để tránh header bị cuộn ra khỏi màn hình.
+                                            offsetHeader: screens.xl ? -24 : -12,
                                         }}
                                         scroll={{ x: 1280 }}
                                     />

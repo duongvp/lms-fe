@@ -4,6 +4,11 @@
     display: flex;
     flex-direction: column;
     gap: 0;
+    min-height: 100%;
+    overflow: visible;
+}
+
+.pageReorder {
     height: 100%;
     min-height: 0;
     overflow: hidden;
@@ -50,6 +55,11 @@
 }
 
 .tableViewport {
+    flex: none;
+    min-height: 240px;
+    overflow: visible;
+}
+.pageReorder .tableViewport {
     flex: 1 1 0;
     min-height: 0;
     overflow: hidden;
@@ -68,6 +78,36 @@
     font-weight: 400;
 }
 
+.quizFormModal :global(.ant-modal-close) {
+    top: 12px;
+    inset-inline-end: 14px;
+}
+
+.quizFormModal :global(.ant-modal-body) {
+    scrollbar-color: #c3cad5 transparent;
+    scrollbar-width: thin;
+}
+
+.quizFormModal :global(.ant-modal-body::-webkit-scrollbar) {
+    width: 8px;
+}
+
+.quizFormModal :global(.ant-modal-body::-webkit-scrollbar-track) {
+    background: transparent;
+}
+
+.quizFormModal :global(.ant-modal-body::-webkit-scrollbar-thumb) {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: #c3cad5;
+    background-clip: padding-box;
+}
+
+.quizFormModal :global(.ant-modal-body::-webkit-scrollbar-thumb:hover) {
+    background: #98a2b3;
+    background-clip: padding-box;
+}
+
 .previewMeta {
     display: flex;
     flex-wrap: wrap;
@@ -83,6 +123,61 @@
     font-weight: 600;
     line-height: 1.55;
     white-space: pre-wrap;
+}
+
+.previewQuestion :global(.quiz-math-display),
+.previewOptionText :global(.quiz-math-display),
+.latexPreview :global(.quiz-math-display) {
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.previewOptionText {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.latexPreview {
+    margin: -10px 0 16px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    border: 1px solid #d6e4ff;
+    border-radius: 8px;
+    background: #f6f9ff;
+    color: #172033;
+    line-height: 1.7;
+    white-space: pre-wrap;
+}
+
+.latexPreviewLabel {
+    margin-bottom: 5px;
+    color: #607089;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.answerLatexPreview {
+    margin-top: 7px;
+    padding: 7px 9px;
+    overflow-x: auto;
+    border-left: 3px solid #91caff;
+    border-radius: 4px;
+    background: #f6f9ff;
+    color: #172033;
+    line-height: 1.6;
+}
+
+.answerLatexPreview :global(.quiz-math-display) {
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.previewQuestion :global(.katex-display),
+.previewOption :global(.katex-display),
+.latexPreview :global(.katex-display),
+.answerLatexPreview :global(.katex-display) {
+    margin: .45em 0;
 }
 
 .previewOption {

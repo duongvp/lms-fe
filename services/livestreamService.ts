@@ -329,6 +329,7 @@ export interface LivestreamListParams {
     lesson_status?: string | number;
     time_status?: "upcoming" | "ongoing" | "completed" | Array<"upcoming" | "ongoing" | "completed">;
     weekdays?: number[];
+    learn_numbers?: number[];
     from_learn_number?: number;
     to_learn_number?: number;
     start_time?: string;

@@ -480,7 +480,12 @@ const QuizManagementPage = () => {
             return;
         }
         resetEditor();
-        form.setFieldValue("code", submittedFilters.code);
+        form.setFieldsValue({
+            code: submittedFilters.code,
+            learn_number: submittedFilters.learn_number === undefined
+                ? undefined
+                : Number(submittedFilters.learn_number),
+        });
         setFormOpen(true);
     };
 
@@ -509,7 +514,13 @@ const QuizManagementPage = () => {
     const handleResetForm = () => {
         const values = editing
             ? recordToQuizForm(editing)
-            : { ...INITIAL_QUIZ_FORM_VALUES, code: String(submittedFilters.code || "") };
+            : {
+                ...INITIAL_QUIZ_FORM_VALUES,
+                code: String(submittedFilters.code || ""),
+                learn_number: submittedFilters.learn_number === undefined
+                    ? undefined as unknown as number
+                    : Number(submittedFilters.learn_number),
+            };
         form.setFieldsValue(values);
         setPreview(values);
     };
@@ -924,7 +935,7 @@ const QuizManagementPage = () => {
         </Dropdown>
     );
 
-    return <div className={styles.page}>
+    return <div className={`${styles.page} ${reorderMode ? styles.pageReorder : ""}`}>
         {contextHolder}
         {/* <div className={`${styles.pageInfo} ${showPageInfo ? styles.pageInfoExpanded : ""}`}>
             <div className={styles.pageInfoHeader}>

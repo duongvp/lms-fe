@@ -22,6 +22,7 @@
     "dayjs": "^1.11.13",
     "html-to-image": "^1.11.13",
     "jsonwebtoken": "^9.0.2",
+    "katex": "^0.18.7",
     "next": "^16.2.1",
     "react": "^19.2.4",
     "react-barcode": "^1.6.1",

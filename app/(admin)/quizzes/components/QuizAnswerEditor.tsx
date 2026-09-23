@@ -6,6 +6,7 @@ import type { QuizType } from "@/services/quizService";
 import type { EditorAnswer } from "../quiz.types";
 import { LETTERS } from "../quiz.utils";
 import styles from "../quiz.module.css";
+import MathText, { hasMathSyntax } from "./MathText";
 
 const { Text } = Typography;
 
@@ -14,9 +15,13 @@ interface QuizAnswerEditorProps {
     editable: boolean;
 }
 
-const QuizAnswerEditor = ({ quizType, editable }: QuizAnswerEditorProps) => <>
-    <Divider orientation="left" plain>Đáp án</Divider>
-    {quizType !== 3 ? (
+const QuizAnswerEditor = ({ quizType, editable }: QuizAnswerEditorProps) => {
+    const answers = Form.useWatch("answers") as EditorAnswer[] | undefined;
+    const shortAnswer = Form.useWatch("short_answer") as string | undefined;
+
+    return <>
+        <Divider orientation="left" plain>Đáp án</Divider>
+        {quizType !== 3 ? (
         <Form.List name="answers" rules={[{
             validator: async (_, answers: EditorAnswer[]) => {
                 if (quizType === 1 && (!answers || answers.length < 2)) {
@@ -59,6 +64,11 @@ const QuizAnswerEditor = ({ quizType, editable }: QuizAnswerEditorProps) => <>
                                             disabled={!editable}
                                         />
                                     </Form.Item>
+                                    {hasMathSyntax(answers?.[index]?.text) && (
+                                        <div className={styles.answerLatexPreview}>
+                                            <MathText value={answers?.[index]?.text} />
+                                        </div>
+                                    )}
                                 </div>
                                 {quizType === 1 && <Form.Item
                                     {...field}
@@ -89,19 +99,25 @@ const QuizAnswerEditor = ({ quizType, editable }: QuizAnswerEditorProps) => <>
                 </Space>
             )}
         </Form.List>
-    ) : (
-        <Form.Item
-            name="short_answer"
-            label="Đáp án mẫu"
-            rules={[{ required: true, whitespace: true, message: "Nhập đáp án mẫu" }]}
-        >
-            <Input.TextArea
-                rows={3}
-                placeholder="Nhập đáp án dùng để đối chiếu/chấm bài"
-                disabled={!editable}
-            />
-        </Form.Item>
-    )}
-</>;
+        ) : (<>
+            <Form.Item
+                name="short_answer"
+                label="Đáp án mẫu"
+                rules={[{ required: true, whitespace: true, message: "Nhập đáp án mẫu" }]}
+            >
+                <Input.TextArea
+                    rows={3}
+                    placeholder="Nhập đáp án dùng để đối chiếu/chấm bài"
+                    disabled={!editable}
+                />
+            </Form.Item>
+            {hasMathSyntax(shortAnswer) && (
+                <div className={styles.answerLatexPreview}>
+                    <MathText value={shortAnswer} />
+                </div>
+            )}
+        </>)}
+    </>;
+};
 
 export default QuizAnswerEditor;

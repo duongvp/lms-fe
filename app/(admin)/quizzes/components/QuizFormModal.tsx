@@ -3,7 +3,6 @@
 import {
     Button,
     Col,
-    Divider,
     Flex,
     Form,
     Input,
@@ -21,6 +20,7 @@ import { QUIZ_TYPE_OPTIONS, SCORE_TYPE_OPTIONS } from "../quiz.constants";
 import type { QuizClassSelectOption, QuizFormValues } from "../quiz.types";
 import { buildLessonSelectOptions, INITIAL_QUIZ_FORM_VALUES } from "../quiz.utils";
 import QuizAnswerEditor from "./QuizAnswerEditor";
+import MathText, { hasMathSyntax } from "./MathText";
 import styles from "../quiz.module.css";
 
 interface QuizFormModalProps {
@@ -65,6 +65,7 @@ const QuizFormModal = ({
     onClose,
 }: QuizFormModalProps) => {
     const quizType = (Form.useWatch("quiz_type", form) || 1) as QuizType;
+    const quizName = Form.useWatch("quiz_name", form);
 
     const handleTypeChange = (type: QuizType) => {
         if (type === 1) {
@@ -81,6 +82,7 @@ const QuizFormModal = ({
 
     return (
         <Modal
+            rootClassName={styles.quizFormModal}
             title={editing ? (
                 <div>
                     <div>Cập nhật câu hỏi</div>
@@ -92,30 +94,65 @@ const QuizFormModal = ({
             open={open}
             onCancel={onClose}
             centered
-            footer={null}
+            footer={(
+                <Flex justify="flex-end" gap={8} wrap>
+                    <Button icon={<EyeOutlined />} onClick={onPreview}>Xem trước</Button>
+                    {editing && (
+                        <Button icon={<ReloadOutlined />} onClick={onReset}>
+                            Đặt lại
+                        </Button>
+                    )}
+                    <Button
+                        type="primary"
+                        htmlType="submit"
+                        form="quiz-question-form"
+                        loading={saving}
+                        icon={editing ? <SaveOutlined /> : <PlusOutlined />}
+                    >
+                        {editing ? "Lưu thay đổi" : "Thêm câu hỏi"}
+                    </Button>
+                </Flex>
+            )}
             width={850}
             destroyOnClose
             styles={{
-            content: {
-                maxHeight: "calc(100vh - 32px)",
-                display: "flex",
-                flexDirection: "column",
+                content: {
+                    maxHeight: "calc(100vh - 32px)",
+                    display: "flex",
+                    flexDirection: "column",
+                    overflow: "hidden",
+                    padding: 0,
+                },
+                header: {
+                    flex: "none",
+                    marginBottom: 0,
+                    padding: "18px 24px 14px",
+                    borderBottom: "1px solid #f0f0f0",
                 },
                 body: {
                     minHeight: 0,
                     overflowY: "auto",
-                    overflowX:"hidden",
+                    overflowX: "hidden",
+                    padding: "4px 24px 16px",
+                    scrollbarGutter: "stable",
+                },
+                footer: {
+                    flex: "none",
+                    marginTop: 0,
+                    padding: "14px 24px 18px",
+                    borderTop: "1px solid #f0f0f0",
                 },
             }}
         >
             <Form<QuizFormValues>
+                id="quiz-question-form"
                 className="responsive-modal-form"
                 form={form}
                 layout="vertical"
                 initialValues={INITIAL_QUIZ_FORM_VALUES}
                 onFinish={onSubmit}
                 requiredMark="optional"
-                style={{ marginTop: 16}}
+                style={{ marginTop: 12 }}
             >
                 <Row gutter={14}>
                     {editing && canViewField("code") && <Col xs={24} md={12}>
@@ -123,7 +160,7 @@ const QuizFormModal = ({
                             <Select
                                 options={classOptions}
                                 placeholder="Chọn Chương trình"
-                                disabled={!canEditField("code")}
+                                disabled={Boolean(editing) || !canEditField("code")}
                                 loading={classesLoading}
                                 showSearch
                                 optionFilterProp="searchText"
@@ -145,7 +182,7 @@ const QuizFormModal = ({
                             <Select
                                 options={buildLessonSelectOptions(lessons, editing?.learn_number)}
                                 placeholder={lessonsLoading ? "Đang tải bài học..." : selectedCode ? "Chọn bài học" : "Chọn Chương trình trước"}
-                                disabled={!canEditField("learn_number") || !selectedCode || lessonsLoading}
+                                disabled={Boolean(editing) || !canEditField("learn_number") || !selectedCode || lessonsLoading}
                                 loading={lessonsLoading}
                                 notFoundContent={lessonsLoading ? <Space><Spin size="small" /> Đang tải bài học...</Space> : "Không có bài học"}
                                 showSearch
@@ -176,22 +213,30 @@ const QuizFormModal = ({
                     </Col>}
                 </Row>
 
-                {canViewField("quiz_name") && <Form.Item
-                    name="quiz_name"
-                    label="Nội dung câu hỏi"
-                    rules={[
-                        { required: true, whitespace: true, message: "Nhập nội dung câu hỏi" },
-                        { max: 500, message: "Tối đa 500 ký tự" },
-                    ]}
-                >
-                    <Input.TextArea
-                        rows={3}
-                        showCount
-                        maxLength={500}
-                        placeholder="Nhập câu hỏi rõ ràng, ngắn gọn..."
-                        disabled={!canEditField("quiz_name")}
-                    />
-                </Form.Item>}
+                {canViewField("quiz_name") && <>
+                    <Form.Item
+                        name="quiz_name"
+                        label="Nội dung câu hỏi"
+                        rules={[
+                            { required: true, whitespace: true, message: "Nhập nội dung câu hỏi" },
+                            { max: 500, message: "Tối đa 500 ký tự" },
+                        ]}
+                    >
+                        <Input.TextArea
+                            rows={3}
+                            showCount
+                            maxLength={500}
+                            placeholder="Nhập câu hỏi rõ ràng, ngắn gọn,..."
+                            disabled={!canEditField("quiz_name")}
+                        />
+                    </Form.Item>
+                    {hasMathSyntax(quizName) && (
+                        <div className={styles.latexPreview}>
+                            <div className={styles.latexPreviewLabel}>Xem trước công thức</div>
+                            <MathText as="div" value={quizName} />
+                        </div>
+                    )}
+                </>}
 
                 <Row gutter={14}>
                     {canViewField("quiz_type") && <Col xs={24} lg={8}>
@@ -222,23 +267,6 @@ const QuizFormModal = ({
                     <QuizAnswerEditor quizType={quizType} editable={canEditField("ans")} />
                 )}
 
-                <Divider />
-                <Flex justify="flex-end" gap={8} wrap>
-                    <Button icon={<EyeOutlined />} onClick={onPreview}>Xem trước</Button>
-                    {editing && (
-                        <Button icon={<ReloadOutlined />} onClick={onReset}>
-                            Đặt lại
-                        </Button>
-                    )}
-                    <Button
-                        type="primary"
-                        htmlType="submit"
-                        loading={saving}
-                        icon={editing ? <SaveOutlined /> : <PlusOutlined />}
-                    >
-                        {editing ? "Lưu thay đổi" : "Thêm câu hỏi"}
-                    </Button>
-                </Flex>
             </Form>
         </Modal>
     );
