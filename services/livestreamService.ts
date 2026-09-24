@@ -109,6 +109,17 @@ export const getSchedulingPrograms = () =>
         cache: "no-store",
     });
 
+export type CalendarTeacherFilterOption = { value: string; label: string };
+
+export const getCalendarTeacherFilterOptions = async (programCode?: string) => {
+    const query = new URLSearchParams();
+    if (programCode) query.set("code", programCode);
+    const response: any = await fetchInstance(
+        API_BASE_URL + "/filter-options/teachers?" + query.toString(),
+        { method: "GET", credentials: "include", cache: "no-store" }
+    );
+    return Array.isArray(response?.data) ? response.data as CalendarTeacherFilterOption[] : [];
+};
 export interface HocmaiSectionOption {
     package_id: string;
     course_id: string;
@@ -577,6 +588,36 @@ export const syncCalendarStudents = (
         headers: { "Content-Type": "application/json" },
         credentials: "include",
     }, "json", 10 * 60_000);
+
+export const syncCalendarAttendance = (ids: Array<string | number>, preview = false) =>
+    fetchInstance(API_BASE_URL + "/students/sync-attendance", {
+        method: "POST",
+        body: JSON.stringify({ ids, preview }),
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+    }, "json", 10 * 60_000);
+export type AttendanceResetStudent = {
+    id: number;
+    username: string;
+    name: string;
+    student_hmid?: string | null;
+    email?: string | null;
+};
+
+export const getCalendarAttendanceResetStudents = (id: string | number) =>
+    fetchInstance(API_BASE_URL + "/" + encodeURIComponent(String(id)) + "/attendance-reset-students", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+    });
+
+export const resetCalendarAttendance = (id: string | number, studentIds: Array<string | number>) =>
+    fetchInstance(API_BASE_URL + "/" + encodeURIComponent(String(id)) + "/reset-attendance", {
+        method: "POST",
+        body: JSON.stringify({ studentIds }),
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+    });
 
 export const getCalendarStudentSyncProgress = (jobId: string) =>
     fetchInstance(`${API_BASE_URL}/students/sync/${encodeURIComponent(jobId)}`, {

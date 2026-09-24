@@ -38,11 +38,11 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
         DEFAULT_TOPUNI_MAX_STUDENTS_PER_ROOM
     );
     const [useSuggestedTopUniLimit, setUseSuggestedTopUniLimit] = useState(true);
-    const [updateMode, setUpdateMode] = useState<ClassroomAssignmentUpdateMode>("all");
+    const [updateMode, setUpdateMode] = useState<ClassroomAssignmentUpdateMode>("unlearned_only");
 
     const loadPreview = useCallback(async (
         requestedMaxStudentsPerRoom?: number,
-        requestedUpdateMode: ClassroomAssignmentUpdateMode = "all"
+        requestedUpdateMode: ClassroomAssignmentUpdateMode = "unlearned_only"
     ) => {
         if (!calendarId) return;
         setLoading(true);
@@ -71,8 +71,8 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
             setPreview(null);
             setMaxStudentsPerRoom(DEFAULT_TOPUNI_MAX_STUDENTS_PER_ROOM);
             setUseSuggestedTopUniLimit(true);
-            setUpdateMode("all");
-            void loadPreview(undefined, "all");
+            setUpdateMode("unlearned_only");
+            void loadPreview(undefined, "unlearned_only");
         }
         else {
             setPreview(null);
@@ -333,19 +333,19 @@ const ClassroomAssignmentModal: React.FC<ClassroomAssignmentModalProps> = ({
                                     }}
                                 >
                                     <Space direction="vertical" size={10}>
-                                        <Radio value="all">
-                                            <Typography.Text strong>Cập nhật tất cả học sinh</Typography.Text>
-                                            <br />
-                                            <Typography.Text type="secondary">
-                                                Giữ nguyên nghiệp vụ hiện tại: cập nhật lại room_id và class_id theo phương án mới.
-                                            </Typography.Text>
-                                        </Radio>
-                                        <Radio value="unlearned_only">
+                                         <Radio value="unlearned_only">
                                             <Typography.Text strong>Chỉ cập nhật học sinh chưa học</Typography.Text>
-                                            <br />
+                                            {/* <br />
                                             <Typography.Text type="secondary">
                                                 Chỉ cập nhật bản ghi islearn = 0; học sinh islearn = 1 của đúng code + learn_number được giữ nguyên.
-                                            </Typography.Text>
+                                            </Typography.Text> */}
+                                        </Radio>
+                                        <Radio value="all">
+                                            <Typography.Text strong>Cập nhật tất cả học sinh</Typography.Text>
+                                            {/* <br />
+                                            <Typography.Text type="secondary">
+                                                Giữ nguyên nghiệp vụ hiện tại: cập nhật lại room_id và class_id theo phương án mới.
+                                            </Typography.Text> */}
                                         </Radio>
                                     </Space>
                                 </Radio.Group>

@@ -33,6 +33,9 @@ import {
     importLivestreamsFile,
     provisionLivestreamEvg,
     resendLivestreamsToHocmai,
+    getCalendarAttendanceResetStudents,
+    resetCalendarAttendance,
+    syncCalendarAttendance,
     syncCalendarStudents,
     syncMissingTeachingUsers,
     updateLivestreamsFile,
@@ -41,12 +44,13 @@ import {
 import dayjs, { Dayjs } from "dayjs";
 import type { ModuleField, ResolvedFieldPermission } from "@/types/fieldPolicy";
 import { canEditAnyField, resolveModuleFieldPermissions, sanitizeEditablePayload } from "@/helper/fieldPolicy";
-import { useLmsCache, useModuleFieldsQuery, useSchedulesQuery, useSchedulingProgramsQuery, useTeachingStaffQuery } from "@/hooks/useLmsQueries";
+import { useLmsCache, useModuleFieldsQuery, useSchedulesQuery, useScheduleTeacherFilterOptionsQuery, useSchedulingProgramsQuery, useTeachingStaffQuery } from "@/hooks/useLmsQueries";
 import type { LivestreamListParams } from "@/services/livestreamService";
 import type { EvgProvisionMode } from "@/services/livestreamService";
 import type { ScanTeachingUser } from "@/services/livestreamService";
 import type { CalendarStudentSyncItem } from "@/services/livestreamService";
 import type { CalendarStudentSyncDuplicate } from "@/services/livestreamService";
+import type { AttendanceResetStudent } from "@/services/livestreamService";
 import TeachingStaffSelect from "@/components/shared/TeachingStaffSelect";
 import { rememberProgramContextUrl } from "@/components/layouts/AdminLayout/SideMenu";
 import { fetchAllPages } from "@/lib/fetchAllPages";
@@ -556,6 +560,8 @@ const HIDDEN_SCHEDULE_LIST_FIELDS = new Set([
 ]);
 
 const MOCK_SCHEDULES: ScheduleDataType[] = [];
+// Các filter này được gửi lên API để total và phân trang tính trên toàn bộ dữ liệu.
+const SERVER_TABLE_FILTER_FIELDS = new Set(["teacher", "learn_number", "system_type", "live_weekday"]);
 const CALENDAR_PLUGINS = [dayGridPlugin, timeGridPlugin, interactionPlugin];
 const parseCalendarWallTime = (value: unknown) => dayjs(String(value || "").replace(/Z$/, ""));
 const LIVE_WEEKDAY_LABELS = ["Chủ Nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
@@ -674,6 +680,20 @@ const lessonStatusText = (
     }
 
     return "Đang diễn ra";
+};
+
+const getScheduleTableFilterValue = (fieldCode: string, record: ScheduleDataType) => {
+    if (fieldCode === "live_weekday") return liveWeekdayLabel(record.start_time);
+    if (fieldCode === "live_date") {
+        const date = parseCalendarWallTime(record.start_time);
+        return date.isValid() ? date.format("DD/MM/YYYY") : "-";
+    }
+    if (fieldCode === "lesson_status") {
+        return Number(record.lesson_status) === 1
+            ? "Nghỉ học"
+            : lessonStatusText(record.start_time, record.end_time);
+    }
+    return String(record[fieldCode] ?? "-").trim() || "-";
 };
 
 const canModifySchedule = (record: ScheduleDataType) => {
@@ -1179,6 +1199,31 @@ const Page = () => {
     const [pageInfoReady, setPageInfoReady] = useState(false);
     const [syncingTeachingUsers, setSyncingTeachingUsers] = useState(false);
     const [syncingStudents, setSyncingStudents] = useState(false);
+    const [syncingAttendance, setSyncingAttendance] = useState(false);
+    const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
+    const [attendancePreviewing, setAttendancePreviewing] = useState(false);
+    const [attendancePhase, setAttendancePhase] = useState<"setup" | "preview" | "progress">("setup");
+    const [attendanceDateRange, setAttendanceDateRange] = useState<[Dayjs, Dayjs] | undefined>();
+    const [attendanceResetOpen, setAttendanceResetOpen] = useState(false);
+    const [attendanceResetProgram, setAttendanceResetProgram] = useState<string>();
+    const [attendanceResetSchedules, setAttendanceResetSchedules] = useState<ScheduleDataType[]>([]);
+    const [attendanceResetScheduleId, setAttendanceResetScheduleId] = useState<string>();
+    const [attendanceResetStudents, setAttendanceResetStudents] = useState<AttendanceResetStudent[]>([]);
+    const [attendanceResetStudentIds, setAttendanceResetStudentIds] = useState<number[]>([]);
+    const [attendanceResetLoadingSchedules, setAttendanceResetLoadingSchedules] = useState(false);
+    const [attendanceResetLoadingStudents, setAttendanceResetLoadingStudents] = useState(false);
+    const [attendanceResetSubmitting, setAttendanceResetSubmitting] = useState(false);
+    const [attendanceItems, setAttendanceItems] = useState<Array<{
+        code: string;
+        ids: number[];
+        scheduleCount: number;
+        eligibleStudents: number;
+        updatedStudents: number;
+        hocmaiStudents: number;
+        progress: number;
+        status: "previewing" | "ready" | "running" | "success" | "error";
+        message?: string;
+    }>>([]);
     const [studentSyncOpen, setStudentSyncOpen] = useState(false);
     const [studentSyncMode, setStudentSyncMode] = useState<"all" | "today">("all");
     const [studentSyncProgress, setStudentSyncProgress] = useState(0);
@@ -1407,6 +1452,32 @@ const Page = () => {
         };
     }, []);
 
+    const serverTableFilterParams = useMemo<Partial<LivestreamListParams>>(() => {
+        const teachers = tableColumnFilters.teacher?.map(String).filter(Boolean) ?? [];
+        const learnNumbers = tableColumnFilters.learn_number
+            ?.map(Number)
+            .filter((value) => Number.isInteger(value) && value > 0) ?? [];
+        const systemTypes = tableColumnFilters.system_type
+            ?.map(String)
+            .filter((value): value is "topclass" | "topuni" => ["topclass", "topuni"].includes(value)) ?? [];
+        const weekdays = tableColumnFilters.live_weekday
+            ?.map((value) => LIVE_WEEKDAY_LABELS.indexOf(String(value)))
+            .map((value) => value === 0 ? 7 : value)
+            .filter((value) => value >= 1 && value <= 7) ?? [];
+
+        return {
+            ...(teachers.length ? { teacher: teachers } : {}),
+            ...(learnNumbers.length ? { learn_numbers: learnNumbers } : {}),
+            ...(systemTypes.length ? { system_type: systemTypes } : {}),
+            ...(weekdays.length ? { weekdays } : {}),
+        };
+    }, [
+        tableColumnFilters.learn_number,
+        tableColumnFilters.live_weekday,
+        tableColumnFilters.system_type,
+        tableColumnFilters.teacher,
+    ]);
+
     const scheduleParams = useMemo<LivestreamListParams>(() => {
         if (!hasSearched) return {} as LivestreamListParams;
 
@@ -1414,8 +1485,9 @@ const Page = () => {
             page: currentPage,
             limit: pageSize,
             ...buildScheduleApiParams(submittedFilterValues),
+            ...serverTableFilterParams,
         };
-    }, [currentPage, pageSize, submittedFilterValues, hasSearched]);
+    }, [currentPage, pageSize, submittedFilterValues, serverTableFilterParams, hasSearched]);
 
     useEffect(() => {
         selectAllRequestRef.current += 1;
@@ -1426,6 +1498,15 @@ const Page = () => {
     }, [submittedFilterValues]);
 
     useEffect(() => {
+        // Bộ lọc cột thay đổi phạm vi thao tác hàng loạt. Xóa selection cũ để
+        // không trộn các dòng đã ẩn với kết quả người dùng đang nhìn thấy.
+        selectAllRequestRef.current += 1;
+        setSelectedRowKeys([]);
+        setAllRowsSelected(false);
+        setSelectingAllRows(false);
+    }, [tableColumnFilters]);
+
+    useEffect(() => {
         data.forEach((record) => {
             if (record.id !== undefined && record.id !== null) {
                 selectedRowsCacheRef.current.set(String(record.id), record);
@@ -1433,9 +1514,25 @@ const Page = () => {
         });
     }, [data]);
 
+    const hasActiveTableColumnFilters = useMemo(() => Object.entries(tableColumnFilters)
+        .some(([fieldCode, values]) => (
+            !SERVER_TABLE_FILTER_FIELDS.has(fieldCode)
+            && Array.isArray(values)
+            && values.length > 0
+        )), [tableColumnFilters]);
+    const tableDisplayData = useMemo(() => {
+        if (!hasActiveTableColumnFilters) return filteredData;
+        return filteredData.filter((record) => Object.entries(tableColumnFilters)
+            .every(([fieldCode, values]) => (
+                SERVER_TABLE_FILTER_FIELDS.has(fieldCode)
+                || !values?.length
+                || values.map(String).includes(getScheduleTableFilterValue(fieldCode, record))
+            )));
+    }, [filteredData, hasActiveTableColumnFilters, tableColumnFilters]);
+    const selectionScopeRows = hasActiveTableColumnFilters ? tableDisplayData : data;
     const selectableRowKeys = useMemo(() => new Set(
-        data.filter(canSelectScheduleForSync).map((record) => String(record.id))
-    ), [data]);
+        selectionScopeRows.filter(canSelectScheduleForSync).map((record) => String(record.id))
+    ), [selectionScopeRows]);
     // Ưu tiên dữ liệu reactive trên trang hiện tại, chỉ dùng cache cho trang khác.
     // Không đợi useEffect ghi ref mới quyết định trạng thái của các thao tác.
     const schedulesOnPage = useMemo(() => new Map(data.map((record) => [String(record.id), record])), [data]);
@@ -1473,7 +1570,7 @@ const Page = () => {
         setAllRowsSelected(true);
         setSelectingAllRows(true);
         setSelectionLoadedCount(0);
-        const selectableKeysOnPage = data
+        const selectableKeysOnPage = selectionScopeRows
             .filter(canSelectScheduleForSync)
             .map((record) => String(record.id));
         const nextVisibleSelection = (current: React.Key[]) => Array.from(new Set([
@@ -1481,6 +1578,14 @@ const Page = () => {
             ...selectableKeysOnPage,
         ]));
         setSelectedRowKeys(nextVisibleSelection);
+
+        // Khi đang lọc trực tiếp ở header, "chọn tất cả" chỉ áp dụng cho đúng
+        // các kết quả còn hiển thị, không tải và chọn lại toàn bộ tập API.
+        if (hasActiveTableColumnFilters) {
+            setAllRowsSelected(selectableKeysOnPage.length > 0);
+            setSelectingAllRows(false);
+            return;
+        }
 
         // Page hiện tại đã chứa toàn bộ kết quả, không gọi lại chính API đó.
         if (totalItems <= data.length) {
@@ -1527,7 +1632,8 @@ const Page = () => {
         } finally {
             if (requestId === selectAllRequestRef.current) setSelectingAllRows(false);
         }
-    }, [api, data, scheduleParams, totalItems]);
+    }, [api, data.length, hasActiveTableColumnFilters, scheduleParams, selectionScopeRows, totalItems]);
+    const displayedTotalItems = hasActiveTableColumnFilters ? tableDisplayData.length : totalItems;
     const rowSelection = useMemo(() => ({
         selectedRowKeys,
         preserveSelectedRowKeys: true,
@@ -1540,7 +1646,7 @@ const Page = () => {
                 checked={allRowsSelected}
                 indeterminate={!allRowsSelected && selectedRowKeys.length > 0}
                 busy={selectingAllRows}
-                disabled={totalItems <= 0 || (totalItems <= data.length && selectableRowKeys.size === 0)}
+                disabled={displayedTotalItems <= 0 || (hasActiveTableColumnFilters || totalItems <= data.length) && selectableRowKeys.size === 0}
                 onChange={(checked) => void handleSelectAll(checked)}
             />
         ),
@@ -1560,7 +1666,7 @@ const Page = () => {
             };
         },
         columnWidth: 32,
-    }), [allRowsSelected, data.length, handleRowSelectionChange, handleSelectAll, selectableRowKeys, selectedRowKeys, selectingAllRows, totalItems]);
+    }), [allRowsSelected, displayedTotalItems, handleRowSelectionChange, handleSelectAll, selectableRowKeys, selectedRowKeys, selectingAllRows]);
 
     const calendarParams = useMemo<LivestreamListParams | null>(() => {
         if (!hasSearched || !calendarMounted) return null;
@@ -1573,15 +1679,31 @@ const Page = () => {
         };
     }, [calendarMounted, hasSearched, submittedFilterValues]);
 
+    const scheduleFilterOptionsParams = useMemo<LivestreamListParams | null>(() => {
+        if (!hasSearched) return null;
+        return {
+            page: 1,
+            // Chỉ tải các trường lịch cần để tạo danh sách filter; API giới hạn 300 dòng/trang.
+            limit: 300,
+            ...buildScheduleApiParams(submittedFilterValues),
+        };
+    }, [hasSearched, submittedFilterValues]);
+
     // ✅ Chỉ fetch khi đã bấm Lọc
     const schedulesQuery = useSchedulesQuery(hasSearched ? scheduleParams : null);
+    const scheduleFilterOptionsQuery = useSchedulesQuery(scheduleFilterOptionsParams);
     const calendarSchedulesQuery = useSchedulesQuery(calendarParams);
     const moduleFieldsQuery = useModuleFieldsQuery(SCHEDULE_MODULE_CODE);
+    const scheduleTeacherFilterOptionsQuery = useScheduleTeacherFilterOptionsQuery(submittedFilterValues.code);
     const assistantsQuery = useTeachingStaffQuery(0);
     const programsQuery = useSchedulingProgramsQuery();
     const { refreshSchedules } = useLmsCache();
     const loading = schedulesQuery.isLoading || schedulesQuery.isValidating;
     const assistantOptions = useMemo(() => assistantsQuery.data ?? [], [assistantsQuery.data]);
+    const filterOptionData = useMemo(() => {
+        const response: any = scheduleFilterOptionsQuery.data;
+        return response?.data?.data ? mapScheduleRows(response.data.data) : data;
+    }, [data, scheduleFilterOptionsQuery.data]);
     const assistantLabelByUsername = useMemo(() => new Map(
         assistantOptions.map((option) => [String(option.value), String(option.label)])
     ), [assistantOptions]);
@@ -2149,6 +2271,215 @@ const Page = () => {
         });
     };
 
+    const updateAttendanceItem = (code: string, patch: Partial<(typeof attendanceItems)[number]>) => {
+        setAttendanceItems((items) => items.map((item) => item.code === code ? { ...item, ...patch } : item));
+    };
+
+    const handleSyncAttendance = () => {
+        setAttendanceModalOpen(true);
+        setAttendancePhase("setup");
+        setAttendanceDateRange(undefined);
+        setAttendanceItems([]);
+    };
+
+    const handlePreviewAttendance = async () => {
+        if (!attendanceDateRange?.[0]?.isValid() || !attendanceDateRange?.[1]?.isValid()) {
+            api.warning({ message: "Chưa chọn khoảng ngày", description: "Vui lòng chọn ngày bắt đầu và ngày kết thúc cần kiểm tra." });
+            return;
+        }
+        setAttendancePreviewing(true);
+        setAttendanceItems([]);
+        try {
+            const queryBase: LivestreamListParams = {
+                ...(submittedFilterValues.code ? { code: submittedFilterValues.code } : {}),
+                start_time: attendanceDateRange[0].startOf("day").format("YYYY-MM-DDTHH:mm:ss.SSS[Z]"),
+                end_time: attendanceDateRange[1].endOf("day").format("YYYY-MM-DDTHH:mm:ss.SSS[Z]"),
+                page: 1, limit: 300,
+            };
+            const rows: any[] = [];
+            let page = 1;
+            let total = 0;
+            do {
+                const response: any = await getLivestreams({ ...queryBase, page, limit: 300 });
+                const pageRows = Array.isArray(response?.data?.data) ? response.data.data : [];
+                total = Number(response?.data?.total || pageRows.length);
+                rows.push(...pageRows);
+                page += 1;
+            } while (rows.length < total);
+
+            const groups = new Map<string, number[]>();
+            mapScheduleRows(rows)
+                .filter((record) => Number(record.lesson_status) !== 1 && record.end_time && dayjs(record.end_time).isBefore(dayjs()))
+                .forEach((record) => {
+                    const code = String(record.code || "Không xác định");
+                    const id = Number(record.id);
+                    if (!Number.isInteger(id) || id <= 0) return;
+                    groups.set(code, [...(groups.get(code) || []), id]);
+                });
+            const initialItems = Array.from(groups.entries()).map(([code, ids]) => ({
+                code, ids, scheduleCount: ids.length, eligibleStudents: 0, updatedStudents: 0, hocmaiStudents: 0, progress: 0, status: "previewing" as const,
+            }));
+            setAttendanceItems(initialItems);
+            for (const item of initialItems) {
+                let eligibleStudents = 0;
+                try {
+                    for (let index = 0; index < item.ids.length; index += 300) {
+                        const response: any = await syncCalendarAttendance(item.ids.slice(index, index + 300), true);
+                        eligibleStudents += Number((response?.data ?? response ?? {}).updated || 0);
+                    }
+                    updateAttendanceItem(item.code, { eligibleStudents, progress: 0, status: "ready" });
+                } catch (error: any) {
+                    updateAttendanceItem(item.code, { status: "error", message: error?.message || "Không thể xem trước" });
+                }
+            }
+            setAttendancePhase("preview");
+        } catch (error: any) {
+            api.error({ message: "Không thể xem trước dữ liệu", description: error?.message || "Vui lòng thử lại sau." });
+        } finally {
+            setAttendancePreviewing(false);
+        }
+    };
+    const handleApplyAttendance = async () => {
+        // Lỗi ở bước xem trước cũng là một công việc đã kết thúc. Đặt 100% để
+        // thanh tiến độ không tạo cảm giác bị dừng giữa chừng.
+        setAttendanceItems((items) => items.map((item) => item.status === "error"
+            ? { ...item, progress: 100 }
+            : item));
+        setAttendancePhase("progress");
+        setSyncingAttendance(true);
+        let totalUpdated = 0;
+        let completedPrograms = 0;
+        for (const item of attendanceItems.filter((row) => row.status === "ready")) {
+            updateAttendanceItem(item.code, { status: "running", progress: 0, updatedStudents: 0, hocmaiStudents: 0 });
+            let updatedStudents = 0;
+            let hocmaiStudents = 0;
+            try {
+                for (let index = 0; index < item.ids.length; index += 300) {
+                    const response: any = await syncCalendarAttendance(item.ids.slice(index, index + 300));
+                    const result = response?.data ?? response ?? {};
+                    updatedStudents += Number(result.updated || 0);
+                    hocmaiStudents += Array.isArray(result.details)
+                        ? result.details.reduce((sum: number, detail: any) => sum + Number(detail?.hocmai_updated || 0), 0)
+                        : 0;
+                    updateAttendanceItem(item.code, {
+                        updatedStudents,
+                        hocmaiStudents,
+                        progress: Math.round(Math.min(item.ids.length, index + 300) * 100 / item.ids.length),
+                    });
+                }
+                totalUpdated += updatedStudents;
+                completedPrograms += 1;
+                updateAttendanceItem(item.code, { status: "success", progress: 100, updatedStudents, hocmaiStudents, message: "Cập nhật hoàn tất · Đã gửi HOCMAI " + hocmaiStudents + " lượt ghi nhận" });
+            } catch (error: any) {
+                updateAttendanceItem(item.code, { status: "error", progress: 100, updatedStudents, message: error?.message || "Cập nhật thất bại" });
+            }
+        }
+        setSyncingAttendance(false);
+        api.success({
+            message: "Hoàn tất cập nhật trạng thái học",
+            description: "Đã xử lý " + completedPrograms + " chương trình và đánh dấu đã học cho " + totalUpdated + " học viên.",
+            duration: 6,
+        });
+        if (hasSearched) await refreshSchedules();
+    };
+
+    const loadAttendanceResetSchedules = async (programCode: string) => {
+        const code = String(programCode || "").trim();
+        setAttendanceResetProgram(code || undefined);
+        setAttendanceResetScheduleId(undefined);
+        setAttendanceResetSchedules([]);
+        setAttendanceResetStudents([]);
+        setAttendanceResetStudentIds([]);
+        if (!code) return;
+
+        setAttendanceResetLoadingSchedules(true);
+        try {
+            const rows: any[] = [];
+            let page = 1;
+            let total = 0;
+            do {
+                const response: any = await getLivestreams({ code, page, limit: 300 });
+                const pageRows = Array.isArray(response?.data?.data) ? response.data.data : [];
+                total = Number(response?.data?.total || pageRows.length);
+                rows.push(...pageRows);
+                page += 1;
+            } while (rows.length < total);
+            const endedSchedules = mapScheduleRows(rows).filter((record) => (
+                Number(record.lesson_status) !== 1
+                && record.end_time
+                && dayjs(record.end_time).isBefore(dayjs())
+            ));
+            setAttendanceResetSchedules(endedSchedules);
+        } catch (error: any) {
+            api.error({ message: "Không tải được danh sách lịch", description: error?.message || "Vui lòng thử lại." });
+        } finally {
+            setAttendanceResetLoadingSchedules(false);
+        }
+    };
+
+    const loadAttendanceResetStudents = async (scheduleId: string) => {
+        setAttendanceResetScheduleId(scheduleId || undefined);
+        setAttendanceResetStudents([]);
+        setAttendanceResetStudentIds([]);
+        if (!scheduleId) return;
+
+        setAttendanceResetLoadingStudents(true);
+        try {
+            const response: any = await getCalendarAttendanceResetStudents(scheduleId);
+            const payload = response?.data ?? response ?? {};
+            setAttendanceResetStudents(Array.isArray(payload.students) ? payload.students : []);
+        } catch (error: any) {
+            api.error({ message: "Không tải được học viên", description: error?.message || "Lịch học có thể chưa kết thúc hoặc bạn không có quyền thao tác." });
+            setAttendanceResetScheduleId(undefined);
+        } finally {
+            setAttendanceResetLoadingStudents(false);
+        }
+    };
+
+    const handleOpenAttendanceReset = () => {
+        const initialProgram = String(submittedFilterValues.code || "").trim();
+        setAttendanceResetOpen(true);
+        setAttendanceResetProgram(initialProgram || undefined);
+        setAttendanceResetScheduleId(undefined);
+        setAttendanceResetSchedules([]);
+        setAttendanceResetStudents([]);
+        setAttendanceResetStudentIds([]);
+        if (initialProgram) void loadAttendanceResetSchedules(initialProgram);
+    };
+
+    const handleResetAttendance = () => {
+        if (!attendanceResetScheduleId || !attendanceResetStudentIds.length) return;
+        const selectedCount = attendanceResetStudentIds.length;
+        Modal.confirm({
+            title: "Xác nhận đưa về chưa học",
+            content: "Bạn sắp đưa " + selectedCount + " học viên đã chọn về trạng thái chưa học của bài thuộc lịch này. Nếu một bài có nhiều lịch, trạng thái islearn của bài được dùng chung. Thao tác không ảnh hưởng học viên hoặc bài học khác.",
+            okText: "Xác nhận đặt lại",
+            okButtonProps: { danger: true },
+            cancelText: "Hủy",
+            onOk: async () => {
+                setAttendanceResetSubmitting(true);
+                try {
+                    const response: any = await resetCalendarAttendance(attendanceResetScheduleId, attendanceResetStudentIds);
+                    const result = response?.data ?? response ?? {};
+                    const skipped = Number(result.skipped || 0);
+                    api.success({
+                        message: "Đã cập nhật trạng thái học",
+                        description: "Đã đưa " + Number(result.reset || 0) + " học viên về trạng thái chưa học và xóa " + Number(result.hocmai_reset || 0) + " lượt ghi nhận trên HOCMAI." + (skipped ? " " + skipped + " học viên không còn đủ điều kiện để cập nhật." : ""),
+                    });
+                    setAttendanceResetOpen(false);
+                    setAttendanceResetStudentIds([]);
+                    setAttendanceResetStudents([]);
+                    if (hasSearched) await refreshSchedules();
+                } catch (error: any) {
+                    api.error({ message: "Không thể cập nhật trạng thái học", description: error?.message || "Vui lòng thử lại." });
+                    throw error;
+                } finally {
+                    setAttendanceResetSubmitting(false);
+                }
+            },
+        });
+    };
+
     const handleSyncStudents = () => {
         const targetIds = Array.from(new Set(
             selectedRowKeys.map(Number).filter((id) => Number.isInteger(id) && id > 0)
@@ -2428,17 +2759,17 @@ const Page = () => {
                             <Space direction="vertical" size={10}>
                                 <Radio value="all">
                                     <Typography.Text strong>Cập nhật tất cả học sinh</Typography.Text>
-                                    <br />
+                                    {/* <br />
                                     <Typography.Text type="secondary">
                                         Nghiệp vụ hiện tại: cập nhật lại room_id và class_id cho toàn bộ học sinh.
-                                    </Typography.Text>
+                                    </Typography.Text> */}
                                 </Radio>
                                 <Radio value="unlearned_only">
                                     <Typography.Text strong>Chỉ cập nhật học sinh chưa học</Typography.Text>
-                                    <br />
+                                    {/* <br />
                                     <Typography.Text type="secondary">
                                         Chỉ cập nhật islearn = 0; islearn = 1 của đúng code + learn_number được giữ nguyên.
-                                    </Typography.Text>
+                                    </Typography.Text> */}
                                 </Radio>
                             </Space>
                         </Radio.Group>
@@ -2926,19 +3257,7 @@ const Page = () => {
     const canSwapScheduleTimes = editableFieldCodeSet.has("start_time")
         && editableFieldCodeSet.has("end_time");
 
-    const getTableFilterValue = useCallback((fieldCode: string, record: ScheduleDataType) => {
-        if (fieldCode === "live_weekday") return liveWeekdayLabel(record.start_time);
-        if (fieldCode === "live_date") {
-            const date = parseCalendarWallTime(record.start_time);
-            return date.isValid() ? date.format("DD/MM/YYYY") : "-";
-        }
-        if (fieldCode === "lesson_status") {
-            return Number(record.lesson_status) === 1
-                ? "Nghỉ học"
-                : lessonStatusText(record.start_time, record.end_time);
-        }
-        return String(record[fieldCode] ?? "-").trim() || "-";
-    }, []);
+    const getTableFilterValue = getScheduleTableFilterValue;
     const filterableFieldCodes = useMemo(() => new Set([
         "learn_number", "subject", "teacher", "assistant_teacher", "system_type", "lesson_status",
     ]), []);
@@ -2946,15 +3265,23 @@ const Page = () => {
         const result = new Map<string, Array<{ text: string; value: string }>>();
         const fieldCodes = [...filterableFieldCodes, "live_weekday", "live_date"];
         fieldCodes.forEach((fieldCode) => {
+            if (fieldCode === "teacher") {
+                const options = scheduleTeacherFilterOptionsQuery.data ?? [];
+                result.set(fieldCode, options.map((option) => ({
+                    text: String(option.label),
+                    value: String(option.value),
+                })));
+                return;
+            }
             const values = Array.from(new Set(
-                data.map((record) => getTableFilterValue(fieldCode, record))
+                filterOptionData.map((record) => getTableFilterValue(fieldCode, record))
             ));
             result.set(fieldCode, values
                 .sort((left, right) => left.localeCompare(right, "vi", { numeric: true }))
                 .map((value) => ({ text: value, value })));
         });
         return result;
-    }, [data, filterableFieldCodes, getTableFilterValue]);
+    }, [filterOptionData, filterableFieldCodes, getTableFilterValue, scheduleTeacherFilterOptionsQuery.data]);
     const getTableFilters = useCallback(
         (fieldCode: string) => tableFiltersByField.get(fieldCode) ?? [],
         [tableFiltersByField]
@@ -3010,7 +3337,7 @@ const Page = () => {
             filteredValue: filterableFieldCodes.has(fieldCode)
                 ? tableColumnFilters[fieldCode] ?? null
                 : undefined,
-            onFilter: filterableFieldCodes.has(fieldCode)
+            onFilter: filterableFieldCodes.has(fieldCode) && !SERVER_TABLE_FILTER_FIELDS.has(fieldCode)
                 ? (value: React.Key | boolean, record: ScheduleDataType) => (
                     getTableFilterValue(fieldCode, record) === String(value)
                 )
@@ -3641,6 +3968,7 @@ const Page = () => {
     const singleClassroomDisabledReason = selectedRowKeys.length !== 1
         ? `Chỉ áp dụng cho đúng một lịch (đang chọn ${selectedRowKeys.length})`
         : classroomDisabledReason;
+    const attendanceDisabledReason = syncingAttendance ? "Đang cập nhật trạng thái học" : "";
     const syncActionLabel = (label: string, reason: string) => (
         <Tooltip title={reason || undefined} placement="left">
             <span style={{ display: "block" }}>{label}</span>
@@ -3659,6 +3987,16 @@ const Page = () => {
                 icon: <DatabaseOutlined />,
                 label: `Đồng bộ học viên${selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}`,
                 disabled: !selectedRowKeys.length || syncingStudents,
+            }, {
+                key: "sync-attendance",
+                icon: <DatabaseOutlined />,
+                label: syncActionLabel("Cập nhật trạng thái học", attendanceDisabledReason),
+                disabled: Boolean(attendanceDisabledReason),
+            }, {
+                key: "reset-attendance",
+                icon: <ReloadOutlined />,
+                label: "Đặt lại trạng thái học",
+                disabled: syncingAttendance || attendanceResetSubmitting,
             }, {
                 type: "divider" as const,
             }, {
@@ -3689,6 +4027,8 @@ const Page = () => {
             if (selectingAllRows) return;
             if (key === "sync-teaching-users") handleSyncMissingTeachingUsers();
             if (key === "sync-students") handleSyncStudents();
+            if (key === "sync-attendance") handleSyncAttendance();
+            if (key === "reset-attendance") handleOpenAttendanceReset();
             if (key === "resend-to-hocmai") handleResendToHocmai();
             if (key === "provision-evg") handleProvisionEvgBulk();
             if (key === "assign-student-classrooms") handleOpenClassroomAssignment();
@@ -3717,6 +4057,201 @@ const Page = () => {
             WebkitOverflowScrolling: "touch",
         }}>
             {contextHolder}
+            <Modal
+                open={attendanceResetOpen}
+                title={<Space><ReloadOutlined style={{ color: "#fa8c16" }} /><span>Đặt lại trạng thái học</span></Space>}
+                width={760}
+                centered
+                maskClosable={!attendanceResetSubmitting}
+                closable={!attendanceResetSubmitting}
+                onCancel={() => !attendanceResetSubmitting && setAttendanceResetOpen(false)}
+                footer={[
+                    <Button key="cancel" disabled={attendanceResetSubmitting} onClick={() => setAttendanceResetOpen(false)}>Hủy</Button>,
+                    <Button key="apply" danger type="primary" loading={attendanceResetSubmitting} disabled={!attendanceResetScheduleId || !attendanceResetStudentIds.length} onClick={handleResetAttendance}>Đặt lại cho {attendanceResetStudentIds.length || ""} học viên</Button>,
+                ]}
+            >
+                <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                    <Alert
+                        type="warning"
+                        showIcon
+                        message="Chỉ áp dụng cho một lịch học đã kết thúc"
+                        description="Chọn chương trình, rồi chọn đúng lịch và các học viên cần điều chỉnh. Chỉ học viên được chọn mới bị thay đổi. Lưu ý: islearn được lưu theo bài học; nếu một bài có nhiều lịch thì trạng thái này được dùng chung."
+                    />
+                    <div style={{ padding: 16, border: "1px solid #e8e8e8", borderRadius: 10, background: "#fafafa" }}>
+                        <Row gutter={[16, 16]}>
+                            <Col xs={24} md={12}>
+                                <Typography.Text strong style={{ display: "block", marginBottom: 8 }}>1. Chương trình <Typography.Text type="danger">*</Typography.Text></Typography.Text>
+                                <Select
+                                    value={attendanceResetProgram}
+                                    placeholder="Chọn chương trình"
+                                    options={programOptions}
+                                    showSearch
+                                    optionFilterProp="label"
+                                    style={{ width: "100%" }}
+                                    onChange={(value) => void loadAttendanceResetSchedules(String(value || ""))}
+                                />
+                            </Col>
+                            <Col xs={24} md={12}>
+                                <Typography.Text strong style={{ display: "block", marginBottom: 8 }}>2. Lịch học đã kết thúc <Typography.Text type="danger">*</Typography.Text></Typography.Text>
+                                <Select
+                                    value={attendanceResetScheduleId}
+                                    placeholder={attendanceResetProgram ? "Chọn lịch học" : "Chọn chương trình trước"}
+                                    disabled={!attendanceResetProgram}
+                                    loading={attendanceResetLoadingSchedules}
+                                    showSearch
+                                    optionFilterProp="label"
+                                    style={{ width: "100%" }}
+                                    options={attendanceResetSchedules.map((schedule) => {
+                                        const date = schedule.start_time ? dayjs(schedule.start_time).format("DD/MM/YYYY HH:mm") : "Không rõ thời gian";
+                                        const label = "Bài " + (schedule.learn_number ?? "-") + " · " + (schedule.lesson_name || schedule.subject || "Chưa có tên bài") + " · " + date;
+                                        return { value: String(schedule.id), label };
+                                    })}
+                                    onChange={(value) => void loadAttendanceResetStudents(String(value || ""))}
+                                />
+                                {!attendanceResetLoadingSchedules && attendanceResetProgram && <Typography.Text type="secondary" style={{ fontSize: 12, display: "block", marginTop: 6 }}>{attendanceResetSchedules.length} lịch đã kết thúc có thể chọn</Typography.Text>}
+                            </Col>
+                        </Row>
+                    </div>
+                    <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+                            <Typography.Text strong>3. Học viên cần đưa về chưa học <Typography.Text type="danger">*</Typography.Text></Typography.Text>
+                            {attendanceResetScheduleId && !attendanceResetLoadingStudents && <Typography.Text type="secondary">{attendanceResetStudents.length} học viên đang được đánh dấu đã học</Typography.Text>}
+                        </div>
+                        <Select
+                            mode="multiple"
+                            value={attendanceResetStudentIds}
+                            disabled={!attendanceResetScheduleId}
+                            loading={attendanceResetLoadingStudents}
+                            placeholder={attendanceResetScheduleId ? "Tìm và chọn học viên" : "Chọn lịch học trước"}
+                            showSearch
+                            optionFilterProp="label"
+                            maxTagCount="responsive"
+                            style={{ width: "100%" }}
+                            options={attendanceResetStudents.map((student) => ({
+                                value: student.id,
+                                label: [student.name, student.username, student.student_hmid].filter(Boolean).join(" · "),
+                            }))}
+                            onChange={(values) => setAttendanceResetStudentIds(values.map(Number))}
+                        />
+                        {!attendanceResetLoadingStudents && attendanceResetScheduleId && !attendanceResetStudents.length && <Alert type="info" showIcon message="Không có học viên nào đang được đánh dấu đã học ở lịch này." style={{ marginTop: 10 }} />}
+                        {attendanceResetStudentIds.length > 0 && <Typography.Text type="warning" style={{ display: "block", marginTop: 10 }}>Đã chọn {attendanceResetStudentIds.length} học viên để đặt lại trạng thái.</Typography.Text>}
+                    </div>
+                </Space>
+            </Modal>
+            <Modal
+                open={attendanceModalOpen}
+                title={<Space><DatabaseOutlined style={{ color: "#1677ff" }} /><span>Cập nhật trạng thái học</span></Space>}
+                width={820}
+                centered
+                maskClosable={attendancePhase !== "progress" && !attendancePreviewing}
+                closable={attendancePhase !== "progress" || !syncingAttendance}
+                onCancel={() => !syncingAttendance && !attendancePreviewing && setAttendanceModalOpen(false)}
+                footer={attendancePhase === "setup" ? [
+                    <Button key="cancel" disabled={attendancePreviewing} onClick={() => setAttendanceModalOpen(false)}>Hủy</Button>,
+                    <Button key="preview" type="primary" loading={attendancePreviewing} disabled={!attendanceDateRange} onClick={() => void handlePreviewAttendance()}>Xem trước</Button>,
+                ] : attendancePhase === "preview" ? [
+                    <Button key="back" onClick={() => { setAttendancePhase("setup"); setAttendanceItems([]); }}>Chọn lại ngày</Button>,
+                    <Button key="apply" type="primary" disabled={!attendanceItems.some((item) => item.status === "ready")} onClick={() => void handleApplyAttendance()}>Xác nhận cập nhật</Button>,
+                ] : [
+                    <Button key="close" disabled={syncingAttendance} onClick={() => setAttendanceModalOpen(false)}>Đóng</Button>,
+                ]}
+            >
+                {attendancePhase === "setup" ? (
+                    <Space direction="vertical" size={18} style={{ width: "100%" }}>
+                        <Alert type="info" showIcon message="Chọn khoảng thời gian cần kiểm tra" description="Chỉ các lịch đã kết thúc trong khoảng ngày này được đưa vào xem trước. Hệ thống sẽ không tự lấy toàn bộ lịch trên màn hình." />
+                        <div style={{ padding: 18, border: "1px solid #e8e8e8", borderRadius: 12, background: "#fafafa" }}>
+                            <Typography.Text strong style={{ display: "block", marginBottom: 8 }}>Khoảng ngày <Typography.Text type="danger">*</Typography.Text></Typography.Text>
+                            <RangePicker
+                                value={attendanceDateRange}
+                                format="DD/MM/YYYY"
+                                placeholder={["Từ ngày", "Đến ngày"]}
+                                disabledDate={(date) => Boolean(date?.isAfter(dayjs(), "day"))}
+                                onChange={(dates) => setAttendanceDateRange(dates?.[0] && dates?.[1] ? [dates[0], dates[1]] : undefined)}
+                                style={{ width: "100%" }}
+                            />
+                            <Typography.Text type="secondary" style={{ display: "block", marginTop: 10 }}>
+                                Phạm vi chương trình: {submittedFilterValues.code || "Tất cả chương trình bạn được phân quyền"}
+                            </Typography.Text>
+                        </div>
+                        <Alert type="success" showIcon message="Cách ghi nhận" description="Học viên có mặt đủ ít nhất 10 phút trong giờ học sẽ được đánh dấu đã học. Trạng thái đã học trước đó luôn được giữ nguyên." />
+                    </Space>
+                ) : (() => {
+                    const completedCount = attendanceItems.filter((item) => ["success", "error"].includes(item.status)).length;
+                    const successCount = attendanceItems.filter((item) => item.status === "success").length;
+                    const errorCount = attendanceItems.filter((item) => item.status === "error").length;
+                    const totalSchedules = attendanceItems.reduce((sum, item) => sum + item.scheduleCount, 0);
+                    const expectedStudents = attendanceItems.reduce((sum, item) => sum + item.eligibleStudents, 0);
+                    const updatedStudents = attendanceItems.reduce((sum, item) => sum + item.updatedStudents, 0);
+                    const overallPercent = attendanceItems.length ? Math.round((completedCount * 100) / attendanceItems.length) : 0;
+                    const rangeLabel = attendanceDateRange?.[0] && attendanceDateRange?.[1]
+                        ? `${attendanceDateRange[0].format("DD/MM/YYYY")} — ${attendanceDateRange[1].format("DD/MM/YYYY")}`
+                        : "Khoảng ngày đã chọn";
+
+                    return <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                        {attendancePhase === "preview" ? (
+                            <>
+                                <Alert
+                                    type="success"
+                                    showIcon
+                                    message="Đã xem trước — dữ liệu chưa thay đổi"
+                                    description={`Phạm vi: ${rangeLabel}. Kiểm tra số liệu và danh sách bên dưới trước khi xác nhận cập nhật.`}
+                                />
+                                <Row gutter={[12, 12]}>
+                                    <Col xs={12} sm={6}><Card size="small" style={{ height: "100%" }}><Typography.Text type="secondary">Chương trình</Typography.Text><Typography.Title level={4} style={{ margin: "4px 0 0" }}>{attendanceItems.length}</Typography.Title></Card></Col>
+                                    <Col xs={12} sm={6}><Card size="small" style={{ height: "100%" }}><Typography.Text type="secondary">Lịch đã kết thúc</Typography.Text><Typography.Title level={4} style={{ margin: "4px 0 0" }}>{totalSchedules}</Typography.Title></Card></Col>
+                                    <Col xs={12} sm={6}><Card size="small" style={{ height: "100%" }}><Typography.Text type="secondary">Học viên đủ điều kiện</Typography.Text><Typography.Title level={4} style={{ margin: "4px 0 0" }}>{expectedStudents}</Typography.Title></Card></Col>
+                                    <Col xs={12} sm={6}><Card size="small" style={{ height: "100%" }}><Typography.Text type="secondary">Không thể kiểm tra</Typography.Text><Typography.Title level={4} style={{ margin: "4px 0 0", color: errorCount ? "#ff4d4f" : undefined }}>{errorCount}</Typography.Title></Card></Col>
+                                </Row>
+                            </>
+                        ) : (
+                            <>
+                                <div style={{ padding: 16, border: "1px solid #d6e4ff", borderRadius: 12, background: "#f6f9ff" }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline", marginBottom: 4 }}>
+                                        <Typography.Text strong>Tiến độ cập nhật chuyên cần</Typography.Text>
+                                        <Typography.Text type="secondary">{completedCount}/{attendanceItems.length} chương trình đã xử lý</Typography.Text>
+                                    </div>
+                                    <Typography.Text type="secondary" style={{ display: "block", fontSize: 12, marginBottom: 10 }}>Phạm vi: {rangeLabel}</Typography.Text>
+                                    <Progress percent={overallPercent} status={syncingAttendance ? "active" : errorCount ? "exception" : "success"} />
+                                    <Row gutter={[16, 8]} style={{ marginTop: 10 }}>
+                                        <Col xs={12} sm={6}><Typography.Text type="secondary">Đã cập nhật</Typography.Text><br /><Typography.Text strong style={{ color: "#52c41a" }}>{updatedStudents} học viên</Typography.Text></Col>
+                                        <Col xs={12} sm={6}><Typography.Text type="secondary">Hoàn tất</Typography.Text><br /><Typography.Text strong>{successCount} chương trình</Typography.Text></Col>
+                                        <Col xs={12} sm={6}><Typography.Text type="secondary">Có lỗi</Typography.Text><br /><Typography.Text strong style={{ color: errorCount ? "#ff4d4f" : undefined }}>{errorCount} chương trình</Typography.Text></Col>
+                                        <Col xs={12} sm={6}><Typography.Text type="secondary">Lịch đã quét</Typography.Text><br /><Typography.Text strong>{totalSchedules} lịch</Typography.Text></Col>
+                                    </Row>
+                                </div>
+                                {!syncingAttendance && errorCount > 0 && <Alert type="warning" showIcon message={`Đã hoàn tất nhưng có ${errorCount} chương trình cần kiểm tra`} description="Các mục lỗi đã chạy xong và được hiển thị đầy đủ bên dưới. Bạn có thể xem nội dung lỗi để xử lý tiếp." />}
+                            </>
+                        )}
+                        {attendanceItems.length ? (
+                            <List
+                                bordered
+                                dataSource={attendanceItems}
+                                rowKey={(item) => item.code}
+                                style={{ maxHeight: 390, overflowY: "auto", borderRadius: 10 }}
+                                renderItem={(item) => {
+                                    const statusMeta = item.status === "success" ? { color: "success", label: "Hoàn tất" } : item.status === "error" ? { color: "error", label: "Cần kiểm tra" } : item.status === "running" ? { color: "processing", label: "Đang cập nhật" } : item.status === "previewing" ? { color: "processing", label: "Đang kiểm tra" } : { color: "blue", label: "Sẵn sàng" };
+                                    const isProgress = attendancePhase === "progress";
+                                    const itemPercent = isProgress && ["success", "error"].includes(item.status) ? 100 : item.progress;
+                                    return <List.Item style={{ padding: "14px 16px" }}>
+                                        <div style={{ width: "100%" }}>
+                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 10 }}>
+                                                <div><Typography.Text strong>{item.code}</Typography.Text><Typography.Text type="secondary" style={{ display: "block", fontSize: 12, marginTop: 2 }}>{item.scheduleCount} lịch đã kết thúc trong khoảng ngày đã chọn</Typography.Text></div>
+                                                <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
+                                            </div>
+                                            <Row gutter={[12, 8]} align="middle">
+                                                <Col xs={24} sm={isProgress ? 8 : 12}><Typography.Text type="secondary">Dự kiến đủ điều kiện</Typography.Text><br /><Typography.Text>{item.eligibleStudents} học viên</Typography.Text></Col>
+                                                <Col xs={24} sm={isProgress ? 8 : 12}><Typography.Text type="secondary">Đã đánh dấu đã học</Typography.Text><br /><Typography.Text strong={item.updatedStudents > 0}>{isProgress ? item.updatedStudents : "—"} {isProgress ? "học viên" : ""}</Typography.Text></Col>
+                                                {isProgress && <Col xs={24} sm={8}><Typography.Text type="secondary" style={{ fontSize: 12 }}>{item.status === "error" ? "Đã xử lý lỗi" : item.status === "success" ? "Đã hoàn tất" : "Đang xử lý"}</Typography.Text><Progress percent={itemPercent} size="small" status={item.status === "error" ? "exception" : item.status === "success" ? "success" : "active"} /></Col>}
+                                            </Row>
+                                            {item.message && <Alert type={item.status === "error" ? "error" : "success"} showIcon={false} message={item.message} style={{ marginTop: 10, padding: "4px 8px", fontSize: 12 }} />}
+                                        </div>
+                                    </List.Item>;
+                                }}
+                            />
+                        ) : <Empty description="Không có lịch đã kết thúc trong khoảng ngày đã chọn" />}
+                    </Space>;
+                })()}
+            </Modal>
             {showBackToTop && (
                 <FloatButton
                     tooltip="Lên đầu trang"
@@ -3910,7 +4445,9 @@ const Page = () => {
                         icon={selectingAllRows ? <Spin size="small" /> : undefined}
                         message={selectingAllRows
                             ? `Đang chọn tất cả lịch học · Đã tải ${Math.min(selectionLoadedCount, totalItems)}/${totalItems} lịch`
-                            : `Đã chọn ${selectedRowKeys.length} lịch học có thể thao tác trong tất cả các trang`}
+                            : hasActiveTableColumnFilters
+                                ? `Đã chọn ${selectedRowKeys.length}/${tableDisplayData.length} lịch học đang hiển thị sau khi lọc`
+                                : `Đã chọn ${selectedRowKeys.length} lịch học có thể thao tác trong tất cả các trang`}
                         description={selectingAllRows ? "Các thao tác hàng loạt sẽ sẵn sàng khi chọn xong." : undefined}
                         action={<Button size="small" onClick={() => void handleSelectAll(false)}>Hủy chọn</Button>}
                         role="status"
@@ -4228,13 +4765,13 @@ const Page = () => {
                                         )}
                                         columns={isDesktop ? desktopColumns : columns}
                                         tableLayout="fixed"
-                                        dataSource={filteredData}
+                                        dataSource={tableDisplayData}
                                         loading={loading}
                                         rowSelection={{ ...rowSelection, columnWidth: 32 }}
                                         pagination={{
-                                            current: currentPage,
+                                            current: hasActiveTableColumnFilters ? 1 : currentPage,
                                             pageSize: pageSize,
-                                            total: totalItems,
+                                            total: displayedTotalItems,
                                             showSizeChanger: true,
                                             pageSizeOptions: ["25", "50", "100", "200", "300"],
                                             position: ["bottomRight"],
@@ -4254,7 +4791,15 @@ const Page = () => {
                                                     if (key === "program_code") return;
                                                     nextColumnFilters[key] = values?.map((value) => value as React.Key) || null;
                                                 });
+                                                const serverFilterChanged = Array.from(SERVER_TABLE_FILTER_FIELDS).some((fieldCode) => (
+                                                    JSON.stringify(nextColumnFilters[fieldCode]?.map(String) || null)
+                                                    !== JSON.stringify(tableColumnFilters[fieldCode]?.map(String) || null)
+                                                ));
                                                 setTableColumnFilters(nextColumnFilters);
+                                                if (serverFilterChanged) {
+                                                    setCurrentPage(1);
+                                                    replaceScheduleUrl(submittedFilterValues);
+                                                }
 
                                                 // Ant Table gửi tất cả filter-enabled columns trong callback.
                                                 // Vì vậy bấm "Đồng ý" ở Giáo viên vẫn có program_code; chỉ

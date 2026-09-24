@@ -26,6 +26,8 @@ export const swrKeys = {
         [SWR_NAMESPACES.schedules, "list", userId, params] as const,
     schedulePrograms: (userId: number | string) =>
         [SWR_NAMESPACES.schedules, "programs", userId] as const,
+    scheduleTeacherFilterOptions: (userId: number | string, programCode: string) =>
+        [SWR_NAMESPACES.schedules, "teacher-filter-options", userId, programCode] as const,
     moduleFields: (userId: number | string, moduleCode: string) =>
         [SWR_NAMESPACES.moduleFields, userId, moduleCode] as const,
     teachingStaff: (userId: number | string, teacherType: number) =>
