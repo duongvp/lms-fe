@@ -139,6 +139,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
   const isMobile = screens && !screens.xl;
   const isPhone = screens && !screens.md;
   const layoutPadding = isPhone ? 6 : isMobile ? 10 : 16;
+  const flushBottom = pathname === '/schedule' || pathname === '/quizzes';
+  const contentPadding = isPhone ? 8 : isMobile ? 12 : 24;
 
   return (
     <ConfigProvider locale={viVN}>
@@ -161,7 +163,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
           flexDirection: 'row',
           flex: 1,
           overflow: 'hidden',
-          padding: layoutPadding,
+          padding: flushBottom ? `${layoutPadding}px ${layoutPadding}px 0` : layoutPadding,
           gap: layoutPadding,
           background: '#f5f6f8'
         }}>
@@ -171,8 +173,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
             style={{
               flex: 1,
               background: '#ffffff',
-              borderRadius: isPhone ? 8 : 12,
-              padding: isPhone ? 8 : isMobile ? 12 : 24,
+              borderRadius: flushBottom ? `${isPhone ? 8 : 12}px ${isPhone ? 8 : 12}px 0 0` : isPhone ? 8 : 12,
+              padding: flushBottom ? `${contentPadding}px ${contentPadding}px 0` : contentPadding,
               boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03)',
               overflow: 'auto',
               minWidth: 0,

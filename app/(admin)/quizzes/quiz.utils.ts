@@ -32,8 +32,11 @@ export const recordToQuizForm = (record: QuizApiResponse): QuizFormValues => {
         learn_number: Number(record.learn_number),
         quiz_type: Number(record.quiz_type) as QuizType,
         quiz_name: record.quiz_name,
-        answers: record.quiz_type === 3 ? [] : answers.map((item) => ({
-            text: String(item.text ?? ""),
+        answers: record.quiz_type === 3 ? [] : answers.map((item, index) => ({
+            text: record.quiz_type === 1
+                && String(item.text ?? "").trim() === `${LETTERS[index]}.`
+                ? ""
+                : String(item.text ?? ""),
             placeholder: String(item.placeholder ?? ""),
             correct: record.quiz_type === 1
                 ? Boolean(item[getAnswerKey(item) || "A"])
@@ -53,7 +56,9 @@ export const quizFormToPayload = (values: QuizFormValues): QuizPayload => {
     if (quizType === 1) {
         ans = (values.answers || []).map((item, index) => ({
             [LETTERS[index]]: Boolean(item.correct),
-            text: String(item.text || "").trim(),
+            // Với câu chỉ dùng mã lựa chọn A/B/C..., không cần nhập lặp lại
+            // nhãn vào từng ô. Lưu nhãn mặc định để API vẫn nhận được nội dung.
+            text: String(item.text || "").trim() || `${LETTERS[index]}.`,
         }));
     } else if (quizType === 2) {
         ans = (values.answers || []).map((item) => ({

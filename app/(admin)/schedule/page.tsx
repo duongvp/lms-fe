@@ -3703,7 +3703,7 @@ const Page = () => {
         : 0;
 
     return (
-        <div ref={pageScrollRef} style={{
+        <div ref={pageScrollRef} className="page--flush-bottom" style={{
             display: "flex",
             flexDirection: "column",
             flex: viewMode === "calendar" && isDesktop ? "1 1 0" : "0 0 auto",

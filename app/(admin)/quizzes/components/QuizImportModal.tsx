@@ -58,7 +58,7 @@ const QuizImportModal = ({
                 Bước 1: Tải file Excel mẫu có ví dụ
             </Button>
             <Paragraph type="secondary" style={{ margin: 0 }}>
-                File mẫu có sẵn ví dụ cho Trắc nghiệm, Điền từ và Trả lời ngắn. Bạn chỉ cần nhập các cột thông thường,
+                File mẫu có sẵn ví dụ cho Trắc nghiệm, Điền từ và Tự luận. Bạn chỉ cần nhập các cột thông thường,
                 không cần viết mã JSON.
             </Paragraph>
 

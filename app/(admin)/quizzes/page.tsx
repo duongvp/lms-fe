@@ -935,7 +935,7 @@ const QuizManagementPage = () => {
         </Dropdown>
     );
 
-    return <div className={`${styles.page} ${reorderMode ? styles.pageReorder : ""}`}>
+    return <div className={`page--flush-bottom ${styles.page} ${reorderMode ? styles.pageReorder : ""}`}>
         {contextHolder}
         {/* <div className={`${styles.pageInfo} ${showPageInfo ? styles.pageInfoExpanded : ""}`}>
             <div className={styles.pageInfoHeader}>

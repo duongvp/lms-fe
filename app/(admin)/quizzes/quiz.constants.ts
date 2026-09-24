@@ -21,7 +21,7 @@ export const QUIZ_FIELDS: ModuleField[] = [
 export const QUIZ_TYPE_OPTIONS: Array<{ value: QuizType; label: string; shortLabel: string }> = [
     { value: 1, label: "Trắc nghiệm", shortLabel: "Trắc nghiệm" },
     { value: 2, label: "Điền từ", shortLabel: "Điền từ" },
-    { value: 3, label: "Trả lời ngắn", shortLabel: "Trả lời ngắn" },
+    { value: 3, label: "Tự luận", shortLabel: "Tự luận" },
 ];
 
 export const SCORE_TYPE_OPTIONS: Array<{ value: QuizScoreType; label: string }> = [

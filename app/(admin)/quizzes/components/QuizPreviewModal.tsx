@@ -64,8 +64,7 @@ const QuizPreviewModal = ({
                             <MathText
                                 as="span"
                                 className={styles.previewOptionText}
-                                value={item.text}
-                                fallback="Lựa chọn chưa có nội dung"
+                                value={item.text?.trim() || `${LETTERS[index]}.`}
                             />
                             {item.correct && <CheckCircleFilled style={{ color: "#22a447", marginTop: 3 }} />}
                         </div>

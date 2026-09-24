@@ -54,12 +54,14 @@ const QuizAnswerEditor = ({ quizType, editable }: QuizAnswerEditorProps) => {
                                         {...field}
                                         key={`text-${field.key}`}
                                         name={[field.name, "text"]}
-                                        rules={[{ required: true, whitespace: true, message: "Nhập đáp án" }]}
+                                        rules={quizType === 1
+                                            ? []
+                                            : [{ required: true, whitespace: true, message: "Nhập đáp án" }]}
                                         style={{ marginBottom: 0 }}
                                     >
                                         <Input
                                             placeholder={quizType === 1
-                                                ? `Nội dung lựa chọn ${LETTERS[index]}`
+                                                ? `Để trống để dùng mặc định ${LETTERS[index]}.`
                                                 : "Các đáp án chấp nhận, phân tách bằng dấu ;"}
                                             disabled={!editable}
                                         />
