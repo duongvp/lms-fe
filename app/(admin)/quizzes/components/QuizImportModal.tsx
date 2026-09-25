@@ -107,7 +107,7 @@ const QuizImportModal = ({
                 type="warning"
                 showIcon
                 message="Lưu ý trước khi nhập"
-                description="Chương trình được xác định từ bộ lọc hiện tại, không cần cột Mã chương trình trong file. Câu mới (không có Mã quiz) luôn được nối tiếp ở cuối từng Bài học, nên không bị trùng thứ tự. Chỉ dùng Mã quiz và chế độ Ghi đè khi muốn cập nhật câu đã có. Hệ thống kiểm tra toàn bộ file trước; nếu có một dòng lỗi thì chưa dòng nào được lưu."
+                description="Chương trình được xác định từ bộ lọc hiện tại, không cần cột Mã chương trình trong file. Bài học phải tồn tại trong Chương trình đã chọn; nếu không, hệ thống báo lỗi theo dòng và không lưu file. Câu mới (không có Mã quiz) luôn được nối tiếp ở cuối từng Bài học, nên không bị trùng thứ tự. Chỉ dùng Mã quiz và chế độ Ghi đè khi muốn cập nhật câu đã có."
             />
         </Space>
     </Modal>

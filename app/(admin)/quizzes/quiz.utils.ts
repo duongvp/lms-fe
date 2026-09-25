@@ -37,7 +37,11 @@ export const recordToQuizForm = (record: QuizApiResponse): QuizFormValues => {
                 && String(item.text ?? "").trim() === `${LETTERS[index]}.`
                 ? ""
                 : String(item.text ?? ""),
-            placeholder: String(item.placeholder ?? ""),
+            // “Đáp án” là nhãn mặc định do hệ thống gán khi lưu. Để trống lại
+            // trên form để người dùng biết đây là trường tùy chọn.
+            placeholder: String(item.placeholder ?? "") === "Đáp án"
+                ? ""
+                : String(item.placeholder ?? ""),
             correct: record.quiz_type === 1
                 ? Boolean(item[getAnswerKey(item) || "A"])
                 : true,
@@ -62,7 +66,7 @@ export const quizFormToPayload = (values: QuizFormValues): QuizPayload => {
         }));
     } else if (quizType === 2) {
         ans = (values.answers || []).map((item) => ({
-            placeholder: String(item.placeholder || "").trim(),
+            placeholder: String(item.placeholder || "").trim() || "Đáp án",
             text: String(item.text || "").trim(),
             A: true,
         }));

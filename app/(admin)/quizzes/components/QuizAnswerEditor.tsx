@@ -45,10 +45,9 @@ const QuizAnswerEditor = ({ quizType, editable }: QuizAnswerEditorProps) => {
                                         {...field}
                                         key={`placeholder-${field.key}`}
                                         name={[field.name, "placeholder"]}
-                                        rules={[{ required: true, whitespace: true, message: "Nhập gợi ý vị trí trống" }]}
                                         style={{ marginBottom: 8 }}
                                     >
-                                        <Input placeholder="Gợi ý/vị trí cần điền" disabled={!editable} />
+                                        <Input placeholder="Gợi ý/ vị trí cần điền" disabled={!editable} />
                                     </Form.Item>}
                                     <Form.Item
                                         {...field}
