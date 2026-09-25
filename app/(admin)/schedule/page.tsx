@@ -1272,6 +1272,11 @@ const Page = () => {
     const [batchClassroomAssignmentOpen, setBatchClassroomAssignmentOpen] = useState(false);
     const [batchClassroomAssigning, setBatchClassroomAssigning] = useState(false);
     const [batchClassroomItems, setBatchClassroomItems] = useState<BatchClassroomAssignmentItem[]>([]);
+    const [classroomWorkflowOpen, setClassroomWorkflowOpen] = useState(false);
+    const [resumeClassroomWorkflow, setResumeClassroomWorkflow] = useState(false);
+    const [workflowStudentSyncSelection, setWorkflowStudentSyncSelection] = useState("");
+    const [workflowClassroomSelection, setWorkflowClassroomSelection] = useState("");
+    const [workflowEvgSelection, setWorkflowEvgSelection] = useState("");
 
     // Đồng bộ trước khi browser vẽ frame đầu tiên; đồng thời giữ transition
     // tắt cho lần đồng bộ này để trạng thái đã lưu không bị animate.
@@ -2526,6 +2531,7 @@ const Page = () => {
             selectedRowKeys.map(Number).filter((id) => Number.isInteger(id) && id > 0)
         ));
         if (!targetIds.length || syncingStudents) return;
+        const workflowTargetSelection = [...targetIds].sort((left, right) => left - right).join(",");
 
         setSyncingStudents(true);
         setStudentSyncProgress(0);
@@ -2584,6 +2590,7 @@ const Page = () => {
                 skipped: Number(job.result?.skipped || 0),
                 failed: Number(job.result?.failed || 0),
             });
+            if (!job.result?.preview) setWorkflowStudentSyncSelection(workflowTargetSelection);
         } catch (error: any) {
             setStudentSyncError(error?.message || "Không thể hoàn tất đồng bộ học viên.");
         } finally {
@@ -2620,6 +2627,7 @@ const Page = () => {
         items: BatchClassroomAssignmentItem[],
         updateMode: ClassroomAssignmentUpdateMode
     ) => {
+        const workflowTargetSelection = items.map((item) => Number(item.calendarId)).filter(Number.isFinite).sort((left, right) => left - right).join(",");
         setBatchClassroomItems(items);
         setBatchClassroomAssignmentOpen(true);
         setBatchClassroomAssigning(true);
@@ -2689,6 +2697,7 @@ const Page = () => {
         }
 
         setBatchClassroomAssigning(false);
+        if (!failedCount) setWorkflowClassroomSelection(workflowTargetSelection);
         try {
             await refreshSchedules();
         } catch {
@@ -2778,6 +2787,7 @@ const Page = () => {
             ),
             okText: "Bắt đầu chia lớp",
             cancelText: "Hủy",
+            onCancel: resumeWorkflowAfterAction,
             onOk: () => {
                 void runBatchClassroomAssignment(items, updateMode);
             },
@@ -3004,6 +3014,7 @@ const Page = () => {
             return [id, record] as const;
         }));
         let selectedMode: EvgProvisionMode = "skip_existing";
+        const workflowTargetSelection = [...ids].sort((left, right) => left - right).join(",");
         Modal.confirm({
             title: `Xử lý EVG cho ${ids.length} lịch`,
             width: 620,
@@ -3026,6 +3037,7 @@ const Page = () => {
             </Space>,
             okText: "Thực hiện",
             cancelText: "Hủy",
+            onCancel: resumeWorkflowAfterAction,
             onOk: () => {
                 setEvgProgress({ current: 0, total: ids.length, created: 0, skipped: 0, failed: 0, errors: [] });
                 setEvgProgressOpen(true);
@@ -3065,6 +3077,7 @@ const Page = () => {
                             progress = { ...progress, errors: [...progress.errors] };
                             setEvgProgress(progress);
                         }
+                        if (!progress.failed) setWorkflowEvgSelection(workflowTargetSelection);
                         setSelectedRowKeys([]);
                         if (hasSearched) await refreshSchedules();
                     } finally {
@@ -3974,8 +3987,31 @@ const Page = () => {
             <span style={{ display: "block" }}>{label}</span>
         </Tooltip>
     );
+    const workflowSelectionKey = [...selectedRowKeys].map(Number).filter(Number.isFinite).sort((left, right) => left - right).join(",");
+    const isWorkflowStudentSynced = Boolean(workflowSelectionKey) && workflowStudentSyncSelection === workflowSelectionKey;
+    const isWorkflowClassroomAssigned = Boolean(workflowSelectionKey) && workflowClassroomSelection === workflowSelectionKey;
+    const isWorkflowEvgProvisioned = Boolean(workflowSelectionKey) && workflowEvgSelection === workflowSelectionKey;
+    const showClassroomWorkflow = () => setClassroomWorkflowOpen(true);
+    const openWorkflowAction = (action: () => void) => {
+        setResumeClassroomWorkflow(true);
+        setClassroomWorkflowOpen(false);
+        action();
+    };
+    const resumeWorkflowAfterAction = () => {
+        if (resumeClassroomWorkflow) {
+            setResumeClassroomWorkflow(false);
+            setClassroomWorkflowOpen(true);
+        }
+    };
     const syncMenu = {
         items: [
+            {
+                key: "classroom-workflow",
+                icon: <ApartmentOutlined />,
+                label: "Quy trình tạo lớp và EVG",
+            }, {
+                type: "divider" as const,
+            },
             {
                 key: "sync-teaching-users",
                 icon: <ReloadOutlined />,
@@ -3987,6 +4023,8 @@ const Page = () => {
                 icon: <DatabaseOutlined />,
                 label: `Đồng bộ học viên${selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}`,
                 disabled: !selectedRowKeys.length || syncingStudents,
+            }, {
+                type: "divider" as const,
             }, {
                 key: "sync-attendance",
                 icon: <DatabaseOutlined />,
@@ -4031,6 +4069,7 @@ const Page = () => {
             if (key === "reset-attendance") handleOpenAttendanceReset();
             if (key === "resend-to-hocmai") handleResendToHocmai();
             if (key === "provision-evg") handleProvisionEvgBulk();
+            if (key === "classroom-workflow") showClassroomWorkflow();
             if (key === "assign-student-classrooms") handleOpenClassroomAssignment();
             if (key === "batch-assign-student-classrooms") handleOpenBatchClassroomAssignment();
         },
@@ -4060,7 +4099,7 @@ const Page = () => {
             <Modal
                 open={attendanceResetOpen}
                 title={<Space><ReloadOutlined style={{ color: "#fa8c16" }} /><span>Đặt lại trạng thái học</span></Space>}
-                width={760}
+                width={824}
                 centered
                 maskClosable={!attendanceResetSubmitting}
                 closable={!attendanceResetSubmitting}
@@ -4952,19 +4991,57 @@ const Page = () => {
                     }}
                 />
                 <Modal
+                    open={classroomWorkflowOpen}
+                    title={<Space size={10}><ApartmentOutlined style={{ color: "#1677ff" }} /><span>Quy trình tạo lớp và EVG</span></Space>}
+                    width={824}
+                    footer={<Button type="primary" onClick={() => setClassroomWorkflowOpen(false)}>Đã hiểu</Button>}
+                    onCancel={() => setClassroomWorkflowOpen(false)}
+                >
+                    <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                        <Alert
+                            type="info"
+                            showIcon
+                            message="Thực hiện lần lượt trên các lịch đã chọn"
+                            description="Mỗi bước dùng đúng thao tác hiện có. Bạn có thể quay lại bảng để thay đổi lựa chọn trước khi sang bước tiếp theo."
+                            style={{ padding: "20px 24px" }}
+                        />
+                        <div style={{ padding: "2px 4px" }}>
+                            <div style={{ display: "flex", gap: 14, position: "relative" }}>
+                                <div style={{ width: 32, height: 32, borderRadius: "50%", background: selectedRowKeys.length ? "#e6f4ff" : "#f0f0f0", color: selectedRowKeys.length ? "#1677ff" : "#8c8c8c", display: "grid", placeItems: "center", fontWeight: 600 }}>{selectedRowKeys.length ? "✓" : "1"}</div><div aria-hidden style={{ position: "absolute", left: 16, top: 32, bottom: -4, width: 1, background: "#91caff" }} />
+                                <div style={{ paddingBottom: 16 }}><Typography.Text strong>1. Chọn chương trình và lịch học</Typography.Text><br /><Typography.Text type="secondary">{selectedRowKeys.length ? <>Đã chọn {selectedRowKeys.length} lịch. Có thể tiếp tục bước 2.</> : "Chọn các lịch cần xử lý trong bảng trước khi tiếp tục."}</Typography.Text></div>
+                            </div>
+                            <div style={{ display: "flex", gap: 14, position: "relative" }}>
+                                <div style={{ width: 32, height: 32, borderRadius: "50%", background: isWorkflowStudentSynced ? "#e6f4ff" : selectedRowKeys.length ? "#1677ff" : "#f0f0f0", color: isWorkflowStudentSynced ? "#1677ff" : selectedRowKeys.length ? "#fff" : "#8c8c8c", display: "grid", placeItems: "center", fontWeight: 600 }}>{isWorkflowStudentSynced ? "✓" : "2"}</div><div aria-hidden style={{ position: "absolute", left: 16, top: 32, bottom: -4, width: 1, background: "#91caff" }} />
+                                <div style={{ paddingBottom: 16 }}><Typography.Text strong>2. Đồng bộ học viên</Typography.Text><br /><Typography.Text type="secondary">Lấy danh sách học viên đăng ký cho các lịch đã chọn.</Typography.Text><br /><Button type="primary" size="small" icon={<DatabaseOutlined />} disabled={!selectedRowKeys.length || syncingStudents} onClick={() => openWorkflowAction(handleSyncStudents)}>Đồng bộ học viên</Button></div>
+                            </div>
+                            <div style={{ display: "flex", gap: 14, position: "relative" }}>
+                                <div style={{ width: 32, height: 32, borderRadius: "50%", background: isWorkflowClassroomAssigned ? "#e6f4ff" : isWorkflowStudentSynced ? "#1677ff" : "#f0f0f0", color: isWorkflowClassroomAssigned ? "#1677ff" : isWorkflowStudentSynced ? "#fff" : "#8c8c8c", display: "grid", placeItems: "center", fontWeight: 600 }}>{isWorkflowClassroomAssigned ? "✓" : "3"}</div><div aria-hidden style={{ position: "absolute", left: 16, top: 32, bottom: -4, width: 1, background: "#91caff" }} />
+                                <div style={{ paddingBottom: 16 }}><Typography.Text strong>3. Tự động chia lớp</Typography.Text><br /><Typography.Text type="secondary">Phân học viên vào room_id/class_id cho các lịch đã chọn.</Typography.Text><br /><Button size="small" icon={<ApartmentOutlined />} disabled={!selectedRowKeys.length || !isWorkflowStudentSynced || batchClassroomAssigning} onClick={() => openWorkflowAction(handleOpenBatchClassroomAssignment)}>Tự động chia lớp đã chọn</Button></div>
+                            </div>
+                            <div style={{ display: "flex", gap: 14, position: "relative" }}>
+                                <div style={{ width: 32, height: 32, borderRadius: "50%", background: isWorkflowEvgProvisioned ? "#e6f4ff" : batchClassroomItems.length && !batchClassroomAssigning ? "#1677ff" : "#f0f0f0", color: isWorkflowEvgProvisioned ? "#1677ff" : batchClassroomItems.length && !batchClassroomAssigning ? "#fff" : "#8c8c8c", display: "grid", placeItems: "center", fontWeight: 600 }}>{isWorkflowEvgProvisioned ? "✓" : "4"}</div>
+                                <div><Typography.Text strong>4. Tạo / đồng bộ EVG</Typography.Text><br /><Typography.Text type="secondary">Tạo stream và phòng EVG sau khi đã hoàn tất chia lớp.</Typography.Text><br /><Button size="small" icon={<CloudUploadOutlined />} disabled={!selectedRowKeys.length || !isWorkflowClassroomAssigned || batchClassroomAssigning || provisioningEvgBulk} onClick={() => openWorkflowAction(handleProvisionEvgBulk)}>Tạo / đồng bộ EVG</Button></div>
+                            </div>
+                        </div>
+                    </Space>
+                </Modal>
+                <Modal
                     title="Tiến trình tự động chia lớp"
                     open={batchClassroomAssignmentOpen}
                     width={960}
                     closable={!batchClassroomAssigning}
                     maskClosable={!batchClassroomAssigning}
                     onCancel={() => {
-                        if (!batchClassroomAssigning) setBatchClassroomAssignmentOpen(false);
+                        if (!batchClassroomAssigning) {
+                            setBatchClassroomAssignmentOpen(false);
+                            resumeWorkflowAfterAction();
+                        }
                     }}
                     footer={(
                         <Button
                             type="primary"
                             disabled={batchClassroomAssigning}
-                            onClick={() => setBatchClassroomAssignmentOpen(false)}
+                            onClick={() => { setBatchClassroomAssignmentOpen(false); resumeWorkflowAfterAction(); }}
                         >
                             Đóng
                         </Button>
@@ -5077,12 +5154,12 @@ const Page = () => {
                     open={studentSyncOpen}
                     closable={!syncingStudents}
                     maskClosable={!syncingStudents}
-                    onCancel={() => { if (!syncingStudents) setStudentSyncOpen(false); }}
+                    onCancel={() => { if (!syncingStudents) { setStudentSyncOpen(false); resumeWorkflowAfterAction(); } }}
                     footer={studentSyncResult || studentSyncError ? (
-                        <Button type="primary" onClick={() => setStudentSyncOpen(false)}>Đóng</Button>
+                        <Button type="primary" onClick={() => { setStudentSyncOpen(false); resumeWorkflowAfterAction(); }}>Đóng</Button>
                     ) : (
                         <Space>
-                            <Button disabled={syncingStudents} onClick={() => setStudentSyncOpen(false)}>Hủy</Button>
+                            <Button disabled={syncingStudents} onClick={() => { setStudentSyncOpen(false); resumeWorkflowAfterAction(); }}>Hủy</Button>
                             <Button
                                 type="primary"
                                 loading={syncingStudents}
@@ -5311,10 +5388,10 @@ const Page = () => {
                 <Modal
                     title="Tiến trình tạo/đồng bộ EVG"
                     open={evgProgressOpen}
-                    footer={<Button type="primary" disabled={provisioningEvgBulk} onClick={() => setEvgProgressOpen(false)}>Đóng</Button>}
+                    footer={<Button type="primary" disabled={provisioningEvgBulk} onClick={() => { setEvgProgressOpen(false); resumeWorkflowAfterAction(); }}>Đóng</Button>}
                     closable={!provisioningEvgBulk}
                     maskClosable={!provisioningEvgBulk}
-                    onCancel={() => { if (!provisioningEvgBulk) setEvgProgressOpen(false); }}
+                    onCancel={() => { if (!provisioningEvgBulk) { setEvgProgressOpen(false); resumeWorkflowAfterAction(); } }}
                 >
                     {evgProgress && <Space direction="vertical" size={16} style={{ width: "100%" }}>
                         <div style={{ textAlign: "center" }}>

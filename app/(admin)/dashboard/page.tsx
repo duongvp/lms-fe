@@ -82,6 +82,15 @@ const hmoIssueDefinitions: Record<string, { label: string; description: string; 
 
 const EMPTY_DASHBOARD: DashboardOverview = {
     generatedAt: '',
+    calendarAttendanceSyncCron: {
+        available: false,
+        enabled: false,
+        hour: 4,
+        minute: 0,
+        timeZone: 'Asia/Ho_Chi_Minh',
+        latest: null,
+        history: [],
+    },
     calendarTeachingUserSyncCron: {
         enabled: false,
         hour: 3,
@@ -319,6 +328,21 @@ const Page: React.FC = () => {
         windowDays: 7,
         latest: null,
     };
+    const attendanceSyncCron = data.calendarAttendanceSyncCron ?? {
+        available: false,
+        enabled: false, hour: 4, minute: 0, timeZone: 'Asia/Ho_Chi_Minh',
+        latest: null, history: [],
+    };
+    const vietnamNow = dayjs.utc(data.generatedAt || new Date().toISOString()).add(7, 'hour');
+    const attendanceTargetDate = vietnamNow.subtract(1, 'day').format('YYYY-MM-DD');
+    const attendanceLatest = attendanceSyncCron.latest;
+    const attendanceDue = vietnamNow.hour() >= 5;
+    const attendanceCurrent = attendanceLatest
+        && formatVietnamDateTime(attendanceLatest.windowStart, 'YYYY-MM-DD') === attendanceTargetDate;
+    const attendanceStale = attendanceLatest?.status === 'running'
+        && dayjs(data.generatedAt || new Date().toISOString()).diff(dayjs(attendanceLatest.heartbeatAt), 'hour') >= 2;
+    const attendanceWarning = attendanceSyncCron.available && attendanceSyncCron.enabled && attendanceDue
+        && (!attendanceCurrent || attendanceLatest?.status !== 'completed');
     const hmoIssues = hmoIssueProgram ? programHmoIssues : dashboardHmoIssues;
     const hmoProgramOptions = useMemo(() => (data.hmoLessonSync?.issuePrograms || []).map((item) => ({
         value: item.programCode,
@@ -496,52 +520,114 @@ const Page: React.FC = () => {
                             />
                         </Col>
                     </Row>
-                    <Card
-                        title={<Space><TeamOutlined /> Tự động quét user giáo viên/trợ giảng</Space>}
-                        className={styles.panelCard}
-                        style={{ marginTop: 16 }}
-                    >
-                        <Alert
-                            showIcon
-                            type={!teachingUserSyncCron.enabled
-                                ? 'warning'
-                                : ['failed', 'interrupted'].includes(teachingUserSyncCron.latest?.status || '')
-                                    ? 'error'
-                                    : teachingUserSyncCron.latest?.status === 'running'
-                                        ? 'info'
-                                        : teachingUserSyncCron.latest?.failed ? 'warning' : 'success'}
-                            message={`Cron ${teachingUserSyncCron.enabled ? 'đang bật' : 'đã tắt'} · Chạy lúc ${String(teachingUserSyncCron.hour).padStart(2, '0')}:${String(teachingUserSyncCron.minute).padStart(2, '0')} hằng ngày · Quét ${teachingUserSyncCron.windowDays} ngày`}
-                            description={teachingUserSyncCron.latest
-                                ? `${teachingUserSyncCron.latest.status === 'running' ? 'Đang chạy từ' : 'Lần gần nhất'}: ${formatVietnamDateTime(teachingUserSyncCron.latest.startedAt, 'HH:mm DD/MM/YYYY')} · Quét ${teachingUserSyncCron.latest.scanned} lịch · Tạo ${teachingUserSyncCron.latest.created} · Cập nhật ${teachingUserSyncCron.latest.updated} · Lỗi ${teachingUserSyncCron.latest.failed}${teachingUserSyncCron.latest.errors[0]?.message ? ` · ${teachingUserSyncCron.latest.errors[0].message}` : ''}`
-                                : teachingUserSyncCron.enabled
-                                    ? 'Chưa có lịch sử chạy. Có thể quét thủ công tại trang Lịch học khi cần đồng bộ ngay.'
-                                    : 'Backend chưa cung cấp trạng thái cron hoặc cron đang tắt.'}
-                        />
-                        {!!teachingUserSyncCron.latest?.errors.length && (
-                            <Collapse
-                                style={{ marginTop: 12 }}
-                                items={[{
-                                    key: 'teaching-user-sync-errors',
-                                    label: `Chi tiết ${teachingUserSyncCron.latest.errors.length} lỗi`,
-                                    children: (
-                                        <List
-                                            size="small"
-                                            style={{ maxHeight: 420, overflow: 'auto' }}
-                                            dataSource={teachingUserSyncCron.latest.errors}
-                                            renderItem={(item) => (
-                                                <List.Item>
-                                                    <Space align="start">
-                                                        <Tag color="red">Lịch #{item.calendar_id}</Tag>
-                                                        <Text>{item.message}</Text>
-                                                    </Space>
-                                                </List.Item>
-                                            )}
-                                        />
-                                    ),
-                                }]}
+                    <Row gutter={[16, 16]}>
+                        <Col xs={24} sm={12}>
+                            <Card
+                            title={<Space><TeamOutlined /> Tự động quét user giáo viên/trợ giảng</Space>}
+                            className={styles.panelCard}
+                            style={{ marginTop: 16 }}
+                        >
+                            <Alert
+                                showIcon
+                                type={!teachingUserSyncCron.enabled
+                                    ? 'warning'
+                                    : ['failed', 'interrupted'].includes(teachingUserSyncCron.latest?.status || '')
+                                        ? 'error'
+                                        : teachingUserSyncCron.latest?.status === 'running'
+                                            ? 'info'
+                                            : teachingUserSyncCron.latest?.failed ? 'warning' : 'success'}
+                                message={`Cron ${teachingUserSyncCron.enabled ? 'đang bật' : 'đã tắt'} · Chạy lúc ${String(teachingUserSyncCron.hour).padStart(2, '0')}:${String(teachingUserSyncCron.minute).padStart(2, '0')} hằng ngày · Quét ${teachingUserSyncCron.windowDays} ngày`}
+                                description={teachingUserSyncCron.latest
+                                    ? `${teachingUserSyncCron.latest.status === 'running' ? 'Đang chạy từ' : 'Lần gần nhất'}: ${formatVietnamDateTime(teachingUserSyncCron.latest.startedAt, 'HH:mm DD/MM/YYYY')} · Quét ${teachingUserSyncCron.latest.scanned} lịch · Tạo ${teachingUserSyncCron.latest.created} · Cập nhật ${teachingUserSyncCron.latest.updated} · Lỗi ${teachingUserSyncCron.latest.failed}${teachingUserSyncCron.latest.errors[0]?.message ? ` · ${teachingUserSyncCron.latest.errors[0].message}` : ''}`
+                                    : teachingUserSyncCron.enabled
+                                        ? 'Chưa có lịch sử chạy. Có thể quét thủ công tại trang Lịch học khi cần đồng bộ ngay.'
+                                        : 'Backend chưa cung cấp trạng thái cron hoặc cron đang tắt.'}
                             />
-                        )}
-                    </Card>
+                            {!!teachingUserSyncCron.latest?.errors.length && (
+                                <Collapse
+                                    style={{ marginTop: 12 }}
+                                    items={[{
+                                        key: 'teaching-user-sync-errors',
+                                        label: `Chi tiết ${teachingUserSyncCron.latest.errors.length} lỗi`,
+                                        children: (
+                                            <List
+                                                size="small"
+                                                style={{ maxHeight: 420, overflow: 'auto' }}
+                                                dataSource={teachingUserSyncCron.latest.errors}
+                                                renderItem={(item) => (
+                                                    <List.Item>
+                                                        <Space align="start">
+                                                            <Tag color="red">Lịch #{item.calendar_id}</Tag>
+                                                            <Text>{item.message}</Text>
+                                                        </Space>
+                                                    </List.Item>
+                                                )}
+                                            />
+                                        ),
+                                    }]}
+                                />
+                            )}
+                            </Card>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                            <Card
+                            title={<Space><CheckCircleOutlined /> Tự động cập nhật trạng thái học</Space>}
+                            className={styles.panelCard}
+                            style={{ marginTop: 16 }}
+                        >
+                            <Alert
+                                showIcon
+                                type={!attendanceSyncCron.available ? 'error'
+                                    : !attendanceSyncCron.enabled ? 'warning'
+                                    : attendanceStale || attendanceLatest?.status === 'failed' || attendanceLatest?.status === 'interrupted'
+                                        ? 'error' : attendanceWarning || attendanceLatest?.status === 'completed_with_errors'
+                                            ? 'warning' : attendanceLatest?.status === 'running' ? 'info' : 'success'}
+                                message={`Cron ${attendanceSyncCron.enabled ? 'đang bật' : 'đã tắt'} · Chạy lúc 04:00 hằng ngày · Xử lý buổi học ngày hôm trước`}
+                                description={!attendanceSyncCron.available
+                                    ? 'Chưa có bảng lịch sử cron chuyên cần trên database. Cần áp dụng migration trước khi cron hoạt động.'
+                                    : !attendanceSyncCron.enabled
+                                    ? 'Cron cập nhật trạng thái học đang tắt.'
+                                    : attendanceStale
+                                        ? 'Lượt chạy gần nhất đã ngừng cập nhật quá 2 giờ; cần kiểm tra backend.'
+                                        : attendanceWarning && !attendanceCurrent
+                                            ? `Chưa có lượt chạy hoàn tất cho buổi học ngày ${vietnamNow.subtract(1, 'day').format('DD/MM/YYYY')}.`
+                                            : attendanceLatest
+                                                ? `${attendanceLatest.status === 'running' ? 'Đang chạy từ' : 'Lần gần nhất'}: ${formatVietnamDateTime(attendanceLatest.startedAt, 'HH:mm DD/MM/YYYY')} · Buổi học: ${formatVietnamDateTime(attendanceLatest.windowStart, 'DD/MM/YYYY')} · Xử lý ${attendanceLatest.calendarsProcessed}/${attendanceLatest.calendarsTotal} lịch · Cập nhật ${attendanceLatest.studentsUpdated} học viên · HOCMAI ${attendanceLatest.hocmaiUpdated} · Lỗi ${attendanceLatest.calendarsFailed}`
+                                                : 'Chưa có lịch sử chạy.'}
+                            />
+                            {!!attendanceSyncCron.history.length && (
+                                <Collapse
+                                    style={{ marginTop: 12 }}
+                                    items={[{
+                                        key: 'attendance-sync-history',
+                                        label: `Lịch sử ${attendanceSyncCron.history.length} lượt gần nhất`,
+                                        children: (
+                                            <List
+                                                size="small"
+                                                dataSource={attendanceSyncCron.history}
+                                                renderItem={(run) => (
+                                                    <List.Item>
+                                                        <Space direction="vertical" size={2}>
+                                                            <Text>
+                                                                <Tag color={run.status === 'completed' ? 'green' : run.status === 'running' ? 'blue' : 'red'}>{run.status}</Tag>
+                                                                {formatVietnamDateTime(run.windowStart, 'DD/MM/YYYY')} · Chạy {formatVietnamDateTime(run.startedAt, 'HH:mm DD/MM/YYYY')} · {run.calendarsProcessed}/{run.calendarsTotal} lịch · {run.studentsUpdated} học viên · {run.calendarsFailed} lỗi
+                                                            </Text>
+                                                            {run.errors.map((error, index) => (
+                                                                <Text type="danger" key={`${run.id}-${index}`}>
+                                                                    {error.calendar_id ? `Lịch #${error.calendar_id}: ` : ''}{error.message}
+                                                                </Text>
+                                                            ))}
+                                                        </Space>
+                                                    </List.Item>
+                                                )}
+                                            />
+                                        ),
+                                    }]}
+                                />
+                            )}
+                            </Card>
+                        </Col>
+                    </Row>
                     <Card
                         title={<Space><CloudSyncOutlined /> Đồng bộ Lesson ID HMO</Space>}
                         className={styles.panelCard}

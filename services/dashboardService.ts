@@ -4,6 +4,15 @@ const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/api/dashboard`;
 
 export interface DashboardOverview {
     generatedAt: string;
+    calendarAttendanceSyncCron?: {
+        available: boolean;
+        enabled: boolean;
+        hour: number;
+        minute: number;
+        timeZone: string;
+        latest: DashboardAttendanceSyncRun | null;
+        history: DashboardAttendanceSyncRun[];
+    };
     calendarTeachingUserSyncCron?: {
         enabled: boolean;
         hour: number;
@@ -113,6 +122,22 @@ export interface DashboardOverview {
         }>;
         issuePrograms: Array<{ programCode: string; issueCount: number; lessonCount: number }>;
     };
+}
+
+export interface DashboardAttendanceSyncRun {
+    id: string;
+    status: 'running' | 'completed' | 'completed_with_errors' | 'failed' | 'interrupted';
+    windowStart: string;
+    windowEnd: string;
+    calendarsTotal: number;
+    calendarsProcessed: number;
+    studentsUpdated: number;
+    hocmaiUpdated: number;
+    calendarsFailed: number;
+    errors: Array<{ calendar_id: number; message: string }>;
+    heartbeatAt: string;
+    startedAt: string;
+    finishedAt: string | null;
 }
 
 export const getDashboardOverview = async (params?: { from?: string; to?: string }): Promise<DashboardOverview> => {
