@@ -58,8 +58,8 @@ const QuizImportModal = ({
                 Bước 1: Tải file Excel mẫu có ví dụ
             </Button>
             <Paragraph type="secondary" style={{ margin: 0 }}>
-                File mẫu có sẵn ví dụ cho Trắc nghiệm, Điền từ và Tự luận. Bạn chỉ cần nhập các cột thông thường,
-                không cần viết mã JSON.
+                File mẫu có sẵn ví dụ cho Trắc nghiệm, Điền từ (tối đa 6 ô) và Tự luận. Bạn chỉ cần nhập các cột
+                thông thường, không cần viết mã JSON.
             </Paragraph>
 
             <Divider style={{ margin: "2px 0" }} />
@@ -107,7 +107,7 @@ const QuizImportModal = ({
                 type="warning"
                 showIcon
                 message="Lưu ý trước khi nhập"
-                description="Chương trình được xác định từ bộ lọc hiện tại, không cần cột Mã chương trình trong file. Thứ tự nên là duy nhất trong cùng Chương trình và bài học. Hệ thống kiểm tra toàn bộ file trước; nếu có một dòng lỗi thì chưa dòng nào được lưu."
+                description="Chương trình được xác định từ bộ lọc hiện tại, không cần cột Mã chương trình trong file. Câu mới (không có Mã quiz) luôn được nối tiếp ở cuối từng Bài học, nên không bị trùng thứ tự. Chỉ dùng Mã quiz và chế độ Ghi đè khi muốn cập nhật câu đã có. Hệ thống kiểm tra toàn bộ file trước; nếu có một dòng lỗi thì chưa dòng nào được lưu."
             />
         </Space>
     </Modal>
