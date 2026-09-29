@@ -567,6 +567,12 @@ const MOCK_SCHEDULES: ScheduleDataType[] = [];
 const SERVER_TABLE_FILTER_FIELDS = new Set(["teacher", "learn_number", "system_type", "live_weekday"]);
 const CALENDAR_PLUGINS = [dayGridPlugin, timeGridPlugin, interactionPlugin];
 const parseCalendarWallTime = (value: unknown) => dayjs(String(value || "").replace(/Z$/, ""));
+const isEndClockAfterStart = (startTime?: Dayjs | null, endTime?: Dayjs | null) => {
+    if (!startTime?.isValid() || !endTime?.isValid()) return true;
+    const startMinutes = startTime.hour() * 60 + startTime.minute();
+    const endMinutes = endTime.hour() * 60 + endTime.minute();
+    return endMinutes > startMinutes;
+};
 const LIVE_WEEKDAY_LABELS = ["Chủ Nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
 const liveWeekdayLabel = (value: unknown) => {
     const date = parseCalendarWallTime(value);
@@ -1356,7 +1362,7 @@ const Page = () => {
         };
     }, []);
     const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
-    const [syncProgress, setSyncProgress] = useState<{ current: number; total: number; created: number; updated: number; failed: number; errors: Array<{ calendar_id: number; message: string }> } | null>(null);
+    const [syncProgress, setSyncProgress] = useState<{ current: number; total: number; created: number; updated: number; skipped: number; failed: number; errors: Array<{ calendar_id: number; message: string }> } | null>(null);
 
     const replaceScheduleUrl = useCallback((values: ScheduleFilterValues, targetPage = 1) => {
         const program = String(values.code || "").trim();
@@ -2235,11 +2241,12 @@ const Page = () => {
             cancelText: "Hủy",
             onOk: async () => {
                 setSyncingTeachingUsers(true);
-                setSyncProgress({ current: 0, total: targetIds.length, created: 0, updated: 0, failed: 0, errors: [] });
+                setSyncProgress({ current: 0, total: targetIds.length, created: 0, updated: 0, skipped: 0, failed: 0, errors: [] });
                 setIsSyncModalOpen(true);
                 try {
                     let totalCreated = 0;
                     let totalUpdated = 0;
+                    let totalSkipped = 0;
                     let totalFailed = 0;
                     let totalScanned = 0;
                     const allErrors: Array<{ calendar_id: number; message: string }> = [];
@@ -2251,6 +2258,7 @@ const Page = () => {
                         totalScanned += Number(result.scanned ?? 0);
                         totalCreated += Number(result.created ?? 0);
                         totalUpdated += Number(result.updated ?? 0);
+                        totalSkipped += Number(result.skipped ?? 0);
                         totalFailed += Number(result.failed ?? 0);
                         if (Array.isArray(result.errors)) {
                             allErrors.push(...result.errors);
@@ -2261,13 +2269,14 @@ const Page = () => {
                             total: targetIds.length,
                             created: totalCreated,
                             updated: totalUpdated,
+                            skipped: totalSkipped,
                             failed: totalFailed,
                             errors: allErrors
                         });
                     }
                     api.success({
                         message: "Đã quét user nhân sự",
-                        description: `Đã quét ${totalScanned} lịch, tạo ${totalCreated} user mới và cập nhật ${totalUpdated} user${totalFailed ? `; ${totalFailed} lịch chưa xử lý được` : ''}.`,
+                        description: `Đã quét ${totalScanned} lịch, tạo ${totalCreated} user mới, cập nhật ${totalUpdated} user và bỏ qua ${totalSkipped} user không thay đổi${totalFailed ? `; ${totalFailed} lịch chưa xử lý được` : ''}.`,
                         duration: 6,
                     });
                 } catch (error: any) {
@@ -3646,8 +3655,9 @@ const Page = () => {
                                         {
                                             validator: (_rule: unknown, value: Dayjs | null) => {
                                                 const startTime = form.getFieldValue("start_time") as Dayjs | null;
-                                                if (!value || !startTime || value.isAfter(startTime)) return Promise.resolve();
-                                                return Promise.reject(new Error("Giờ kết thúc phải sau giờ bắt đầu"));
+                                                return isEndClockAfterStart(startTime, value)
+                                                    ? Promise.resolve()
+                                                    : Promise.reject(new Error("Giờ kết thúc phải sau giờ bắt đầu"));
                                             },
                                         },
                                     ]}
@@ -5506,6 +5516,8 @@ const Page = () => {
                                 <Typography.Text type="success">Đã tạo mới: {syncProgress.created} user</Typography.Text>
                                 <br />
                                 <Typography.Text style={{ color: '#1677ff' }}>Đã bổ sung/chỉnh sửa: {syncProgress.updated} user</Typography.Text>
+                                <br />
+                                <Typography.Text type="secondary">Đã bỏ qua (không thay đổi): {syncProgress.skipped} user</Typography.Text>
                                 {syncProgress.failed > 0 && (
                                     <>
                                         <br />

@@ -101,6 +101,10 @@ export interface CreateLessonProgramPayload {
     lesson_name: string;
 }
 
+export interface LessonProgramSubjectUpdatePayload {
+    subject_name: string;
+}
+
 export interface LessonExportParams extends LessonListParams {
     format: "csv" | "xlsx";
     ids?: Array<string | number>;
@@ -188,6 +192,8 @@ export const createLessonProgram = (payload: CreateLessonProgramPayload) =>
         headers: lessonHeaders(),
         credentials: "include",
     });
+
+export const updateLessonProgramSubject = (programCode: string, payload: LessonProgramSubjectUpdatePayload) => fetchInstance(`${API_BASE_URL}/options/programs/${encodeURIComponent(programCode)}/subject`, { method: "PATCH", body: JSON.stringify(payload), headers: lessonHeaders(), credentials: "include" });
 
 export const getLessonCourseMappings = (programCode: string) =>
     fetchInstance(`${API_BASE_URL}/course-mappings?program_code=${encodeURIComponent(programCode)}`, {

@@ -34,6 +34,7 @@ import {
     type CreateLessonProgramPayload,
     reorderLessons,
     updateLesson,
+    updateLessonProgramSubject,
 } from "@/services/lessonService";
 import { useLessonsQuery, useLmsCache, useModuleFieldsQuery } from "@/hooks/useLmsQueries";
 import { useLessonProgramOptions } from "@/hooks/useLessonSubjectOptions";
@@ -45,6 +46,7 @@ import LessonCourseMappingModal from "./components/Modal/LessonCourseMappingModa
 import ScormNameSyncModal from "./components/Modal/ScormNameSyncModal";
 import ProgramCreateModal from "./components/Modal/ProgramCreateModal";
 import ProgramImportModal from "./components/Modal/ProgramImportModal";
+import ProgramSubjectModal from "./components/Modal/ProgramSubjectModal";
 import LessonTable from "./components/LessonTable";
 import {
     DEFAULT_MODULE_FIELDS,
@@ -130,6 +132,7 @@ const Page = () => {
     const [openFilterDrawer, setOpenFilterDrawer] = useState(false);
     const [openFormModal, setOpenFormModal] = useState(false);
     const [openProgramModal, setOpenProgramModal] = useState(false);
+    const [openProgramSubjectModal, setOpenProgramSubjectModal] = useState(false);
     const [openProgramImportModal, setOpenProgramImportModal] = useState(false);
     const [openImportModal, setOpenImportModal] = useState(false);
     const [openCourseMappingModal, setOpenCourseMappingModal] = useState(false);
@@ -680,6 +683,20 @@ const Page = () => {
         }
     };
 
+    const handleUpdateProgramSubject = async (subjectName: string) => {
+        const programCode = String(submittedFilterValues.subject_code || "").trim();
+        if (!programCode) return;
+        try {
+            setSaving(true);
+            const response: any = await updateLessonProgramSubject(programCode, { subject_name: subjectName });
+            const updated = response?.data;
+            const next = cleanFilterValues({ ...submittedFilterValues, subject: updated?.subject_name || subjectName });
+            setFilterValues(next); setSubmittedFilterValues(next); setOpenProgramSubjectModal(false);
+            await Promise.all([refreshLessons(), refreshSchedules()]);
+            api.success({ message: "Đã cập nhật môn học", description: `Đã cập nhật ${updated?.lessons_updated || 0} bài và ${updated?.calendars_updated || 0} lịch.` });
+        } catch (error: any) { api.error({ message: "Không thể cập nhật môn học", description: error?.message || "Vui lòng thử lại." }); } finally { setSaving(false); }
+    };
+
     const handleCreateProgram = async (payload: CreateLessonProgramPayload) => {
         try {
             setSaving(true);
@@ -1089,6 +1106,7 @@ const Page = () => {
                                 Chương trình: {submittedFilterValues.subject_code}{submittedFilterValues.subject ? ` — ${submittedFilterValues.subject}` : ""}
                             </Tag>
                         )}
+                        {canEdit && submittedFilterValues.subject_code && <Button size="small" onClick={() => setOpenProgramSubjectModal(true)}>Đổi môn học</Button>}
                         {!secondaryUnlocked && !secondaryChecking && (
                             <Button
                                 size="small"
@@ -1255,7 +1273,8 @@ const Page = () => {
                 onClose={() => setOpenProgramModal(false)}
                 onSubmit={handleCreateProgram}
             />
-            <ProgramImportModal
+<ProgramSubjectModal open={openProgramSubjectModal} loading={saving} programCode={String(submittedFilterValues.subject_code || "")} currentSubject={String(submittedFilterValues.subject || lessonPrograms.find((item) => item.subject_code === submittedFilterValues.subject_code)?.subject_name || "")} systemType={lessonPrograms.find((item) => item.subject_code === submittedFilterValues.subject_code)?.system_type} grade={lessonPrograms.find((item) => item.subject_code === submittedFilterValues.subject_code)?.grade} onClose={() => setOpenProgramSubjectModal(false)} onSubmit={handleUpdateProgramSubject} />
+                        <ProgramImportModal
                 open={openProgramImportModal}
                 loading={importing}
                 onClose={() => setOpenProgramImportModal(false)}

@@ -27,6 +27,7 @@ export interface DashboardOverview {
             scanned: number;
             created: number;
             updated: number;
+            skipped: number;
             failed: number;
             errors: Array<{ calendar_id: number; message: string }>;
             startedAt: string;
