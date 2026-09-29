@@ -26,6 +26,9 @@ interface CustomTableProps<T extends object> extends TableProps<T> {
   responsiveCards?: boolean;
   /** Tiêu đề ngắn gọn hiển thị trên mỗi thẻ ở màn hình nhỏ. */
   responsiveCardTitle?: (record: T, index: number) => React.ReactNode;
+  responsiveCardExtra?: (record: T, index: number) => React.ReactNode;
+  responsiveCardContent?: (record: T, index: number, controls: { expanded: boolean; toggleExpanded: () => void }) => React.ReactNode;
+  responsiveCardBreakpoint?: "md" | "lg";
 }
 
 const flattenColumns = <T extends object,>(columns: ColumnsType<T>): any[] => (
@@ -58,6 +61,9 @@ function CustomTable<T extends object>({
   dataSource,
   responsiveCards = true,
   responsiveCardTitle,
+  responsiveCardExtra,
+  responsiveCardContent,
+  responsiveCardBreakpoint = "lg",
   pagination,
   rowSelection,
   expandable,
@@ -69,7 +75,7 @@ function CustomTable<T extends object>({
   ...rest
 }: CustomTableProps<T>) {
   const screens = Grid.useBreakpoint();
-  const useCards = responsiveCards && !screens.lg;
+  const useCards = responsiveCards && (responsiveCardBreakpoint === "md" ? !screens.md : !screens.lg);
   const [internalPage, setInternalPage] = useState(1);
   const [internalPageSize, setInternalPageSize] = useState(10);
   const [internalSelectedKeys, setInternalSelectedKeys] = useState<React.Key[]>([]);
@@ -212,6 +218,7 @@ function CustomTable<T extends object>({
                     className="responsive-table-card"
                     size="small"
                     styles={{ body: { padding: screens.md ? 14 : 12 } }}
+                    extra={responsiveCardExtra?.(record, index)}
                     title={rowSelection ? (
                       <Checkbox
                         checked={selectedKeys.includes(key)}
@@ -226,6 +233,7 @@ function CustomTable<T extends object>({
                       </Checkbox>
                     ) : responsiveCardTitle?.(record, index)}
                   >
+                    {responsiveCardContent ? responsiveCardContent(record, index, { expanded: isExpanded, toggleExpanded: () => updateExpanded(key, record) }) : <>
                     <div style={{
                       display: "grid",
                       gridTemplateColumns: screens.md ? "repeat(2, minmax(0, 1fr))" : "minmax(0, 1fr)",
@@ -263,6 +271,7 @@ function CustomTable<T extends object>({
                         )}
                       </div>
                     )}
+                    </>}
                   </Card>
                 </div>
               );

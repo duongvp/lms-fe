@@ -651,20 +651,25 @@ export const swapLivestreamTimes = (payload: {
 
 export type EvgProvisionMode = "skip_existing" | "overwrite";
 
-export const provisionLivestreamEvg = (id: string | number, mode: EvgProvisionMode = "skip_existing") =>
+export const provisionLivestreamEvg = (
+    id: string | number,
+    mode: EvgProvisionMode = "skip_existing",
+    bannerUrl?: string
+) =>
     fetchInstance(`${API_BASE_URL}/${id}/evg-stream`, {
         method: "POST",
-        body: JSON.stringify({ mode }),
+        body: JSON.stringify({ mode, ...(bannerUrl ? { banner_url: bannerUrl } : {}) }),
         headers: { "Content-Type": "application/json" },
         credentials: "include",
     }, "json", 90_000);
 
 export const provisionLivestreamsEvgBulk = (
     ids: Array<string | number>,
-    mode: EvgProvisionMode = "skip_existing"
+    mode: EvgProvisionMode = "skip_existing",
+    bannerUrl?: string
 ) => fetchInstance(`${API_BASE_URL}/evg-stream/bulk`, {
     method: "POST",
-    body: JSON.stringify({ ids, mode }),
+    body: JSON.stringify({ ids, mode, ...(bannerUrl ? { banner_url: bannerUrl } : {}) }),
     headers: { "Content-Type": "application/json" },
     credentials: "include",
 }, "json", 10 * 60_000);

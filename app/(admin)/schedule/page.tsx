@@ -6,8 +6,9 @@ import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import type { FilterDropdownProps } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
+import CustomSearchInput from "@/components/ui/Inputs/CustomSearchInput";
 import { notification, Alert, Card, Form, Input, InputNumber, List, Select, Button, Checkbox, Space, Modal, Radio, Row, Col, DatePicker, TimePicker, Drawer, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress, Table, Spin } from "antd";
-import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, SearchOutlined, SortAscendingOutlined, SortDescendingOutlined, MoreOutlined, ApartmentOutlined, CloudUploadOutlined, SwapOutlined, LinkOutlined } from "@ant-design/icons";
+import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, SearchOutlined, SortAscendingOutlined, SortDescendingOutlined, MoreOutlined, ApartmentOutlined, CloudUploadOutlined, SwapOutlined, LinkOutlined, ClockCircleOutlined, UserOutlined, EyeOutlined, PlusOutlined } from "@ant-design/icons";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -422,6 +423,8 @@ interface ScheduleDataType {
     can_modify?: boolean;
     classroom_assigned?: boolean;
     classroom_assigned_at?: string | null;
+    student_synced_at?: string | null;
+    evg_stream?: string | null;
     [key: string]: any;
 }
 
@@ -590,6 +593,8 @@ const mapScheduleRows = (rows: any[]): ScheduleDataType[] => rows.map((item: any
     can_modify: item.can_modify === true,
     classroom_assigned: item.classroom_assigned === true,
     classroom_assigned_at: item.classroom_assigned_at || null,
+    student_synced_at: item.student_synced_at || null,
+    evg_stream: item.evg_stream || null,
 }));
 const REQUIRED_QUICK_EDIT_FIELDS = new Set([
     "start_time",
@@ -752,7 +757,9 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
                     <Space size={[8, 8]} wrap>
                         <Tag color="blue">{date} · {time}</Tag>
                         <Tag color={statusColor}>{status}</Tag>
+                        {!isCancelled && record.student_synced_at && <Tag color="blue">Đã đồng bộ học viên</Tag>}
                         {!isCancelled && record.classroom_assigned && <Tag color="green">Đã chia lớp</Tag>}
+                        {!isCancelled && record.evg_stream && <Tag color="purple">Đã tạo EVG</Tag>}
                     </Space>
                 </Space>
             </div>
@@ -1130,6 +1137,58 @@ const ScheduleInlineFilters = ({
     );
 };
 
+type EvgBannerOverrideInputProps = {
+    onChange: (bannerUrl: string, isValid: boolean) => void;
+};
+
+const EvgBannerOverrideInput = ({ onChange }: EvgBannerOverrideInputProps) => {
+    const [value, setValue] = useState("");
+    const [previewFailed, setPreviewFailed] = useState(false);
+    const bannerUrl = value.trim();
+    let isValid = true;
+    if (bannerUrl) {
+        try {
+            const parsed = new URL(bannerUrl);
+            isValid = ["http:", "https:"].includes(parsed.protocol);
+        } catch {
+            isValid = false;
+        }
+    }
+
+    useEffect(() => {
+        onChange(bannerUrl, isValid);
+    }, [bannerUrl, isValid, onChange]);
+
+    return <Space direction="vertical" size={8} style={{ width: "100%" }}>
+        <Typography.Text strong>URL background EVG (tùy chọn)</Typography.Text>
+        <Input
+            value={value}
+            status={bannerUrl && !isValid ? "error" : undefined}
+            placeholder="https://.../background.jpg"
+            onChange={(event) => {
+                setPreviewFailed(false);
+                setValue(event.target.value);
+            }}
+        />
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            Dùng khi giáo viên dạy thay. Nếu để trống, hệ thống sẽ lấy banner đã cấu hình theo chương trình và giáo viên; chỉ báo lỗi khi không có cả hai.
+        </Typography.Text>
+        {bannerUrl && !isValid && <Typography.Text type="danger">Nhập URL ảnh hợp lệ, bắt đầu bằng http:// hoặc https://.</Typography.Text>}
+        {bannerUrl && isValid && <div style={{ overflow: "hidden", border: "1px solid #f0f0f0", borderRadius: 8, background: "#fafafa" }}>
+            {previewFailed ? (
+                <Typography.Text type="danger" style={{ display: "block", padding: 12 }}>Không thể tải ảnh từ URL này. Kiểm tra lại liên kết ảnh.</Typography.Text>
+            ) : (
+                <img
+                    src={bannerUrl}
+                    alt="Xem trước background EVG"
+                    style={{ display: "block", width: "100%", height: 144, objectFit: "cover" }}
+                    onError={() => setPreviewFailed(true)}
+                />
+            )}
+        </div>}
+    </Space>;
+};
+
 const Page = () => {
     const pageScrollRef = useRef<HTMLDivElement>(null);
     const [showBackToTop, setShowBackToTop] = useState(false);
@@ -1439,6 +1498,7 @@ const Page = () => {
     const calendarRef = useRef<FullCalendar>(null);
     const screens = Grid.useBreakpoint();
     const isDesktop = Boolean(screens.lg);
+    const isMobile = !screens.md;
 
     useEffect(() => {
         // Content của AdminLayout đã là vùng cuộn chính. Không tạo thêm vùng
@@ -1943,7 +2003,7 @@ const Page = () => {
         date: Dayjs;
         start_time: Dayjs;
         end_time: Dayjs;
-    }) => {
+    }, allowManualProgramSelection = false) => {
         if (!canCreateSchedule) {
             api.warning({
                 message: "Không có quyền",
@@ -1959,7 +2019,7 @@ const Page = () => {
             });
             return false;
         }
-        if (!submittedFilterValues.code) {
+        if (!submittedFilterValues.code && !allowManualProgramSelection) {
             api.warning({
                 message: "Vui lòng chọn Chương trình",
                 description: "Chọn Chương trình trong bộ lọc trước khi thêm lịch học.",
@@ -2001,6 +2061,12 @@ const Page = () => {
 
     const handleAddBtn = () => {
         openCreateScheduleModal();
+    };
+
+    // Mobile không yêu cầu người dùng rời màn hình để chọn chương trình trước.
+    // ScheduleModal đã có trường chọn chương trình trong chính form tạo mới.
+    const handleMobileAddBtn = () => {
+        openCreateScheduleModal(undefined, true);
     };
 
     const handleCalendarDateClick = (info: any) => {
@@ -2746,7 +2812,7 @@ const Page = () => {
             return left.calendarId.localeCompare(right.calendarId, "vi", { numeric: true });
         });
 
-        let updateMode: ClassroomAssignmentUpdateMode = "all";
+        let updateMode: ClassroomAssignmentUpdateMode = "unlearned_only";
         Modal.confirm({
             title: `Tự động chia lớp cho ${items.length} lịch?`,
             icon: <ApartmentOutlined />,
@@ -2760,24 +2826,24 @@ const Page = () => {
                     </Typography.Text>
                     <Card size="small" title="Phạm vi cập nhật" style={{ marginTop: 8 }}>
                         <Radio.Group
-                            defaultValue="all"
+                            defaultValue="unlearned_only"
                             onChange={(event) => {
                                 updateMode = event.target.value as ClassroomAssignmentUpdateMode;
                             }}
                         >
                             <Space direction="vertical" size={10}>
+                                <Radio value="unlearned_only">
+                                    <Typography.Text strong>Chỉ cập nhật học sinh chưa học (Khuyến nghị)</Typography.Text>
+                                    {/* <br />
+                                    <Typography.Text type="secondary">
+                                        Chỉ cập nhật islearn = 0; islearn = 1 của đúng code + learn_number được giữ nguyên.
+                                    </Typography.Text> */}
+                                </Radio>
                                 <Radio value="all">
                                     <Typography.Text strong>Cập nhật tất cả học sinh</Typography.Text>
                                     {/* <br />
                                     <Typography.Text type="secondary">
                                         Nghiệp vụ hiện tại: cập nhật lại room_id và class_id cho toàn bộ học sinh.
-                                    </Typography.Text> */}
-                                </Radio>
-                                <Radio value="unlearned_only">
-                                    <Typography.Text strong>Chỉ cập nhật học sinh chưa học</Typography.Text>
-                                    {/* <br />
-                                    <Typography.Text type="secondary">
-                                        Chỉ cập nhật islearn = 0; islearn = 1 của đúng code + learn_number được giữ nguyên.
                                     </Typography.Text> */}
                                 </Radio>
                             </Space>
@@ -3013,7 +3079,9 @@ const Page = () => {
             const record = getSelectedSchedule(id);
             return [id, record] as const;
         }));
-        let selectedMode: EvgProvisionMode = "skip_existing";
+        let selectedMode: EvgProvisionMode = "overwrite";
+        let bannerUrlOverride = "";
+        let isBannerUrlOverrideValid = true;
         const workflowTargetSelection = [...ids].sort((left, right) => left - right).join(",");
         Modal.confirm({
             title: `Xử lý EVG cho ${ids.length} lịch`,
@@ -3024,21 +3092,29 @@ const Page = () => {
                     selectedMode = event.target.value as EvgProvisionMode;
                 }}>
                     <Space direction="vertical" size={10}>
-                        <Radio value="skip_existing">
-                            <b>Bỏ qua nếu đã có EVG (khuyến nghị)</b><br />
-                            <Typography.Text type="secondary">Chỉ tạo EVG cho lịch chưa có; lịch đã có EVG được giữ nguyên.</Typography.Text>
-                        </Radio>
-                        <Radio value="overwrite">
+                         <Radio value="overwrite">
                             <b>Ghi đè</b><br />
                             <Typography.Text type="danger">Tạo EVG mới cho tất cả lịch đã chọn và thay thế dữ liệu EVG hiện tại.</Typography.Text>
                         </Radio>
+                        <Radio value="skip_existing">
+                            <b>Bỏ qua nếu đã có EVG</b><br />
+                            <Typography.Text type="secondary">Chỉ tạo EVG cho lịch chưa có; lịch đã có EVG được giữ nguyên.</Typography.Text>
+                        </Radio>
                     </Space>
                 </Radio.Group>
+                <EvgBannerOverrideInput onChange={(bannerUrl, isValid) => {
+                    bannerUrlOverride = bannerUrl;
+                    isBannerUrlOverrideValid = isValid;
+                }} />
             </Space>,
             okText: "Thực hiện",
             cancelText: "Hủy",
             onCancel: resumeWorkflowAfterAction,
             onOk: () => {
+                if (!isBannerUrlOverrideValid) {
+                    api.warning({ message: "URL background EVG không hợp lệ" });
+                    return Promise.reject(new Error("URL background EVG không hợp lệ"));
+                }
                 setEvgProgress({ current: 0, total: ids.length, created: 0, skipped: 0, failed: 0, errors: [] });
                 setEvgProgressOpen(true);
                 setProvisioningEvgBulk(true);
@@ -3051,7 +3127,7 @@ const Page = () => {
                             const batch = ids.slice(index, index + 1);
                             const results = await Promise.all(batch.map(async (calendarId) => {
                                 try {
-                                    const response: any = await provisionLivestreamEvg(calendarId, selectedMode);
+                                    const response: any = await provisionLivestreamEvg(calendarId, selectedMode, bannerUrlOverride || undefined);
                                     return { calendarId, result: response?.data || {}, error: null };
                                 } catch (error: any) {
                                     return { calendarId, result: null, error: String(error?.message || error) };
@@ -3649,20 +3725,22 @@ const Page = () => {
     }
 
     columns.push({
-        title: "Phân lớp",
-        key: "classroom_assignment_status",
-        width: 130,
+        title: "Trạng thái xử lý",
+        key: "processing_status",
+        width: 172,
         className: "responsive-card-hidden",
         shouldCellUpdate: shouldUpdateScheduleCell,
         render: (_: unknown, record: ScheduleDataType) => {
             if (Number(record.lesson_status) === 1) return null;
-            return record.classroom_assigned ? (
-                <Tooltip title={record.classroom_assigned_at
-                    ? `Lần chia gần nhất: ${dayjs(record.classroom_assigned_at).format("DD/MM/YYYY HH:mm")}`
-                    : "Buổi học đã được chia lớp"}>
-                    <Tag color="green">Đã chia lớp</Tag>
-                </Tooltip>
-            ) : <Tag>Chưa chia lớp</Tag>;
+            return <Space direction="vertical" size={4}>
+                {record.student_synced_at ? (
+                    <Tooltip title={"Đồng bộ lúc " + dayjs(record.student_synced_at).format("DD/MM/YYYY HH:mm")}><Tag color="blue">Đã đồng bộ học viên</Tag></Tooltip>
+                ) : <Tag>Chưa đồng bộ học viên</Tag>}
+                {record.classroom_assigned ? (
+                    <Tooltip title={record.classroom_assigned_at ? "Lần chia gần nhất: " + dayjs(record.classroom_assigned_at).format("DD/MM/YYYY HH:mm") : "Buổi học đã được chia lớp"}><Tag color="green">Đã chia lớp</Tag></Tooltip>
+                ) : <Tag>Chưa chia lớp</Tag>}
+                {record.evg_stream ? <Tag color="purple">Đã tạo EVG</Tag> : <Tag>Chưa tạo EVG</Tag>}
+            </Space>;
         },
     });
 
@@ -4074,6 +4152,30 @@ const Page = () => {
             if (key === "batch-assign-student-classrooms") handleOpenBatchClassroomAssignment();
         },
     };
+    const exportMenuKeys = new Set(exportMenu.items.flatMap((item: any) => item?.key ? [String(item.key)] : []));
+    const syncMenuKeys = new Set(syncMenu.items.flatMap((item: any) => item?.key ? [String(item.key)] : []));
+    const mobileToolbarMenu = {
+        items: [
+            ...((canImportSchedule || canEditSchedule) ? [{ key: "mobile-import", icon: <UploadOutlined />, label: "Import" }] : []),
+            ...(canExportSchedule ? [{ key: "mobile-export", icon: <DownloadOutlined />, label: "Export", children: exportMenu.items }] : []),
+            { key: "mobile-sync", icon: <DatabaseOutlined />, label: "Đồng bộ", children: syncMenu.items, disabled: selectingAllRows },
+            { type: "divider" as const },
+            ...(canCreateSchedule ? [{ key: "mobile-auto", icon: <CalendarOutlined />, label: "Tạo lịch tự động", disabled: !submittedFilterValues.code }] : []),
+            ...(canEditSchedule ? [{ key: "mobile-bulk-edit", icon: <EditOutlined />, label: "Sửa hàng loạt" }] : []),
+            ...(canDeleteSchedule ? [{ key: "mobile-bulk-delete", icon: <DeleteOutlined />, danger: true, label: "Xóa" + (selectedRowKeys.length ? " (" + selectedRowKeys.length + ")" : ""), disabled: selectingAllRows || !selectedRowKeys.length || !selectedRowsAllModifiable || deletingSelectedSchedules }] : []),
+            { type: "divider" as const },
+            { key: "mobile-refresh", icon: <ReloadOutlined />, label: "Làm mới", disabled: !hasSearched || refreshingScheduleList },
+        ],
+        onClick: ({ key }: { key: string }) => {
+            if (key === "mobile-import") handleOpenScheduleImport();
+            else if (key === "mobile-auto") handleOpenAutoSchedule();
+            else if (key === "mobile-bulk-edit") handleOpenBulkEdit();
+            else if (key === "mobile-bulk-delete") handleDeleteSelected();
+            else if (key === "mobile-refresh") void handleRefreshScheduleList();
+            else if (exportMenuKeys.has(key)) exportMenu.onClick({ key });
+            else if (syncMenuKeys.has(key)) syncMenu.onClick({ key });
+        },
+    };
     const completedClassroomAssignments = batchClassroomItems.filter(
         (item) => ["success", "skipped", "error"].includes(item.status)
     ).length;
@@ -4206,7 +4308,7 @@ const Page = () => {
                                 placeholder={["Từ ngày", "Đến ngày"]}
                                 disabledDate={(date) => Boolean(date?.isAfter(dayjs(), "day"))}
                                 onChange={(dates) => setAttendanceDateRange(dates?.[0] && dates?.[1] ? [dates[0], dates[1]] : undefined)}
-                                style={{ width: "100%" }}
+                                // style={{ width: "" }}
                             />
                             <Typography.Text type="secondary" style={{ display: "block", marginTop: 10 }}>
                                 Phạm vi chương trình: {submittedFilterValues.code || "Tất cả chương trình bạn được phân quyền"}
@@ -4291,6 +4393,17 @@ const Page = () => {
                     </Space>;
                 })()}
             </Modal>
+            {isMobile && canCreateSchedule && (
+                <FloatButton
+                    className="schedule-add-fab"
+                    type="primary"
+                    tooltip="Thêm mới"
+                    aria-label="Thêm mới lịch học"
+                    icon={<PlusOutlined />}
+                    onClick={handleMobileAddBtn}
+                    style={{ right: 16, bottom: showBackToTop ? 80 : 16 }}
+                />
+            )}
             {showBackToTop && (
                 <FloatButton
                     tooltip="Lên đầu trang"
@@ -4354,6 +4467,23 @@ const Page = () => {
                     </div>
                 </div> */}
 
+                {isMobile ? (
+                    <div className="schedule-mobile-toolbar">
+                        <div className="schedule-mobile-search">
+                            <CustomSearchInput
+                                placeholder="Tìm chương trình, bài học, giáo viên, phòng..."
+                                value={searchText}
+                                fetchApi={handleSearch}
+                            />
+                        </div>
+                        <Tooltip title="Lọc lịch học">
+                            <Button className="schedule-mobile-toolbar-button" aria-label="Lọc lịch học" icon={<FilterOutlined />} onClick={() => setOpenFilterDrawer(true)} />
+                        </Tooltip>
+                        <Dropdown trigger={["click"]} menu={mobileToolbarMenu} placement="bottomRight">
+                            <Button className="schedule-mobile-toolbar-button" aria-label="Mở menu thao tác" icon={<MoreOutlined />} loading={refreshingScheduleList || deletingSelectedSchedules} />
+                        </Dropdown>
+                    </div>
+                ) : (
                 <SearchAndActionsBar
                     onSearch={handleSearch}
                     searchValue={searchText}
@@ -4388,7 +4518,7 @@ const Page = () => {
                                         disabled={selectingAllRows || !selectedRowKeys.length || !selectedRowsAllModifiable}
                                         onClick={handleDeleteSelected}
                                     >
-                                        Xóa đã chọn{selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}
+                                        Xóa{selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}
                                     </Button>
                                 )}
                             </div>
@@ -4445,7 +4575,7 @@ const Page = () => {
                                                 key: "bulk-delete",
                                                 icon: <DeleteOutlined />,
                                                 danger: true,
-                                                label: `Xóa đã chọn${selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}`,
+                                                label: `Xóa${selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}`,
                                                 disabled: selectingAllRows || !selectedRowKeys.length || !selectedRowsAllModifiable || deletingSelectedSchedules,
                                             }] : []),
                                         ],
@@ -4476,6 +4606,7 @@ const Page = () => {
                         </div>
                     }
                 />
+                )}
                 {(selectingAllRows || allRowsSelected) && (
                     <Alert
                         style={{ marginTop: 8, marginBottom: 12 }}
@@ -4539,6 +4670,7 @@ const Page = () => {
                     </div>
                 )}
                 <Segmented
+                    size={isMobile ? "small" : "middle"}
                     value={viewMode}
                     options={[
                         { label: "Dạng bảng", value: "table" },
@@ -4772,36 +4904,44 @@ const Page = () => {
                                     <CustomTable<ScheduleDataType>
                                         className="schedule-data-table"
                                         responsiveCardTitle={(record) => (
-                                            <Space size={6} style={{ maxWidth: "100%" }}>
-                                                {record.code && (
-                                                    <Tooltip title={`Nhấn để sao chép ${record.code}`}>
-                                                        <Tag
-                                                            color="blue"
-                                                            role="button"
-                                                            tabIndex={0}
-                                                            aria-label={`Sao chép mã chương trình ${record.code}`}
-                                                            onClick={(event) => {
-                                                                event.stopPropagation();
-                                                                void copyProgramCode(record.code);
-                                                            }}
-                                                            onKeyDown={(event) => {
-                                                                if (event.key !== "Enter" && event.key !== " ") return;
-                                                                event.preventDefault();
-                                                                event.stopPropagation();
-                                                                void copyProgramCode(record.code);
-                                                            }}
-                                                            style={{ marginInlineEnd: 0, cursor: "copy" }}
-                                                        >
-                                                            {record.code}<CopyOutlined style={{ marginInlineStart: 6, fontSize: 11 }} />
-                                                        </Tag>
-                                                    </Tooltip>
-                                                )}
-                                                {Number(record.lesson_status) !== 1 && record.classroom_assigned && <Tag color="green" style={{ marginInlineEnd: 0 }}>Đã chia</Tag>}
-                                                <Typography.Text strong ellipsis style={{ maxWidth: 190 }}>
-                                                    Bài {record.learn_number || "-"}{record.lesson_name ? ` · ${record.lesson_name}` : ""}
-                                                </Typography.Text>
-                                            </Space>
+                                            <Tooltip title={record.code || "Chưa xác định"}>
+                                                <Tag color="blue" className="schedule-mobile-program-tag">{record.code || "Chưa xác định"}</Tag>
+                                            </Tooltip>
                                         )}
+                                        responsiveCardBreakpoint="md"
+                                        responsiveCardExtra={(record) => {
+                                            const status = Number(record.lesson_status) === 1 ? "Nghỉ học" : lessonStatusText(record.start_time, record.end_time);
+                                            const color = status === "Đang diễn ra" ? "green" : status === "Đã kết thúc" ? "default" : status === "Nghỉ học" ? "red" : "blue";
+                                            return <Tag color={color} style={{ marginInlineEnd: 0 }}>{status === "Chưa bắt đầu" ? "Sắp live" : status}</Tag>;
+                                        }}
+                                        responsiveCardContent={(record, _index, controls) => {
+                                            const start = parseCalendarWallTime(record.start_time);
+                                            const end = parseCalendarWallTime(record.end_time);
+                                            const canModify = canModifySchedule(record);
+                                            const canCopy = Boolean(record.end_time && dayjs(record.end_time).isBefore(dayjs()));
+                                            const teacher = String(record.teacher || "").trim();
+                                            return <div className="schedule-mobile-lesson-card">
+                                                <Typography.Text strong className="schedule-mobile-lesson-title">
+                                                    {record.lesson_name || "Bài " + (record.learn_number || "-")}
+                                                </Typography.Text>
+                                                <div className="schedule-mobile-lesson-meta">
+                                                    <span><CalendarOutlined /> {start.isValid() ? start.format("DD/MM/YYYY") + " (" + liveWeekdayLabel(record.start_time) + ")" : "Chưa có ngày"}</span>
+                                                    <span><ClockCircleOutlined /> {start.isValid() && end.isValid() ? start.format("HH:mm") + " - " + end.format("HH:mm") : "Chưa có giờ"}</span>
+                                                </div>
+                                                {teacher && teacher !== "-" && <div className="schedule-mobile-lesson-teacher"><UserOutlined /> GV: {teacher}</div>}
+                                                <div className="schedule-mobile-lesson-footer">
+                                                    <Space size={2}>
+                                                        {canCopy && <Tooltip title="Sao chép lịch"><Button type="text" size="small" icon={<CopyOutlined />} aria-label="Sao chép lịch" onClick={(event) => { event.stopPropagation(); handleCopySchedule(record); }} /></Tooltip>}
+                                                        {canModify && canEditSchedule && editableFieldCodes.length > 0 && <Tooltip title="Sửa nhanh"><Button type="text" size="small" icon={<EditOutlined />} aria-label="Sửa lịch" onClick={(event) => { event.stopPropagation(); edit(record); }} /></Tooltip>}
+                                                        {canModify && canDeleteSchedule && <Tooltip title="Xóa"><Button type="text" danger size="small" icon={<DeleteOutlined />} aria-label="Xóa lịch" onClick={(event) => { event.stopPropagation(); handleDelete(record); }} /></Tooltip>}
+                                                    </Space>
+                                                    <Button type="link" size="small" icon={<EyeOutlined />} onClick={(event) => { event.stopPropagation(); controls.toggleExpanded(); }}>
+                                                        {controls.expanded ? "Ẩn chi tiết" : "Xem chi tiết"}
+                                                    </Button>
+                                                </div>
+                                                {controls.expanded && <div className="schedule-mobile-lesson-detail"><ScheduleDetailRow record={record} /></div>}
+                                            </div>;
+                                        }}
                                         columns={isDesktop ? desktopColumns : columns}
                                         tableLayout="fixed"
                                         dataSource={tableDisplayData}

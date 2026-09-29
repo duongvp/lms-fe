@@ -1,7 +1,7 @@
 "use client";
 
 import { PlusOutlined, SyncOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Checkbox, DatePicker, Empty, Form, Grid, Input, InputNumber, message, Modal, Progress, Select, Space, Spin, Table, TimePicker, Typography } from "antd";
+import { Alert, Button, Card, Checkbox, DatePicker, Empty, Form, Grid, Input, InputNumber, message, Modal, Progress, Radio, Select, Space, Spin, Table, TimePicker, Typography } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import {
     commitAutoSchedule,
@@ -759,8 +759,8 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
         ))
             .filter((value) => Number.isInteger(value) && value >= 1 && value <= 7);
         const topuniWeekInterval = Number(values.topuni_week_interval || 1);
-        if (values.system_type === "topuni" && ![1, 2].includes(topuniWeekInterval)) {
-            throw new Error("Nhịp học TopUni chỉ hỗ trợ hàng tuần hoặc cách tuần.");
+        if (values.system_type === "topuni" && (!Number.isInteger(topuniWeekInterval) || topuniWeekInterval < 1 || topuniWeekInterval > 52)) {
+            throw new Error("Tần suất học TopUni phải là số nguyên từ 1 đến 52 tuần.");
         }
         if (values.system_type === "topuni" && !topuniWeekdays.length) {
             throw new Error("Vui lòng chọn ít nhất một thứ học hàng tuần cho TopUni.");
@@ -1057,7 +1057,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                         start_date: dayjs(),
                         topuni_weekdays: [],
                         topuni_week_interval: 1,
-                        topuni_gap_weeks: 0,
+                        topuni_schedule_frequency: "weekly",
                         holiday_handling: "create_canceled",
                         holiday_periods: [],
                         customize_lesson_names: false,
@@ -1164,25 +1164,78 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                         onChange={(checked) => syncTopuniScheduleWeekdays(checked as Array<number | string>)}
                                     />
                                 </Form.Item>
-                                <Form.Item
-                                    name="topuni_gap_weeks"
-                                    label="Số tuần nghỉ giữa hai lần học"
-                                    tooltip="Nhập 0 để học hằng tuần; nhập 1 để nghỉ một tuần rồi học tuần kế tiếp."
-                                >
-                                    <InputNumber
-                                        min={0}
-                                        max={51}
-                                        precision={0}
-                                        addonAfter="tuần"
-                                        style={{ width: 180 }}
-                                        onChange={(value) => {
-                                            form.setFieldValue("topuni_week_interval", Math.max(1, Number(value ?? 0) + 1));
+                                <div style={{ minWidth: 360 }}>
+                                {/* Đăng ký field để validateFields() luôn đưa chu kỳ vào payload xem trước/tạo lịch. */}
+                                <Form.Item name="topuni_week_interval" hidden>
+                                    <InputNumber />
+                                </Form.Item>
+                                <Form.Item name="topuni_schedule_frequency" label="Tần suất học">
+                                    <Radio.Group
+                                        onChange={(event) => {
+                                            const frequency = event.target.value;
+                                            const currentInterval = Number(form.getFieldValue("topuni_week_interval") || 1);
+                                            const interval = frequency === "weekly"
+                                                ? 1
+                                                : frequency === "biweekly"
+                                                ? 2
+                                                : Math.max(3, currentInterval);
+                                            form.setFieldsValue({
+                                                topuni_schedule_frequency: frequency,
+                                                topuni_week_interval: interval,
+                                            });
                                             divideIntoBlocks(lessons, 1, lessons.filter(
                                                 (lesson) => Number(lesson.scheduled_count || 0) === 0
                                             ).length);
                                         }}
-                                    />
+                                    >
+                                        <Space wrap align="center">
+                                            <Radio value="weekly">Hàng tuần</Radio>
+                                            <Radio value="biweekly">Cách tuần</Radio>
+                                            <Radio value="custom">Tùy chọn</Radio>
+                                            <Form.Item noStyle shouldUpdate={(previous, current) => (
+                                                previous.topuni_schedule_frequency !== current.topuni_schedule_frequency
+                                                || previous.topuni_week_interval !== current.topuni_week_interval
+                                            )}>
+                                                {({ getFieldValue }) => {
+                                                    const frequency = getFieldValue("topuni_schedule_frequency");
+                                                    const interval = Math.max(3, Number(getFieldValue("topuni_week_interval") || 3));
+                                                    return frequency === "custom" ? (
+                                                        <Space size={8} align="center">
+                                                            <Typography.Text>Lặp lại mỗi</Typography.Text>
+                                                            <InputNumber
+                                                                min={3}
+                                                                max={52}
+                                                                precision={0}
+                                                                value={interval}
+                                                                addonAfter="tuần"
+                                                                style={{ width: 180 }}
+                                                                onChange={(value) => {
+                                                                    form.setFieldValue("topuni_week_interval", Math.max(3, Number(value ?? 3)));
+                                                                    divideIntoBlocks(lessons, 1, lessons.filter(
+                                                                        (lesson) => Number(lesson.scheduled_count || 0) === 0
+                                                                    ).length);
+                                                                }}
+                                                            />
+                                                        </Space>
+                                                    ) : null;
+                                                }}
+                                            </Form.Item>
+                                        </Space>
+                                    </Radio.Group>
                                 </Form.Item>
+                                <Form.Item noStyle shouldUpdate={(previous, current) => (
+                                    previous.topuni_schedule_frequency !== current.topuni_schedule_frequency
+                                    || previous.topuni_week_interval !== current.topuni_week_interval
+                                )}>
+                                    {({ getFieldValue }) => {
+                                        const frequency = getFieldValue("topuni_schedule_frequency");
+                                        const interval = Math.max(1, Number(getFieldValue("topuni_week_interval") || 1));
+                                        return <Typography.Text type="secondary" style={{ display: "block", marginTop: -12, marginBottom: 12 }}>
+                                            Lịch sẽ lặp lại sau {interval} tuần kể từ mỗi buổi học.
+                                        </Typography.Text>;
+                                    }}
+                                </Form.Item>
+                                </div>
                             </>
                         )}
                     </Space>

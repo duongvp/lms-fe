@@ -242,7 +242,7 @@ body {
 
   .responsive-search-actions .schedule-utility-actions {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 44px 44px;
+    grid-template-columns: minmax(0, 1fr) 40px 40px;
     gap: 8px;
   }
 
@@ -810,4 +810,171 @@ body {
   display: none !important;
   width: 0 !important;
   height: 0 !important;
+}
+
+
+/* schedule page mobile toolbar */
+@media (max-width: 767px) {
+  .schedule-mobile-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px 44px;
+    align-items: stretch;
+    gap: 8px;
+    width: 100%;
+    margin-bottom: 12px;
+  }
+
+  .schedule-mobile-toolbar button {
+    width: auto !important;
+  }
+
+  .schedule-mobile-search,
+  .schedule-mobile-search > div,
+  .schedule-mobile-search .ant-input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .schedule-mobile-search .ant-input,
+  .schedule-mobile-toolbar-button {
+    height: 40px;
+    min-height: 40px;
+    border-radius: 8px;
+  }
+
+  .schedule-mobile-toolbar-button {
+    width: 40px;
+    padding-inline: 0;
+    font-size: 16px;
+  }
+
+  .schedule-mobile-toolbar-button > .anticon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+
+  .responsive-schedule-view-toolbar {
+    align-items: stretch !important;
+    flex-direction: column;
+    gap: 8px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .responsive-schedule-view-toolbar > .ant-segmented {
+    align-self: stretch;
+    width: 100%;
+    min-height: 36px;
+  }
+
+  .responsive-schedule-view-toolbar > .ant-segmented .ant-segmented-group {
+    width: 100%;
+  }
+
+  .responsive-schedule-view-toolbar > .ant-segmented .ant-segmented-item {
+    flex: 1 1 50%;
+    min-width: 0;
+    text-align: center;
+  }
+
+  .responsive-schedule-view-toolbar > .ant-segmented .ant-segmented-item-label {
+    min-height: 32px;
+    line-height: 32px;
+  }
+
+  .schedule-add-fab {
+    width: 48px;
+    height: 48px;
+  }
+
+  .schedule-add-fab .ant-float-btn-body .ant-float-btn-icon {
+    width: auto;
+    font-size: 21px;
+  }
+
+  .responsive-calendar-legend {
+    gap: 6px 12px !important;
+  }
+}
+
+/* schedule mobile lesson cards */
+@media (max-width: 767px) {
+  .schedule-data-table .responsive-table-card {
+    border: 1px solid #edf0f5;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  }
+
+  .schedule-data-table .responsive-table-card .ant-card-head {
+    min-height: 42px;
+    padding: 0 12px;
+    border-bottom-color: #f0f2f5;
+  }
+
+  .schedule-data-table .responsive-table-card .ant-card-head-title,
+  .schedule-data-table .responsive-table-card .ant-card-extra {
+    min-width: 0;
+    padding: 9px 0;
+  }
+
+  .schedule-data-table .responsive-table-card .ant-checkbox-wrapper {
+    max-width: 100%;
+  }
+
+  .schedule-mobile-program-tag {
+    display: block;
+    max-width: min(52vw, 210px);
+    margin-inline-end: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .schedule-mobile-lesson-card { min-width: 0; }
+  .schedule-mobile-lesson-title {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: 15px;
+    line-height: 1.42;
+  }
+
+  .schedule-mobile-lesson-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    margin-top: 10px;
+    color: rgba(0, 0, 0, 0.65);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .schedule-mobile-lesson-meta span,
+  .schedule-mobile-lesson-teacher { white-space: nowrap; }
+  .schedule-mobile-lesson-meta .anticon,
+  .schedule-mobile-lesson-teacher .anticon { margin-right: 4px; color: #1677ff; }
+
+  .schedule-mobile-lesson-teacher {
+    margin-top: 7px;
+    overflow: hidden;
+    color: rgba(0, 0, 0, 0.72);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .schedule-mobile-lesson-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 38px;
+    margin-top: 11px;
+    padding-top: 7px;
+    border-top: 1px solid #f0f2f5;
+  }
+
+  .schedule-mobile-lesson-footer .ant-btn { min-width: 36px; min-height: 32px; }
+  .schedule-mobile-lesson-footer .ant-btn-link { min-width: auto; padding-inline: 4px; }
+  .schedule-mobile-lesson-detail { margin-top: 10px; border-top: 1px solid #f0f2f5; }
 }
