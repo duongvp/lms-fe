@@ -6,347 +6,592 @@ const LESSON_REAUTH_STORAGE_KEY = "lms.lessons.reauth";
 // localStorage được chia sẻ giữa các tab cùng origin. Token vẫn được backend
 // buộc vào auth session hiện tại, nên logout hoặc session mới sẽ vô hiệu hóa nó.
 const getLessonReauthToken = () => {
-    if (typeof window === "undefined") return "";
-    const sharedToken = localStorage.getItem(LESSON_REAUTH_STORAGE_KEY) || "";
-    if (sharedToken) return sharedToken;
-    // Tương thích với token đã xác thực ở phiên bản trước (sessionStorage).
-    const legacyToken = sessionStorage.getItem(LESSON_REAUTH_STORAGE_KEY) || "";
-    if (legacyToken) {
-        localStorage.setItem(LESSON_REAUTH_STORAGE_KEY, legacyToken);
-        sessionStorage.removeItem(LESSON_REAUTH_STORAGE_KEY);
-    }
-    return legacyToken;
+  if (typeof window === "undefined") return "";
+  const sharedToken = localStorage.getItem(LESSON_REAUTH_STORAGE_KEY) || "";
+  if (sharedToken) return sharedToken;
+  // Tương thích với token đã xác thực ở phiên bản trước (sessionStorage).
+  const legacyToken = sessionStorage.getItem(LESSON_REAUTH_STORAGE_KEY) || "";
+  if (legacyToken) {
+    localStorage.setItem(LESSON_REAUTH_STORAGE_KEY, legacyToken);
+    sessionStorage.removeItem(LESSON_REAUTH_STORAGE_KEY);
+  }
+  return legacyToken;
 };
 
 const lessonHeaders = (json = true) => ({
-    ...(json ? { "Content-Type": "application/json" } : {}),
-    ...(getLessonReauthToken() ? { "X-Lessons-Reauth": getLessonReauthToken() } : {}),
+  ...(json ? { "Content-Type": "application/json" } : {}),
+  ...(getLessonReauthToken()
+    ? { "X-Lessons-Reauth": getLessonReauthToken() }
+    : {}),
 });
 
 export const clearLessonReauthToken = () => {
-    if (typeof window !== "undefined") {
-        localStorage.removeItem(LESSON_REAUTH_STORAGE_KEY);
-        sessionStorage.removeItem(LESSON_REAUTH_STORAGE_KEY);
-    }
+  if (typeof window !== "undefined") {
+    localStorage.removeItem(LESSON_REAUTH_STORAGE_KEY);
+    sessionStorage.removeItem(LESSON_REAUTH_STORAGE_KEY);
+  }
 };
 
 export const hasLessonReauthToken = () => Boolean(getLessonReauthToken());
 
 export const reauthenticateLessons = async (password: string) => {
-    const response: any = await fetchInstance(`${API_BASE_URL}/reauth`, {
-        method: "POST",
-        body: JSON.stringify({ password }),
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-    });
-    const token = String(response?.data?.token || "");
-    if (!token) throw new Error("Backend không trả token xác thực cấp 2");
-    localStorage.setItem(LESSON_REAUTH_STORAGE_KEY, token);
-    return response.data as { token: string; expiresInSeconds: number | null };
+  const response: any = await fetchInstance(`${API_BASE_URL}/reauth`, {
+    method: "POST",
+    body: JSON.stringify({ password }),
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+  });
+  const token = String(response?.data?.token || "");
+  if (!token) throw new Error("Backend không trả token xác thực cấp 2");
+  localStorage.setItem(LESSON_REAUTH_STORAGE_KEY, token);
+  return response.data as { token: string; expiresInSeconds: number | null };
 };
 
 export const validateLessonReauthentication = () =>
-    fetchInstance(`${API_BASE_URL}/reauth`, {
-        method: "GET",
-        headers: lessonHeaders(),
-        credentials: "include",
-        cache: "no-store",
-    });
+  fetchInstance(`${API_BASE_URL}/reauth`, {
+    method: "GET",
+    headers: lessonHeaders(),
+    credentials: "include",
+    cache: "no-store",
+  });
 
 export interface LessonApiResponse {
-    id: string;
-    grade: number | null;
-    system_type: "topclass" | "topuni";
-    subject_code: string;
-    subject_name: string;
-    learn_number: number;
-    lesson_name: string;
-    scheduled_count?: number | string;
-    past_scheduled_count?: number | string;
-    status: number;
-    created_at: string;
-    updated_at: string;
+  id: string;
+  grade: number | null;
+  system_type: "topclass" | "topuni";
+  subject_code: string;
+  subject_name: string;
+  learn_number: number;
+  lesson_name: string;
+  scheduled_count?: number | string;
+  past_scheduled_count?: number | string;
+  status: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface LessonListParams {
-    page?: number;
-    limit?: number;
-    keyword?: string;
-    course_code?: string;
-    grade?: number | string;
-    subject_code?: string;
-    subject?: string;
-    learn_number?: number | string;
-    from_learn_number?: number | string;
-    to_learn_number?: number | string;
-    sort_by?: string;
-    sort_order?: string;
+  page?: number;
+  limit?: number;
+  keyword?: string;
+  course_code?: string;
+  grade?: number | string;
+  subject_code?: string;
+  subject?: string;
+  learn_number?: number | string;
+  from_learn_number?: number | string;
+  to_learn_number?: number | string;
+  sort_by?: string;
+  sort_order?: string;
 }
 
 export interface LessonSubjectOption {
-    subject_name: string;
-    subject_code: string;
+  subject_name: string;
+  subject_code: string;
 }
 
 export interface LessonProgramOption extends LessonSubjectOption {
-    grade?: number | null;
-    system_type?: "topclass" | "topuni" | null;
+  grade?: number | null;
+  system_type?: "topclass" | "topuni" | null;
 }
 
 export interface CreateLessonProgramPayload {
-    grade?: number;
-    system_type: "topclass" | "topuni";
-    subject_code: string;
-    subject_name: string;
-    lesson_name: string;
+  grade?: number;
+  system_type: "topclass" | "topuni";
+  subject_code: string;
+  subject_name: string;
+  lesson_name: string;
 }
 
 export interface LessonProgramSubjectUpdatePayload {
-    subject_name: string;
+  subject_name: string;
 }
 
 export interface LessonExportParams extends LessonListParams {
-    format: "csv" | "xlsx";
-    ids?: Array<string | number>;
+  format: "csv" | "xlsx";
+  ids?: Array<string | number>;
 }
 
 export interface LessonPayload {
-    grade?: number;
-    system_type?: "topclass" | "topuni";
-    subject_code: string;
-    subject_name: string;
-    learn_number?: number;
-    lesson_name: string;
+  grade?: number;
+  system_type?: "topclass" | "topuni";
+  subject_code: string;
+  subject_name: string;
+  learn_number?: number;
+  lesson_name: string;
 }
 
 export interface LessonBulkUpdatePayload {
-    ids: Array<string | number>;
-    data: Partial<LessonPayload> & { status?: number };
+  ids: Array<string | number>;
+  data: Partial<LessonPayload> & { status?: number };
 }
 
 export interface LessonReorderPayload {
-    grade?: number;
-    subject_code: string;
-    mode?: "insert" | "swap";
-    renumber?: boolean;
-    ordered_ids: Array<string | number>;
+  grade?: number;
+  subject_code: string;
+  mode?: "insert" | "swap";
+  renumber?: boolean;
+  ordered_ids: Array<string | number>;
 }
 
 export interface LessonCourseMapping {
-    id: string;
-    lesson_id: string;
-    package_id: string;
-    course_id: string;
-    learn_number: number;
-    lesson_name: string;
+  id: string;
+  lesson_id: string;
+  package_id: string;
+  course_id: string;
+  learn_number: number;
+  lesson_name: string;
 }
 
 export interface LessonCourseMappingPayload {
-    program_code: string;
-    action: "add" | "delete";
-    package_id: string;
-    course_id: string;
-    lesson_ids?: Array<string | number>;
+  program_code: string;
+  action: "add" | "delete";
+  package_id: string;
+  course_id: string;
+  lesson_ids?: Array<string | number>;
 }
 
 const buildQuery = (params: LessonListParams) => {
-    const query = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-        if (value === undefined || value === null || value === "") return;
-        if (Array.isArray(value)) {
-            if (value.length) query.append(key, value.join(","));
-            return;
-        }
-        query.append(key, String(value));
-    });
-    return query.toString();
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    if (Array.isArray(value)) {
+      if (value.length) query.append(key, value.join(","));
+      return;
+    }
+    query.append(key, String(value));
+  });
+  return query.toString();
 };
 
 export const getLessons = (params: LessonListParams) =>
-    fetchInstance(`${API_BASE_URL}?${buildQuery(params)}`, {
-        method: "GET",
-        headers: lessonHeaders(),
-        credentials: "include",
-    });
+  fetchInstance(`${API_BASE_URL}?${buildQuery(params)}`, {
+    method: "GET",
+    headers: lessonHeaders(),
+    credentials: "include",
+  });
 
 export const getLessonSubjects = () =>
-    fetchInstance(`${API_BASE_URL}/options/subjects`, {
-        method: "GET",
-        headers: lessonHeaders(),
-        credentials: "include",
-        cache: "no-store",
-    });
+  fetchInstance(`${API_BASE_URL}/options/subjects`, {
+    method: "GET",
+    headers: lessonHeaders(),
+    credentials: "include",
+    cache: "no-store",
+  });
 
 export const getLessonPrograms = () =>
-    fetchInstance(`${API_BASE_URL}/options/programs`, {
-        method: "GET",
-        headers: lessonHeaders(),
-        credentials: "include",
-        cache: "no-store",
-    });
+  fetchInstance(`${API_BASE_URL}/options/programs`, {
+    method: "GET",
+    headers: lessonHeaders(),
+    credentials: "include",
+    cache: "no-store",
+  });
 
 export const createLessonProgram = (payload: CreateLessonProgramPayload) =>
-    fetchInstance(`${API_BASE_URL}/options/programs`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-        headers: lessonHeaders(),
-        credentials: "include",
-    });
+  fetchInstance(`${API_BASE_URL}/options/programs`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    headers: lessonHeaders(),
+    credentials: "include",
+  });
 
-export const updateLessonProgramSubject = (programCode: string, payload: LessonProgramSubjectUpdatePayload) => fetchInstance(`${API_BASE_URL}/options/programs/${encodeURIComponent(programCode)}/subject`, { method: "PATCH", body: JSON.stringify(payload), headers: lessonHeaders(), credentials: "include" });
+export const updateLessonProgramSubject = (
+  programCode: string,
+  payload: LessonProgramSubjectUpdatePayload,
+) =>
+  fetchInstance(
+    `${API_BASE_URL}/options/programs/${encodeURIComponent(programCode)}/subject`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+      headers: lessonHeaders(),
+      credentials: "include",
+    },
+  );
 
 export const getLessonCourseMappings = (programCode: string) =>
-    fetchInstance(`${API_BASE_URL}/course-mappings?program_code=${encodeURIComponent(programCode)}`, {
-        method: "GET",
-        headers: lessonHeaders(),
-        credentials: "include",
-        cache: "no-store",
-    });
+  fetchInstance(
+    `${API_BASE_URL}/course-mappings?program_code=${encodeURIComponent(programCode)}`,
+    {
+      method: "GET",
+      headers: lessonHeaders(),
+      credentials: "include",
+      cache: "no-store",
+    },
+  );
 
-export const updateLessonCourseMappings = (payload: LessonCourseMappingPayload) =>
-    fetchInstance(`${API_BASE_URL}/course-mappings`, {
-        method: "PUT",
-        body: JSON.stringify(payload),
-        headers: lessonHeaders(),
-        credentials: "include",
-    });
+export const updateLessonCourseMappings = (
+  payload: LessonCourseMappingPayload,
+) =>
+  fetchInstance(`${API_BASE_URL}/course-mappings`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+    headers: lessonHeaders(),
+    credentials: "include",
+  });
 
 export const getLessonById = (id: string | number) =>
-    fetchInstance(`${API_BASE_URL}/${id}`, {
-        method: "GET",
-        headers: lessonHeaders(),
-        credentials: "include",
-    });
+  fetchInstance(`${API_BASE_URL}/${id}`, {
+    method: "GET",
+    headers: lessonHeaders(),
+    credentials: "include",
+  });
 
 export const createLesson = (payload: LessonPayload) =>
-    fetchInstance(`${API_BASE_URL}`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-        headers: lessonHeaders(),
-        credentials: "include",
-    });
+  fetchInstance(`${API_BASE_URL}`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    headers: lessonHeaders(),
+    credentials: "include",
+  });
 
-export const updateLesson = (id: string | number, payload: Partial<LessonPayload>) =>
-    fetchInstance(`${API_BASE_URL}/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(payload),
-        headers: lessonHeaders(),
-        credentials: "include",
-    }, "json", 120_000);
+export const updateLesson = (
+  id: string | number,
+  payload: Partial<LessonPayload>,
+) =>
+  fetchInstance(
+    `${API_BASE_URL}/${id}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+      headers: lessonHeaders(),
+      credentials: "include",
+    },
+    "json",
+    120_000,
+  );
 
 export const bulkUpdateLessons = (payload: LessonBulkUpdatePayload) =>
-    fetchInstance(`${API_BASE_URL}/bulk`, {
-        method: "PATCH",
-        body: JSON.stringify(payload),
-        headers: lessonHeaders(),
-        credentials: "include",
-    });
+  fetchInstance(`${API_BASE_URL}/bulk`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+    headers: lessonHeaders(),
+    credentials: "include",
+  });
 
 export const reorderLessons = (payload: LessonReorderPayload) =>
-    fetchInstance(`${API_BASE_URL}/reorder`, {
-        method: "PATCH",
-        body: JSON.stringify(payload),
-        headers: lessonHeaders(),
-        credentials: "include",
-    });
+  fetchInstance(`${API_BASE_URL}/reorder`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+    headers: lessonHeaders(),
+    credentials: "include",
+  });
 
 export const deleteLesson = (id: string | number) =>
-    fetchInstance(`${API_BASE_URL}/${id}`, {
-        method: "DELETE",
-        headers: lessonHeaders(),
-        credentials: "include",
-    });
+  fetchInstance(`${API_BASE_URL}/${id}`, {
+    method: "DELETE",
+    headers: lessonHeaders(),
+    credentials: "include",
+  });
 
 export const exportLessons = (params: LessonExportParams) =>
-    fetchInstance(`${API_BASE_URL}/export?${buildQuery(params)}`, {
-        method: "GET",
-        headers: lessonHeaders(false),
-        credentials: "include",
-    }, "blob");
+  fetchInstance(
+    `${API_BASE_URL}/export?${buildQuery(params)}`,
+    {
+      method: "GET",
+      headers: lessonHeaders(false),
+      credentials: "include",
+    },
+    "blob",
+  );
 
-export const downloadLessonTemplate = (format: "csv" | "xlsx", programCode: string) =>
-    fetchInstance(`${API_BASE_URL}/template?format=${format}&program_code=${encodeURIComponent(programCode)}`, {
-        method: "GET",
-        headers: lessonHeaders(false),
-        credentials: "include",
-    }, "blob");
+export const downloadLessonTemplate = (
+  format: "csv" | "xlsx",
+  programCode: string,
+) =>
+  fetchInstance(
+    `${API_BASE_URL}/template?format=${format}&program_code=${encodeURIComponent(programCode)}`,
+    {
+      method: "GET",
+      headers: lessonHeaders(false),
+      credentials: "include",
+    },
+    "blob",
+  );
 
 export const downloadLessonProgramTemplate = (format: "csv" | "xlsx") =>
-    fetchInstance(`${API_BASE_URL}/program-template?format=${format}`, {
-        method: "GET",
-        headers: lessonHeaders(false),
-        credentials: "include",
-    }, "blob");
+  fetchInstance(
+    `${API_BASE_URL}/program-template?format=${format}`,
+    {
+      method: "GET",
+      headers: lessonHeaders(false),
+      credentials: "include",
+    },
+    "blob",
+  );
 
 export const importLessonsFile = (
-    file: File,
-    mode: "overwrite" | "skip",
-    programCode: string
+  file: File,
+  mode: "overwrite" | "skip",
+  programCode: string,
 ) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("mode", mode);
-    formData.append("program_code", programCode);
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("mode", mode);
+  formData.append("program_code", programCode);
 
-    return fetchInstance(`${API_BASE_URL}/import`, {
-        method: "POST",
-        body: formData,
-        headers: lessonHeaders(false),
-        credentials: "include",
-    });
+  return fetchInstance(`${API_BASE_URL}/import`, {
+    method: "POST",
+    body: formData,
+    headers: lessonHeaders(false),
+    credentials: "include",
+  });
 };
 
 export const importLessonProgramFile = (
-    file: File | undefined,
-    mode: "overwrite" | "skip",
-    program: Partial<Omit<CreateLessonProgramPayload, "lesson_name">> = {},
-    sheetUrl?: string,
+  file: File | undefined,
+  mode: "overwrite" | "skip",
+  program: Partial<Omit<CreateLessonProgramPayload, "lesson_name">> = {},
+  sheetUrl?: string,
 ) => {
-    const formData = new FormData();
-    if (file) formData.append("file", file);
-    if (sheetUrl) formData.append("sheet_url", sheetUrl);
-    formData.append("mode", mode);
-    formData.append("create_program", "true");
-    Object.entries(program).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) formData.append(key, String(value));
-    });
-    return fetchInstance(`${API_BASE_URL}/import`, {
-        method: "POST",
-        body: formData,
-        headers: lessonHeaders(false),
-        credentials: "include",
-    });
+  const formData = new FormData();
+  if (file) formData.append("file", file);
+  if (sheetUrl) formData.append("sheet_url", sheetUrl);
+  formData.append("mode", mode);
+  formData.append("create_program", "true");
+  Object.entries(program).forEach(([key, value]) => {
+    if (value !== undefined && value !== null)
+      formData.append(key, String(value));
+  });
+  return fetchInstance(`${API_BASE_URL}/import`, {
+    method: "POST",
+    body: formData,
+    headers: lessonHeaders(false),
+    credentials: "include",
+  });
 };
 
-export type ScormNamePreview = { sheetName: string; rowNumber: number; type: "TOPCLASS" | "TOPUNI"; courseId: number; lessonId: number; teacherName: string; oldName: string; newName: string };
-export type ScormNameSyncPreviewResult = { sheetsProcessed: number; rowsRead: number; validLessons: number; skippedLessons: number; updates: ScormNamePreview[]; warnings: Array<{ message: string }> };
-export const getScormNameSyncSheets = () => fetchInstance(`${API_BASE_URL}/scorm-name-sync/sheets`, { method: "GET", headers: lessonHeaders(), credentials: "include", cache: "no-store" });
-export const previewScormNameSync = (sheet_names: string[]) => fetchInstance(`${API_BASE_URL}/scorm-name-sync/preview`, { method: "POST", body: JSON.stringify({ sheet_names }), headers: lessonHeaders(), credentials: "include" });
-export const applyScormNameSync = (sheet_names: string[]) => fetchInstance(`${API_BASE_URL}/scorm-name-sync/apply`, { method: "POST", body: JSON.stringify({ sheet_names }), headers: lessonHeaders(), credentials: "include" }, "json", 120_000);
-export const getScormNameSyncStatus = (jobId: string) => fetchInstance(`${API_BASE_URL}/scorm-name-sync/status/${encodeURIComponent(jobId)}`, { method: "GET", headers: lessonHeaders(), credentials: "include", cache: "no-store" });
+export type ScormNamePreview = {
+  sheetName: string;
+  rowNumber: number;
+  type: "TOPCLASS" | "TOPUNI";
+  courseId: number;
+  lessonId: number;
+  teacherName: string;
+  oldName: string;
+  newName: string;
+};
+export type ScormNameSyncPreviewResult = {
+  programCode?: string;
+  sheetsProcessed: number;
+  rowsRead: number;
+  validLessons: number;
+  skippedLessons: number;
+  updates: ScormNamePreview[];
+  warnings: Array<{ message: string }>;
+};
+export const getScormNameSyncSheets = () =>
+  fetchInstance(`${API_BASE_URL}/scorm-name-sync/sheets`, {
+    method: "GET",
+    headers: lessonHeaders(),
+    credentials: "include",
+    cache: "no-store",
+  });
+export const previewScormNameSync = (sheet_names: string[]) =>
+  fetchInstance(`${API_BASE_URL}/scorm-name-sync/preview`, {
+    method: "POST",
+    body: JSON.stringify({ sheet_names }),
+    headers: lessonHeaders(),
+    credentials: "include",
+  });
+export const applyScormNameSync = (sheet_names: string[]) =>
+  fetchInstance(
+    `${API_BASE_URL}/scorm-name-sync/apply`,
+    {
+      method: "POST",
+      body: JSON.stringify({ sheet_names }),
+      headers: lessonHeaders(),
+      credentials: "include",
+    },
+    "json",
+    120_000,
+  );
+export const getScormNameSyncStatus = (jobId: string) =>
+  fetchInstance(
+    `${API_BASE_URL}/scorm-name-sync/status/${encodeURIComponent(jobId)}`,
+    {
+      method: "GET",
+      headers: lessonHeaders(),
+      credentials: "include",
+      cache: "no-store",
+    },
+  );
+export type HocmaiScormPreviewStatus = "update" | "unchanged" | "skipped";
+export type HocmaiScormCandidateSession = {
+  key: string;
+  name: string;
+  lessons: Array<{ lessonId: string; name: string; lessonIndex?: number }>;
+};
+export type HocmaiScormPreviewRow = {
+  key: string;
+  learnNumber: number;
+  lessonName: string;
+  teacherName: string;
+  scheduleTime: string;
+  occurrence: number;
+  packageId?: string;
+  courseId?: string;
+  hocmaiLessonId?: string;
+  hocmaiSessionName?: string;
+  currentName?: string;
+  expectedName?: string;
+  status: HocmaiScormPreviewStatus;
+  reason?: string;
+  sharedTarget?: boolean;
+  candidateSessions?: HocmaiScormCandidateSession[];
+};
+export type HocmaiScormPreviewResult = {
+  programCode: string;
+  teacherCount: number;
+  scheduleCount: number;
+  packageCourseCount: number;
+  updateCount: number;
+  unchangedCount: number;
+  skippedCount: number;
+  rows: HocmaiScormPreviewRow[];
+  warnings: string[];
+};
+export const previewHocmaiScormNames = (program_code: string) =>
+  fetchInstance(
+    `${API_BASE_URL}/hocmai-scorm-name-sync/preview`,
+    {
+      method: "POST",
+      body: JSON.stringify({ program_code }),
+      headers: lessonHeaders(),
+      credentials: "include",
+    },
+    "json",
+    120_000,
+  );
+export type HocmaiScormManualOverride = {
+  rowKey: string;
+  lessonId: string;
+  expectedName: string;
+};
+export type HocmaiScormManualResolution = {
+  rowKey: string;
+  lessonId: string;
+  currentName: string;
+  suggestedName: string;
+  sessionName?: string;
+  packageId: string;
+  courseId: string;
+};
+export const resolveManualHocmaiScormLesson = (
+  program_code: string,
+  row_key: string,
+  lesson_id: string,
+) =>
+  fetchInstance(
+    `${API_BASE_URL}/hocmai-scorm-name-sync/resolve-manual`,
+    {
+      method: "POST",
+      body: JSON.stringify({ program_code, row_key, lesson_id }),
+      headers: lessonHeaders(),
+      credentials: "include",
+    },
+    "json",
+    120_000,
+  );
+export type HocmaiScormManualSelection = {
+  rowKey: string;
+  lessonId: string;
+};
+export const resolveManualHocmaiScormLessonsBulk = (
+  program_code: string,
+  selections: HocmaiScormManualSelection[],
+) =>
+  fetchInstance(
+    `${API_BASE_URL}/hocmai-scorm-name-sync/resolve-manual-bulk`,
+    {
+      method: "POST",
+      body: JSON.stringify({ program_code, selections }),
+      headers: lessonHeaders(),
+      credentials: "include",
+    },
+    "json",
+    120_000,
+  );
+export const applyHocmaiScormNames = (
+  program_code: string,
+  manual_overrides: HocmaiScormManualOverride[] = [],
+) =>
+  fetchInstance(
+    `${API_BASE_URL}/hocmai-scorm-name-sync/apply`,
+    {
+      method: "POST",
+      body: JSON.stringify({ program_code, manual_overrides }),
+      headers: lessonHeaders(),
+      credentials: "include",
+    },
+    "json",
+    120_000,
+  );
+export const getHocmaiScormNameSyncStatus = (jobId: string) =>
+  fetchInstance(
+    `${API_BASE_URL}/hocmai-scorm-name-sync/status/${encodeURIComponent(jobId)}`,
+    {
+      method: "GET",
+      headers: lessonHeaders(),
+      credentials: "include",
+      cache: "no-store",
+    },
+  );
+
 export type ScormCourseMappingItem = { packageId: string; courseId: string };
 export type ScormCourseMappingPreviewRow = {
-    lessonId: string;
-    learnNumber: number;
-    lessonName: string;
-    sheetNames: string[];
-    currentMappings: ScormCourseMappingItem[];
-    sheetMappings: ScormCourseMappingItem[];
-    additions: ScormCourseMappingItem[];
-    removals: ScormCourseMappingItem[];
+  lessonId: string;
+  learnNumber: number;
+  lessonName: string;
+  sheetNames: string[];
+  currentMappings: ScormCourseMappingItem[];
+  sheetMappings: ScormCourseMappingItem[];
+  additions: ScormCourseMappingItem[];
+  removals: ScormCourseMappingItem[];
 };
 export type ScormCourseMappingPreviewResult = {
-    programCode: string;
-    sheetsProcessed: number;
-    lessonsTotal: number;
-    matchedLessons: number;
-    unmatchedLessons: number;
-    updatesNeeded: number;
-    rows: ScormCourseMappingPreviewRow[];
-    warnings: Array<{ message: string }>;
-    added?: number;
-    removed?: number;
+  programCode: string;
+  sheetsProcessed: number;
+  lessonsTotal: number;
+  matchedLessons: number;
+  unmatchedLessons: number;
+  updatesNeeded: number;
+  rows: ScormCourseMappingPreviewRow[];
+  warnings: Array<{ message: string }>;
+  added?: number;
+  removed?: number;
 };
-const scormCourseMappingBody = (program_code: string, sheet_names: string[]) => ({ program_code, sheet_names });
-export const previewScormCourseMappings = (programCode: string, sheetNames: string[]) => fetchInstance(`${API_BASE_URL}/scorm-name-sync/course-mappings/preview`, { method: "POST", body: JSON.stringify(scormCourseMappingBody(programCode, sheetNames)), headers: lessonHeaders(), credentials: "include" }, "json", 120_000);
-export const applyScormCourseMappings = (programCode: string, sheetNames: string[]) => fetchInstance(`${API_BASE_URL}/scorm-name-sync/course-mappings/apply`, { method: "POST", body: JSON.stringify(scormCourseMappingBody(programCode, sheetNames)), headers: lessonHeaders(), credentials: "include" }, "json", 120_000);
+const scormCourseMappingBody = (
+  program_code: string,
+  sheet_names: string[],
+) => ({ program_code, sheet_names });
+export const previewScormCourseMappings = (
+  programCode: string,
+  sheetNames: string[],
+) =>
+  fetchInstance(
+    `${API_BASE_URL}/scorm-name-sync/course-mappings/preview`,
+    {
+      method: "POST",
+      body: JSON.stringify(scormCourseMappingBody(programCode, sheetNames)),
+      headers: lessonHeaders(),
+      credentials: "include",
+    },
+    "json",
+    120_000,
+  );
+export const applyScormCourseMappings = (
+  programCode: string,
+  sheetNames: string[],
+) =>
+  fetchInstance(
+    `${API_BASE_URL}/scorm-name-sync/course-mappings/apply`,
+    {
+      method: "POST",
+      body: JSON.stringify(scormCourseMappingBody(programCode, sheetNames)),
+      headers: lessonHeaders(),
+      credentials: "include",
+    },
+    "json",
+    120_000,
+  );

@@ -29,6 +29,20 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Ant Design Mobile được dùng trong các luồng mobile; ép font Latin/Vietnamese
+   và kích thước chạm đọc dễ hơn thay vì fallback font CJK. */
+.adm-popup,
+.adm-popup-body {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.adm-picker {
+  --header-button-font-size: 16px;
+  --title-font-size: 16px;
+  --item-font-size: 17px;
+  --item-height: 38px;
+}
+
 .ant-message {
   bottom: 20px;
   top: initial;
@@ -812,6 +826,127 @@ body {
   height: 0 !important;
 }
 
+
+@media (max-width: 991px) {
+  .schedule-filter-sheet {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 20px 20px 0 0;
+    background: #fff;
+  }
+
+  .schedule-filter-sheet::before {
+    width: 36px;
+    height: 4px;
+    margin: 9px auto 0;
+    border-radius: 999px;
+    background: #d9d9d9;
+    content: "";
+  }
+
+  .schedule-filter-sheet-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .schedule-filter-sheet-header .ant-typography {
+    display: block;
+  }
+
+  .schedule-filter-sheet-header .ant-typography-secondary {
+    margin-top: 3px;
+    font-size: 12px;
+  }
+
+  .schedule-filter-sheet-header .ant-btn {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+  }
+
+  .schedule-filter-sheet-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 16px 16px 8px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .schedule-filter-sheet-body :where(.ant-select-selection-search-input, .ant-select-selection-item, .ant-input, .ant-input-number-input) {
+    font-size: 16px !important;
+  }
+
+  .schedule-filter-sheet-body .ant-select,
+  .schedule-filter-sheet-body .ant-input-number {
+    width: 100%;
+  }
+
+  .schedule-filter-sheet-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    border-top: 1px solid #f0f0f0;
+    background: #fff;
+  }
+
+  .schedule-filter-sheet-actions .ant-btn {
+    min-height: 44px;
+  }
+
+  .schedule-mobile-date-range {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+  }
+
+  .schedule-mobile-date-range button {
+    min-width: 0;
+    min-height: 52px;
+    padding: 8px 10px;
+    border: 1px solid #d9d9d9;
+    border-radius: 8px;
+    background: #fff;
+    color: inherit;
+    text-align: left;
+  }
+
+  .schedule-mobile-date-range button:focus-visible {
+    border-color: #1677ff;
+    outline: 2px solid rgba(22, 119, 255, 0.2);
+  }
+
+  .schedule-mobile-date-range button span,
+  .schedule-mobile-date-range button strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .schedule-mobile-date-range button span {
+    margin-bottom: 3px;
+    color: rgba(0, 0, 0, 0.55);
+    font-size: 12px;
+  }
+
+  .schedule-mobile-date-range button strong {
+    font-size: 16px;
+    font-weight: 500;
+  }
+
+  .schedule-mobile-date-range-divider {
+    color: rgba(0, 0, 0, 0.45);
+    font-size: 12px;
+  }
+}
 
 /* schedule page mobile toolbar */
 @media (max-width: 767px) {

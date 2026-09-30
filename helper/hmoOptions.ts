@@ -23,7 +23,9 @@ export const buildGroupedHmoOptions = (
     const groups = new Map<string, HocmaiSectionOption[]>();
 
     unique.forEach((option) => {
-        const key = `${option.package_id}::${option.course_id}`;
+        const sessionKey = option.section_id
+            || `index:${option.section_index ?? "unknown"}:${option.section_name || ""}`;
+        const key = `${option.package_id}::${option.course_id}::${sessionKey}`;
         const current = groups.get(key) || [];
         current.push(option);
         groups.set(key, current);
@@ -33,11 +35,12 @@ export const buildGroupedHmoOptions = (
         .sort(([left], [right]) => compareIds(left, right))
         .map(([key, options]) => {
             const [packageId, courseId] = key.split("::");
+            const sessionName = options[0]?.section_name || "Không rõ session";
             const sorted = [...options].sort((left, right) => (
                 compareIds(String(left.lesson_id), String(right.lesson_id))
             ));
             return {
-                label: `Package ${packageId} · Course ${courseId} (${sorted.length} Lesson ID)`,
+                label: `Package ${packageId} · Course ${courseId} · ${sessionName} (${sorted.length} Lesson ID)`,
                 options: sorted.map((option) => ({
                     value: hmoOptionKey(option),
                     label: `${option.lesson_id}${option.lesson_name ? ` · ${option.lesson_name}` : ""}`,

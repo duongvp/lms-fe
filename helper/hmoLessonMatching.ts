@@ -5,6 +5,7 @@ export type HmoLessonMatchRow = {
     title: unknown;
     teacher?: unknown;
     occurrence?: number;
+    startTime?: unknown;
 };
 
 export type HmoLessonMatch = {
@@ -19,6 +20,7 @@ export type HmoLessonMatchingResult = {
     courseIds: string[];
     matchesByRow: Map<string, Map<string, HmoLessonMatch>>;
     matchedRowCountByCourse: Map<string, number>;
+    unmatchedReasonsByRow: Map<string, Map<string, 'SESSION_UNCERTAIN'>>;
 };
 
 const canonicalText = (value: unknown) => String(value || '')
@@ -27,6 +29,30 @@ const canonicalText = (value: unknown) => String(value || '')
     .replace(/đ/g, 'd')
     .replace(/Đ/g, 'D')
     .toLowerCase();
+
+const scheduleMonthYear = (value: unknown) => {
+    const date = value instanceof Date ? value : new Date(String(value || ''));
+    if (Number.isNaN(date.getTime())) return undefined;
+    return { month: date.getUTCMonth() + 1, year: date.getUTCFullYear() };
+};
+
+const sectionMonthYear = (value: unknown) => {
+    const normalized = canonicalText(value);
+    const match = /(?:^|\b)thang\s*(\d{1,2})(?:\s*[\/-]\s*(\d{4}))?/.exec(normalized);
+    if (!match) return undefined;
+    const month = Number(match[1]);
+    const year = match[2] ? Number(match[2]) : undefined;
+    return month >= 1 && month <= 12 ? { month, year } : undefined;
+};
+
+const sessionMatchQuality = (startTime: unknown, sectionName: unknown) => {
+    const schedule = scheduleMonthYear(startTime);
+    const section = sectionMonthYear(sectionName);
+    if (!schedule || !section) return 0;
+    if (schedule.month !== section.month) return -1;
+    if (section.year && section.year !== schedule.year) return -1;
+    return section.year === schedule.year ? 2 : 1;
+};
 
 export const normalizeLessonTitle = (value: unknown) => {
     let title = canonicalText(value).trim();
@@ -78,6 +104,9 @@ const teacherMatchQuality = (rowTeacher: string, hmoTeacher: string) => {
     if (rowTeacher === hmoTeacher) return 2;
     return teacherMatches(rowTeacher, hmoTeacher) ? 1 : -1;
 };
+
+const hmoSessionKey = (option: HocmaiSectionOption) => option.section_id
+    || `index:${option.section_index ?? "unknown"}:${option.section_name || ""}`;
 
 const parseHmoTitle = (value: unknown) => {
     const rawTitle = String(value || '').trim();
@@ -152,12 +181,15 @@ type EvaluatedCandidate = {
     exactTitle: boolean;
     teacherMatched: boolean;
     teacherMatchQuality: number;
+    sessionQuality: number;
+    sessionKey: string;
     normalizedHmoTitle: string;
 };
 
 const evaluateCandidate = (
     rowTitle: string,
     rowTeacher: string,
+    rowStartTime: unknown,
     candidate: Candidate,
 ): EvaluatedCandidate | null => {
     let best: EvaluatedCandidate | null = null;
@@ -174,11 +206,19 @@ const evaluateCandidate = (
             exactTitle: rowTitle === parsed.title,
             teacherMatched: Boolean(parsed.teacher && teacherMatches(rowTeacher, parsed.teacher)),
             teacherMatchQuality: matchQuality,
+            sessionQuality: rowStartTime
+                ? sessionMatchQuality(rowStartTime, option.section_name)
+                : 0,
+            sessionKey: hmoSessionKey(option),
             normalizedHmoTitle: parsed.title,
         };
         if (!best
-            || evaluated.teacherMatchQuality > best.teacherMatchQuality
-            || (evaluated.teacherMatchQuality === best.teacherMatchQuality && evaluated.score > best.score)) {
+            || (rowStartTime && evaluated.sessionQuality > best.sessionQuality)
+            || (evaluated.sessionQuality === best.sessionQuality
+                && evaluated.teacherMatchQuality > best.teacherMatchQuality)
+            || (evaluated.sessionQuality === best.sessionQuality
+                && evaluated.teacherMatchQuality === best.teacherMatchQuality
+                && evaluated.score > best.score)) {
             best = evaluated;
         }
     });
@@ -193,6 +233,9 @@ export const matchHmoLessonsByCourse = (
     const courseIds = Array.from(new Set(deduplicatedOptions.map((option) => String(option.course_id))));
     const matchesByRow = new Map(rows.map((row) => [row.key, new Map<string, HmoLessonMatch>()]));
     const matchedRowCountByCourse = new Map<string, number>();
+    const unmatchedReasonsByRow = new Map(
+        rows.map((row) => [row.key, new Map<string, 'SESSION_UNCERTAIN'>()])
+    );
     const normalizedRows = rows.map((row, index) => ({
         ...row,
         index,
@@ -211,11 +254,13 @@ export const matchHmoLessonsByCourse = (
                 return groups;
             }, new Map<string, Candidate>()).values());
 
-        const evaluatedByRow = normalizedRows.map((row) => {
-            const allEvaluated = candidates
+        const rawEvaluatedByRow = normalizedRows.map((row) => ({
+            row,
+            allEvaluated: candidates
                 .map((candidate) => evaluateCandidate(
                     row.normalizedTitle,
                     row.normalizedTeacher,
+                    row.startTime,
                     candidate,
                 ))
                 .filter((candidate): candidate is EvaluatedCandidate => Boolean(candidate))
@@ -224,11 +269,32 @@ export const matchHmoLessonsByCourse = (
                     || Number(right.exactTitle) - Number(left.exactTitle)
                     || right.score - left.score
                     || left.candidate.lessonId.localeCompare(right.candidate.lessonId, 'vi', { numeric: true })
-                ));
-            const bestTeacherQuality = allEvaluated[0]?.teacherMatchQuality;
+                )),
+        }));
+        const trustedSessionKeys = new Set(
+            rawEvaluatedByRow.flatMap(({ allEvaluated }) => allEvaluated
+                .filter((item) => item.sessionQuality === 2)
+                .map((item) => item.sessionKey))
+        );
+        const inferredSessionKey = trustedSessionKeys.size === 1
+            ? Array.from(trustedSessionKeys)[0]
+            : undefined;
+        const evaluatedByRow = rawEvaluatedByRow.map(({ row, allEvaluated }) => {
+            const exactSessionEvaluated = row.startTime
+                ? allEvaluated.filter((item) => item.sessionQuality === 2)
+                : allEvaluated;
+            const sessionEvaluated = exactSessionEvaluated.length
+                ? exactSessionEvaluated
+                : row.startTime && inferredSessionKey
+                    ? allEvaluated.filter((item) => item.sessionKey === inferredSessionKey)
+                    : [];
+            if (row.startTime && allEvaluated.length && !sessionEvaluated.length) {
+                unmatchedReasonsByRow.get(row.key)!.set(courseId, 'SESSION_UNCERTAIN');
+            }
+            const bestTeacherQuality = sessionEvaluated[0]?.teacherMatchQuality;
             let evaluated = bestTeacherQuality === undefined
-                ? allEvaluated
-                : allEvaluated.filter((item) => item.teacherMatchQuality === bestTeacherQuality);
+                ? sessionEvaluated
+                : sessionEvaluated.filter((item) => item.teacherMatchQuality === bestTeacherQuality);
 
             // Hai tên lõi fuzzy khác nhau có điểm sát nhau là trường hợp mơ hồ.
             // Nhiều Lesson ID có cùng một tên lõi vẫn hợp lệ và sẽ được chia theo thứ tự.
@@ -290,7 +356,7 @@ export const matchHmoLessonsByCourse = (
         ).length);
     });
 
-    return { courseIds, matchesByRow, matchedRowCountByCourse };
+    return { courseIds, matchesByRow, matchedRowCountByCourse, unmatchedReasonsByRow };
 };
 
 export const hmoCourseMatchSummary = (

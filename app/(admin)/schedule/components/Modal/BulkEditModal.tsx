@@ -1018,6 +1018,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     title: syncNameSource === 'calendar' ? row.lesson_name : sourceLessonName,
                     teacher: teacherValue(row.teacher),
                     occurrence: hmoCalendarOccurrence(row.lesson_name, row.lesson_count),
+                    startTime: row.start_time,
                 }));
 
                 if (matchingRows.some((row) => !normalizeLessonTitle(row.title))) {
@@ -1040,9 +1041,15 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         const rowMatches = matching.matchesByRow.get(String(row.id));
                         const matchedCourseIds = courseIds.filter((courseId) => rowMatches?.has(courseId));
                         if (!matchedCourseIds.length) {
+                            const uncertainSessionCourseIds = courseIds.filter(
+                                (courseId) => matching.unmatchedReasonsByRow
+                                    .get(String(row.id))?.get(courseId) === 'SESSION_UNCERTAIN'
+                            );
                             notes[String(row.id)] = {
                                 type: 'warning',
-                                message: `Không thể tự gán Lesson ID HMO cho “${row.lesson_name}”: ${hmoCourseMatchSummary(matching)}. Tên cần đạt ít nhất 92%, đúng P1/P2 và đúng giáo viên nếu HMO có hậu tố Cô/Thầy.`,
+                                message: uncertainSessionCourseIds.length
+                                    ? `Không tự gán vì Course ${uncertainSessionCourseIds.join(', ')} không có session Tháng M/YYYY khớp ngày lịch; vui lòng chọn Session/Lesson ID thủ công.`
+                                    : `Không thể tự gán Lesson ID HMO cho “${row.lesson_name}”: ${hmoCourseMatchSummary(matching)}. Tên cần đạt ít nhất 92%, đúng P1/P2 và đúng giáo viên nếu HMO có hậu tố Cô/Thầy.`,
                             };
                             return;
                         }
@@ -1091,6 +1098,10 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     const rowTeacher = teacherValue(row.teacher) || 'chưa xác định';
                     const normalizedSourceTitle = normalizeLessonTitle(sourceLessonName);
                     const details = unmatchedCourseIds.map((courseId) => {
+                        if (matching.unmatchedReasonsByRow
+                            .get(String(row.id))?.get(courseId) === 'SESSION_UNCERTAIN') {
+                            return `Course ${courseId}: không có session Tháng M/YYYY khớp ngày lịch; cần chọn Session/Lesson ID thủ công`;
+                        }
                         const sameTitleOptions = availableOptions.filter((option) => (
                             String(option.course_id) === courseId
                             && normalizeLessonTitle(hmoCoreTitle(option.lesson_name)) === normalizedSourceTitle

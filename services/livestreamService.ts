@@ -125,6 +125,10 @@ export interface HocmaiSectionOption {
     course_id: string;
     lesson_id: string;
     lesson_name?: string;
+    section_id?: string;
+    section_name?: string;
+    section_index?: number;
+    lesson_index?: number;
 }
 
 export interface HocmaiSectionsBatchData {

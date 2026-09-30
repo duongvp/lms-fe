@@ -165,3 +165,59 @@ test('Lịch 2 của đề số 1 không được lấy ứng viên fuzzy đề 
 
     assert.equal(result.matchesByRow.get('second-calendar')?.get('2434')?.lessonId, '167996');
 });
+
+
+test('bài 67 và 81 cùng tên vẫn ghép theo đúng tháng của session', () => {
+    const options = [
+        { package_id: '9149', course_id: '1768', lesson_id: '168530', lesson_name: 'Ôn tập phân số và số thập phân_Cô Dương Thùy Linh', section_name: 'Tháng 2/2027' },
+        { package_id: '9149', course_id: '1768', lesson_id: '168531', lesson_name: 'Ôn tập phân số và số thập phân_Cô Nguyễn Thị Chi', section_name: 'Tháng 2/2027' },
+        { package_id: '9149', course_id: '1768', lesson_id: '168558', lesson_name: 'Ôn tập phân số và số thập phân_Cô Dương Thùy Linh', section_name: 'Tháng 4/2027' },
+        { package_id: '9149', course_id: '1768', lesson_id: '168559', lesson_name: 'Ôn tập phân số và số thập phân_Cô Nguyễn Thị Chi', section_name: 'Tháng 4/2027' },
+    ];
+    const result = matchHmoLessonsByCourse(options, [
+        { key: '67-linh', title: 'Ôn tập phân số và số thập phân..', teacher: 'Dương Thùy Linh', startTime: '2027-02-25T18:00:00.000Z' },
+        { key: '67-chi', title: 'Ôn tập phân số và số thập phân..', teacher: 'Nguyễn Thị Chi', occurrence: 2, startTime: '2027-02-27T20:00:00.000Z' },
+        { key: '81-linh', title: 'Ôn tập phân số và số thập phân..', teacher: 'Dương Thùy Linh', startTime: '2027-04-15T18:00:00.000Z' },
+        { key: '81-chi', title: 'Ôn tập phân số và số thập phân..', teacher: 'Nguyễn Thị Chi', startTime: '2027-04-17T20:00:00.000Z' },
+    ]);
+
+    assert.equal(result.matchesByRow.get('67-linh')?.get('1768')?.lessonId, '168530');
+    assert.equal(result.matchesByRow.get('67-chi')?.get('1768')?.lessonId, '168531');
+    assert.equal(result.matchesByRow.get('81-linh')?.get('1768')?.lessonId, '168558');
+    assert.equal(result.matchesByRow.get('81-chi')?.get('1768')?.lessonId, '168559');
+});
+
+test('session không có dạng Tháng M/YYYY không được modal tự gán', () => {
+    const result = matchHmoLessonsByCourse([{
+        package_id: '9149',
+        course_id: '1768',
+        lesson_id: '900001',
+        lesson_name: 'Ôn tập phân số và số thập phân_Cô Nguyễn Thị Chi',
+        section_name: 'Học tập tương tác',
+    }], [{
+        key: 'uncertain',
+        title: 'Ôn tập phân số và số thập phân..',
+        teacher: 'Nguyễn Thị Chi',
+        startTime: '2027-03-10T20:00:00.000Z',
+    }]);
+
+    assert.equal(result.matchesByRow.get('uncertain')?.has('1768'), false);
+    assert.equal(
+        result.unmatchedReasonsByRow.get('uncertain')?.get('1768'),
+        'SESSION_UNCERTAIN',
+    );
+});
+
+
+test('cùng một bài bắc qua đầu tháng vẫn dùng session duy nhất đã được xác nhận', () => {
+    const result = matchHmoLessonsByCourse([
+        { package_id: '9196', course_id: '3353', lesson_id: '173858', lesson_name: 'Đề luyện cuối kì I_Đề số 04_Cô Dương Thùy Linh', section_id: '1097911', section_name: 'Tháng 12/2026' },
+        { package_id: '9196', course_id: '3353', lesson_id: '173883', lesson_name: 'Đề luyện cuối kì I_Đề số 04_Cô Nguyễn Thị Chi', section_id: '1097911', section_name: 'Tháng 12/2026' },
+    ], [
+        { key: '55-linh', title: 'Đề luyện cuối kì I_Đề số 04..', teacher: 'Dương Thùy Linh', startTime: '2026-12-31T18:00:00.000Z' },
+        { key: '55-chi', title: 'Đề luyện cuối kì I_Đề số 04..', teacher: 'Nguyễn Thị Chi', occurrence: 2, startTime: '2027-01-02T20:00:00.000Z' },
+    ]);
+
+    assert.equal(result.matchesByRow.get('55-linh')?.get('3353')?.lessonId, '173858');
+    assert.equal(result.matchesByRow.get('55-chi')?.get('3353')?.lessonId, '173883');
+});

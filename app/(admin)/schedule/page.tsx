@@ -2,12 +2,14 @@
 import type { FormInstance } from 'antd';
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { ConfigProvider as MobileConfigProvider, DatePicker as MobileDatePicker, Popup as MobilePopup } from "antd-mobile";
+import viVN from "antd-mobile/es/locales/vi-VN";
 import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import type { FilterDropdownProps } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
 import CustomSearchInput from "@/components/ui/Inputs/CustomSearchInput";
-import { notification, Alert, Card, Form, Input, InputNumber, List, Select, Button, Checkbox, Space, Modal, Radio, Row, Col, DatePicker, TimePicker, Drawer, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress, Table, Spin } from "antd";
+import { notification, Alert, Card, Form, Input, InputNumber, List, Select, Button, Checkbox, Space, Modal, Radio, Row, Col, DatePicker, TimePicker, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress, Table, Spin } from "antd";
 import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, SearchOutlined, SortAscendingOutlined, SortDescendingOutlined, MoreOutlined, ApartmentOutlined, CloudUploadOutlined, SwapOutlined, LinkOutlined, ClockCircleOutlined, UserOutlined, EyeOutlined, PlusOutlined } from "@ant-design/icons";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
@@ -843,7 +845,67 @@ function useDebounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
     }, [delay]);
 }
 
-const ScheduleFilterDrawer = ({
+const MobileDateRangePicker = ({
+    value,
+    onChange,
+}: {
+    value?: [Dayjs, Dayjs];
+    onChange?: (value?: [Dayjs, Dayjs]) => void;
+}) => {
+    const [target, setTarget] = useState<"start" | "end" | null>(null);
+    const selectedDate = target === "start" ? value?.[0] : value?.[1];
+    const updateDate = (date: Date) => {
+        const nextDate = dayjs(date).startOf("day");
+        const currentStart = value?.[0];
+        const currentEnd = value?.[1];
+        const nextRange: [Dayjs, Dayjs] = target === "end"
+            ? currentStart && nextDate.isBefore(currentStart)
+                ? [nextDate, nextDate]
+                : [currentStart || nextDate, nextDate]
+            : currentEnd && nextDate.isAfter(currentEnd)
+                ? [nextDate, nextDate]
+                : [nextDate, currentEnd || nextDate];
+        onChange?.(nextRange);
+        setTarget(null);
+    };
+    const displayDate = (date?: Dayjs) => date?.isValid() ? date.format("DD/MM/YYYY") : "Chọn ngày";
+
+    return (
+        <>
+            <div className="schedule-mobile-date-range">
+                <button type="button" onClick={() => setTarget("start")}>
+                    <span>Từ ngày</span>
+                    <strong>{displayDate(value?.[0])}</strong>
+                </button>
+                <span className="schedule-mobile-date-range-divider">đến</span>
+                <button type="button" onClick={() => setTarget("end")}>
+                    <span>Đến ngày</span>
+                    <strong>{displayDate(value?.[1])}</strong>
+                </button>
+            </div>
+            {value?.[0] && value?.[1] && (
+                <Button type="link" size="small" onClick={() => onChange?.(undefined)} style={{ paddingInline: 0, marginTop: 4 }}>
+                    Xóa khoảng ngày
+                </Button>
+            )}
+            <MobileConfigProvider locale={viVN}>
+                <MobileDatePicker
+                visible={Boolean(target)}
+                value={selectedDate?.toDate()}
+                precision="day"
+                title={target === "start" ? "Chọn ngày bắt đầu" : "Chọn ngày kết thúc"}
+                onClose={() => setTarget(null)}
+                onConfirm={updateDate}
+                cancelText="Hủy"
+                confirmText="Xác nhận"
+                style={{ "--z-index": 1200 } as React.CSSProperties}
+                />
+            </MobileConfigProvider>
+        </>
+    );
+};
+
+const ScheduleFilterSheet = ({
     open,
     value,
     loading,
@@ -876,116 +938,79 @@ const ScheduleFilterDrawer = ({
     };
 
     return (
-        <Drawer
-            title="Bộ lọc lịch học"
-            placement="right"
-            open={open}
+        <MobilePopup
+            position="bottom"
+            visible={open}
             onClose={onClose}
-            width="min(92vw, 400px)"
-            footer={
-                <Space className="responsive-modal-footer" style={{ width: "100%", justifyContent: "flex-end" }}>
-                    <Button onClick={handleReset}>Xóa lọc</Button>
-                    <Button type="primary" onClick={() => filterForm.submit()} loading={loading}>
-                        Tìm kiếm
-                    </Button>
-                </Space>
-            }
+            closeOnMaskClick
+            bodyClassName="schedule-filter-sheet"
+            bodyStyle={{ height: "calc(100dvh - 48px)" }}
         >
-            <div>
-                <Form form={filterForm} layout="vertical" onFinish={(values) => onSearch(cleanFilterValues(values))}>
-                    <Form.Item
-                        name="code"
-                        label="Chương trình"
-                        rules={allowFilterWithoutProgram ? [] : [{ required: true, message: "Vui lòng chọn Chương trình" }]}
-                    >
-                        <Select
-                            allowClear
-                            showSearch
-                            loading={loadingPrograms}
-                            options={programOptions}
-                            optionFilterProp="label"
-                            placeholder="Chọn Chương trình"
-                            notFoundContent={loadingPrograms ? "Đang tải..." : "Không có Chương trình"}
-                        />
-                    </Form.Item>
-                    {allowFilterWithoutProgram && (
-                        <Alert
-                            type="info"
-                            showIcon
-                            message="Admin có thể lọc theo thời gian mà không cần chọn Chương trình"
-                            style={{ marginTop: -8, marginBottom: 16 }}
-                        />
-                    )}
-                    <Form.Item name="teacher" label="Giáo viên">
-                        <TeachingStaffSelect
-                            teacherType={1}
-                            mode="multiple"
-                            maxTagCount="responsive"
-                            allowQuickCreate={false}
-                            allowClear
-                            showSearch
-                            placeholder="Chọn giáo viên"
-                        />
-                    </Form.Item>
-                    <Form.Item name="system_type" label="Hệ thống">
-                        <Select
-                            mode="multiple"
-                            maxTagCount="responsive"
-                            allowClear
-                            placeholder="Tất cả hệ thống"
-                            options={[
-                                { value: "topclass", label: "Topclass" },
-                                { value: "topuni", label: "Topuni" },
-                            ]}
-                        />
-                    </Form.Item>
-                    <Form.Item name="time_status" label="Trạng thái buổi học">
-                        <Select
-                            mode="multiple"
-                            maxTagCount="responsive"
-                            allowClear
-                            placeholder="Tất cả trạng thái"
-                            options={[
-                                { value: "upcoming", label: "Chưa bắt đầu" },
-                                { value: "ongoing", label: "Đang diễn ra" },
-                                { value: "completed", label: "Đã kết thúc" },
-                            ]}
-                        />
-                    </Form.Item>
-                    <Form.Item name="weekdays" label="Thứ trong tuần">
-                        <Select
-                            mode="multiple"
-                            maxTagCount="responsive"
-                            allowClear
-                            placeholder="Tất cả các thứ"
-                            options={WEEKDAY_OPTIONS}
-                        />
-                    </Form.Item>
-                    <Form.Item label="Khoảng bài">
-                        <Space.Compact block>
-                            <Form.Item name="from_learn_number" noStyle>
-                                <InputNumber min={1} precision={0} placeholder="Từ bài" style={{ width: "50%" }} />
-                            </Form.Item>
-                            <Form.Item name="to_learn_number" noStyle>
-                                <InputNumber min={1} precision={0} placeholder="Đến bài" style={{ width: "50%" }} />
-                            </Form.Item>
-                        </Space.Compact>
-                    </Form.Item>
-                    <Form.Item
-                        name="date_range"
-                        label="Khoảng ngày"
-                        normalize={(value) => {
-                            const [from, to] = Array.isArray(value) ? value : [];
-                            return dayjs.isDayjs(from) && from.isValid() && dayjs.isDayjs(to) && to.isValid()
-                                ? [from, to]
-                                : undefined;
-                        }}
-                    >
-                        <RangePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
-                    </Form.Item>
-                </Form>
+            <div className="schedule-filter-sheet-header">
+                <div>
+                    <Typography.Text strong>Bộ lọc lịch học</Typography.Text>
+                    <Typography.Text type="secondary">Lọc theo chương trình, thời gian và giáo viên</Typography.Text>
+                </div>
+                <Button type="text" aria-label="Đóng bộ lọc" icon={<CloseOutlined />} onClick={onClose} />
             </div>
-        </Drawer>
+            <Form className="schedule-filter-sheet-body" form={filterForm} layout="vertical" onFinish={(values) => onSearch(cleanFilterValues(values))}>
+                <Form.Item
+                    name="code"
+                    label="Chương trình"
+                    rules={allowFilterWithoutProgram ? [] : [{ required: true, message: "Vui lòng chọn Chương trình" }]}
+                >
+                    <Select
+                        allowClear
+                        showSearch
+                        loading={loadingPrograms}
+                        options={programOptions}
+                        optionFilterProp="label"
+                        placeholder="Chọn Chương trình"
+                        notFoundContent={loadingPrograms ? "Đang tải..." : "Không có Chương trình"}
+                    />
+                </Form.Item>
+                {allowFilterWithoutProgram && (
+                    <Alert
+                        type="info"
+                        showIcon
+                        message="Admin có thể lọc theo thời gian mà không cần chọn Chương trình"
+                        style={{ marginTop: -8, marginBottom: 16 }}
+                    />
+                )}
+                <Form.Item name="teacher" label="Giáo viên">
+                    <TeachingStaffSelect teacherType={1} mode="multiple" maxTagCount="responsive" allowQuickCreate={false} allowClear showSearch placeholder="Chọn giáo viên" />
+                </Form.Item>
+                <Form.Item name="system_type" label="Hệ thống">
+                    <Select mode="multiple" maxTagCount="responsive" allowClear placeholder="Tất cả hệ thống" options={[{ value: "topclass", label: "Topclass" }, { value: "topuni", label: "Topuni" }]} />
+                </Form.Item>
+                <Form.Item name="time_status" label="Trạng thái buổi học">
+                    <Select mode="multiple" maxTagCount="responsive" allowClear placeholder="Tất cả trạng thái" options={[{ value: "upcoming", label: "Chưa bắt đầu" }, { value: "ongoing", label: "Đang diễn ra" }, { value: "completed", label: "Đã kết thúc" }]} />
+                </Form.Item>
+                <Form.Item name="weekdays" label="Thứ trong tuần">
+                    <Select mode="multiple" maxTagCount="responsive" allowClear placeholder="Tất cả các thứ" options={WEEKDAY_OPTIONS} />
+                </Form.Item>
+                <Form.Item label="Khoảng bài">
+                    <Space.Compact block>
+                        <Form.Item name="from_learn_number" noStyle><InputNumber min={1} precision={0} placeholder="Từ bài" style={{ width: "50%" }} /></Form.Item>
+                        <Form.Item name="to_learn_number" noStyle><InputNumber min={1} precision={0} placeholder="Đến bài" style={{ width: "50%" }} /></Form.Item>
+                    </Space.Compact>
+                </Form.Item>
+                <Form.Item
+                    name="date_range"
+                    label="Khoảng ngày"
+                    normalize={(range) => {
+                        const [from, to] = Array.isArray(range) ? range : [];
+                        return dayjs.isDayjs(from) && from.isValid() && dayjs.isDayjs(to) && to.isValid() ? [from, to] : undefined;
+                    }}
+                >
+                    <MobileDateRangePicker />
+                </Form.Item>
+            </Form>
+            <div className="schedule-filter-sheet-actions">
+                <Button onClick={handleReset}>Xóa lọc</Button>
+                <Button type="primary" onClick={() => filterForm.submit()} loading={loading}>Tìm kiếm</Button>
+            </div>
+        </MobilePopup>
     );
 };
 
@@ -5038,7 +5063,7 @@ const Page = () => {
                     )}
                 </div>
                 {!isDesktop && (
-                    <ScheduleFilterDrawer
+                    <ScheduleFilterSheet
                         open={openFilterDrawer}
                         onClose={() => setOpenFilterDrawer(false)}
                         value={filterValues}
