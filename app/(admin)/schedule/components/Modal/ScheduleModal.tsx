@@ -1,5 +1,6 @@
 'use client';
-import { Alert, Modal, Input, Row, Col, Form, Button, Typography, Select, Radio, Checkbox, Card, TimePicker, DatePicker, message, Space, Tooltip } from 'antd';
+import { Alert, Modal, Input, Row, Col, Form, Grid, Button, Typography, Select, Radio, Checkbox, Card, message, Space, Tooltip } from 'antd';
+import { DatePicker, TimePicker } from "../MobileSchedulePickers";
 import { CloseCircleOutlined, CompressOutlined, ExpandOutlined, EyeFilled, HolderOutlined, PlusOutlined } from '@ant-design/icons';
 import React, { useMemo, useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
@@ -187,6 +188,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     allowFollowingAfterCancel = true,
     onDraftChange,
 }) => {
+    const screens = Grid.useBreakpoint();
     const [form] = Form.useForm();
     const [modalFrame, setModalFrame] = useState({
         x: 24,
@@ -277,11 +279,12 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         if (!open || typeof window === 'undefined') return;
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
-        const width = Math.min(900, Math.max(320, viewportWidth - 32));
-        const height = Math.min(760, Math.max(420, viewportHeight - 32));
+        const mobile = viewportWidth < 992;
+        const width = mobile ? viewportWidth - 12 : Math.min(900, Math.max(320, viewportWidth - 32));
+        const height = mobile ? viewportHeight - 12 : Math.min(760, Math.max(420, viewportHeight - 32));
         setModalFrame({
-            x: Math.max(8, (viewportWidth - width) / 2),
-            y: Math.max(8, (viewportHeight - height) / 2),
+            x: mobile ? 6 : Math.max(8, (viewportWidth - width) / 2),
+            y: mobile ? 6 : Math.max(8, (viewportHeight - height) / 2),
             width,
             height,
         });
@@ -304,7 +307,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     };
 
     const startModalDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-        if (event.button !== 0 || typeof window === 'undefined') return;
+        if (event.button !== 0 || typeof window === 'undefined' || window.innerWidth < 992) return;
         event.preventDefault();
         setIsModalInteracting(true);
         const startX = event.clientX;
@@ -330,7 +333,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     };
 
     const startModalResize = (event: React.PointerEvent<HTMLDivElement>) => {
-        if (event.button !== 0 || typeof window === 'undefined') return;
+        if (event.button !== 0 || typeof window === 'undefined' || window.innerWidth < 992) return;
         event.preventDefault();
         event.stopPropagation();
         setIsModalInteracting(true);
@@ -876,15 +879,16 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         <>
             {contextHolder}
             <Modal
-                rootClassName="schedule-responsive-modal"
+                rootClassName="schedule-responsive-modal schedule-entry-modal"
                 title={
                     <div
+                        className="schedule-entry-title"
                         onPointerDown={startModalDrag}
                         style={{ position: 'relative', cursor: 'move', userSelect: 'none', touchAction: 'none', paddingRight: 76 }}
                         title="Giữ và kéo để di chuyển cửa sổ"
                     >
                         <Space size={8} align="start">
-                            <HolderOutlined style={{ color: '#8c8c8c', marginTop: 5 }} />
+                            <HolderOutlined className="schedule-entry-drag-icon" style={{ color: '#8c8c8c', marginTop: 5 }} />
                             <div>
                                 <Title level={5} style={{ marginBottom: 4 }}>
                                     {title || (isEdit ? 'Cập nhật Lịch học' : 'Thêm mới Lịch học')}
@@ -898,6 +902,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                             <Button
                                 type="text"
                                 size="small"
+                                className="schedule-entry-resize-button"
                                 aria-label={isModalCompact ? 'Mở rộng cửa sổ' : 'Thu gọn cửa sổ'}
                                 icon={isModalCompact ? <ExpandOutlined /> : <CompressOutlined />}
                                 onPointerDown={(event) => event.stopPropagation()}
@@ -947,6 +952,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                     <div style={{ position: 'relative', width: '100%', height: modalFrame.height }}>
                         {modal}
                         <div
+                            className="schedule-entry-resize-handle"
                             role="separator"
                             aria-label="Kéo để thay đổi kích thước cửa sổ"
                             title="Kéo để thay đổi kích thước cửa sổ"
@@ -1156,7 +1162,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                         disabled={!selectedSubjectCode}
                                                         showSearch
                                                         optionFilterProp="label"
-                                                        popupMatchSelectWidth={480}
+                                                        popupMatchSelectWidth={screens.md ? 480 : true}
                                                         options={lessonOptions.map((lesson) => ({
                                                             value: String(lesson.id),
                                                             label: formatLessonScheduleOption(lesson),
@@ -1243,7 +1249,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                         disabled={!contextProgramCode}
                                                         showSearch
                                                         optionFilterProp="label"
-                                                        popupMatchSelectWidth={480}
+                                                        popupMatchSelectWidth={screens.md ? 480 : true}
                                                         options={lessonOptions.map((lesson) => ({
                                                             value: String(lesson.id),
                                                             label: formatLessonScheduleOption(lesson),
@@ -1309,7 +1315,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                         loading={loadingHmoOptions}
                                         disabled={!selectedLessonId}
                                         listHeight={420}
-                                        popupMatchSelectWidth={680}
+                                        popupMatchSelectWidth={screens.md ? 680 : true}
                                         placeholder={!selectedLessonId
                                             ? 'Chọn bài học trước'
                                             : hmoOptions.length
@@ -1541,7 +1547,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                                 }
                                                 showSearch
                                                 optionFilterProp="label"
-                                                popupMatchSelectWidth={480}
+                                                popupMatchSelectWidth={screens.md ? 480 : true}
                                                 options={bulkLessonOptions.map((lesson) => ({
                                                     value: lesson.learn_number,
                                                     label: formatLessonScheduleOption(lesson),

@@ -16,6 +16,59 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Mobile Pickers CSS */
+.schedule-mobile-picker-input {
+  position: relative;
+  display: inline-flex;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 11px;
+  color: rgba(0, 0, 0, 0.88);
+  font-size: 14px;
+  background-color: #ffffff;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  align-items: center;
+}
+.schedule-mobile-picker-field {
+  flex: 1;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  outline: none;
+  text-align: left;
+  font-family: inherit;
+  font-size: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.schedule-mobile-picker-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  color: rgba(0, 0, 0, 0.25);
+  font-size: 12px;
+  background: #fff;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.schedule-mobile-picker-range {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 11px;
+  background-color: #ffffff;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  gap: 8px;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
@@ -63,7 +116,8 @@ body {
   outline: none !important;
   box-shadow: none !important;
   background: transparent !important;
-  color: #000 !important; /* Màu khi hover/focus */
+  color: #000 !important;
+  /* Màu khi hover/focus */
 }
 
 .custom-delete-btn:hover .anticon,
@@ -78,7 +132,7 @@ body {
   padding-right: 0 !important;
 }
 
-.table-no-data .ant-table-tbody > tr.ant-table-placeholder {
+.table-no-data .ant-table-tbody>tr.ant-table-placeholder {
   display: none;
 }
 
@@ -109,9 +163,12 @@ body {
 
 /* styles.css */
 .custom-datepicker input {
-  text-align: right; /* căn phải nội dung */
-  padding: 0; /* bỏ padding nếu cần */
-  width: 18ch; /* hoặc dùng auto nếu bạn muốn co theo nội dung */
+  text-align: right;
+  /* căn phải nội dung */
+  padding: 0;
+  /* bỏ padding nếu cần */
+  width: 18ch;
+  /* hoặc dùng auto nếu bạn muốn co theo nội dung */
 }
 
 .login-form {
@@ -205,18 +262,18 @@ body {
     width: 100%;
   }
 
-  .responsive-search-actions .responsive-action-buttons > :where(.ant-btn, .ant-dropdown-trigger) {
+  .responsive-search-actions .responsive-action-buttons> :where(.ant-btn, .ant-dropdown-trigger) {
     flex: 1 1 calc(50% - 4px);
     min-width: 0;
   }
 
-  .responsive-search-actions .responsive-action-buttons > .ant-radio-group {
+  .responsive-search-actions .responsive-action-buttons>.ant-radio-group {
     display: flex;
     flex: 1 1 100%;
     flex-wrap: wrap;
   }
 
-  .responsive-search-actions .responsive-action-buttons > .ant-radio-group .ant-radio-button-wrapper {
+  .responsive-search-actions .responsive-action-buttons>.ant-radio-group .ant-radio-button-wrapper {
     flex: 1;
     text-align: center;
   }
@@ -227,11 +284,11 @@ body {
     gap: 8px !important;
   }
 
-  .responsive-search-actions .schedule-action-buttons > .ant-btn {
+  .responsive-search-actions .schedule-action-buttons>.ant-btn {
     width: 100%;
   }
 
-  .responsive-search-actions .schedule-action-buttons > .responsive-secondary-actions {
+  .responsive-search-actions .schedule-action-buttons>.responsive-secondary-actions {
     grid-column: 1 / -1;
     display: flex;
     align-items: stretch;
@@ -246,7 +303,7 @@ body {
     gap: 8px;
   }
 
-  .schedule-workflow-actions > :only-child {
+  .schedule-workflow-actions> :only-child {
     grid-column: 1 / -1;
   }
 
@@ -260,7 +317,7 @@ body {
     gap: 8px;
   }
 
-  .schedule-utility-actions > * {
+  .schedule-utility-actions>* {
     min-width: 0;
   }
 
@@ -300,8 +357,8 @@ body {
     flex-direction: column;
   }
 
-  .responsive-page-toolbar > *,
-  .responsive-card-header > * {
+  .responsive-page-toolbar>*,
+  .responsive-card-header>* {
     max-width: 100%;
   }
 
@@ -313,17 +370,18 @@ body {
     max-width: 100%;
   }
 
-  .responsive-modal-form .ant-form-item-row > :where(.ant-form-item-label, .ant-form-item-control) {
+  .responsive-modal-form .ant-form-item-row> :where(.ant-form-item-label, .ant-form-item-control) {
     flex: 0 0 100%;
     max-width: 100%;
     text-align: start;
   }
 
-  .responsive-modal-form .ant-form-item-label > label {
+  .responsive-modal-form .ant-form-item-label>label {
     height: auto;
+    white-space: nowrap !important;
   }
 
-  .responsive-modal-form :where(.ant-input, .ant-input-number, .ant-picker, .ant-select) {
+  .responsive-modal-form :where(.ant-input, .ant-input-number, .ant-picker, .ant-select, .ant-space-compact):not(.ant-space-compact *) {
     width: 100% !important;
     max-width: 100% !important;
   }
@@ -338,12 +396,12 @@ body {
     font-size: 12px;
   }
 
-  .lesson-course-mapping-table .ant-table-thead > tr > th:nth-child(1),
-  .lesson-course-mapping-table .ant-table-thead > tr > th:nth-child(3),
-  .lesson-course-mapping-table .ant-table-thead > tr > th:nth-child(4),
-  .lesson-course-mapping-table .ant-table-tbody > tr > td:nth-child(1),
-  .lesson-course-mapping-table .ant-table-tbody > tr > td:nth-child(3),
-  .lesson-course-mapping-table .ant-table-tbody > tr > td:nth-child(4) {
+  .lesson-course-mapping-table .ant-table-thead>tr>th:nth-child(1),
+  .lesson-course-mapping-table .ant-table-thead>tr>th:nth-child(3),
+  .lesson-course-mapping-table .ant-table-thead>tr>th:nth-child(4),
+  .lesson-course-mapping-table .ant-table-tbody>tr>td:nth-child(1),
+  .lesson-course-mapping-table .ant-table-tbody>tr>td:nth-child(3),
+  .lesson-course-mapping-table .ant-table-tbody>tr>td:nth-child(4) {
     white-space: nowrap;
   }
 
@@ -369,7 +427,7 @@ body {
     flex-direction: column;
   }
 
-  .responsive-filter-flex > :where(.ant-input-group-wrapper, .ant-select, .ant-input, .ant-picker) {
+  .responsive-filter-flex> :where(.ant-input-group-wrapper, .ant-select, .ant-input, .ant-picker) {
     width: 100% !important;
     max-width: 100% !important;
   }
@@ -380,7 +438,7 @@ body {
     width: 100%;
   }
 
-  .responsive-page-toolbar .responsive-action-buttons > * {
+  .responsive-page-toolbar .responsive-action-buttons>* {
     width: 100%;
   }
 
@@ -389,11 +447,11 @@ body {
     flex-direction: column;
   }
 
-  .responsive-schedule-view-toolbar > .ant-segmented {
+  .responsive-schedule-view-toolbar>.ant-segmented {
     width: 100%;
   }
 
-  .responsive-schedule-view-toolbar > .ant-segmented .ant-segmented-item {
+  .responsive-schedule-view-toolbar>.ant-segmented .ant-segmented-item {
     flex: 1;
     text-align: center;
   }
@@ -455,8 +513,9 @@ body {
 }
 
 @media (max-width: 1199px) {
+
   .responsive-table-spin.ant-spin-nested-loading,
-  .responsive-table-spin > .ant-spin-container {
+  .responsive-table-spin>.ant-spin-container {
     height: 100%;
     min-height: 0;
   }
@@ -500,7 +559,7 @@ body {
      vùng cuộn lồng nhau cho danh sách thẻ, vì thao tác vuốt trên mobile có thể
      bị giữ lại ở vùng này và khiến người dùng không cuộn được toàn bộ trang. */
   .schedule-data-table .responsive-table-spin.ant-spin-nested-loading,
-  .schedule-data-table .responsive-table-spin > .ant-spin-container,
+  .schedule-data-table .responsive-table-spin>.ant-spin-container,
   .schedule-data-table .responsive-table-scroll {
     height: auto !important;
     min-height: 0;
@@ -513,8 +572,9 @@ body {
 }
 
 @media (max-width: 991px) {
-  .responsive-filter-row > .ant-col,
-  .responsive-form-row > .ant-col {
+
+  .responsive-filter-row>.ant-col,
+  .responsive-form-row>.ant-col {
     min-width: 0;
   }
 
@@ -530,12 +590,12 @@ body {
     min-width: 720px;
   }
 
-  .responsive-schedule-form > .ant-space,
-  .responsive-schedule-form .ant-card-body > .ant-space-wrap {
+  .responsive-schedule-form>.ant-space,
+  .responsive-schedule-form .ant-card-body>.ant-space-wrap {
     width: 100%;
   }
 
-  .responsive-schedule-form .ant-space-wrap > .ant-space-item {
+  .responsive-schedule-form .ant-space-wrap>.ant-space-item {
     min-width: 0;
   }
 }
@@ -553,7 +613,7 @@ body {
 }
 
 @media (max-width: 767px) {
-  .responsive-search-actions .responsive-action-buttons > .responsive-secondary-actions {
+  .responsive-search-actions .responsive-action-buttons>.responsive-secondary-actions {
     flex: 1 1 100%;
     width: 100%;
   }
@@ -582,12 +642,12 @@ body {
     overscroll-behavior-y: contain;
   }
 
-  .responsive-schedule-form .ant-row > .ant-col {
+  .responsive-schedule-form .ant-row>.ant-col {
     flex: 0 0 100% !important;
     max-width: 100% !important;
   }
 
-  .responsive-schedule-form .ant-space-wrap > .ant-space-item {
+  .responsive-schedule-form .ant-space-wrap>.ant-space-item {
     flex: 1 1 min(100%, 280px);
     max-width: 100%;
   }
@@ -667,7 +727,7 @@ body {
     grid-template-columns: minmax(0, 1fr) 36px !important;
   }
 
-  .responsive-mapping-grid > :nth-child(2) {
+  .responsive-mapping-grid> :nth-child(2) {
     grid-column: 1 / -1;
     grid-row: 2;
   }
@@ -677,7 +737,7 @@ body {
     flex-direction: column;
   }
 
-  .responsive-config-mode > *,
+  .responsive-config-mode>*,
   .responsive-config-mode .ant-segmented {
     width: 100%;
   }
@@ -964,7 +1024,7 @@ body {
   }
 
   .schedule-mobile-search,
-  .schedule-mobile-search > div,
+  .schedule-mobile-search>div,
   .schedule-mobile-search .ant-input {
     width: 100%;
     min-width: 0;
@@ -983,7 +1043,7 @@ body {
     font-size: 16px;
   }
 
-  .schedule-mobile-toolbar-button > .anticon {
+  .schedule-mobile-toolbar-button>.anticon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -997,23 +1057,23 @@ body {
     margin-bottom: 10px !important;
   }
 
-  .responsive-schedule-view-toolbar > .ant-segmented {
+  .responsive-schedule-view-toolbar>.ant-segmented {
     align-self: stretch;
     width: 100%;
     min-height: 36px;
   }
 
-  .responsive-schedule-view-toolbar > .ant-segmented .ant-segmented-group {
+  .responsive-schedule-view-toolbar>.ant-segmented .ant-segmented-group {
     width: 100%;
   }
 
-  .responsive-schedule-view-toolbar > .ant-segmented .ant-segmented-item {
+  .responsive-schedule-view-toolbar>.ant-segmented .ant-segmented-item {
     flex: 1 1 50%;
     min-width: 0;
     text-align: center;
   }
 
-  .responsive-schedule-view-toolbar > .ant-segmented .ant-segmented-item-label {
+  .responsive-schedule-view-toolbar>.ant-segmented .ant-segmented-item-label {
     min-height: 32px;
     line-height: 32px;
   }
@@ -1065,7 +1125,10 @@ body {
     white-space: nowrap;
   }
 
-  .schedule-mobile-lesson-card { min-width: 0; }
+  .schedule-mobile-lesson-card {
+    min-width: 0;
+  }
+
   .schedule-mobile-lesson-title {
     display: -webkit-box;
     overflow: hidden;
@@ -1086,9 +1149,15 @@ body {
   }
 
   .schedule-mobile-lesson-meta span,
-  .schedule-mobile-lesson-teacher { white-space: nowrap; }
+  .schedule-mobile-lesson-teacher {
+    white-space: nowrap;
+  }
+
   .schedule-mobile-lesson-meta .anticon,
-  .schedule-mobile-lesson-teacher .anticon { margin-right: 4px; color: #1677ff; }
+  .schedule-mobile-lesson-teacher .anticon {
+    margin-right: 4px;
+    color: #1677ff;
+  }
 
   .schedule-mobile-lesson-teacher {
     margin-top: 7px;
@@ -1109,7 +1178,383 @@ body {
     border-top: 1px solid #f0f2f5;
   }
 
-  .schedule-mobile-lesson-footer .ant-btn { min-width: 36px; min-height: 32px; }
-  .schedule-mobile-lesson-footer .ant-btn-link { min-width: auto; padding-inline: 4px; }
-  .schedule-mobile-lesson-detail { margin-top: 10px; border-top: 1px solid #f0f2f5; }
+  .schedule-mobile-lesson-footer .ant-btn {
+    min-width: 36px;
+    min-height: 32px;
+  }
+
+  .schedule-mobile-lesson-footer .ant-btn-link {
+    min-width: auto;
+    padding-inline: 4px;
+  }
+
+  .schedule-mobile-lesson-detail {
+    margin-top: 10px;
+    border-top: 1px solid #f0f2f5;
+  }
+}
+/* Outline management: compact cards and bottom filter only on phones. */
+@media (max-width: 767px) {
+  .lesson-mobile-toolbar {
+    grid-template-columns: minmax(0, 1fr) repeat(2, 40px);
+    gap: 6px !important;
+    margin-bottom: 8px;
+  }
+
+  .lesson-mobile-toolbar .schedule-mobile-search {
+    min-width: 0;
+  }
+
+  .lesson-mobile-toolbar .schedule-mobile-toolbar-button {
+    min-width: 40px;
+    padding-inline: 0;
+  }
+
+  .lesson-page-info {
+    padding: 8px 10px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .lesson-page-info .responsive-page-info-header {
+    align-items: flex-start !important;
+    gap: 6px !important;
+  }
+
+  .lesson-page-info .ant-tag {
+    max-width: 100%;
+    margin: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .lesson-page-info .ant-btn-link {
+    flex: 0 0 auto;
+    padding-inline: 2px;
+  }
+
+  .lesson-table-container .responsive-table-scroll > .ant-space-compact {
+    margin-bottom: 8px !important;
+  }
+
+  .lesson-table-container .responsive-table-scroll > .ant-space {
+    gap: 8px !important;
+  }
+
+  .lesson-table-container .responsive-table-card {
+    border: 1px solid #e8edf3;
+    border-radius: 10px;
+    box-shadow: 0 1px 5px rgb(15 23 42 / 4%);
+  }
+
+  .lesson-table-container .responsive-table-card .ant-card-head {
+    min-height: 38px;
+    padding: 6px 10px;
+  }
+
+  .lesson-table-container .responsive-table-card .ant-card-head-title {
+    min-width: 0;
+  }
+
+  .lesson-table-container .responsive-table-card .ant-card-head-title .ant-checkbox-wrapper {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .lesson-table-container .responsive-table-card .ant-card-body {
+    padding: 10px 12px 8px !important;
+  }
+
+  .lesson-mobile-title {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: 15px;
+    line-height: 1.42;
+    overflow-wrap: anywhere;
+  }
+
+  .lesson-mobile-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px 8px;
+    margin-top: 6px;
+    color: #667085;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .lesson-mobile-meta span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .lesson-mobile-meta span:last-child {
+    max-width: 100%;
+  }
+
+  .lesson-mobile-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    min-height: 36px;
+    margin-top: 8px;
+    padding-top: 5px;
+    border-top: 1px solid #f0f2f5;
+  }
+
+  .lesson-mobile-footer .ant-btn {
+    min-width: 36px;
+    min-height: 34px;
+  }
+
+  .lesson-mobile-footer .ant-btn-link {
+    min-width: 0;
+    padding-inline: 4px;
+  }
+
+  .lesson-mobile-drag-icon {
+    display: inline-flex;
+    align-items: center;
+    min-width: 36px;
+    min-height: 34px;
+    color: #1677ff;
+    font-size: 17px;
+  }
+
+  .lesson-mobile-inline-edit {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .lesson-mobile-inline-edit .ant-input {
+    min-width: 0;
+  }
+
+  .lesson-mobile-inline-edit .ant-btn {
+    padding-inline: 8px;
+  }
+
+  .lesson-mobile-detail {
+    display: grid;
+    gap: 7px;
+    margin-top: 7px;
+    padding-top: 10px;
+    border-top: 1px solid #f0f2f5;
+  }
+
+  .lesson-mobile-detail > div {
+    display: grid;
+    grid-template-columns: minmax(82px, 35%) minmax(0, 1fr);
+    gap: 8px;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .lesson-mobile-detail span {
+    color: #667085;
+  }
+
+  .lesson-mobile-detail strong {
+    min-width: 0;
+    font-weight: 500;
+    overflow-wrap: anywhere;
+  }
+
+}
+
+@media (min-width: 768px) {
+  .lesson-add-fab { display: none !important; }
+}
+
+@media (max-width: 767px) {
+  .lesson-actions-sheet {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 20px 20px 0 0;
+    background: #fff;
+  }
+
+  .lesson-actions-sheet::before {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 4px;
+    margin: 9px auto 0;
+    border-radius: 999px;
+    background: #d9d9d9;
+    content: "";
+  }
+
+  .lesson-actions-sheet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 16px 8px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 16px;
+  }
+
+  .lesson-actions-sheet-header .ant-btn {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+  }
+
+  .lesson-actions-sheet-body {
+    min-height: 0;
+    padding: 4px 12px calc(12px + env(safe-area-inset-bottom));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .lesson-actions-sheet .ant-collapse-item {
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .lesson-actions-sheet .ant-collapse-header {
+    align-items: center !important;
+    min-height: 48px;
+    padding: 10px 4px !important;
+    font-weight: 600;
+  }
+
+  .lesson-actions-sheet .ant-collapse-content-box {
+    padding: 0 0 8px !important;
+  }
+
+  .lesson-actions-sheet-list {
+    display: grid;
+    gap: 2px;
+  }
+
+  .lesson-actions-sheet-list .ant-btn {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    width: 100%;
+    height: auto;
+    min-height: 44px;
+    padding: 9px 12px;
+    text-align: left;
+    white-space: normal;
+  }
+
+  .lesson-actions-sheet-list .ant-btn > span:not(.anticon) {
+    overflow-wrap: anywhere;
+  }
+}
+
+/* Dropdowns in the mobile auto-schedule modal follow the trigger width. */
+@media (max-width: 767px) {
+  .schedule-auto-route-hint {
+    display: none;
+  }
+
+  .schedule-mobile-staff-popup {
+    max-width: calc(100vw - 24px);
+  }
+
+  .schedule-mobile-staff-popup .ant-select-item-option {
+    height: auto;
+    min-height: 36px;
+    align-items: center;
+  }
+
+  .schedule-mobile-staff-popup .ant-select-item-option-content {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* Question-management mobile toolbar, filter sheet, and supporting modals. */
+@media (max-width: 767px) {
+  .quiz-filter-sheet-body .quiz-filter-fields { margin: 0; }
+  .quiz-filter-sheet-body .quiz-filter-form {
+    padding: 0;
+    border: 0;
+    background: #fff;
+  }
+  .quiz-filter-sheet-body .quiz-filter-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .quiz-filter-sheet-body .ant-form-item { margin-bottom: 16px; }
+  .quiz-filter-sheet-body .quiz-filter-inline-actions { display: none; }
+
+  .quiz-mobile-reorder-toolbar {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .quiz-mobile-reorder-toolbar .ant-radio-group,
+  .quiz-mobile-reorder-toolbar > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .quiz-mobile-reorder-toolbar .ant-radio-button-wrapper,
+  .quiz-mobile-reorder-toolbar .ant-btn {
+    min-height: 40px;
+    text-align: center;
+  }
+
+  .quiz-responsive-modal .ant-modal {
+    width: calc(100vw - 12px) !important;
+    max-width: calc(100vw - 12px) !important;
+    margin: 6px auto !important;
+    top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+  .quiz-responsive-modal .ant-modal-content {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100dvh - 12px);
+    overflow: hidden;
+  }
+  .quiz-responsive-modal .ant-modal-header {
+    flex: 0 0 auto;
+    padding-right: 30px;
+  }
+  .quiz-responsive-modal .ant-modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .quiz-responsive-modal .ant-modal-footer {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid #f0f0f0;
+  }
+  .quiz-responsive-modal .ant-modal-footer .ant-btn {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    margin: 0 !important;
+    white-space: normal;
+  }
+  .quiz-preview-modal .ant-modal-footer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .quiz-import-modal .ant-modal-body > .ant-space {
+    max-width: 100%;
+  }
+  .quiz-import-modal .ant-modal-body .ant-btn {
+    max-width: 100%;
+    height: auto;
+    min-height: 40px;
+    white-space: normal;
+  }
 }

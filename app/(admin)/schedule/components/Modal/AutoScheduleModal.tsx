@@ -942,7 +942,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                 {(fields, { add, remove }) => (
                     <Space direction="vertical" style={{ width: "100%" }}>
                         {fields.map((field, index) => (
-                            <Space key={field.key} align="start" wrap>
+                            <Space key={field.key} className="auto-template-session" align="start" wrap>
                                 {lockToOneSession ? (
                                     <Form.Item label="Thứ học">
                                         <Typography.Text strong style={{ display: "inline-block", minWidth: 72, paddingTop: 5 }}>
@@ -985,7 +985,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                     label="Giáo viên"
                                     rules={lockToOneSession ? [{ required: true, message: "Chọn giáo viên" }] : undefined}
                                 >
-                                    <TeachingStaffSelect
+                                    <TeachingStaffSelect popupClassName="schedule-mobile-staff-popup" virtual={isDesktopPreview}
                                         teacherType={1}
                                         teacherValueMode="displayName"
                                         knownValues={(form.getFieldValue(name) || []).map((session: any) => session.teacher)}
@@ -995,14 +995,14 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                     />
                                 </Form.Item>
                                 <Form.Item name={[field.name, "assistant_teachers"]} label="Trợ giảng">
-                                    <TeachingStaffSelect
+                                    <TeachingStaffSelect popupClassName="schedule-mobile-staff-popup" virtual={isDesktopPreview}
                                         teacherType={0}
                                         knownValues={(form.getFieldValue(name) || []).flatMap((session: any) => session.assistant_teachers || [])}
                                         mode="multiple"
                                         allowClear
                                         placeholder="Chọn một hoặc nhiều trợ giảng"
                                         style={{ width: 360 }}
-                                        popupMatchSelectWidth={480}
+                                        popupMatchSelectWidth={isDesktopPreview ? 480 : true}
                                         maxTagCount="responsive"
                                     />
                                 </Form.Item>
@@ -1023,7 +1023,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     return (
         <>
         <Modal
-            rootClassName="schedule-responsive-modal"
+            rootClassName="schedule-responsive-modal schedule-auto-create-modal"
             open={open}
             title={`Tạo lịch học tự động · ${programCode}`}
             width={fullscreen ? "100%" : 1100}
@@ -1094,7 +1094,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                         if (payload) setPayload(null);
                     }}
                 >
-                    <Space align="start" wrap>
+                    <Space className="auto-main-settings" align="start" wrap>
                         <Form.Item
                             name="system_type"
                             label="Hệ thống"
@@ -1495,7 +1495,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                                         )}
                                                         <Form.List name={[lessonField.name, "sessions"]}>
                                                             {(sessionFields) => sessionFields.slice(0, 1).map((sessionField) => (
-                                                                <Space key={sessionField.key} align="start" wrap style={{ width: "100%", marginTop: 8 }}>
+                                                                <Space key={sessionField.key} className="auto-template-session" align="start" wrap style={{ width: "100%", marginTop: 8 }}>
                                                                     <Form.Item name={[sessionField.name, "weekday"]} label="Thứ" rules={[{ required: true, message: "Chọn thứ học" }]}>
                                                                         <Select style={{ width: 125 }} options={WEEKDAYS} />
                                                                     </Form.Item>
@@ -1523,16 +1523,16 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                                                         }}
                                                                     </Form.Item>
                                                                     <Form.Item name={[sessionField.name, "teacher"]} label="Giáo viên" rules={[{ required: true, message: "Chọn giáo viên" }]}>
-                                                                        <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" allowClear placeholder="Chọn giáo viên" style={{ width: 220 }} />
+                                                                        <TeachingStaffSelect popupClassName="schedule-mobile-staff-popup" virtual={isDesktopPreview} teacherType={1} teacherValueMode="displayName" allowClear placeholder="Chọn giáo viên" style={{ width: 220 }} />
                                                                     </Form.Item>
                                                                     <Form.Item name={[sessionField.name, "assistant_teachers"]} label="Trợ giảng">
-                                                                        <TeachingStaffSelect
+                                                                        <TeachingStaffSelect popupClassName="schedule-mobile-staff-popup" virtual={isDesktopPreview}
                                                                             teacherType={0}
                                                                             mode="multiple"
                                                                             allowClear
                                                                             placeholder="Chọn một hoặc nhiều trợ giảng"
                                                                             style={{ width: 300 }}
-                                                                            popupMatchSelectWidth={480}
+                                                                            popupMatchSelectWidth={isDesktopPreview ? 480 : true}
                                                                             maxTagCount="responsive"
                                                                         />
                                                                     </Form.Item>
@@ -1542,7 +1542,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                                                             showSearch
                                                                             loading={loadingHmoLessonIds.has(lessonId)}
                                                                             style={{ width: "100%" }}
-                                                                            popupMatchSelectWidth={680}
+                                                                            popupMatchSelectWidth={isDesktopPreview ? 680 : true}
                                                                             listHeight={420}
                                                                             placeholder={outlineOptions.length
                                                                                 ? "Chọn Lesson ID từ HMO"
@@ -1620,7 +1620,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                                                 {(sessionFields, { add, remove }) => (
                                                                     <Space direction="vertical" style={{ width: "100%" }}>
                                                                         {sessionFields.map((sessionField, sessionIndex) => (
-                                                                            <Space key={sessionField.key} align="start" wrap>
+                                                                            <Space key={sessionField.key} className="auto-template-session" align="start" wrap>
                                                                                 <Form.Item name={[sessionField.name, "weekday"]} label={`Buổi ${sessionIndex + 1}`} rules={[{ required: true }]}><Select style={{ width: 125 }} options={WEEKDAYS} /></Form.Item>
                                                                                 <Form.Item name={[sessionField.name, "start_time"]} label="Bắt đầu" rules={[{ required: true }]}>
                                                                                     <TimePicker
@@ -1651,16 +1651,16 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                                                                     label="Giáo viên"
                                                                                     rules={[{ required: true, message: "Chọn giáo viên" }]}
                                                                                 >
-                                                                                    <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" allowClear placeholder="Chọn giáo viên" style={{ width: 220 }} />
+                                                                                    <TeachingStaffSelect popupClassName="schedule-mobile-staff-popup" virtual={isDesktopPreview} teacherType={1} teacherValueMode="displayName" allowClear placeholder="Chọn giáo viên" style={{ width: 220 }} />
                                                                                 </Form.Item>
                                                                                 <Form.Item name={[sessionField.name, "assistant_teachers"]} label="Trợ giảng">
-                                                                                    <TeachingStaffSelect
+                                                                                    <TeachingStaffSelect popupClassName="schedule-mobile-staff-popup" virtual={isDesktopPreview}
                                                                                         teacherType={0}
                                                                                         mode="multiple"
                                                                                         allowClear
                                                                                         placeholder="Chọn một hoặc nhiều trợ giảng"
                                                                                         style={{ width: 360 }}
-                                                                                        popupMatchSelectWidth={480}
+                                                                                        popupMatchSelectWidth={isDesktopPreview ? 480 : true}
                                                                                         maxTagCount="responsive"
                                                                                     />
                                                                                 </Form.Item>
@@ -1671,7 +1671,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                                                                             showSearch
                                                                                             loading={loadingHmoLessonIds.has(lessonId)}
                                                                                             style={{ width: "100%" }}
-                                                                                            popupMatchSelectWidth={680}
+                                                                                            popupMatchSelectWidth={isDesktopPreview ? 680 : true}
                                                                                             listHeight={420}
                                                                                             placeholder={outlineOptions.length
                                                                                                 ? "Chọn Lesson ID từ HMO"
@@ -1781,6 +1781,90 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                 .auto-schedule-holiday-row > td {
                     background: #fff1f0 !important;
                     color: #cf1322 !important;
+                }
+
+                /* Mobile only — không ảnh hưởng desktop */
+                @media (max-width: 767px) {
+
+                    /* Các ô thiết lập chính (Hệ thống, ngày bắt đầu...) xuống dòng */
+                    .auto-main-settings {
+                        display: flex !important;
+                        flex-wrap: wrap !important;
+                        gap: 8px !important;
+                        width: 100% !important;
+                    }
+                    .auto-main-settings > .ant-space-item {
+                        flex: 1 1 140px !important;
+                        max-width: 100% !important;
+                        min-width: 0 !important;
+                        margin: 0 !important;
+                    }
+
+                    /* Mỗi buổi (Buổi mẫu N / Buổi N) chuyển sang flex wrap */
+                    .auto-template-session {
+                        display: flex !important;
+                        flex-wrap: wrap !important;
+                        gap: 8px !important;
+                        width: 100% !important;
+                    }
+
+                    /* Mặc định mỗi ô con chiếm 50% hàng (Bắt đầu | Kết thúc) */
+                    .auto-template-session > .ant-space-item {
+                        flex: 1 1 calc(50% - 8px) !important;
+                        max-width: calc(50% - 4px) !important;
+                        min-width: 0 !important;
+                        margin: 0 !important;
+                        box-sizing: border-box !important;
+                    }
+
+                    /* Ô đầu tiên (Buổi mẫu / Buổi N / Thứ học): full width */
+                    .auto-template-session > .ant-space-item:first-child {
+                        flex: 1 1 100% !important;
+                        max-width: 100% !important;
+                    }
+
+                    /* Ô từ thứ 4 trở đi (Giáo viên, Trợ giảng, Lesson ID...): full width */
+                    .auto-template-session > .ant-space-item:nth-child(n + 4) {
+                        flex: 1 1 100% !important;
+                        max-width: 100% !important;
+                    }
+
+                    /* Form.Item control chain → full width để input giãn đúng */
+                    .auto-template-session .ant-form-item-control,
+                    .auto-template-session .ant-form-item-control-input,
+                    .auto-template-session .ant-form-item-control-input-content {
+                        width: 100% !important;
+                    }
+
+                    /* TimePicker full width */
+                    .auto-template-session .ant-picker {
+                        width: 100% !important;
+                    }
+
+                    /* Select độc lập (không trong Space.Compact) full width */
+                    .auto-template-session .ant-form-item-control-input-content > .ant-select,
+                    .auto-template-session .ant-form-item-control-input-content > .ant-select-selector {
+                        width: 100% !important;
+                    }
+
+                    /* Space.Compact (Select + nút +): full width toàn bộ container */
+                    .auto-template-session .ant-space-compact {
+                        width: 100% !important;
+                    }
+
+                    /* Select bên trong Space.Compact: flex auto để tự điền phần còn lại */
+                    .auto-template-session .ant-space-compact > .ant-select {
+                        flex: 1 1 auto !important;
+                        min-width: 0 !important;
+                        width: 0 !important;
+                    }
+
+                    /* Nút "Xóa" — loại bỏ marginTop cứng (30px) để không tạo khoảng trắng thừa */
+                    .auto-template-session .ant-btn-dangerous,
+                    .auto-template-session .ant-btn-text.ant-btn-dangerous {
+                        margin-top: 4px !important;
+                        align-self: flex-start;
+                    }
                 }
             `}</style>
         </Modal>

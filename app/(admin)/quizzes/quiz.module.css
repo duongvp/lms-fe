@@ -272,3 +272,129 @@
     .contextStrip :global(.ant-divider-vertical) { display: none; }
     .formContext { grid-template-columns: 1fr; }
 }
+
+@media (max-width: 767px) {
+    .page { min-width: 0; }
+
+    .tableViewport :global(.responsive-table-card) {
+        border: 1px solid #e8edf3;
+        border-radius: 10px;
+        box-shadow: 0 1px 5px rgba(15, 23, 42, .04);
+    }
+    .tableViewport :global(.responsive-table-card .ant-card-head) {
+        min-height: 38px;
+        padding: 6px 10px;
+    }
+    .tableViewport :global(.responsive-table-card .ant-card-body) {
+        padding: 10px 12px 8px !important;
+    }
+    .mobileCard { min-width: 0; }
+    .mobileQuestion {
+        display: -webkit-box;
+        overflow: hidden;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        min-width: 0;
+        color: #1e293b;
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+    }
+    .mobileQuestion :global(.katex-display) {
+        max-width: 100%;
+        overflow-x: auto;
+    }
+    .mobileMeta {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 4px 8px;
+        margin-top: 8px;
+        color: #667085;
+        font-size: 12px;
+    }
+    .mobileMeta :global(.ant-tag) { margin: 0; }
+    .mobileFooter {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 4px 8px;
+        min-height: 36px;
+        margin-top: 8px;
+        padding-top: 5px;
+        border-top: 1px solid #f0f2f5;
+    }
+    .mobileFooter :global(.ant-btn) {
+        min-width: 36px;
+        min-height: 34px;
+    }
+    .mobileDrag {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: #1677ff;
+        font-size: 12px;
+    }
+    .mobileUpdated {
+        color: #98a2b3;
+        font-size: 11px;
+    }
+
+    .quizFormModal :global(.ant-modal) {
+        width: calc(100vw - 12px) !important;
+        max-width: calc(100vw - 12px) !important;
+        top: 0 !important;
+        margin: 6px auto !important;
+        padding-bottom: 0 !important;
+    }
+    .quizFormModal :global(.ant-modal-content) {
+        height: calc(100dvh - 12px) !important;
+        max-height: calc(100dvh - 12px) !important;
+    }
+    .quizFormModal :global(.ant-modal-header) {
+        padding: 12px 44px 10px 14px !important;
+    }
+    .quizFormModal :global(.ant-modal-body) {
+        flex: 1 1 auto;
+        padding: 8px 14px 16px !important;
+        scrollbar-gutter: auto !important;
+    }
+    .quizFormModal :global(.ant-modal-footer) {
+        padding: 10px 14px calc(10px + env(safe-area-inset-bottom)) !important;
+    }
+    .quizFormModal :global(.ant-modal-footer .ant-flex) {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px !important;
+    }
+    .quizFormModal :global(.ant-modal-footer .ant-btn) {
+        width: 100%;
+        min-width: 0;
+        min-height: 44px;
+        margin: 0;
+        white-space: normal;
+    }
+    .quizFormModal :global(.ant-modal-footer .ant-btn:last-child) {
+        grid-column: 1 / -1;
+    }
+    .quizFormModal :global(.ant-form-item-label > label) {
+        height: auto;
+        white-space: normal;
+    }
+    .quizFormModal :global(.ant-input),
+    .quizFormModal :global(.ant-input-number-input),
+    .quizFormModal :global(.ant-select-selection-search-input) {
+        font-size: 16px !important;
+    }
+    .answerRow { padding: 10px; }
+    .answerRow :global(.ant-flex) {
+        min-width: 0;
+        flex-wrap: wrap;
+    }
+    .answerRow :global(.ant-flex > div[style*="flex: 1"]) {
+        min-width: 0;
+        flex-basis: calc(100% - 36px);
+    }
+}

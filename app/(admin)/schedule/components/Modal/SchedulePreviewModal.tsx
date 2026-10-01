@@ -5,16 +5,17 @@ import {
     Checkbox,
     Collapse,
     Form,
+    Grid,
     Input,
     message,
     Modal,
     Select,
     Space,
     Table,
-    TimePicker,
     Tooltip,
     Typography,
 } from 'antd';
+import { TimePicker } from "../MobileSchedulePickers";
 import {
     CheckCircleOutlined,
     CloseCircleOutlined,
@@ -116,6 +117,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
     loading,
     errorMessage,
 }) => {
+    const screens = Grid.useBreakpoint();
     const errorRef = useRef<HTMLDivElement>(null);
     const [sessions, setSessions] = useState<PreviewSession[]>([]);
     const [requiredSessions, setRequiredSessions] = useState(0);
@@ -1009,7 +1011,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     size="small"
                     showSearch
                     optionFilterProp="label"
-                    popupMatchSelectWidth={320}
+                    popupMatchSelectWidth={screens.md ? 320 : true}
                     placeholder="Chọn giáo viên"
                     style={{ width: '100%' }}
                 />
@@ -1092,7 +1094,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                             disabled={record.isSkipped}
                             showSearch
                             optionFilterProp="label"
-                            popupMatchSelectWidth={480}
+                            popupMatchSelectWidth={screens.md ? 480 : true}
                             placeholder="Chọn bài học"
                             style={{ width: 'calc(100% - 32px)' }}
                         />
@@ -1437,7 +1439,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                                                                 showSearch
                                                                 optionFilterProp="label"
                                                                 placeholder={`Chọn Course ID ${mappingIndex + 1}`}
-                                                                popupMatchSelectWidth={600}
+                                                                popupMatchSelectWidth={screens.md ? 600 : true}
                                                                 onChange={(value) => updateSessionMapping(
                                                                     session.key,
                                                                     mappingIndex,

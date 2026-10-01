@@ -4,11 +4,10 @@ import React, { useEffect } from 'react';
 import {
     Modal,
     Form,
+    Grid,
     Radio,
     Select,
-    TimePicker,
     Checkbox,
-    DatePicker,
     Row,
     Col,
     Button,
@@ -27,6 +26,7 @@ import {
     Progress,
     Spin,
 } from 'antd';
+import { DatePicker, TimePicker } from "../MobileSchedulePickers";
 import { EditOutlined, CloseCircleOutlined, PlusOutlined, SyncOutlined, CalendarOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import TeachingStaffSelect from '@/components/shared/TeachingStaffSelect';
@@ -247,6 +247,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     requestedIds = [],
     fullscreen = false,
 }) => {
+    const screens = Grid.useBreakpoint();
     const [form] = Form.useForm();
     const [loading, setLoading] = React.useState(false);
     // Hiển thị form trước, rồi mới bắt đầu các request HMO theo từng bài học.
@@ -1465,11 +1466,11 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     const isMappingUnchanged = values.config_mode === 'common'
                         ? !values.enable_mapping
                         : !autoSyncedSeparateMappingIds.has(String(lessonKey))
-                            && !form.isFieldTouched([
-                                'separate_config',
-                                String(lessonKey),
-                                'hmo_mapping_keys',
-                            ]);
+                        && !form.isFieldTouched([
+                            'separate_config',
+                            String(lessonKey),
+                            'hmo_mapping_keys',
+                        ]);
 
                     return {
                         id: lessonKey,
@@ -1503,7 +1504,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 total: targetIds.length,
                 completed: 0,
                 percent: 6,
-                    message: `Hệ thống đang cập nhật ${targetIds.length} lịch học...`,
+                message: `Hệ thống đang cập nhật ${targetIds.length} lịch học...`,
             });
             const response = await updateLivestreamBulk({
                 ids: targetIds,
@@ -1544,1054 +1545,1117 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         || !sourceDataReady;
     return (
         <>
-        <Modal
-            rootClassName="schedule-responsive-modal"
-            title={
-                <Space size={8} align="center">
-                    <span>Cập Nhật Lịch Học Hàng Loạt</span>
-                    <Tag color="blue" style={{ marginRight: 0, fontWeight: 500 }}>
-                        {selectedRowKeys.length} lịch học đã chọn
-                    </Tag>
-                </Space>
-            }
-            open={open}
-            onCancel={loading ? undefined : handleClose}
-            closable={!loading}
-            maskClosable={!loading}
-            width={fullscreen ? "100%" : 1100}
-            style={fullscreen ? { top: 0, maxWidth: "none", paddingBottom: 0 } : undefined}
-            styles={fullscreen ? { content: { height: "100dvh", display: "flex", flexDirection: "column" }, body: { flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden" } } : undefined}
-            modalRender={(node) => (
-                <div ref={modalRenderRef} style={{ opacity: 1, transition: 'opacity 100ms ease' }}>
-                    {node}
-                </div>
-            )}
-            footer={preparingRelatedData ? null : [
-                <Button key="cancel" onClick={handleClose} icon={<CloseCircleOutlined />} disabled={loading}>
-                    Hủy
-                </Button>,
-                <Button
-                    key="submit"
-                    type="primary"
-                    onClick={() => form.submit()}
-                    loading={loading}
-                    disabled={switchingConfigMode}
-                    icon={<EditOutlined />}
-                    style={!previewRows.length ? { background: '#52c41a', borderColor: '#52c41a' } : undefined}
-                >
-                    {previewRows.length
-                        ? (operation === 'update' ? 'Xác nhận cập nhật' : 'Xác nhận thực hiện')
-                        : 'Xem trước'}
-                </Button>
-            ]}
-        >
-            {switchingConfigMode && (
-                <div style={{
-                    position: 'fixed',
-                    inset: 0,
-                    zIndex: 2100,
-                    display: 'grid',
-                    placeItems: 'center',
-                    background: 'rgba(255, 255, 255, 0.82)',
-                    backdropFilter: 'blur(1px)',
-                }}>
-                    <Spin
-                        size="large"
-                        tip={pendingConfigMode === 'separate'
-                            ? `Đang mở cấu hình riêng cho ${selectedLessonKeys.length} lịch học...`
-                            : 'Đang quay lại cấu hình dùng chung...'}
+            <Modal
+                rootClassName="schedule-responsive-modal schedule-bulk-edit-modal"
+                title={
+                    <Space size={8} align="center">
+                        <span>Cập Nhật Lịch Học Hàng Loạt</span>
+                        <Tag color="blue" style={{ marginRight: 0, fontWeight: 500 }}>
+                            {selectedRowKeys.length} lịch học đã chọn
+                        </Tag>
+                    </Space>
+                }
+                open={open}
+                onCancel={loading ? undefined : handleClose}
+                closable={!loading}
+                maskClosable={!loading}
+                width={fullscreen ? "100%" : 1100}
+                style={fullscreen ? { top: 0, maxWidth: "none", paddingBottom: 0 } : undefined}
+                styles={fullscreen ? { content: { height: "100dvh", display: "flex", flexDirection: "column" }, body: { flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden" } } : undefined}
+                modalRender={(node) => (
+                    <div ref={modalRenderRef} style={{ opacity: 1, transition: 'opacity 100ms ease' }}>
+                        {node}
+                    </div>
+                )}
+                footer={preparingRelatedData ? null : [
+                    <Button key="cancel" onClick={handleClose} icon={<CloseCircleOutlined />} disabled={loading}>
+                        Hủy
+                    </Button>,
+                    <Button
+                        key="submit"
+                        type="primary"
+                        onClick={() => form.submit()}
+                        loading={loading}
+                        disabled={switchingConfigMode}
+                        icon={<EditOutlined />}
+                        style={!previewRows.length ? { background: '#52c41a', borderColor: '#52c41a' } : undefined}
                     >
-                        <div style={{ width: 360, height: 120 }} />
-                    </Spin>
-                </div>
-            )}
-            {preparingRelatedData ? (
-                <div style={{ minHeight: 'calc(100dvh - 90px)', display: 'grid', placeItems: 'center' }}>
-                    <Spin size="large" tip={`Đang chuẩn bị dữ liệu cho ${selectedRowKeys.length || requestedIds.length} lịch học...`}>
-                        <div style={{ width: 320, height: 120 }} />
-                    </Spin>
-                </div>
-            ) : <Form
-                className="responsive-modal-form responsive-schedule-form"
-                form={form}
-                layout="vertical"
-                onFinish={handleFinish}
-                onFinishFailed={({ errorFields }) => {
-                    const firstError = errorFields[0];
-                    if (!firstError) return;
-                    // Ant Design tìm đúng scroll container của modal fullscreen.
-                    requestAnimationFrame(() => form.scrollToField(firstError.name, {
-                        block: 'center',
-                        behavior: 'smooth',
-                    }));
-                }}
-                onValuesChange={(changedValues) => {
-                    if (previewRows.length) setPreviewRows([]);
-                    if (submitError) setSubmitError(null);
-                    // Ghi chú chỉ mô tả lần đồng bộ ở tab hiện tại. Khi đổi
-                    // chế độ, mapping vẫn được giữ trong form nhưng không
-                    // hiển thị lại kết quả của tab trước để tránh gây nhiễu.
-                    if (Object.prototype.hasOwnProperty.call(changedValues, 'config_mode')) {
-                        setHmoSyncNotes({});
-                    }
-                }}
-                initialValues={{
-                    operation: 'update',
-                    config_mode: 'common',
-                    enable_teacher: true,
-                    enable_assistant: false,
-                    enable_time: true,
-                    enable_mapping: false,
-                    canceled_lesson_name_prefix: DEFAULT_CANCELED_LESSON_PREFIX,
-                    canceled_lesson_name_suffix: '',
-                    new_lesson_name_prefix: DEFAULT_MAKEUP_LESSON_PREFIX,
-                    new_lesson_name_suffix: '',
-                }}
+                        {previewRows.length
+                            ? (operation === 'update' ? 'Xác nhận cập nhật' : 'Xác nhận thực hiện')
+                            : 'Xem trước'}
+                    </Button>
+                ]}
             >
-                <Form.Item
-                    name="selected_lessons"
-                    hidden
-                    rules={[
-                        {
-                            type: 'array',
-                            min: 1,
-                            message: 'Vui lòng chọn ít nhất 1 lịch học trên bảng!',
-                        },
-                    ]}
+                {switchingConfigMode && (
+                    <div style={{
+                        position: 'fixed',
+                        inset: 0,
+                        zIndex: 2100,
+                        display: 'grid',
+                        placeItems: 'center',
+                        background: 'rgba(255, 255, 255, 0.82)',
+                        backdropFilter: 'blur(1px)',
+                    }}>
+                        <Spin
+                            size="large"
+                            tip={pendingConfigMode === 'separate'
+                                ? `Đang mở cấu hình riêng cho ${selectedLessonKeys.length} lịch học...`
+                                : 'Đang quay lại cấu hình dùng chung...'}
+                        >
+                            <div style={{ width: 360, height: 120 }} />
+                        </Spin>
+                    </div>
+                )}
+                {preparingRelatedData ? (
+                    <div style={{ minHeight: 'calc(100dvh - 90px)', display: 'grid', placeItems: 'center' }}>
+                        <Spin size="large" tip={`Đang chuẩn bị dữ liệu cho ${selectedRowKeys.length || requestedIds.length} lịch học...`}>
+                            <div style={{ width: '100%', minWidth: 260, height: 120 }} />
+                        </Spin>
+                    </div>
+                ) : <Form
+                    className="responsive-modal-form responsive-schedule-form"
+                    form={form}
+                    layout="vertical"
+                    onFinish={handleFinish}
+                    onFinishFailed={({ errorFields }) => {
+                        const firstError = errorFields[0];
+                        if (!firstError) return;
+                        // Ant Design tìm đúng scroll container của modal fullscreen.
+                        requestAnimationFrame(() => form.scrollToField(firstError.name, {
+                            block: 'center',
+                            behavior: 'smooth',
+                        }));
+                    }}
+                    onValuesChange={(changedValues) => {
+                        if (previewRows.length) setPreviewRows([]);
+                        if (submitError) setSubmitError(null);
+                        // Ghi chú chỉ mô tả lần đồng bộ ở tab hiện tại. Khi đổi
+                        // chế độ, mapping vẫn được giữ trong form nhưng không
+                        // hiển thị lại kết quả của tab trước để tránh gây nhiễu.
+                        if (Object.prototype.hasOwnProperty.call(changedValues, 'config_mode')) {
+                            setHmoSyncNotes({});
+                        }
+                    }}
+                    initialValues={{
+                        operation: 'update',
+                        config_mode: 'common',
+                        enable_teacher: true,
+                        enable_assistant: false,
+                        enable_time: true,
+                        enable_mapping: false,
+                        canceled_lesson_name_prefix: DEFAULT_CANCELED_LESSON_PREFIX,
+                        canceled_lesson_name_suffix: '',
+                        new_lesson_name_prefix: DEFAULT_MAKEUP_LESSON_PREFIX,
+                        new_lesson_name_suffix: '',
+                    }}
                 >
-                    <Input type="hidden" />
-                </Form.Item>
-
-                <Form.Item name="operation" label="Thao tác hàng loạt">
-                    <Radio.Group
-                        buttonStyle="solid"
-                        onChange={() => setPreviewRows([])}
-                        style={{ display: 'flex', flexWrap: 'wrap' }}
-                        options={[
-                            { value: 'update', label: 'Cập nhật lịch' },
-                            { value: 'cancel', label: 'Nghỉ hẳn' },
-                            { value: 'makeup', label: 'Nghỉ & thêm lịch bù' },
+                    <Form.Item
+                        name="selected_lessons"
+                        hidden
+                        rules={[
+                            {
+                                type: 'array',
+                                min: 1,
+                                message: 'Vui lòng chọn ít nhất 1 lịch học trên bảng!',
+                            },
                         ]}
-                        optionType="button"
-                    />
-                </Form.Item>
+                    >
+                        <Input type="hidden" />
+                    </Form.Item>
 
-                {operation === 'update' && (
-                    <>
-                        {/* Chọn chế độ cấu hình */}
-                        <div className="responsive-config-mode" style={{ marginBottom: 24, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16, background: '#f8f9fa', padding: '12px 16px', borderRadius: 8, border: '1px solid #f0f0f0' }}>
-                            <Text strong style={{ whiteSpace: 'nowrap', color: '#595959' }}>Cách cấu hình:</Text>
-                            <Form.Item name="config_mode" hidden><Input /></Form.Item>
-                            <Segmented
-                                value={configMode}
-                                disabled={switchingConfigMode}
-                                options={[
-                                    { label: 'Dùng chung cho tất cả lịch', value: 'common' },
-                                    { label: 'Cấu hình riêng từng lịch', value: 'separate' }
-                                ]}
-                                onChange={handleConfigModeChange}
-                                size="middle"
-                            />
-                            <Text type="secondary" style={{ fontSize: 13 }}>
-                                {configMode === 'common' ? 'Áp dụng các trường đã chọn cho toàn bộ lịch.' : 'Tùy chỉnh độc lập từng lịch.'}
-                            </Text>
-                        </div>
+                    <Form.Item className="bulk-mobile-operation" name="operation" label="Thao tác hàng loạt">
+                        <Radio.Group
+                            buttonStyle="solid"
+                            onChange={() => setPreviewRows([])}
+                            className="bulk-operation-radio-group"
+                            options={[
+                                { value: 'update', label: 'Cập nhật lịch' },
+                                { value: 'cancel', label: 'Nghỉ hẳn' },
+                                { value: 'makeup', label: 'Nghỉ & thêm lịch bù' },
+                            ]}
+                            optionType="button"
+                        />
+                    </Form.Item>
 
-                        {/* CHẾ ĐỘ 1: CẤU HÌNH CHUNG */}
-                        {configMode === 'common' && (
-                            <Card size="small" style={{ borderRadius: 8, border: '1px solid #e8e8e8', padding: '8px 12px' }}>
-                                <div style={{ marginBottom: 16, padding: '4px 4px 0 4px' }}>
-                                    <Text type="secondary" style={{ fontSize: '12.5px', fontStyle: 'italic', display: 'block' }}>
-                                        * Chỉ những thông tin được tích chọn mới được cập nhật ghi đè. Các thông tin không tích chọn sẽ giữ nguyên giá trị cũ.
-                                    </Text>
-                                </div>
+                    {operation === 'update' && (
+                        <>
+                            {/* Chọn chế độ cấu hình */}
+                            <div className="responsive-config-mode" style={{ marginBottom: 24, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16, background: '#f8f9fa', padding: '12px 16px', borderRadius: 8, border: '1px solid #f0f0f0' }}>
+                                <Text strong style={{ whiteSpace: 'nowrap', color: '#595959' }}>Cách cấu hình:</Text>
+                                <Form.Item name="config_mode" hidden><Input /></Form.Item>
+                                <Segmented
+                                    value={configMode}
+                                    disabled={switchingConfigMode}
+                                    options={[
+                                        { label: 'Dùng chung cho tất cả lịch', value: 'common' },
+                                        { label: 'Cấu hình riêng từng lịch', value: 'separate' }
+                                    ]}
+                                    onChange={handleConfigModeChange}
+                                    size="middle"
+                                />
+                                <Text type="secondary" style={{ fontSize: 13 }}>
+                                    {configMode === 'common' ? 'Áp dụng các trường đã chọn cho toàn bộ lịch.' : 'Tùy chỉnh độc lập từng lịch.'}
+                                </Text>
+                            </div>
 
-                                {/* Tùy chọn Giáo viên */}
-                                <Row gutter={16} align="middle" style={{ marginBottom: 16, marginTop: 8 }}>
-                                    <Col span={8}>
-                                        <Form.Item name="enable_teacher" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                            <Checkbox><Text strong>Đổi Giáo viên</Text></Checkbox>
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={16}>
-                                        <Form.Item noStyle dependencies={['enable_teacher']}>
-                                            {({ getFieldValue }) => {
-                                                const enabled = getFieldValue('enable_teacher');
-                                                return (
-                                                    <Form.Item
-                                                        name="common_teacher"
-                                                        style={{ marginBottom: 0 }}
-                                                        rules={[{ required: enabled, message: 'Vui lòng chọn giáo viên mới' }]}
-                                                    >
+                            {/* CHẾ ĐỘ 1: CẤU HÌNH CHUNG */}
+                            {configMode === 'common' && (
+                                <Card className="bulk-common-card" size="small" style={{ borderRadius: 8, border: '1px solid #e8e8e8', padding: '8px 12px' }}>
+                                    <div style={{ marginBottom: 16, padding: '4px 4px 0 4px' }}>
+                                        <Text type="secondary" style={{ fontSize: '12.5px', fontStyle: 'italic', display: 'block' }}>
+                                            * Chỉ những thông tin được tích chọn mới được cập nhật ghi đè. Các thông tin không tích chọn sẽ giữ nguyên giá trị cũ.
+                                        </Text>
+                                    </div>
+
+                                    {/* Tùy chọn Giáo viên */}
+                                    <Row gutter={[8, 8]} align="middle" style={{ marginBottom: 16, marginTop: 8 }}>
+                                        <Col xs={24} sm={8}>
+                                            <Form.Item name="enable_teacher" valuePropName="checked" style={{ marginBottom: 0 }}>
+                                                <Checkbox><Text strong>Đổi Giáo viên</Text></Checkbox>
+                                            </Form.Item>
+                                        </Col>
+                                        <Col xs={24} sm={16}>
+                                            <Form.Item noStyle dependencies={['enable_teacher']}>
+                                                {({ getFieldValue }) => {
+                                                    const enabled = getFieldValue('enable_teacher');
+                                                    return (
+                                                        <Form.Item
+                                                            name="common_teacher"
+                                                            style={{ marginBottom: 0 }}
+                                                            rules={[{ required: enabled, message: 'Vui lòng chọn giáo viên mới' }]}
+                                                        >
+                                                            <TeachingStaffSelect
+                                                                teacherType={1}
+                                                                teacherValueMode="displayName"
+                                                                placeholder="Chọn giáo viên mới"
+                                                                disabled={!enabled}
+                                                            />
+                                                        </Form.Item>
+                                                    );
+                                                }}
+                                            </Form.Item>
+                                        </Col>
+                                    </Row>
+
+                                    <Divider style={{ margin: '12px 0' }} />
+
+                                    <Row gutter={[8, 8]} align="middle" style={{ marginBottom: 16 }}>
+                                        <Col xs={24} sm={8}>
+                                            <Form.Item name="enable_assistant" valuePropName="checked" style={{ marginBottom: 0 }}>
+                                                <Checkbox><Text strong>Đổi Trợ giảng</Text></Checkbox>
+                                            </Form.Item>
+                                        </Col>
+                                        <Col xs={24} sm={16}>
+                                            <Form.Item noStyle dependencies={['enable_assistant']}>
+                                                {({ getFieldValue }) => (
+                                                    <Form.Item name="common_assistant_teacher" style={{ marginBottom: 0 }}>
                                                         <TeachingStaffSelect
-                                                            teacherType={1}
-                                                            teacherValueMode="displayName"
-                                                            placeholder="Chọn giáo viên mới"
-                                                            disabled={!enabled}
+                                                            teacherType={0}
+                                                            mode="multiple"
+                                                            showSearch
+                                                            optionFilterProp="label"
+                                                            placeholder="Chọn trợ giảng (có thể để trống để gỡ)"
+                                                            disabled={!getFieldValue('enable_assistant')}
                                                         />
                                                     </Form.Item>
-                                                );
-                                            }}
-                                        </Form.Item>
-                                    </Col>
-                                </Row>
-
-                                <Divider style={{ margin: '12px 0' }} />
-
-                                <Row gutter={16} align="middle" style={{ marginBottom: 16 }}>
-                                    <Col span={8}>
-                                        <Form.Item name="enable_assistant" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                            <Checkbox><Text strong>Đổi Trợ giảng</Text></Checkbox>
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={16}>
-                                        <Form.Item noStyle dependencies={['enable_assistant']}>
-                                            {({ getFieldValue }) => (
-                                                <Form.Item name="common_assistant_teacher" style={{ marginBottom: 0 }}>
-                                                    <TeachingStaffSelect
-                                                        teacherType={0}
-                                                        mode="multiple"
-                                                        showSearch
-                                                        optionFilterProp="label"
-                                                        placeholder="Chọn trợ giảng (có thể để trống để gỡ)"
-                                                        disabled={!getFieldValue('enable_assistant')}
-                                                    />
-                                                </Form.Item>
-                                            )}
-                                        </Form.Item>
-                                    </Col>
-                                </Row>
-
-                                <Divider style={{ margin: '12px 0' }} />
-
-                                {/* Tùy chọn Khung giờ */}
-                                <Row gutter={16} align="middle" style={{ marginBottom: 16 }}>
-                                    <Col span={8}>
-                                        <Form.Item name="enable_time" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                            <Checkbox><Text strong>Đổi Khung giờ</Text></Checkbox>
-                                        </Form.Item>
-                                    </Col>
-                                    <Col span={16}>
-                                        <Space size={8}>
-                                            <Form.Item noStyle dependencies={['enable_time']}>
-                                                {({ getFieldValue }) => {
-                                                    const enabled = getFieldValue('enable_time');
-                                                    return (
-                                                        <Form.Item
-                                                            name="common_start_time"
-                                                            style={{ marginBottom: 0 }}
-                                                            rules={[{ required: enabled, message: 'Chọn giờ bắt đầu' }]}
-                                                        >
-                                                            <TimePicker
-                                                                format="HH:mm"
-                                                                style={{ width: 140 }}
-                                                                placeholder="Giờ bắt đầu"
-                                                                disabled={!enabled}
-                                                                onChange={(value) => revalidateOrClearEndTime('common_end_time', value)}
-                                                            />
-                                                        </Form.Item>
-                                                    );
-                                                }}
+                                                )}
                                             </Form.Item>
-                                            <Form.Item noStyle dependencies={['enable_time']}>
-                                                {({ getFieldValue }) => {
-                                                    const enabled = getFieldValue('enable_time');
-                                                    return (
-                                                        <Form.Item
-                                                            name="common_end_time"
-                                                            style={{ marginBottom: 0 }}
-                                                            rules={[
-                                                                { required: enabled, message: 'Chọn giờ kết thúc' },
-                                                                { validator: validateEndTimeAfter('common_start_time') },
-                                                            ]}
-                                                        >
-                                                            <TimePicker
-                                                                format="HH:mm"
-                                                                style={{ width: 140 }}
-                                                                placeholder="Giờ kết thúc"
-                                                                disabledTime={() => getEndDisabledTime(commonStartTime)}
-                                                                defaultOpenValue={commonStartTime}
-                                                                disabled={!enabled || !commonStartTime}
-                                                            />
-                                                        </Form.Item>
-                                                    );
-                                                }}
+                                        </Col>
+                                    </Row>
+
+                                    <Divider style={{ margin: '12px 0' }} />
+
+                                    {/* Tùy chọn Khung giờ */}
+                                    <Row gutter={16} align="middle" style={{ marginBottom: 16 }}>
+                                        <Col span={8}>
+                                            <Form.Item name="enable_time" valuePropName="checked" style={{ marginBottom: 0 }}>
+                                                <Checkbox><Text strong>Đổi Khung giờ</Text></Checkbox>
                                             </Form.Item>
-                                        </Space>
-                                    </Col>
-                                </Row>
-                                <Divider style={{ margin: '12px 0' }} />
-
-                                <Row gutter={16} align="top" style={{ marginBottom: 8 }}>
-                                    <Col span={8}>
-                                        <Form.Item name="enable_lesson_name_pattern" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                            <Checkbox><Text strong>Thêm tiền tố / hậu tố tên bài</Text></Checkbox>
-                                        </Form.Item>
-                                        <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
-                                            Dùng <Text code>{'{n}'}</Text> để chèn số lần diễn ra của từng bài. Ví dụ tiền tố “Lịch {'{n}'} - ” với tên “Bài 1” sẽ thành “Lịch 1 - Bài 1”. {!hasSingleSelectedLesson && 'Mặc định mẫu chỉ áp dụng từ buổi thứ hai; tích chọn bên phải để áp dụng ngay từ buổi đầu.'}
-                                        </Text>
-                                    </Col>
-                                    <Col span={16}>
-                                        <Form.Item noStyle dependencies={['enable_lesson_name_pattern']}>
-                                            {({ getFieldValue }) => {
-                                                const enabled = getFieldValue('enable_lesson_name_pattern');
-                                                return (
-                                                    <Space wrap align="start" style={{ width: '100%', opacity: enabled ? 1 : 0.5 }}>
-                                                        <Form.Item
-                                                            name="lesson_name_prefix"
-                                                            label="Tiền tố"
-                                                            rules={[{ max: 100, message: 'Tiền tố không được quá 100 ký tự' }]}
-                                                            style={{ minWidth: 220, marginBottom: 0 }}
-                                                        >
-                                                            <Input disabled={!enabled} maxLength={100} placeholder="Ví dụ: [Lịch {n}] - " />
-                                                        </Form.Item>
-                                                        <Form.Item
-                                                            name="lesson_name_suffix"
-                                                            label="Hậu tố"
-                                                            rules={[{ max: 100, message: 'Hậu tố không được quá 100 ký tự' }]}
-                                                            style={{ minWidth: 220, marginBottom: 0 }}
-                                                        >
-                                                            <Input disabled={!enabled} maxLength={100} placeholder="Ví dụ: - Lần {n}" />
-                                                        </Form.Item>
-                                                        {!hasSingleSelectedLesson && (
-                                                            <Form.Item name="apply_name_pattern_to_first_session" valuePropName="checked" style={{ marginBottom: 0, paddingTop: 30 }}>
-                                                                <Checkbox disabled={!enabled}>Áp dụng cả buổi đầu tiên</Checkbox>
-                                                            </Form.Item>
-                                                        )}
-                                                    </Space>
-                                                );
-                                            }}
-                                        </Form.Item>
-                                    </Col>
-                                </Row>
-                                <Form.Item noStyle dependencies={['enable_lesson_name_pattern']}>
-                                    {({ getFieldValue }) => getFieldValue('enable_lesson_name_pattern') && !hasSingleSelectedLesson && (
-                                        <Form.List name="lesson_name_rules">
-                                            {(fields, { add, remove }) => (
-                                                <Card size="small" title="Mẫu tên theo khoảng bài" style={{ margin: '0 0 12px 33.333%' }}>
-                                                    <Text type="secondary" style={{ display: 'block', fontSize: 12, marginBottom: 12 }}>
-                                                        Bài trong khoảng dùng mẫu riêng và có lựa chọn áp dụng buổi đầu riêng; bài ngoài khoảng dùng mẫu chung. Các khoảng không được chồng lấn.
-                                                    </Text>
-                                                    <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                                                        {fields.map((field) => (
-                                                            <Space key={field.key} align="end" wrap style={{ width: '100%' }}>
-                                                                <Form.Item name={[field.name, 'from_learn_number']} label="Từ bài" rules={[{ required: true, message: 'Nhập bài bắt đầu' }]} style={{ marginBottom: 0 }}>
-                                                                    <InputNumber min={1} precision={0} style={{ width: 100 }} />
-                                                                </Form.Item>
-                                                                <Form.Item name={[field.name, 'to_learn_number']} label="Đến bài" dependencies={[["lesson_name_rules", field.name, "from_learn_number"]]} rules={[
-                                                                    { required: true, message: 'Nhập bài kết thúc' },
-                                                                    ({ getFieldValue }) => ({
-                                                                        validator: (_, value) => Number(value) >= Number(getFieldValue(['lesson_name_rules', field.name, 'from_learn_number']))
-                                                                            ? Promise.resolve()
-                                                                            : Promise.reject(new Error('Phải lớn hơn hoặc bằng bài bắt đầu')),
-                                                                    }),
-                                                                ]} style={{ marginBottom: 0 }}>
-                                                                    <InputNumber min={1} precision={0} style={{ width: 100 }} />
-                                                                </Form.Item>
-                                                                <Form.Item name={[field.name, 'prefix']} label="Tiền tố" rules={[{ max: 100 }]} style={{ flex: '1 1 180px', marginBottom: 0 }}>
-                                                                    <Input maxLength={100} placeholder="Ví dụ: [Lịch {n}] - " />
-                                                                </Form.Item>
-                                                                <Form.Item name={[field.name, 'suffix']} label="Hậu tố" rules={[{ max: 100 }]} style={{ flex: '1 1 180px', marginBottom: 0 }}>
-                                                                    <Input maxLength={100} placeholder="Ví dụ: - Nhóm A" />
-                                                                </Form.Item>
-                                                                <Form.Item name={[field.name, 'apply_to_first_session']} valuePropName="checked" style={{ marginBottom: 0 }}>
-                                                                    <Checkbox>Áp dụng buổi đầu</Checkbox>
-                                                                </Form.Item>
-                                                                <Button danger type="text" onClick={() => remove(field.name)}>Xóa</Button>
-                                                            </Space>
-                                                        ))}
-                                                        <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ apply_to_first_session: false })}>Thêm khoảng bài</Button>
-                                                    </Space>
-                                                </Card>
-                                            )}
-                                        </Form.List>
-                                    )}
-                                </Form.Item>
-                                <Divider style={{ margin: '12px 0' }} />
-
-                                <Row gutter={16} align="top" style={{ marginBottom: 8 }}>
-                                    <Col span={8}>
-                                        <Form.Item name="enable_mapping" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                            <Checkbox onChange={(event) => {
-                                                if (event.target.checked) setHmoDataReady(false);
-                                            }}><Text strong>Đổi Lesson ID HMO</Text></Checkbox>
-                                        </Form.Item>
-                                        <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
-                                            Chọn riêng Lesson ID cho từng lịch. Course ID và Package ID được lấy từ bài học của lịch đó.
-                                        </Text>
-                                        <Form.Item name="hmo_sync_name_source" label="Đồng bộ theo" style={{ margin: '10px 0 0' }}>
-                                            <Select
-                                                options={[
-                                                    { value: 'calendar', label: 'Tên lịch học (calendar)' },
-                                                    { value: 'lesson', label: 'Tên bài học (lessons)' },
-                                                ]}
-                                            />
-                                        </Form.Item>
-                                        <Text type="secondary" style={{ display: 'block', fontSize: 12 }}>
-                                            Theo tên lịch sẽ so khớp từng lịch với Lesson ID HMO cùng tên, không gán lần lượt theo thứ tự tăng dần.
-                                        </Text>
-                                        <Button
-                                            type="primary"
-                                            ghost
-                                            size="small"
-                                            icon={<SyncOutlined spin={syncingHmoLessonIds} />}
-                                            loading={syncingHmoLessonIds}
-                                            onClick={() => void handleSyncHmoLessonIds()}
-                                            style={{ marginTop: 10 }}
-                                        >
-                                            Đồng bộ Lesson ID HMO
-                                        </Button>
-                                    </Col>
-                                    <Col span={16}>
-                                        <div style={{ opacity: mappingEnabled ? 1 : 0.5 }}>
-                                                        <Space direction="vertical" style={{ width: '100%' }}>
-                                                            {calendarContexts.map((context) => {
-                                                                const options = hmoOptionsByLesson[context.internalLessonId] || [];
-                                                                const optionsResolved = Object.prototype.hasOwnProperty.call(
-                                                                    hmoOptionsByLesson,
-                                                                    context.internalLessonId,
-                                                                );
-                                                                const optionsLoading = loadingHmoLessons.has(context.internalLessonId);
-                                                                const calendarRow = selectedRowByCalendarId.get(context.calendarId);
-                                                                return (
-                                                                    <React.Fragment key={context.calendarId}>
-                                                                        <Form.Item
-                                                                            name={['common_hmo_mapping_keys_by_calendar', context.calendarId]}
-                                                                            label={context.label}
-                                                                            extra={options.length
-                                                                                ? `${summarizeHmoOptions(options)} — danh sách được nhóm theo Package/Course.`
-                                                                                : undefined}
-                                                                            style={{
-                                                                                marginBottom: 8,
-                                                                                contentVisibility: 'auto',
-                                                                                containIntrinsicSize: '0 88px',
-                                                                            }}
-                                                                        >
-                                                                            <HmoMappingSelect
-                                                                                allowClear
-                                                                                showSearch
-                                                                                optionFilterProp="label"
-                                                                                loading={optionsLoading}
-                                                                                disabled={!mappingEnabled}
-                                                                                onDropdownVisibleChange={(nextOpen: boolean) => {
-                                                                                    if (nextOpen && !optionsResolved) {
-                                                                                        void loadHmoOptionsForLesson(
-                                                                                            context.internalLessonId,
-                                                                                            String(calendarRow?.code || ''),
-                                                                                        );
-                                                                                    }
-                                                                                }}
-                                                                                listHeight={420}
-                                                                                popupMatchSelectWidth={680}
-                                                                                placeholder={optionsLoading
-                                                                                    ? 'Đang tải Lesson ID HMO...'
-                                                                                    : !optionsResolved
-                                                                                        ? 'Chọn để tải Lesson ID HMO'
-                                                                                    : options.length
-                                                                                        ? 'Chọn Lesson ID HMO'
-                                                                                        : 'Bài chưa có Course ID hoặc HMO không có Lesson ID'}
-                                                                                notFoundContent={optionsLoading ? (
-                                                                                    <Space size={8}>
-                                                                                        <Spin size="small" />
-                                                                                        <Text type="secondary">Đang tải Lesson ID HMO...</Text>
-                                                                                    </Space>
-                                                                                ) : 'Không có Lesson ID HMO phù hợp'}
-                                                                                options={buildGroupedHmoOptions(options)}
-                                                                            />
-                                                                        </Form.Item>
-                                                                        {hmoSyncNotes[context.calendarId] && (
-                                                                            <Alert
-                                                                                showIcon
-                                                                                type={hmoSyncNotes[context.calendarId].type}
-                                                                                message={hmoSyncNotes[context.calendarId].message}
-                                                                                style={{ marginTop: -4, marginBottom: 8 }}
-                                                                            />
-                                                                        )}
-                                                                    </React.Fragment>
-                                                                );
-                                                            })}
-                                                            {!calendarContexts.length && (
-                                                                <Alert type="warning" showIcon message="Lịch đã chọn chưa gắn bài học nội bộ" />
-                                                            )}
-                                                        </Space>
-                                        </div>
-                                    </Col>
-                                </Row>
-                            </Card>
-                        )}
-
-                        {/* CHẾ ĐỘ 2: CẤU HÌNH RIÊNG CHO TỪNG LỊCH */}
-                        {renderedSeparateCount > 0 && (
-                            <div style={{ display: configMode === 'separate' ? 'block' : 'none' }}>
-                                {(!hmoDataReady || renderedSeparateCount < selectedLessonKeys.length) && (
-                                    <Alert
-                                        showIcon
-                                        type="info"
-                                        message={!hmoDataReady
-                                            ? 'Đang tải danh sách Lesson ID HMO'
-                                            : `Đã hiển thị ${renderedSeparateCount}/${selectedLessonKeys.length} lịch học`}
-                                        description={renderedSeparateCount < selectedLessonKeys.length
-                                            ? `Bạn có thể xem trước ngay. Chỉ cần cuộn xuống khi muốn sửa riêng; hệ thống sẽ tải thêm ${Math.min(SEPARATE_RENDER_BATCH_SIZE, selectedLessonKeys.length - renderedSeparateCount)} lịch mỗi lượt.`
-                                            : 'Dữ liệu HMO đang được tải theo nhóm Package/Course.'}
-                                        style={{ marginBottom: 16 }}
-                                    />
-                                )}
-                                {Array.isArray(selectedLessons) && selectedLessons.length > 0 ? (
-                                    <>
-                                        <div style={{ marginBottom: 16 }}>
-                                            <Space wrap size={16} align="end">
-                                                <Form.Item name="hmo_sync_name_source" label="Đồng bộ theo" style={{ marginBottom: 0 }}>
-                                                    <Select
-                                                        style={{ width: 220 }}
-                                                        options={[
-                                                            { value: 'calendar', label: 'Tên lịch học (calendar)' },
-                                                            { value: 'lesson', label: 'Tên bài học (lessons)' },
-                                                        ]}
-                                                    />
-                                                </Form.Item>
-                                                <Button
-                                                    type="primary"
-                                                    ghost
-                                                    icon={<SyncOutlined spin={syncingHmoLessonIds} />}
-                                                    loading={syncingHmoLessonIds}
-                                                    onClick={() => void handleSyncHmoLessonIds()}
-                                                >
-                                                    Đồng bộ Lesson ID HMO
-                                                </Button>
-                                            </Space>
-                                            <div style={{ marginTop: 4 }}>
-                                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                                    Theo tên lịch: so khớp từng lịch với Lesson ID HMO cùng tên. Theo tên bài học: chỉ tự gán khi số Lesson ID trùng tên khớp chính xác số lịch của mỗi bài.
-                                                </Text>
-                                            </div>
-                                        </div>
-                                        <div style={{ padding: '16px 20px', backgroundColor: '#f0f5ff', border: '1px solid #adc6ff', borderRadius: 8, marginBottom: 24, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
-                                                <CalendarOutlined style={{ fontSize: 18, color: '#1677ff', marginRight: 8 }} />
-                                                <Text strong style={{ fontSize: 15, color: '#1677ff' }}>Công cụ tự động điền ngày học</Text>
-                                            </div>
-                                            <Row gutter={[24, 16]} align="bottom">
-                                                <Col xs={24} md={8} xl={6}>
-                                                    <div style={{ marginBottom: 8 }}><Text strong style={{ fontSize: 13 }}>Ngày bắt đầu</Text></div>
-                                                    <DatePicker
-                                                        format="DD/MM/YYYY"
-                                                        style={{ width: '100%' }}
-                                                        value={autoFillStartDate}
-                                                        onChange={setAutoFillStartDate}
-                                                        placeholder="Chọn ngày bắt đầu"
-                                                    />
-                                                </Col>
-                                                <Col xs={24} md={16} xl={12}>
-                                                    <div style={{ marginBottom: 8 }}><Text strong style={{ fontSize: 13 }}>Lịch học hàng tuần</Text></div>
-                                                    <Checkbox.Group
-                                                        options={[
-                                                            { label: 'T2', value: 1 },
-                                                            { label: 'T3', value: 2 },
-                                                            { label: 'T4', value: 3 },
-                                                            { label: 'T5', value: 4 },
-                                                            { label: 'T6', value: 5 },
-                                                            { label: 'T7', value: 6 },
-                                                            { label: 'CN', value: 7 },
-                                                        ]}
-                                                        value={autoFillWeekdays}
-                                                        onChange={checked => {
-                                                            const weekdays = checked as number[];
-                                                            setAutoFillWeekdays(weekdays);
-                                                        }}
-                                                    />
-                                                </Col>
-                                                <Col xs={24} xl={6} style={{ textAlign: 'right' }}>
-                                                    <Button type="primary" onClick={handleAutoFillDates} style={{ width: '100%' }}>Áp dụng</Button>
-                                                </Col>
-                                            </Row>
-                                            {!!autoFillWeekdays.length && (
-                                                <Card size="small" title="Khung giờ (tùy chọn)" style={{ marginTop: 12, maxWidth: 900 }}>
-                                                    <Space wrap size={[12, 8]} align="start">
-                                                        {[...autoFillWeekdays].sort((left, right) => left - right).map((weekday) => (
+                                        </Col>
+                                        <Col span={16}>
+                                            <Space className="bulk-common-time" size={8} wrap>
+                                                <Form.Item noStyle dependencies={['enable_time']}>
+                                                    {({ getFieldValue }) => {
+                                                        const enabled = getFieldValue('enable_time');
+                                                        return (
                                                             <Form.Item
-                                                                key={weekday}
-                                                                name={['auto_fill_weekday_times', String(weekday)]}
-                                                                label={weekday === 7 ? 'Chủ Nhật' : `Thứ ${weekday + 1}`}
-                                                                style={{ marginBottom: 0, width: 260 }}
+                                                                name="common_start_time"
+                                                                style={{ marginBottom: 0 }}
+                                                                rules={[{ required: enabled, message: 'Chọn giờ bắt đầu' }]}
                                                             >
-                                                                <TimePicker.RangePicker
-                                                                    size="small"
+                                                                <TimePicker
                                                                     format="HH:mm"
-                                                                    minuteStep={5}
-                                                                    allowClear
-                                                                    placeholder={['Giữ giờ cũ', 'Giữ giờ cũ']}
-                                                                    style={{ width: '100%' }}
+                                                                    style={{ width: 140 }}
+                                                                    placeholder="Giờ bắt đầu"
+                                                                    disabled={!enabled}
+                                                                    onChange={(value) => revalidateOrClearEndTime('common_end_time', value)}
                                                                 />
                                                             </Form.Item>
-                                                        ))}
-                                                    </Space>
-                                                    <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
-                                                        Để trống để chỉ đổi ngày và giữ nguyên giờ hiện tại; chỉ nhập cho những thứ cần đổi giờ.
-                                                    </Text>
-                                                </Card>
-                                            )}
-                                            <Card size="small" title="Các đợt nghỉ" style={{ marginTop: 16 }}>
-                                                <Form.List name="auto_fill_holiday_periods">
-                                                    {(fields, { add, remove }) => (
+                                                        );
+                                                    }}
+                                                </Form.Item>
+                                                <Form.Item noStyle dependencies={['enable_time']}>
+                                                    {({ getFieldValue }) => {
+                                                        const enabled = getFieldValue('enable_time');
+                                                        return (
+                                                            <Form.Item
+                                                                name="common_end_time"
+                                                                style={{ marginBottom: 0 }}
+                                                                rules={[
+                                                                    { required: enabled, message: 'Chọn giờ kết thúc' },
+                                                                    { validator: validateEndTimeAfter('common_start_time') },
+                                                                ]}
+                                                            >
+                                                                <TimePicker
+                                                                    format="HH:mm"
+                                                                    style={{ width: 140 }}
+                                                                    placeholder="Giờ kết thúc"
+                                                                    disabledTime={() => getEndDisabledTime(commonStartTime)}
+                                                                    defaultOpenValue={commonStartTime}
+                                                                    disabled={!enabled || !commonStartTime}
+                                                                />
+                                                            </Form.Item>
+                                                        );
+                                                    }}
+                                                </Form.Item>
+                                            </Space>
+                                        </Col>
+                                    </Row>
+                                    <Divider style={{ margin: '12px 0' }} />
+
+                                    <Row gutter={16} align="top" style={{ marginBottom: 8 }}>
+                                        <Col span={8}>
+                                            <Form.Item name="enable_lesson_name_pattern" valuePropName="checked" style={{ marginBottom: 0 }}>
+                                                <Checkbox><Text strong>Thêm tiền tố / hậu tố tên bài</Text></Checkbox>
+                                            </Form.Item>
+                                            <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
+                                                Dùng <Text code>{'{n}'}</Text> để chèn số lần diễn ra của từng bài. Ví dụ tiền tố “Lịch {'{n}'} - ” với tên “Bài 1” sẽ thành “Lịch 1 - Bài 1”. {!hasSingleSelectedLesson && 'Mặc định mẫu chỉ áp dụng từ buổi thứ hai; tích chọn bên phải để áp dụng ngay từ buổi đầu.'}
+                                            </Text>
+                                        </Col>
+                                        <Col span={16}>
+                                            <Form.Item noStyle dependencies={['enable_lesson_name_pattern']}>
+                                                {({ getFieldValue }) => {
+                                                    const enabled = getFieldValue('enable_lesson_name_pattern');
+                                                    return (
+                                                        <Space wrap align="start" style={{ width: '100%', opacity: enabled ? 1 : 0.5 }}>
+                                                            <Form.Item
+                                                                name="lesson_name_prefix"
+                                                                label="Tiền tố"
+                                                                rules={[{ max: 100, message: 'Tiền tố không được quá 100 ký tự' }]}
+                                                                style={{ minWidth: 220, marginBottom: 0 }}
+                                                            >
+                                                                <Input disabled={!enabled} maxLength={100} placeholder="Ví dụ: [Lịch {n}] - " />
+                                                            </Form.Item>
+                                                            <Form.Item
+                                                                name="lesson_name_suffix"
+                                                                label="Hậu tố"
+                                                                rules={[{ max: 100, message: 'Hậu tố không được quá 100 ký tự' }]}
+                                                                style={{ minWidth: 220, marginBottom: 0 }}
+                                                            >
+                                                                <Input disabled={!enabled} maxLength={100} placeholder="Ví dụ: - Lần {n}" />
+                                                            </Form.Item>
+                                                            {!hasSingleSelectedLesson && (
+                                                                <Form.Item name="apply_name_pattern_to_first_session" valuePropName="checked" style={{ marginBottom: 0, paddingTop: 30 }}>
+                                                                    <Checkbox disabled={!enabled}>Áp dụng cả buổi đầu tiên</Checkbox>
+                                                                </Form.Item>
+                                                            )}
+                                                        </Space>
+                                                    );
+                                                }}
+                                            </Form.Item>
+                                        </Col>
+                                    </Row>
+                                    <Form.Item noStyle dependencies={['enable_lesson_name_pattern']}>
+                                        {({ getFieldValue }) => getFieldValue('enable_lesson_name_pattern') && !hasSingleSelectedLesson && (
+                                            <Form.List name="lesson_name_rules">
+                                                {(fields, { add, remove }) => (
+                                                    <Card size="small" title="Mẫu tên theo khoảng bài" style={{ margin: '0 0 12px 33.333%' }}>
+                                                        <Text type="secondary" style={{ display: 'block', fontSize: 12, marginBottom: 12 }}>
+                                                            Bài trong khoảng dùng mẫu riêng và có lựa chọn áp dụng buổi đầu riêng; bài ngoài khoảng dùng mẫu chung. Các khoảng không được chồng lấn.
+                                                        </Text>
                                                         <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                                                            {fields.map((field, index) => (
-                                                                <Space key={field.key} wrap align="start">
-                                                                    <Form.Item
-                                                                        name={[field.name, 'date_range']}
-                                                                        label={`Đợt ${index + 1}`}
-                                                                        rules={[{ required: true, message: 'Chọn ngày hoặc khoảng ngày nghỉ' }]}
-                                                                        style={{ marginBottom: 0 }}
-                                                                    >
-                                                                        <DatePicker.RangePicker
-                                                                            format="DD/MM/YYYY"
-                                                                            allowEmpty={[false, false]}
-                                                                            placeholder={['Từ ngày', 'Đến ngày']}
-                                                                        />
+                                                            {fields.map((field) => (
+                                                                <Space key={field.key} align="end" wrap style={{ width: '100%' }}>
+                                                                    <Form.Item name={[field.name, 'from_learn_number']} label="Từ bài" rules={[{ required: true, message: 'Nhập bài bắt đầu' }]} style={{ marginBottom: 0 }}>
+                                                                        <InputNumber min={1} precision={0} style={{ width: 100 }} />
                                                                     </Form.Item>
-                                                                    <Form.Item
-                                                                        name={[field.name, 'handling']}
-                                                                        label="Cách xử lý"
-                                                                        initialValue="create_canceled"
-                                                                        style={{ marginBottom: 0 }}
-                                                                    >
-                                                                        <Select
-                                                                            style={{ width: 290 }}
-                                                                            options={[
-                                                                                { value: 'create_canceled', label: 'Tạo lịch ngày nghỉ và đánh dấu Nghỉ' },
-                                                                                { value: 'next_session', label: 'Không tạo ngày nghỉ, giữ nguyên thứ tự bài' },
-                                                                            ]}
-                                                                        />
+                                                                    <Form.Item name={[field.name, 'to_learn_number']} label="Đến bài" dependencies={[["lesson_name_rules", field.name, "from_learn_number"]]} rules={[
+                                                                        { required: true, message: 'Nhập bài kết thúc' },
+                                                                        ({ getFieldValue }) => ({
+                                                                            validator: (_, value) => Number(value) >= Number(getFieldValue(['lesson_name_rules', field.name, 'from_learn_number']))
+                                                                                ? Promise.resolve()
+                                                                                : Promise.reject(new Error('Phải lớn hơn hoặc bằng bài bắt đầu')),
+                                                                        }),
+                                                                    ]} style={{ marginBottom: 0 }}>
+                                                                        <InputNumber min={1} precision={0} style={{ width: 100 }} />
                                                                     </Form.Item>
-                                                                    <Button danger type="text" onClick={() => remove(field.name)} style={{ marginTop: 30 }}>
-                                                                        Xóa
-                                                                    </Button>
+                                                                    <Form.Item name={[field.name, 'prefix']} label="Tiền tố" rules={[{ max: 100 }]} style={{ flex: '1 1 180px', marginBottom: 0 }}>
+                                                                        <Input maxLength={100} placeholder="Ví dụ: [Lịch {n}] - " />
+                                                                    </Form.Item>
+                                                                    <Form.Item name={[field.name, 'suffix']} label="Hậu tố" rules={[{ max: 100 }]} style={{ flex: '1 1 180px', marginBottom: 0 }}>
+                                                                        <Input maxLength={100} placeholder="Ví dụ: - Nhóm A" />
+                                                                    </Form.Item>
+                                                                    <Form.Item name={[field.name, 'apply_to_first_session']} valuePropName="checked" style={{ marginBottom: 0 }}>
+                                                                        <Checkbox>Áp dụng buổi đầu</Checkbox>
+                                                                    </Form.Item>
+                                                                    <Button danger type="text" onClick={() => remove(field.name)}>Xóa</Button>
                                                                 </Space>
                                                             ))}
-                                                            <Button
-                                                                type="dashed"
-                                                                icon={<PlusOutlined />}
-                                                                onClick={() => add({ date_range: null, handling: 'create_canceled' })}
-                                                                style={{ alignSelf: 'flex-start' }}
-                                                            >
-                                                                Thêm ngày hoặc đợt nghỉ
-                                                            </Button>
-                                                            <Text type="secondary">
-                                                                Chọn cùng ngày ở hai đầu để nghỉ một ngày. Mỗi đợt sẽ được tạo lịch Nghỉ hoặc bỏ qua theo đúng cách xử lý đã chọn.
-                                                            </Text>
+                                                            <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ apply_to_first_session: false })}>Thêm khoảng bài</Button>
                                                         </Space>
-                                                    )}
-                                                </Form.List>
-                                            </Card>
-                                        </div>
-                                        {selectedLessonKeys.slice(0, renderedSeparateCount).map((lessonKey) => (
-                                            <Card
-                                                key={lessonKey}
+                                                    </Card>
+                                                )}
+                                            </Form.List>
+                                        )}
+                                    </Form.Item>
+                                    <Divider style={{ margin: '12px 0' }} />
+
+                                    <Row gutter={16} align="top" style={{ marginBottom: 8 }}>
+                                        <Col span={8}>
+                                            <Form.Item name="enable_mapping" valuePropName="checked" style={{ marginBottom: 0 }}>
+                                                <Checkbox onChange={(event) => {
+                                                    if (event.target.checked) setHmoDataReady(false);
+                                                }}><Text strong>Đổi Lesson ID HMO</Text></Checkbox>
+                                            </Form.Item>
+                                            <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
+                                                Chọn riêng Lesson ID cho từng lịch. Course ID và Package ID được lấy từ bài học của lịch đó.
+                                            </Text>
+                                            <Form.Item name="hmo_sync_name_source" label="Đồng bộ theo" style={{ margin: '10px 0 0' }}>
+                                                <Select
+                                                    options={[
+                                                        { value: 'calendar', label: 'Tên lịch học (calendar)' },
+                                                        { value: 'lesson', label: 'Tên bài học (lessons)' },
+                                                    ]}
+                                                />
+                                            </Form.Item>
+                                            <Text type="secondary" style={{ display: 'block', fontSize: 12 }}>
+                                                Theo tên lịch sẽ so khớp từng lịch với Lesson ID HMO cùng tên, không gán lần lượt theo thứ tự tăng dần.
+                                            </Text>
+                                            <Button
+                                                type="primary"
+                                                ghost
                                                 size="small"
-                                                title={<Text style={{ fontSize: 14 }}>
-                                                    {calendarContextById.get(String(lessonKey))?.label || `Lịch ${lessonKey}`}
-                                                </Text>}
-                                                style={{
-                                                    marginBottom: 16,
-                                                    borderRadius: 8,
-                                                    border: '1px solid #e8e8e8',
-                                                    contentVisibility: 'auto',
-                                                    containIntrinsicSize: '0 260px',
-                                                }}
-                                                headStyle={{ borderBottom: '1px solid #e8e8e8', padding: '10px 16px' }}
-                                                bodyStyle={{ padding: '16px' }}
+                                                icon={<SyncOutlined spin={syncingHmoLessonIds} />}
+                                                loading={syncingHmoLessonIds}
+                                                onClick={() => void handleSyncHmoLessonIds()}
+                                                style={{ marginTop: 10 }}
                                             >
-                                                <Row gutter={[16, 16]} align="top">
-                                                    <Col xs={24} md={8} xl={3}>
-                                                        <Form.Item
-                                                            label={<Text>Ngày học</Text>}
-                                                            name={['separate_config', lessonKey, 'start_date']}
-                                                            style={{ marginBottom: 0 }}
-                                                        >
-                                                            <DatePicker format="dddd - DD/MM/YYYY" style={{ width: '100%' }} />
-                                                        </Form.Item>
-                                                    </Col>
-                                                    <Col xs={12} md={8} xl={2}>
-                                                        <Form.Item
-                                                            label={<Text>Bắt đầu</Text>}
-                                                            name={['separate_config', lessonKey, 'start_time']}
-                                                            style={{ marginBottom: 0 }}
-                                                        >
-                                                            <TimePicker
-                                                                format="HH:mm"
-                                                                style={{ width: '100%' }}
-                                                                onChange={(value) => revalidateOrClearEndTime(['separate_config', lessonKey, 'end_time'], value)}
-                                                            />
-                                                        </Form.Item>
-                                                    </Col>
-                                                    <Col xs={12} md={8} xl={2}>
-                                                        <Form.Item noStyle dependencies={[['separate_config', lessonKey, 'start_time']]}>
-                                                            {({ getFieldValue }) => {
-                                                                const separateStartTime = getFieldValue(['separate_config', lessonKey, 'start_time']) as Dayjs | undefined;
-                                                                return (
-                                                                    <Form.Item
-                                                                        label={<Text>Kết thúc</Text>}
-                                                                        name={['separate_config', lessonKey, 'end_time']}
-                                                                        style={{ marginBottom: 0 }}
-                                                                        rules={[{ validator: validateEndTimeAfter(['separate_config', lessonKey, 'start_time']) }]}
-                                                                    >
-                                                                        <TimePicker
-                                                                            format="HH:mm"
-                                                                            style={{ width: '100%' }}
-                                                                            disabledTime={() => getEndDisabledTime(separateStartTime)}
-                                                                            defaultOpenValue={separateStartTime}
-                                                                            disabled={!separateStartTime}
-                                                                        />
-                                                                    </Form.Item>
-                                                                );
-                                                            }}
-                                                        </Form.Item>
-                                                    </Col>
-
-                                                    <Col xs={24} md={12} xl={4}>
-                                                        <Form.Item
-                                                            label={<Text>Giáo viên</Text>}
-                                                            name={['separate_config', lessonKey, 'teacher']}
-                                                            style={{ marginBottom: 0 }}
-                                                        >
-                                                            <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" showSearch optionFilterProp="label" placeholder="Chọn giáo viên" />
-                                                        </Form.Item>
-                                                    </Col>
-                                                    <Col xs={24} md={12} xl={6}>
-                                                        <Form.Item
-                                                            label={<Text>Trợ giảng</Text>}
-                                                            name={['separate_config', lessonKey, 'assistant_teacher']}
-                                                            style={{ marginBottom: 0 }}
-                                                        >
-                                                            <TeachingStaffSelect teacherType={0} mode="multiple" showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" maxTagCount="responsive" />
-                                                        </Form.Item>
-                                                    </Col>
-                                                    <Col xs={24} xl={8} style={{ order: 3 }}>
-                                                        <Form.Item noStyle dependencies={[["separate_config", lessonKey, "enable_lesson_name_pattern"]]}>
-                                                            {({ getFieldValue }) => {
-                                                                const enabled = getFieldValue(['separate_config', lessonKey, 'enable_lesson_name_pattern']);
-                                                                return (
-                                                                    <Form.Item
-                                                                        label={
-                                                                            <Form.Item name={['separate_config', lessonKey, 'enable_lesson_name_pattern']} valuePropName="checked" noStyle>
-                                                                                <Checkbox><Text>Thêm tiền tố / hậu tố tên bài</Text></Checkbox>
-                                                                            </Form.Item>
-                                                                        }
-                                                                        style={{ marginBottom: 0 }}
-                                                                    >
-                                                                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, opacity: enabled ? 1 : 0.5 }}>
-                                                                            <Form.Item name={['separate_config', lessonKey, 'lesson_name_prefix']} style={{ marginBottom: 0 }} rules={[{ max: 100 }]}>
-                                                                                <Input disabled={!enabled} maxLength={100} placeholder="Tiền tố: [Lịch {n}] - " style={{ width: 220 }} />
-                                                                            </Form.Item>
-                                                                            <Form.Item name={['separate_config', lessonKey, 'lesson_name_suffix']} style={{ marginBottom: 0 }} rules={[{ max: 100 }]}>
-                                                                                <Input disabled={!enabled} maxLength={100} placeholder="Hậu tố: - Lần {n}" style={{ width: 190 }} />
-                                                                            </Form.Item>
-                                                                        </div>
-                                                                    </Form.Item>
-                                                                );
-                                                            }}
-                                                        </Form.Item>
-                                                    </Col>
-
-                                                    {(() => {
-                                                        const record = selectedRowByCalendarId.get(String(lessonKey));
-                                                        const internalLessonId = String(record?.session_id || '');
-                                                        const options = hmoOptionsByLesson[internalLessonId] || [];
-                                                        const presentation = hmoPresentationByLesson[internalLessonId];
+                                                Đồng bộ Lesson ID HMO
+                                            </Button>
+                                        </Col>
+                                        <Col span={16}>
+                                            <div style={{ opacity: mappingEnabled ? 1 : 0.5 }}>
+                                                <Space direction="vertical" style={{ width: '100%' }}>
+                                                    {calendarContexts.map((context) => {
+                                                        const options = hmoOptionsByLesson[context.internalLessonId] || [];
                                                         const optionsResolved = Object.prototype.hasOwnProperty.call(
                                                             hmoOptionsByLesson,
-                                                            internalLessonId,
+                                                            context.internalLessonId,
                                                         );
-                                                        const optionsLoading = loadingHmoLessons.has(internalLessonId);
+                                                        const optionsLoading = loadingHmoLessons.has(context.internalLessonId);
+                                                        const calendarRow = selectedRowByCalendarId.get(context.calendarId);
                                                         return (
-                                                                    <Col xs={24} xl={16} style={{ order: 2 }}>
-                                                                        <Form.Item
-                                                                    label={<Text>Lesson ID HMO</Text>}
-                                                                    name={['separate_config', lessonKey, 'hmo_mapping_keys']}
-                                                                    extra={presentation?.summary
-                                                                        ? `${presentation.summary} — danh sách được nhóm theo Package/Course.`
+                                                            <React.Fragment key={context.calendarId}>
+                                                                <Form.Item
+                                                                    name={['common_hmo_mapping_keys_by_calendar', context.calendarId]}
+                                                                    label={context.label}
+                                                                    extra={options.length
+                                                                        ? `${summarizeHmoOptions(options)} — danh sách được nhóm theo Package/Course.`
                                                                         : undefined}
-                                                                    style={{ marginBottom: 0 }}
+                                                                    style={{
+                                                                        marginBottom: 8,
+                                                                        contentVisibility: 'auto',
+                                                                        containIntrinsicSize: '0 88px',
+                                                                    }}
                                                                 >
                                                                     <HmoMappingSelect
                                                                         allowClear
                                                                         showSearch
                                                                         optionFilterProp="label"
                                                                         loading={optionsLoading}
-                                                                        disabled={!internalLessonId}
+                                                                        disabled={!mappingEnabled}
                                                                         onDropdownVisibleChange={(nextOpen: boolean) => {
                                                                             if (nextOpen && !optionsResolved) {
                                                                                 void loadHmoOptionsForLesson(
-                                                                                    internalLessonId,
-                                                                                    String(record?.code || ''),
+                                                                                    context.internalLessonId,
+                                                                                    String(calendarRow?.code || ''),
                                                                                 );
                                                                             }
                                                                         }}
                                                                         listHeight={420}
-                                                                        popupMatchSelectWidth={680}
-                                                                        placeholder={!internalLessonId
-                                                                            ? 'Lịch chưa gắn bài học'
-                                                                            : optionsLoading
-                                                                                ? 'Đang tải Lesson ID HMO...'
-                                                                                : !optionsResolved
-                                                                                    ? 'Chọn để tải Lesson ID HMO'
-                                                                            : options.length
+                                                                        popupMatchSelectWidth={screens.md ? 680 : true}
+                                                                        placeholder={optionsLoading
+                                                                            ? 'Đang tải Lesson ID HMO...'
+                                                                            : !optionsResolved
+                                                                                ? 'Chọn để tải Lesson ID HMO'
+                                                                                : options.length
                                                                                     ? 'Chọn Lesson ID HMO'
-                                                                                    : 'Bài chưa có Course ID / HMO không có Lesson ID'}
+                                                                                    : 'Bài chưa có Course ID hoặc HMO không có Lesson ID'}
                                                                         notFoundContent={optionsLoading ? (
                                                                             <Space size={8}>
                                                                                 <Spin size="small" />
                                                                                 <Text type="secondary">Đang tải Lesson ID HMO...</Text>
                                                                             </Space>
                                                                         ) : 'Không có Lesson ID HMO phù hợp'}
-                                                                        options={presentation?.groupedOptions || []}
+                                                                        options={buildGroupedHmoOptions(options)}
+                                                                    />
+                                                                </Form.Item>
+                                                                {hmoSyncNotes[context.calendarId] && (
+                                                                    <Alert
+                                                                        showIcon
+                                                                        type={hmoSyncNotes[context.calendarId].type}
+                                                                        message={hmoSyncNotes[context.calendarId].message}
+                                                                        style={{ marginTop: -4, marginBottom: 8 }}
+                                                                    />
+                                                                )}
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
+                                                    {!calendarContexts.length && (
+                                                        <Alert type="warning" showIcon message="Lịch đã chọn chưa gắn bài học nội bộ" />
+                                                    )}
+                                                </Space>
+                                            </div>
+                                        </Col>
+                                    </Row>
+                                </Card>
+                            )}
+
+                            {/* CHẾ ĐỘ 2: CẤU HÌNH RIÊNG CHO TỪNG LỊCH */}
+                            {renderedSeparateCount > 0 && (
+                                <div style={{ display: configMode === 'separate' ? 'block' : 'none' }}>
+                                    {(!hmoDataReady || renderedSeparateCount < selectedLessonKeys.length) && (
+                                        <Alert
+                                            showIcon
+                                            type="info"
+                                            message={!hmoDataReady
+                                                ? 'Đang tải danh sách Lesson ID HMO'
+                                                : `Đã hiển thị ${renderedSeparateCount}/${selectedLessonKeys.length} lịch học`}
+                                            description={renderedSeparateCount < selectedLessonKeys.length
+                                                ? `Bạn có thể xem trước ngay. Chỉ cần cuộn xuống khi muốn sửa riêng; hệ thống sẽ tải thêm ${Math.min(SEPARATE_RENDER_BATCH_SIZE, selectedLessonKeys.length - renderedSeparateCount)} lịch mỗi lượt.`
+                                                : 'Dữ liệu HMO đang được tải theo nhóm Package/Course.'}
+                                            style={{ marginBottom: 16 }}
+                                        />
+                                    )}
+                                    {Array.isArray(selectedLessons) && selectedLessons.length > 0 ? (
+                                        <>
+                                            <div style={{ marginBottom: 16 }}>
+                                                <Space wrap size={16} align="end">
+                                                    <Form.Item name="hmo_sync_name_source" label="Đồng bộ theo" style={{ marginBottom: 0 }}>
+                                                        <Select
+                                                            style={{ width: 220 }}
+                                                            options={[
+                                                                { value: 'calendar', label: 'Tên lịch học (calendar)' },
+                                                                { value: 'lesson', label: 'Tên bài học (lessons)' },
+                                                            ]}
+                                                        />
+                                                    </Form.Item>
+                                                    <Button
+                                                        type="primary"
+                                                        ghost
+                                                        icon={<SyncOutlined spin={syncingHmoLessonIds} />}
+                                                        loading={syncingHmoLessonIds}
+                                                        onClick={() => void handleSyncHmoLessonIds()}
+                                                    >
+                                                        Đồng bộ Lesson ID HMO
+                                                    </Button>
+                                                </Space>
+                                                <div style={{ marginTop: 4 }}>
+                                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                                        Theo tên lịch: so khớp từng lịch với Lesson ID HMO cùng tên. Theo tên bài học: chỉ tự gán khi số Lesson ID trùng tên khớp chính xác số lịch của mỗi bài.
+                                                    </Text>
+                                                </div>
+                                            </div>
+                                            <div style={{ padding: '16px 20px', backgroundColor: '#f0f5ff', border: '1px solid #adc6ff', borderRadius: 8, marginBottom: 24, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
+                                                    <CalendarOutlined style={{ fontSize: 18, color: '#1677ff', marginRight: 8 }} />
+                                                    <Text strong style={{ fontSize: 15, color: '#1677ff' }}>Công cụ tự động điền ngày học</Text>
+                                                </div>
+                                                <Row gutter={[24, 16]} align="bottom">
+                                                    <Col xs={24} md={8} xl={6}>
+                                                        <div style={{ marginBottom: 8 }}><Text strong style={{ fontSize: 13 }}>Ngày bắt đầu</Text></div>
+                                                        <DatePicker
+                                                            format="DD/MM/YYYY"
+                                                            style={{ width: '100%' }}
+                                                            value={autoFillStartDate}
+                                                            onChange={setAutoFillStartDate}
+                                                            placeholder="Chọn ngày bắt đầu"
+                                                        />
+                                                    </Col>
+                                                    <Col xs={24} md={16} xl={12}>
+                                                        <div style={{ marginBottom: 8 }}><Text strong style={{ fontSize: 13 }}>Lịch học hàng tuần</Text></div>
+                                                        <Checkbox.Group
+                                                            options={[
+                                                                { label: 'T2', value: 1 },
+                                                                { label: 'T3', value: 2 },
+                                                                { label: 'T4', value: 3 },
+                                                                { label: 'T5', value: 4 },
+                                                                { label: 'T6', value: 5 },
+                                                                { label: 'T7', value: 6 },
+                                                                { label: 'CN', value: 7 },
+                                                            ]}
+                                                            value={autoFillWeekdays}
+                                                            onChange={checked => {
+                                                                const weekdays = checked as number[];
+                                                                setAutoFillWeekdays(weekdays);
+                                                            }}
+                                                        />
+                                                    </Col>
+                                                    <Col xs={24} xl={6} style={{ textAlign: 'right' }}>
+                                                        <Button type="primary" onClick={handleAutoFillDates} style={{ width: '100%' }}>Áp dụng</Button>
+                                                    </Col>
+                                                </Row>
+                                                {!!autoFillWeekdays.length && (
+                                                    <Card size="small" title="Khung giờ (tùy chọn)" style={{ marginTop: 12, maxWidth: 900 }}>
+                                                        <Space wrap size={[12, 8]} align="start">
+                                                            {[...autoFillWeekdays].sort((left, right) => left - right).map((weekday) => (
+                                                                <Form.Item
+                                                                    key={weekday}
+                                                                    name={['auto_fill_weekday_times', String(weekday)]}
+                                                                    label={weekday === 7 ? 'Chủ Nhật' : `Thứ ${weekday + 1}`}
+                                                                    style={{ marginBottom: 0, width: 260 }}
+                                                                >
+                                                                    <TimePicker.RangePicker
+                                                                        size="small"
+                                                                        format="HH:mm"
+                                                                        minuteStep={5}
+                                                                        allowClear
+                                                                        placeholder={['Giữ giờ cũ', 'Giữ giờ cũ']}
                                                                         style={{ width: '100%' }}
                                                                     />
                                                                 </Form.Item>
-                                                                {hmoSyncNotes[String(lessonKey)] && (
-                                                                    <Alert
-                                                                        showIcon
-                                                                        type={hmoSyncNotes[String(lessonKey)].type}
-                                                                        message={hmoSyncNotes[String(lessonKey)].message}
-                                                                        style={{ marginTop: 8 }}
-                                                                    />
-                                                                )}
-                                                            </Col>
-                                                        );
-                                                    })()}
-                                                </Row>
-                                            </Card>
-                                        ))}
-                                        {renderedSeparateCount < selectedLessonKeys.length && (
-                                            <div
-                                                style={{
-                                                    minHeight: 72,
-                                                    display: 'grid',
-                                                    placeItems: 'center',
-                                                    marginBottom: 16,
-                                                }}
-                                            >
-                                                <Button
-                                                    type="dashed"
-                                                    loading={loadingMoreSeparate}
-                                                    onClick={handleLoadMoreSeparate}
-                                                >
-                                                    Tải thêm {Math.min(SEPARATE_RENDER_BATCH_SIZE, selectedLessonKeys.length - renderedSeparateCount)} lịch để chỉnh riêng
-                                                </Button>
+                                                            ))}
+                                                        </Space>
+                                                        <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
+                                                            Để trống để chỉ đổi ngày và giữ nguyên giờ hiện tại; chỉ nhập cho những thứ cần đổi giờ.
+                                                        </Text>
+                                                    </Card>
+                                                )}
+                                                <Card size="small" title="Các đợt nghỉ" style={{ marginTop: 16 }}>
+                                                    <Form.List name="auto_fill_holiday_periods">
+                                                        {(fields, { add, remove }) => (
+                                                            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                                                                {fields.map((field, index) => (
+                                                                    <Space key={field.key} wrap align="start">
+                                                                        <Form.Item
+                                                                            name={[field.name, 'date_range']}
+                                                                            label={`Đợt ${index + 1}`}
+                                                                            rules={[{ required: true, message: 'Chọn ngày hoặc khoảng ngày nghỉ' }]}
+                                                                            style={{ marginBottom: 0 }}
+                                                                        >
+                                                                            <DatePicker.RangePicker
+                                                                                format="DD/MM/YYYY"
+                                                                                allowEmpty={[false, false]}
+                                                                                placeholder={['Từ ngày', 'Đến ngày']}
+                                                                            />
+                                                                        </Form.Item>
+                                                                        <Form.Item
+                                                                            name={[field.name, 'handling']}
+                                                                            label="Cách xử lý"
+                                                                            initialValue="create_canceled"
+                                                                            style={{ marginBottom: 0 }}
+                                                                        >
+                                                                            <Select
+                                                                                style={{ width: 290 }}
+                                                                                options={[
+                                                                                    { value: 'create_canceled', label: 'Tạo lịch ngày nghỉ và đánh dấu Nghỉ' },
+                                                                                    { value: 'next_session', label: 'Không tạo ngày nghỉ, giữ nguyên thứ tự bài' },
+                                                                                ]}
+                                                                            />
+                                                                        </Form.Item>
+                                                                        <Button danger type="text" onClick={() => remove(field.name)} style={{ marginTop: 30 }}>
+                                                                            Xóa
+                                                                        </Button>
+                                                                    </Space>
+                                                                ))}
+                                                                <Button
+                                                                    type="dashed"
+                                                                    icon={<PlusOutlined />}
+                                                                    onClick={() => add({ date_range: null, handling: 'create_canceled' })}
+                                                                    style={{ alignSelf: 'flex-start' }}
+                                                                >
+                                                                    Thêm ngày hoặc đợt nghỉ
+                                                                </Button>
+                                                                <Text type="secondary">
+                                                                    Chọn cùng ngày ở hai đầu để nghỉ một ngày. Mỗi đợt sẽ được tạo lịch Nghỉ hoặc bỏ qua theo đúng cách xử lý đã chọn.
+                                                                </Text>
+                                                            </Space>
+                                                        )}
+                                                    </Form.List>
+                                                </Card>
                                             </div>
-                                        )}
-                                    </>
-                                ) : (
-                                    <Text type="secondary">Vui lòng chọn ít nhất 1 lịch học từ Bảng ở trên.</Text>
-                                )}
-                            </div>
-                        )}
-                    </>
-                )}
+                                            {selectedLessonKeys.slice(0, renderedSeparateCount).map((lessonKey) => (
+                                                <Card
+                                                    key={lessonKey}
+                                                    size="small"
+                                                    title={<Text style={{ fontSize: 14 }}>
+                                                        {calendarContextById.get(String(lessonKey))?.label || `Lịch ${lessonKey}`}
+                                                    </Text>}
+                                                    style={{
+                                                        marginBottom: 16,
+                                                        borderRadius: 8,
+                                                        border: '1px solid #e8e8e8',
+                                                        contentVisibility: 'auto',
+                                                        containIntrinsicSize: '0 260px',
+                                                    }}
+                                                    headStyle={{ borderBottom: '1px solid #e8e8e8', padding: '10px 16px' }}
+                                                    bodyStyle={{ padding: '16px' }}
+                                                >
+                                                    <Row gutter={[16, 16]} align="top">
+                                                        <Col xs={24} md={8} xl={3}>
+                                                            <Form.Item
+                                                                label={<Text>Ngày học</Text>}
+                                                                name={['separate_config', lessonKey, 'start_date']}
+                                                                style={{ marginBottom: 0 }}
+                                                            >
+                                                                <DatePicker format="dddd - DD/MM/YYYY" style={{ width: '100%' }} />
+                                                            </Form.Item>
+                                                        </Col>
+                                                        <Col xs={12} md={8} xl={2}>
+                                                            <Form.Item
+                                                                label={<Text>Bắt đầu</Text>}
+                                                                name={['separate_config', lessonKey, 'start_time']}
+                                                                style={{ marginBottom: 0 }}
+                                                            >
+                                                                <TimePicker
+                                                                    format="HH:mm"
+                                                                    style={{ width: '100%' }}
+                                                                    onChange={(value) => revalidateOrClearEndTime(['separate_config', lessonKey, 'end_time'], value)}
+                                                                />
+                                                            </Form.Item>
+                                                        </Col>
+                                                        <Col xs={12} md={8} xl={2}>
+                                                            <Form.Item noStyle dependencies={[['separate_config', lessonKey, 'start_time']]}>
+                                                                {({ getFieldValue }) => {
+                                                                    const separateStartTime = getFieldValue(['separate_config', lessonKey, 'start_time']) as Dayjs | undefined;
+                                                                    return (
+                                                                        <Form.Item
+                                                                            label={<Text>Kết thúc</Text>}
+                                                                            name={['separate_config', lessonKey, 'end_time']}
+                                                                            style={{ marginBottom: 0 }}
+                                                                            rules={[{ validator: validateEndTimeAfter(['separate_config', lessonKey, 'start_time']) }]}
+                                                                        >
+                                                                            <TimePicker
+                                                                                format="HH:mm"
+                                                                                style={{ width: '100%' }}
+                                                                                disabledTime={() => getEndDisabledTime(separateStartTime)}
+                                                                                defaultOpenValue={separateStartTime}
+                                                                                disabled={!separateStartTime}
+                                                                            />
+                                                                        </Form.Item>
+                                                                    );
+                                                                }}
+                                                            </Form.Item>
+                                                        </Col>
 
-                {operation !== 'update' && (
-                    <FormSection title={operation === 'cancel' ? 'Xác nhận nghỉ học hàng loạt' : 'Cấu hình lịch bù hàng loạt'}>
-                        <Alert
-                            showIcon
-                            type={operation === 'cancel' ? 'warning' : 'info'}
-                            style={{ marginBottom: 16 }}
-                            message={operation === 'cancel'
-                                ? 'Các lịch đã chọn sẽ chuyển sang trạng thái Nghỉ học và không tạo lịch thay thế.'
-                                : 'Mỗi lịch đã chọn sẽ được giữ lại dưới dạng lịch nghỉ và tạo một lịch bù mới có cùng nội dung.'}
-                        />
-                        {operation === 'makeup' && (
-                            <Form.Item
-                                name="offset_days"
-                                label="Dịch lịch bù thêm bao nhiêu ngày"
-                                initialValue={7}
-                                rules={[{ required: true, message: 'Nhập số ngày dịch lịch bù' }]}
-                            >
-                                <InputNumber min={1} max={3650} precision={0} style={{ width: 220 }} addonAfter="ngày" />
-                            </Form.Item>
-                        )}
+                                                        <Col xs={24} md={12} xl={4}>
+                                                            <Form.Item
+                                                                label={<Text>Giáo viên</Text>}
+                                                                name={['separate_config', lessonKey, 'teacher']}
+                                                                style={{ marginBottom: 0 }}
+                                                            >
+                                                                <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" showSearch optionFilterProp="label" placeholder="Chọn giáo viên" />
+                                                            </Form.Item>
+                                                        </Col>
+                                                        <Col xs={24} md={12} xl={6}>
+                                                            <Form.Item
+                                                                label={<Text>Trợ giảng</Text>}
+                                                                name={['separate_config', lessonKey, 'assistant_teacher']}
+                                                                style={{ marginBottom: 0 }}
+                                                            >
+                                                                <TeachingStaffSelect teacherType={0} mode="multiple" showSearch optionFilterProp="label" placeholder="Chọn trợ giảng" maxTagCount="responsive" />
+                                                            </Form.Item>
+                                                        </Col>
+                                                        <Col xs={24} xl={8} style={{ order: 3 }}>
+                                                            <Form.Item noStyle dependencies={[["separate_config", lessonKey, "enable_lesson_name_pattern"]]}>
+                                                                {({ getFieldValue }) => {
+                                                                    const enabled = getFieldValue(['separate_config', lessonKey, 'enable_lesson_name_pattern']);
+                                                                    return (
+                                                                        <Form.Item
+                                                                            label={
+                                                                                <Form.Item name={['separate_config', lessonKey, 'enable_lesson_name_pattern']} valuePropName="checked" noStyle>
+                                                                                    <Checkbox><Text>Thêm tiền tố / hậu tố tên bài</Text></Checkbox>
+                                                                                </Form.Item>
+                                                                            }
+                                                                            style={{ marginBottom: 0 }}
+                                                                        >
+                                                                            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, opacity: enabled ? 1 : 0.5 }}>
+                                                                                <Form.Item name={['separate_config', lessonKey, 'lesson_name_prefix']} style={{ marginBottom: 0 }} rules={[{ max: 100 }]}>
+                                                                                    <Input disabled={!enabled} maxLength={100} placeholder="Tiền tố: [Lịch {n}] - " style={{ width: 220 }} />
+                                                                                </Form.Item>
+                                                                                <Form.Item name={['separate_config', lessonKey, 'lesson_name_suffix']} style={{ marginBottom: 0 }} rules={[{ max: 100 }]}>
+                                                                                    <Input disabled={!enabled} maxLength={100} placeholder="Hậu tố: - Lần {n}" style={{ width: 190 }} />
+                                                                                </Form.Item>
+                                                                            </div>
+                                                                        </Form.Item>
+                                                                    );
+                                                                }}
+                                                            </Form.Item>
+                                                        </Col>
 
-                        <Divider orientation="left" plain style={{ margin: '8px 0 16px' }}>
-                            Tên bài hiển thị sau thao tác
-                        </Divider>
-                        <Row gutter={24}>
-                            <Col flex={operation === 'makeup' ? '420px' : '100%'}>
-                                <Text strong>Buổi nghỉ</Text>
-                                <Row gutter={12} style={{ marginTop: 8 }}>
-                                    <Col flex="180px">
-                                        <Form.Item label="Tiền tố" name="canceled_lesson_name_prefix">
-                                            <Input placeholder="[NGHỈ HỌC] " maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
-                                        </Form.Item>
-                                    </Col>
-                                    <Col flex="180px">
-                                        <Form.Item label="Hậu tố" name="canceled_lesson_name_suffix">
-                                            <Input placeholder="Để trống nếu không dùng" maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
-                                        </Form.Item>
-                                    </Col>
-                                </Row>
-                            </Col>
+                                                        {(() => {
+                                                            const record = selectedRowByCalendarId.get(String(lessonKey));
+                                                            const internalLessonId = String(record?.session_id || '');
+                                                            const options = hmoOptionsByLesson[internalLessonId] || [];
+                                                            const presentation = hmoPresentationByLesson[internalLessonId];
+                                                            const optionsResolved = Object.prototype.hasOwnProperty.call(
+                                                                hmoOptionsByLesson,
+                                                                internalLessonId,
+                                                            );
+                                                            const optionsLoading = loadingHmoLessons.has(internalLessonId);
+                                                            return (
+                                                                <Col xs={24} xl={16} style={{ order: 2 }}>
+                                                                    <Form.Item
+                                                                        label={<Text>Lesson ID HMO</Text>}
+                                                                        name={['separate_config', lessonKey, 'hmo_mapping_keys']}
+                                                                        extra={presentation?.summary
+                                                                            ? `${presentation.summary} — danh sách được nhóm theo Package/Course.`
+                                                                            : undefined}
+                                                                        style={{ marginBottom: 0 }}
+                                                                    >
+                                                                        <HmoMappingSelect
+                                                                            allowClear
+                                                                            showSearch
+                                                                            optionFilterProp="label"
+                                                                            loading={optionsLoading}
+                                                                            disabled={!internalLessonId}
+                                                                            onDropdownVisibleChange={(nextOpen: boolean) => {
+                                                                                if (nextOpen && !optionsResolved) {
+                                                                                    void loadHmoOptionsForLesson(
+                                                                                        internalLessonId,
+                                                                                        String(record?.code || ''),
+                                                                                    );
+                                                                                }
+                                                                            }}
+                                                                            listHeight={420}
+                                                                            popupMatchSelectWidth={screens.md ? 680 : true}
+                                                                            placeholder={!internalLessonId
+                                                                                ? 'Lịch chưa gắn bài học'
+                                                                                : optionsLoading
+                                                                                    ? 'Đang tải Lesson ID HMO...'
+                                                                                    : !optionsResolved
+                                                                                        ? 'Chọn để tải Lesson ID HMO'
+                                                                                        : options.length
+                                                                                            ? 'Chọn Lesson ID HMO'
+                                                                                            : 'Bài chưa có Course ID / HMO không có Lesson ID'}
+                                                                            notFoundContent={optionsLoading ? (
+                                                                                <Space size={8}>
+                                                                                    <Spin size="small" />
+                                                                                    <Text type="secondary">Đang tải Lesson ID HMO...</Text>
+                                                                                </Space>
+                                                                            ) : 'Không có Lesson ID HMO phù hợp'}
+                                                                            options={presentation?.groupedOptions || []}
+                                                                            style={{ width: '100%' }}
+                                                                        />
+                                                                    </Form.Item>
+                                                                    {hmoSyncNotes[String(lessonKey)] && (
+                                                                        <Alert
+                                                                            showIcon
+                                                                            type={hmoSyncNotes[String(lessonKey)].type}
+                                                                            message={hmoSyncNotes[String(lessonKey)].message}
+                                                                            style={{ marginTop: 8 }}
+                                                                        />
+                                                                    )}
+                                                                </Col>
+                                                            );
+                                                        })()}
+                                                    </Row>
+                                                </Card>
+                                            ))}
+                                            {renderedSeparateCount < selectedLessonKeys.length && (
+                                                <div
+                                                    style={{
+                                                        minHeight: 72,
+                                                        display: 'grid',
+                                                        placeItems: 'center',
+                                                        marginBottom: 16,
+                                                    }}
+                                                >
+                                                    <Button
+                                                        type="dashed"
+                                                        loading={loadingMoreSeparate}
+                                                        onClick={handleLoadMoreSeparate}
+                                                    >
+                                                        Tải thêm {Math.min(SEPARATE_RENDER_BATCH_SIZE, selectedLessonKeys.length - renderedSeparateCount)} lịch để chỉnh riêng
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <Text type="secondary">Vui lòng chọn ít nhất 1 lịch học từ Bảng ở trên.</Text>
+                                    )}
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                    {operation !== 'update' && (
+                        <FormSection title={operation === 'cancel' ? 'Xác nhận nghỉ học hàng loạt' : 'Cấu hình lịch bù hàng loạt'}>
+                            <Alert
+                                showIcon
+                                type={operation === 'cancel' ? 'warning' : 'info'}
+                                style={{ marginBottom: 16 }}
+                                message={operation === 'cancel'
+                                    ? 'Các lịch đã chọn sẽ chuyển sang trạng thái Nghỉ học và không tạo lịch thay thế.'
+                                    : 'Mỗi lịch đã chọn sẽ được giữ lại dưới dạng lịch nghỉ và tạo một lịch bù mới có cùng nội dung.'}
+                            />
                             {operation === 'makeup' && (
-                                <Col flex="420px">
-                                    <Text strong>Buổi học bù</Text>
+                                <Form.Item
+                                    name="offset_days"
+                                    label="Dịch lịch bù thêm bao nhiêu ngày"
+                                    initialValue={7}
+                                    rules={[{ required: true, message: 'Nhập số ngày dịch lịch bù' }]}
+                                >
+                                    <InputNumber min={1} max={3650} precision={0} style={{ width: 220 }} addonAfter="ngày" />
+                                </Form.Item>
+                            )}
+
+                            <Divider orientation="left" plain style={{ margin: '8px 0 16px' }}>
+                                Tên bài hiển thị sau thao tác
+                            </Divider>
+                            <Row gutter={24}>
+                                <Col flex={operation === 'makeup' ? '420px' : '100%'}>
+                                    <Text strong>Buổi nghỉ</Text>
                                     <Row gutter={12} style={{ marginTop: 8 }}>
                                         <Col flex="180px">
-                                            <Form.Item label="Tiền tố" name="new_lesson_name_prefix">
-                                                <Input placeholder="[HỌC BÙ] " maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
+                                            <Form.Item label="Tiền tố" name="canceled_lesson_name_prefix">
+                                                <Input placeholder="[NGHỈ HỌC] " maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
                                             </Form.Item>
                                         </Col>
                                         <Col flex="180px">
-                                            <Form.Item label="Hậu tố" name="new_lesson_name_suffix">
+                                            <Form.Item label="Hậu tố" name="canceled_lesson_name_suffix">
                                                 <Input placeholder="Để trống nếu không dùng" maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
                                             </Form.Item>
                                         </Col>
                                     </Row>
                                 </Col>
-                            )}
-                        </Row>
-
-                        <Form.Item
-                            name="reason"
-                            label="Lý do thay đổi"
-                            rules={[
-                                { required: true, whitespace: true, message: 'Nhập lý do thay đổi lịch học' },
-                                { max: 500, message: 'Lý do không được quá 500 ký tự' },
-                            ]}
-                        >
-                            <Input.TextArea rows={3} maxLength={500} showCount placeholder="Ví dụ: Nghỉ lễ theo thông báo của nhà trường" />
-                        </Form.Item>
-                    </FormSection>
-                )}
-                {previewRows.length > 0 && (
-                    <div ref={previewRef} style={{ scrollMarginTop: 16 }}>
-                        <Alert
-                            type="info"
-                            showIcon
-                            style={{ marginTop: 16 }}
-                            message={operation === 'update' ? 'Xem trước thay đổi trước khi cập nhật' : 'Xem trước thao tác hàng loạt'}
-                            description={
-                                <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                                <Table
-                                    scroll={{ x: "max-content" }}
-                                    size="small"
-                                    pagination={false}
-                                    rowKey="id"
-                                    dataSource={previewRows}
-                                    onRow={(row) => ({
-                                        style: row.is_holiday ? { backgroundColor: '#fff1f0' } : undefined,
-                                    })}
-                                    columns={[
-                                        { title: 'Bài', dataIndex: 'label', width: 90 },
-                                        {
-                                            title: 'Tên bài',
-                                            hidden: operation !== 'update',
-                                            render: (_, row) => renderPreviewChange(row.current_lesson_name, row.next_lesson_name),
-                                        },
-                                        {
-                                            title: 'Tên bài sau thao tác',
-                                            hidden: operation === 'update',
-                                            render: (_, row) => (
-                                                <div style={{ whiteSpace: 'pre-line' }}>{row.next_lesson_name}</div>
-                                            ),
-                                        },
-                                        {
-                                            title: 'Giáo viên',
-                                            hidden: operation !== 'update',
-                                            render: (_, row) => renderPreviewChange(row.current_teacher, row.next_teacher),
-                                        },
-                                        {
-                                            title: 'Trợ giảng',
-                                            hidden: operation !== 'update',
-                                            render: (_, row) => renderPreviewChange(row.current_assistant, row.next_assistant),
-                                        },
-                                        {
-                                            title: 'Thứ',
-                                            width: 100,
-                                            hidden: operation !== 'update',
-                                            render: (_, row) => renderPreviewChange(row.current_weekday, row.next_weekday),
-                                        },
-                                        {
-                                            title: 'Thời gian',
-                                            hidden: operation !== 'update',
-                                            render: (_, row) => row.is_holiday
-                                                ? (
-                                                    <Space direction="vertical" size={0} style={{ lineHeight: 1.35 }}>
-                                                        <Text delete type="secondary">{row.current_schedule}</Text>
-                                                        <Text strong type="danger">{row.next_schedule}</Text>
-                                                    </Space>
-                                                )
-                                                : renderPreviewChange(row.current_schedule, row.next_schedule),
-                                        },
-                                        {
-                                            title: 'Trạng thái',
-                                            width: 110,
-                                            hidden: operation !== 'update',
-                                            render: (_, row) => row.is_holiday ? <Tag color="red">Nghỉ học</Tag> : <Text type="secondary">Giữ nguyên</Text>,
-                                        },
-                                        operation === 'update'
-                                            ? {
-                                                title: 'Lesson ID HMO',
-                                                width: 340,
-                                                render: (_: unknown, row: any) => renderMappingPreviewChange(row.current, row.next),
-                                            }
-                                            : { title: 'Lịch hiện tại', dataIndex: 'current' },
-                                        ...(operation === 'update' ? [] : [{ title: 'Sau thao tác', dataIndex: 'next' }]),
-                                    ]}
-                                />
-                                {submitError && (
-                                    <div ref={submitErrorRef} style={{ width: '100%', scrollMargin: 24 }}>
-                                        <Alert
-                                            type="error"
-                                            showIcon
-                                            message="Không thể cập nhật lịch"
-                                            description={<div style={{ whiteSpace: 'pre-line' }}>{submitError}</div>}
-                                        />
-                                    </div>
+                                {operation === 'makeup' && (
+                                    <Col flex="420px">
+                                        <Text strong>Buổi học bù</Text>
+                                        <Row gutter={12} style={{ marginTop: 8 }}>
+                                            <Col flex="180px">
+                                                <Form.Item label="Tiền tố" name="new_lesson_name_prefix">
+                                                    <Input placeholder="[HỌC BÙ] " maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
+                                                </Form.Item>
+                                            </Col>
+                                            <Col flex="180px">
+                                                <Form.Item label="Hậu tố" name="new_lesson_name_suffix">
+                                                    <Input placeholder="Để trống nếu không dùng" maxLength={100} style={{ width: '100%', maxWidth: 180 }} />
+                                                </Form.Item>
+                                            </Col>
+                                        </Row>
+                                    </Col>
                                 )}
-                                </Space>
-                            }
+                            </Row>
+
+                            <Form.Item
+                                name="reason"
+                                label="Lý do thay đổi"
+                                rules={[
+                                    { required: true, whitespace: true, message: 'Nhập lý do thay đổi lịch học' },
+                                    { max: 500, message: 'Lý do không được quá 500 ký tự' },
+                                ]}
+                            >
+                                <Input.TextArea rows={3} maxLength={500} showCount placeholder="Ví dụ: Nghỉ lễ theo thông báo của nhà trường" />
+                            </Form.Item>
+                        </FormSection>
+                    )}
+                    {previewRows.length > 0 && (
+                        <div ref={previewRef} style={{ scrollMarginTop: 16 }}>
+                            <Alert
+                                type="info"
+                                showIcon
+                                style={{ marginTop: 16 }}
+                                message={operation === 'update' ? 'Xem trước thay đổi trước khi cập nhật' : 'Xem trước thao tác hàng loạt'}
+                                description={
+                                    <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                                        <div className="bulk-preview-mobile">
+                                            {previewRows.map((row, index) => (
+                                                <Card key={row.id ?? index} size="small" title={row.label || `Lịch ${index + 1}`} extra={row.is_holiday ? <Tag color="red">Nghỉ học</Tag> : undefined}>
+                                                    {operation === 'update' ? (
+                                                        <>
+                                                            <div className="bulk-preview-field"><Text type="secondary">Tên bài</Text>{renderPreviewChange(row.current_lesson_name, row.next_lesson_name)}</div>
+                                                            <div className="bulk-preview-field"><Text type="secondary">Thứ học</Text>{renderPreviewChange(row.current_weekday, row.next_weekday)}</div>
+                                                            <div className="bulk-preview-field"><Text type="secondary">Thời gian</Text>{renderPreviewChange(row.current_schedule, row.next_schedule)}</div>
+                                                            <div className="bulk-preview-field"><Text type="secondary">Giáo viên</Text>{renderPreviewChange(row.current_teacher, row.next_teacher)}</div>
+                                                            <div className="bulk-preview-field"><Text type="secondary">Trợ giảng</Text>{renderPreviewChange(row.current_assistant, row.next_assistant)}</div>
+                                                            <div className="bulk-preview-field"><Text type="secondary">Lesson ID HMO</Text>{renderMappingPreviewChange(row.current, row.next)}</div>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <div className="bulk-preview-field"><Text type="secondary">Tên bài sau thao tác</Text><Text>{row.next_lesson_name || '-'}</Text></div>
+                                                            <div className="bulk-preview-field"><Text type="secondary">Lịch hiện tại</Text><Text>{row.current || '-'}</Text></div>
+                                                            <div className="bulk-preview-field"><Text type="secondary">Sau thao tác</Text><Text>{row.next || '-'}</Text></div>
+                                                        </>
+                                                    )}
+                                                </Card>
+                                            ))}
+                                        </div>
+                                        <div className="bulk-preview-desktop">
+                                            <Table
+                                                scroll={{ x: "max-content" }}
+                                                size="small"
+                                                pagination={false}
+                                                rowKey="id"
+                                                dataSource={previewRows}
+                                                onRow={(row) => ({
+                                                    style: row.is_holiday ? { backgroundColor: '#fff1f0' } : undefined,
+                                                })}
+                                                columns={[
+                                                    { title: 'Bài', dataIndex: 'label', width: 90 },
+                                                    {
+                                                        title: 'Tên bài',
+                                                        hidden: operation !== 'update',
+                                                        render: (_, row) => renderPreviewChange(row.current_lesson_name, row.next_lesson_name),
+                                                    },
+                                                    {
+                                                        title: 'Tên bài sau thao tác',
+                                                        hidden: operation === 'update',
+                                                        render: (_, row) => (
+                                                            <div style={{ whiteSpace: 'pre-line' }}>{row.next_lesson_name}</div>
+                                                        ),
+                                                    },
+                                                    {
+                                                        title: 'Giáo viên',
+                                                        hidden: operation !== 'update',
+                                                        render: (_, row) => renderPreviewChange(row.current_teacher, row.next_teacher),
+                                                    },
+                                                    {
+                                                        title: 'Trợ giảng',
+                                                        hidden: operation !== 'update',
+                                                        render: (_, row) => renderPreviewChange(row.current_assistant, row.next_assistant),
+                                                    },
+                                                    {
+                                                        title: 'Thứ',
+                                                        width: 100,
+                                                        hidden: operation !== 'update',
+                                                        render: (_, row) => renderPreviewChange(row.current_weekday, row.next_weekday),
+                                                    },
+                                                    {
+                                                        title: 'Thời gian',
+                                                        hidden: operation !== 'update',
+                                                        render: (_, row) => row.is_holiday
+                                                            ? (
+                                                                <Space direction="vertical" size={0} style={{ lineHeight: 1.35 }}>
+                                                                    <Text delete type="secondary">{row.current_schedule}</Text>
+                                                                    <Text strong type="danger">{row.next_schedule}</Text>
+                                                                </Space>
+                                                            )
+                                                            : renderPreviewChange(row.current_schedule, row.next_schedule),
+                                                    },
+                                                    {
+                                                        title: 'Trạng thái',
+                                                        width: 110,
+                                                        hidden: operation !== 'update',
+                                                        render: (_, row) => row.is_holiday ? <Tag color="red">Nghỉ học</Tag> : <Text type="secondary">Giữ nguyên</Text>,
+                                                    },
+                                                    operation === 'update'
+                                                        ? {
+                                                            title: 'Lesson ID HMO',
+                                                            width: 340,
+                                                            render: (_: unknown, row: any) => renderMappingPreviewChange(row.current, row.next),
+                                                        }
+                                                        : { title: 'Lịch hiện tại', dataIndex: 'current' },
+                                                    ...(operation === 'update' ? [] : [{ title: 'Sau thao tác', dataIndex: 'next' }]),
+                                                ]}
+                                            />
+                                        </div>
+                                        {submitError && (
+                                            <div ref={submitErrorRef} style={{ width: '100%', scrollMargin: 24 }}>
+                                                <Alert
+                                                    type="error"
+                                                    showIcon
+                                                    message="Không thể cập nhật lịch"
+                                                    description={<div style={{ whiteSpace: 'pre-line' }}>{submitError}</div>}
+                                                />
+                                            </div>
+                                        )}
+                                    </Space>
+                                }
+                            />
+                        </div>
+                    )}
+                </Form>}
+            </Modal>
+            <Modal
+                title="Tiến trình xử lý lịch học"
+                open={Boolean(submitProgress)}
+                footer={null}
+                closable={false}
+                maskClosable={false}
+                keyboard={false}
+                width={520}
+                zIndex={1200}
+            >
+                {submitProgress && (
+                    <div style={{ padding: '20px 4px 8px' }}>
+                        <Text strong style={{ display: 'block', marginBottom: 12 }}>
+                            {submitProgress.message}
+                        </Text>
+                        <Progress
+                            percent={submitProgress.percent}
+                            status={submitProgress.percent === 100 ? 'success' : 'active'}
+                            size="default"
                         />
+                        <div style={{ marginTop: 12, padding: '12px 16px', borderRadius: 8, background: '#f5f5f5' }}>
+                            {submitProgress.completed > 0 ? (
+                                <Text strong>
+                                    Đã xử lý {submitProgress.completed}/{submitProgress.total} lịch học
+                                </Text>
+                            ) : (
+                                <>
+                                    <Text>Đang xử lý: {submitProgress.total} lịch học</Text>
+                                    <br />
+                                    <Text type="secondary">
+                                        Vui lòng chờ trong giây lát. Hệ thống sẽ tự động lưu toàn bộ thay đổi khi hoàn tất.
+                                    </Text>
+                                </>
+                            )}
+                        </div>
                     </div>
                 )}
-            </Form>}
-        </Modal>
-        <Modal
-            title="Tiến trình xử lý lịch học"
-            open={Boolean(submitProgress)}
-            footer={null}
-            closable={false}
-            maskClosable={false}
-            keyboard={false}
-            width={520}
-            zIndex={1200}
-        >
-            {submitProgress && (
-                <div style={{ padding: '20px 4px 8px' }}>
-                    <Text strong style={{ display: 'block', marginBottom: 12 }}>
-                        {submitProgress.message}
-                    </Text>
-                    <Progress
-                        percent={submitProgress.percent}
-                        status={submitProgress.percent === 100 ? 'success' : 'active'}
-                        size="default"
-                    />
-                    <div style={{ marginTop: 12, padding: '12px 16px', borderRadius: 8, background: '#f5f5f5' }}>
-                        {submitProgress.completed > 0 ? (
-                            <Text strong>
-                                Đã xử lý {submitProgress.completed}/{submitProgress.total} lịch học
-                            </Text>
-                        ) : (
-                            <>
-                                <Text>Đang xử lý: {submitProgress.total} lịch học</Text>
-                                <br />
-                                <Text type="secondary">
-                                    Vui lòng chờ trong giây lát. Hệ thống sẽ tự động lưu toàn bộ thay đổi khi hoàn tất.
-                                </Text>
-                            </>
-                        )}
-                    </div>
-                </div>
-            )}
-        </Modal>
+            </Modal>
+            <style jsx global>{`
+                .schedule-bulk-edit-modal .bulk-operation-radio-group {
+                    display: flex;
+                    flex-wrap: wrap;
+                }
+
+                @media (max-width: 767px) {
+                    /* Fix Teacher dropdown overflow on mobile in BulkEditModal */
+                    .schedule-bulk-edit-modal .ant-space-compact {
+                        display: flex !important;
+                        width: 100% !important;
+                    }
+                    .schedule-bulk-edit-modal .ant-space-compact > .ant-select {
+                        flex: 1 1 auto !important;
+                        min-width: 0 !important;
+                        width: 0 !important;
+                    }
+
+                    /* Make bulk operation buttons fit on one row */
+                    .schedule-bulk-edit-modal .bulk-operation-radio-group {
+                        display: flex !important;
+                        flex-wrap: nowrap !important;
+                        width: 100%;
+                    }
+                    .schedule-bulk-edit-modal .bulk-operation-radio-group .ant-radio-button-wrapper {
+                        flex: 1;
+                        padding: 0 4px !important;
+                        text-align: center;
+                        font-size: 13px; /* Tăng size chữ lên để đỡ bé */
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        line-height: 1.3;
+                        white-space: normal;
+                        height: auto;
+                        min-height: 38px; /* Tăng độ cao nút cho cân đối */
+                    }
+                }
+            `}</style>
         </>
-    );  
+    );
 };
 
 export default BulkEditModal;

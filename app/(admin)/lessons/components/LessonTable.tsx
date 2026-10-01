@@ -2,12 +2,13 @@
 
 import { useEffect, useRef } from "react";
 import type { DragEvent } from "react";
-import { Button, Checkbox, Empty, Grid, Input, Space, Tag, Tooltip } from "antd";
+import { Button, Checkbox, Empty, Grid, Input, Space, Tag, Tooltip, Typography } from "antd";
 import { FilterOutlined } from "@ant-design/icons";
 import {
     DeleteOutlined,
     DragOutlined,
     EditOutlined,
+    EyeOutlined,
 } from "@ant-design/icons";
 import CustomTable from "@/components/ui/Table";
 import type { ResolvedFieldPermission } from "@/types/fieldPolicy";
@@ -230,6 +231,7 @@ const LessonTable = ({
 
     return (
         <div
+            className="lesson-table-container"
             ref={containerRef}
             style={{ flex: "1 1 0", minHeight: 0, overflow: "hidden" }}
             onDragOver={handleRowDragOver}
@@ -249,11 +251,72 @@ const LessonTable = ({
             ) : (
                 <CustomTable<LessonDataType>
                     responsiveCards
-                    responsiveCardTitle={(record) => (
+                    responsiveCardTitle={(record) => screens.md ? (
                         <Space size={6} wrap>
                             <Tag color="blue">Bài {record.learn_number}</Tag>
                             <span>{record.lesson_name || "Chưa có tên bài học"}</span>
                         </Space>
+                    ) : <Tag color="blue" style={{ margin: 0 }}>Bài {record.learn_number}</Tag>}
+                    responsiveCardExtra={(record) => screens.md ? undefined : isPastLesson(record)
+                        ? <Tag color="green" style={{ margin: 0 }}>Đã dạy</Tag>
+                        : <Tag style={{ margin: 0 }}>Chưa dạy</Tag>}
+                    responsiveCardContent={screens.md ? undefined : (record, _index, controls) => (
+                        <div className="lesson-mobile-card">
+                            {String(record.id) === editingLessonId ? (
+                                <Space.Compact className="lesson-mobile-inline-edit" onClick={(event) => event.stopPropagation()}>
+                                    <Input
+                                        autoFocus
+                                        value={editingLessonName}
+                                        onChange={(event) => onChangeEditTitle(event.target.value)}
+                                        onPressEnter={onSaveEditTitle}
+                                        disabled={savingInlineName}
+                                    />
+                                    <Button type="primary" loading={savingInlineName} onClick={onSaveEditTitle}>Lưu</Button>
+                                    <Button disabled={savingInlineName} onClick={onCancelEditTitle}>Hủy</Button>
+                                </Space.Compact>
+                            ) : (
+                                <Typography.Text strong className="lesson-mobile-title">
+                                    {record.lesson_name || "Chưa có tên bài học"}
+                                </Typography.Text>
+                            )}
+                            <div className="lesson-mobile-meta">
+                                <span>{record.subject_code || "Chưa có chương trình"}</span>
+                                {record.subject_name && <span>{record.subject_name}</span>}
+                            </div>
+                            <div className="lesson-mobile-footer">
+                                <Space size={2}>
+                                    {reorderMode && <Tooltip title="Giữ và kéo để sắp xếp"><DragOutlined className="lesson-mobile-drag-icon" /></Tooltip>}
+                                    {!reorderMode && canEdit && canEditTitle && (
+                                        <Tooltip title={isPastLesson(record) ? "Bài học đã được dạy, không thể sửa" : "Sửa tên bài học"}>
+                                            <Button type="text" size="small" icon={<EditOutlined />} aria-label="Sửa tên bài học" disabled={isPastLesson(record)} onClick={(event) => { event.stopPropagation(); onStartEditTitle(record); }} />
+                                        </Tooltip>
+                                    )}
+                                    {!reorderMode && canDelete && (
+                                        <Tooltip title={isPastLesson(record) ? "Bài học đã được dạy, không thể xóa" : "Xóa"}>
+                                            <Button type="text" danger size="small" icon={<DeleteOutlined />} aria-label="Xóa bài học" disabled={isPastLesson(record)} onClick={(event) => { event.stopPropagation(); onDelete(record); }} />
+                                        </Tooltip>
+                                    )}
+                                </Space>
+                                <Button type="link" size="small" icon={<EyeOutlined />} onClick={(event) => { event.stopPropagation(); controls.toggleExpanded(); }}>
+                                    {controls.expanded ? "Ẩn chi tiết" : "Xem chi tiết"}
+                                </Button>
+                            </div>
+                            {controls.expanded && (
+                                <div className="lesson-mobile-detail">
+                                    <div><span>Hệ thống</span><strong>{record.system_type === "topuni" ? "Topuni" : "Topclass"}</strong></div>
+                                    {record.grade != null && <div><span>Khối</span><strong>{record.grade}</strong></div>}
+                                    {visibleFieldPermissions
+                                        .filter(({ field }) => !["lesson_name", "learn_number"].includes(field.fieldCode))
+                                        .map(({ field }) => {
+                                            const value = (record as unknown as Record<string, unknown>)[field.fieldCode];
+                                            return <div key={field.fieldCode}>
+                                                <span>{field.fieldLabel || FIELD_LABELS[field.fieldCode] || field.fieldCode}</span>
+                                                <strong>{field.fieldCode === "updated_at" ? formatLessonDateTime(value as string | undefined) : value == null || value === "" ? "-" : String(value)}</strong>
+                                            </div>;
+                                        })}
+                                </div>
+                            )}
+                        </div>
                     )}
                     columns={columns}
                     dataSource={data}

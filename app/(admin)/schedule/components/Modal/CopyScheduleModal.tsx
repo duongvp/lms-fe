@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Alert, Button, Col, DatePicker, Form, message, Modal, Row, Tag, TimePicker } from 'antd';
+import { Alert, Button, Col, Form, Grid, message, Modal, Row, Tag } from 'antd';
+import { DatePicker, TimePicker } from "../MobileSchedulePickers";
 import dayjs, { type Dayjs } from 'dayjs';
 import TeachingStaffSelect from '@/components/shared/TeachingStaffSelect';
 import HmoMappingSelect from '@/components/shared/HmoMappingSelect';
@@ -70,6 +71,7 @@ const CopyScheduleModal: React.FC<CopyScheduleModalProps> = ({
     onClose,
     onSuccess,
 }) => {
+    const screens = Grid.useBreakpoint();
     const [form] = Form.useForm<CopyScheduleFormValues>();
     const [loading, setLoading] = useState(false);
     const [hmoOptions, setHmoOptions] = useState<HocmaiSectionOption[]>([]);
@@ -302,7 +304,7 @@ const CopyScheduleModal: React.FC<CopyScheduleModalProps> = ({
                                 loading={loadingHmoOptions}
                                 disabled={!source?.session_id}
                                 listHeight={420}
-                                popupMatchSelectWidth={680}
+                                popupMatchSelectWidth={screens.md ? 680 : true}
                                 placeholder={!source?.session_id
                                     ? 'Lịch cũ chưa gắn bài học nội bộ'
                                     : hmoOptions.length

@@ -29,6 +29,7 @@ const AutoSchedulePage = () => {
     return (
         <>
             <Alert
+                className="schedule-auto-route-hint"
                 banner
                 showIcon
                 message={`Tạo lịch tự động cho Chương trình ${programCode}`}

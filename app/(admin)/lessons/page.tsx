@@ -9,10 +9,11 @@ import {
   useCallback,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button, Input, Modal, notification, Spin, Tag } from "antd";
+import { Button, FloatButton, Input, Modal, notification, Spin, Tag } from "antd";
 import {
   DownOutlined,
   InfoCircleOutlined,
+  PlusOutlined,
   UpOutlined,
 } from "@ant-design/icons";
 import { useAuthStore } from "@/stores/authStore";
@@ -1286,6 +1287,7 @@ const Page = () => {
         />
       </Modal>
       <div
+        className="lesson-page-info"
         style={{
           border: "1px solid #d6e4ff",
           background: "#f6fbff",
@@ -1476,6 +1478,18 @@ const Page = () => {
             }}
             onDelete={handleDelete}
           />
+
+          {canCreate && !reorderMode && (
+            <FloatButton
+              className="schedule-add-fab lesson-add-fab"
+              type="primary"
+              tooltip="Thêm mới"
+              aria-label="Thêm mới bài học"
+              icon={<PlusOutlined />}
+              onClick={handleOpenCreate}
+              style={{ right: 16, bottom: 16 }}
+            />
+          )}
 
           <LessonFilterDrawer
             open={openFilterDrawer}

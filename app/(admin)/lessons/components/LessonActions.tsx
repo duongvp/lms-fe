@@ -1,6 +1,8 @@
 "use client";
 
-import { Alert, Button, Dropdown, Grid, Radio, Space } from "antd";
+import { useState } from "react";
+
+import { Alert, Button, Collapse, Dropdown, Grid, Radio, Space, Tooltip, Typography } from "antd";
 import {
   DownloadOutlined,
   FileExcelOutlined,
@@ -14,8 +16,12 @@ import {
   UploadOutlined,
   DownOutlined,
   MoreOutlined,
+  FilterOutlined,
+  CloseOutlined,
 } from "@ant-design/icons";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
+import CustomSearchInput from "@/components/ui/Inputs/CustomSearchInput";
+import { Popup as MobilePopup } from "antd-mobile";
 import type {
   LessonExportFormat,
   LessonExportScope,
@@ -168,125 +174,192 @@ const LessonActions = ({
       )}
     </>
   );
+  const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
+  const [mobileActionGroup, setMobileActionGroup] = useState<string>();
+  const runMobileAction = (action: () => void) => {
+    setMobileActionsOpen(false);
+    action();
+  };
   const mobileUtilityActions = (
-    <Dropdown
-      menu={{
-        items: [
-          ...(canCreate ? programMenuItems : []),
-          { type: "divider" as const },
-          ...exportMenuItems,
-          { type: "divider" as const },
-          { key: "reload", icon: <ReloadOutlined />, label: "Làm mới" },
-          ...(canEdit
-            ? [
-                {
-                  key: "manage-course-ids",
-                  icon: <LinkOutlined />,
-                  label: "Course ID theo bài",
-                  disabled: !canManageCourseIds,
-                },
-              ]
-            : []),
-          ...(canEdit
-            ? [
-                { key: "sync-scorm", label: "Đồng bộ từ Google Sheets" },
-                {
-                  key: "sync-hocmai-scorm",
-                  label: "Đồng bộ tên SCORM từ HOCMAI",
-                  disabled: !canManageCourseIds,
-                },
-              ]
-            : []),
-          ...(canEdit
-            ? [
-                {
-                  key: "reorder",
-                  icon: <UnorderedListOutlined />,
-                  label: "Sắp xếp thứ tự",
-                },
-              ]
-            : []),
-        ],
-        onClick: ({ key }) => {
-          if (key === "create-program" || key === "import-program") {
-            handleProgramMenuClick({ key });
-          } else if (
-            String(key).startsWith("xlsx-") ||
-            String(key).startsWith("csv-")
-          ) {
-            handleExportMenuClick({ key: String(key) });
-          } else if (key === "reload") {
-            onReload();
-          } else if (key === "manage-course-ids") {
-            onManageCourseIds();
-          } else if (key === "sync-scorm") {
-            onSyncScormNames();
-          } else if (key === "sync-hocmai-scorm") {
-            onSyncHocmaiScormNames();
-          } else if (key === "reorder") {
-            onEnableReorder();
-          }
-        },
-      }}
-      trigger={["click"]}
-    >
-      <Button icon={<MoreOutlined />}>Thao tác khác</Button>
-    </Dropdown>
+    <>
+      <Button
+        className="schedule-mobile-toolbar-button"
+        aria-label="Mở menu thao tác"
+        icon={<MoreOutlined />}
+        onClick={() => { setMobileActionGroup(undefined); setMobileActionsOpen(true); }}
+      />
+      <MobilePopup
+        position="bottom"
+        visible={mobileActionsOpen}
+        onClose={() => setMobileActionsOpen(false)}
+        closeOnMaskClick
+        bodyClassName="lesson-actions-sheet"
+        bodyStyle={{ maxHeight: "min(80dvh, 560px)" }}
+      >
+        <div className="lesson-actions-sheet-header">
+          <Typography.Text strong>Thao tác đề cương</Typography.Text>
+          <Button type="text" aria-label="Đóng menu thao tác" icon={<CloseOutlined />} onClick={() => setMobileActionsOpen(false)} />
+        </div>
+        <div className="lesson-actions-sheet-body">
+          <Collapse
+            accordion
+            ghost
+            activeKey={mobileActionGroup}
+            onChange={(key) => setMobileActionGroup(Array.isArray(key) ? key[0] : key)}
+            items={[
+              ...(canCreate ? [{
+                key: "program",
+                label: "Chương trình",
+                children: <div className="lesson-actions-sheet-list">
+                  {programMenuItems.map((item) => (
+                    <Button key={item.key} type="text" block icon={item.icon} onClick={() => runMobileAction(() => handleProgramMenuClick({ key: item.key }))}>
+                      {item.label}
+                    </Button>
+                  ))}
+                </div>,
+              }] : []),
+              {
+                key: "export",
+                label: "Xuất dữ liệu",
+                children: <div className="lesson-actions-sheet-list">
+                  {exportMenuItems.map((item) => (
+                    <Button key={item.key} type="text" block icon={item.icon} disabled={"disabled" in item && item.disabled} onClick={() => runMobileAction(() => handleExportMenuClick({ key: item.key }))}>
+                      {item.label}
+                    </Button>
+                  ))}
+                </div>,
+              },
+              {
+                key: "tools",
+                label: "Công cụ",
+                children: <div className="lesson-actions-sheet-list">
+                  <Button type="text" block icon={<ReloadOutlined />} onClick={() => runMobileAction(onReload)}>Làm mới</Button>
+                  {canEdit && <>
+                    <Button type="text" block icon={<LinkOutlined />} disabled={!canManageCourseIds} onClick={() => runMobileAction(onManageCourseIds)}>Course ID theo bài</Button>
+                    <Button type="text" block onClick={() => runMobileAction(onSyncScormNames)}>Đồng bộ từ Google Sheets</Button>
+                    <Button type="text" block disabled={!canManageCourseIds} onClick={() => runMobileAction(onSyncHocmaiScormNames)}>Đồng bộ tên SCORM từ HOCMAI</Button>
+                    <Button type="text" block icon={<UnorderedListOutlined />} onClick={() => runMobileAction(onEnableReorder)}>Sắp xếp thứ tự</Button>
+                  </>}
+                </div>,
+              },
+            ]}
+          />
+        </div>
+      </MobilePopup>
+    </>
   );
 
   return (
     <>
-      <SearchAndActionsBar
-        onSearch={onSearch}
-        searchValue={searchValue}
-        placeholder="Tìm theo tên bài học..."
-        titleBtnAdd="Bài học"
-        handleAddBtn={canCreate && !reorderMode ? onCreate : undefined}
-        handleFilterBtn={!reorderMode ? onFilter : undefined}
-        filterLabel="Lọc"
-        handleImportClick={canCreate && !reorderMode ? onImport : undefined}
-        extraExportButton={
-          <>
-            {!reorderMode &&
-              (compact ? mobileUtilityActions : desktopUtilityActions)}
-            {reorderMode && (
-              <>
-                <Radio.Group
-                  value={reorderStrategy}
-                  onChange={(event) =>
-                    onReorderStrategyChange(event.target.value)
-                  }
-                  optionType="button"
-                  buttonStyle="solid"
-                  options={[
-                    { label: "Chèn vị trí", value: "insert" },
-                    { label: "Đổi chỗ", value: "swap" },
-                  ]}
+      {compact ? (
+        <div className="schedule-mobile-toolbar lesson-mobile-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
+          {!reorderMode ? (
+            <>
+              <div className="schedule-mobile-search">
+                <CustomSearchInput
+                  placeholder="Tìm theo tên bài học..."
+                  value={searchValue}
+                  fetchApi={onSearch}
                 />
-                <Button icon={<StopOutlined />} onClick={onCancelReorder}>
-                  Hủy sắp xếp
+              </div>
+              <Tooltip title="Lọc đề cương">
+                <Button className="schedule-mobile-toolbar-button" aria-label="Lọc đề cương" icon={<FilterOutlined />} onClick={onFilter} />
+              </Tooltip>
+              {mobileUtilityActions}
+            </>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', width: '100%', gap: 8 }}>
+              <Radio.Group
+                value={reorderStrategy}
+                onChange={(event) =>
+                  onReorderStrategyChange(event.target.value)
+                }
+                optionType="button"
+                buttonStyle="solid"
+                options={[
+                  { label: "Chèn vị trí", value: "insert" },
+                  { label: "Đổi chỗ", value: "swap" },
+                ]}
+                style={{ display: 'flex', width: '100%' }}
+              />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Button style={{ flex: 1, padding: 0 }} icon={<StopOutlined />} onClick={onCancelReorder}>
+                  Hủy
                 </Button>
                 <Button
+                  style={{ flex: 1, padding: 0 }}
                   type={renumberEnabled ? "primary" : "default"}
                   ghost={renumberEnabled}
                   icon={<ReloadOutlined />}
                   onClick={onToggleRenumber}
                 >
-                  {renumberEnabled ? "Khôi phục số bài" : "Đánh lại số bài"}
+                  {renumberEnabled ? "Khôi phục" : "Đánh số"}
                 </Button>
                 <Button
+                  style={{ flex: 1, padding: 0 }}
                   type="primary"
                   icon={<SaveOutlined />}
                   loading={savingReorder}
                   onClick={onSaveReorder}
                 >
-                  Lưu thứ tự
+                  Lưu
                 </Button>
-              </>
-            )}
-          </>
-        }
-      />
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <SearchAndActionsBar
+          onSearch={onSearch}
+          searchValue={searchValue}
+          placeholder="Tìm theo tên bài học..."
+          titleBtnAdd="Bài học"
+          handleAddBtn={canCreate && !reorderMode ? onCreate : undefined}
+          handleFilterBtn={!reorderMode ? onFilter : undefined}
+          filterLabel="Lọc"
+          handleImportClick={canCreate && !reorderMode ? onImport : undefined}
+          extraExportButton={
+            <>
+              {!reorderMode && desktopUtilityActions}
+              {reorderMode && (
+                <>
+                  <Radio.Group
+                    value={reorderStrategy}
+                    onChange={(event) =>
+                      onReorderStrategyChange(event.target.value)
+                    }
+                    optionType="button"
+                    buttonStyle="solid"
+                    options={[
+                      { label: "Chèn vị trí", value: "insert" },
+                      { label: "Đổi chỗ", value: "swap" },
+                    ]}
+                  />
+                  <Button icon={<StopOutlined />} onClick={onCancelReorder}>
+                    Hủy sắp xếp
+                  </Button>
+                  <Button
+                    type={renumberEnabled ? "primary" : "default"}
+                    ghost={renumberEnabled}
+                    icon={<ReloadOutlined />}
+                    onClick={onToggleRenumber}
+                  >
+                    {renumberEnabled ? "Khôi phục số bài" : "Đánh lại số bài"}
+                  </Button>
+                  <Button
+                    type="primary"
+                    icon={<SaveOutlined />}
+                    loading={savingReorder}
+                    onClick={onSaveReorder}
+                  >
+                    Lưu thứ tự
+                  </Button>
+                </>
+              )}
+            </>
+          }
+        />
+      )}
 
       {reorderMode && (
         <Alert

@@ -3,8 +3,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Key } from "react";
-import { Alert, Button, Form, Modal, notification, Select, Space, Empty, Dropdown, Spin, Tag, Grid, Radio } from "antd";
-import { DownOutlined, InfoCircleOutlined, UpOutlined, EditOutlined, ReloadOutlined, DownloadOutlined, FilterOutlined, MoreOutlined, SaveOutlined, StopOutlined, UploadOutlined } from "@ant-design/icons";
+import { Alert, Button, FloatButton, Form, Modal, notification, Select, Space, Empty, Dropdown, Spin, Tag, Grid, Radio, Typography } from "antd";
+import { DownOutlined, InfoCircleOutlined, UpOutlined, EditOutlined, ReloadOutlined, DownloadOutlined, FilterOutlined, MoreOutlined, PlusOutlined, CloseOutlined, SaveOutlined, StopOutlined, UploadOutlined } from "@ant-design/icons";
 import type { UploadFile } from "antd/es/upload/interface";
 import { useAuthStore } from "@/stores/authStore";
 import { rememberProgramContextUrl } from "@/components/layouts/AdminLayout/SideMenu";
@@ -37,6 +37,8 @@ import {
     type QuizPayload,
 } from "@/services/quizService";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
+import CustomSearchInput from "@/components/ui/Inputs/CustomSearchInput";
+import { Popup as MobilePopup } from "antd-mobile";
 import QuizFormModal from "./components/QuizFormModal";
 import QuizImportModal from "./components/QuizImportModal";
 import QuizPreviewModal from "./components/QuizPreviewModal";
@@ -129,6 +131,7 @@ const QuizManagementPage = () => {
     const [formOpen, setFormOpen] = useState(false);
     const [previewOpen, setPreviewOpen] = useState(false);
     const [importOpen, setImportOpen] = useState(false);
+    const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
     const [importing, setImporting] = useState(false);
     const [importMode, setImportMode] = useState<"skip" | "overwrite">("skip");
     const [importFiles, setImportFiles] = useState<UploadFile[]>([]);
@@ -816,9 +819,9 @@ const QuizManagementPage = () => {
     };
 
     const inlineFilters = !reorderMode && (
-        <div className={styles.filters}>
-            <Form layout="vertical" className={styles.filterPanel}>
-                <div className={styles.filterGrid}>
+        <div className={`${styles.filters} quiz-filter-fields`}>
+            <Form layout="vertical" className={`${styles.filterPanel} quiz-filter-form`}>
+                <div className={`${styles.filterGrid} quiz-filter-grid`}>
                     <Form.Item label="Chương trình" required>
                         <Select
                             showSearch
@@ -895,7 +898,7 @@ const QuizManagementPage = () => {
                             }))}
                         />
                     </Form.Item>
-                    <Form.Item label=" ">
+                    <Form.Item className="quiz-filter-inline-actions" label=" ">
                         <Space.Compact block>
                             <Button onClick={handleResetFilter}>Đặt lại</Button>
                             <Button
@@ -974,8 +977,85 @@ const QuizManagementPage = () => {
             </div>
         </div> */}
 
-        {inlineFilters}
+        {!compact && inlineFilters}
+        {compact && !reorderMode && (
+            <MobilePopup
+                position="bottom"
+                visible={mobileFilterOpen}
+                onClose={() => setMobileFilterOpen(false)}
+                closeOnMaskClick
+                bodyClassName="schedule-filter-sheet quiz-filter-sheet"
+                bodyStyle={{ height: "min(580px, calc(100dvh - 48px))" }}
+            >
+                <div className="schedule-filter-sheet-header">
+                    <div>
+                        <Typography.Text strong>Bộ lọc câu hỏi</Typography.Text>
+                        <Typography.Text type="secondary">Lọc theo chương trình, bài học, loại và trạng thái</Typography.Text>
+                    </div>
+                    <Button type="text" aria-label="Đóng bộ lọc" icon={<CloseOutlined />} onClick={() => setMobileFilterOpen(false)} />
+                </div>
+                <div className="schedule-filter-sheet-body quiz-filter-sheet-body">{inlineFilters}</div>
+                <div className="schedule-filter-sheet-actions">
+                    <Button onClick={handleResetFilter}>Đặt lại</Button>
+                    <Button type="primary" loading={quizzesQuery.isLoading || quizzesQuery.isValidating} onClick={() => {
+                        handleFilterSubmit();
+                        if (filters.code) setMobileFilterOpen(false);
+                    }}>Áp dụng</Button>
+                </div>
+            </MobilePopup>
+        )}
 
+        {compact ? (
+            reorderMode ? (
+                <div className="quiz-mobile-reorder-toolbar">
+                    <Radio.Group
+                        value={reorderStrategy}
+                        onChange={(event) => setReorderStrategy(event.target.value)}
+                        optionType="button"
+                        buttonStyle="solid"
+                        options={[
+                            { label: "Chèn vị trí", value: "insert" },
+                            { label: "Đổi chỗ", value: "swap" },
+                        ]}
+                    />
+                    <div>
+                        <Button icon={<StopOutlined />} onClick={handleCancelReorder} disabled={savingReorder}>Hủy</Button>
+                        <Button type="primary" icon={<SaveOutlined />} loading={savingReorder} onClick={handleSaveReorder}>Lưu thứ tự</Button>
+                    </div>
+                </div>
+            ) : (
+                <div className="schedule-mobile-toolbar quiz-mobile-toolbar">
+                    <div className="schedule-mobile-search">
+                        <CustomSearchInput
+                            placeholder="Tìm kiếm câu hỏi..."
+                            value={keyword}
+                            fetchApi={handleSearch}
+                        />
+                    </div>
+                    <Button className="schedule-mobile-toolbar-button" aria-label="Lọc câu hỏi" icon={<FilterOutlined />} onClick={() => setMobileFilterOpen(true)} />
+                    <Dropdown
+                        trigger={["click"]}
+                        placement="bottomRight"
+                        menu={{
+                            items: [
+                                ...(canImport ? [{ key: "import", icon: <UploadOutlined />, label: "Import câu hỏi" }] : []),
+                                ...(canExport ? [{ key: "export", icon: <DownloadOutlined />, label: `Export Excel${selectedKeys.length ? ` (${selectedKeys.length})` : ""}` }] : []),
+                                { key: "reload", icon: <ReloadOutlined />, label: "Làm mới" },
+                                ...(canEdit ? [{ key: "reorder", icon: <EditOutlined />, label: "Sắp xếp câu hỏi" }] : []),
+                            ],
+                            onClick: ({ key }) => {
+                                if (key === "import") handleOpenImport();
+                                if (key === "export") handleExport();
+                                if (key === "reload" && hasSearched) void refreshQuizzes();
+                                if (key === "reorder") handleEnableReorder();
+                            },
+                        }}
+                    >
+                        <Button className="schedule-mobile-toolbar-button" aria-label="Mở menu thao tác" icon={<MoreOutlined />} />
+                    </Dropdown>
+                </div>
+            )
+        ) : (
         <SearchAndActionsBar
             onSearch={handleSearch}
             searchValue={keyword}
@@ -1043,6 +1123,18 @@ const QuizManagementPage = () => {
                 </Space>
             }
         />
+        )}
+        {compact && canCreate && !reorderMode && (
+            <FloatButton
+                className="schedule-add-fab"
+                type="primary"
+                tooltip="Thêm mới"
+                aria-label="Thêm mới câu hỏi"
+                icon={<PlusOutlined />}
+                onClick={handleOpenCreate}
+                style={{ right: 16, bottom: 16 }}
+            />
+        )}
 
         {reorderMode && (
             <Alert

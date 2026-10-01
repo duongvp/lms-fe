@@ -292,7 +292,7 @@ const TeachingStaffSelect = ({
 
     return (
         <>
-            <Space.Compact style={{ width: "100%", ...style }}>
+            <Space.Compact style={{ display: "flex", width: "100%", ...style }}>
                 <Select
                     {...props}
                     showSearch
@@ -309,7 +309,7 @@ const TeachingStaffSelect = ({
                     }}
                     options={filteredOptions}
                     tagRender={props.mode === "multiple" ? staffTagRender : props.tagRender}
-                    style={{ width: showQuickCreate ? "calc(100% - 32px)" : "100%" }}
+                    style={{ flex: 1, minWidth: 0, width: showQuickCreate ? 0 : "100%" }}
                 />
                 {showQuickCreate && (
                     <Tooltip title={teacherType === 1 ? "Thêm nhanh giáo viên" : "Thêm nhanh trợ giảng"}>

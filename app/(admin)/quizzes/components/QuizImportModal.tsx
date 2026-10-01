@@ -31,6 +31,7 @@ const QuizImportModal = ({
     onClose,
 }: QuizImportModalProps) => (
     <Modal
+        rootClassName="quiz-responsive-modal quiz-import-modal"
         title="Nhập câu hỏi từ Excel"
         open={open}
         onCancel={onClose}

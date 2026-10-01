@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import { Button, Drawer, Form, InputNumber, Select, Space } from "antd";
+import { Button, Drawer, Form, Grid, InputNumber, Select, Space, Typography } from "antd";
+import { CloseOutlined } from "@ant-design/icons";
+import { Popup as MobilePopup } from "antd-mobile";
 import { useLessonProgramOptions } from "@/hooks/useLessonSubjectOptions";
 import type { LessonFilterValues } from "../lesson.types";
 import { cleanFilterValues } from "../lesson.utils";
@@ -24,6 +26,8 @@ const LessonFilterDrawer = ({
     onReset,
 }: LessonFilterDrawerProps) => {
     const [filterForm] = Form.useForm();
+    const screens = Grid.useBreakpoint();
+    const compact = !screens.md;
     const lessonPrograms = useLessonProgramOptions();
     const programOptions = lessonPrograms.map((program) => ({
         value: program.subject_code,
@@ -39,34 +43,17 @@ const LessonFilterDrawer = ({
         filterForm.setFieldsValue(value);
     }, [filterForm, value]);
 
-    return (
-        <Drawer
-            title="Bộ lọc đề cương"
-            placement="right"
-            open={open}
-            onClose={onClose}
-            width="min(92vw, 400px)"
-            footer={
-                <Space className="responsive-modal-footer" style={{ width: "100%", justifyContent: "flex-end" }}>
-                    <Button
-                        onClick={() => {
-                            filterForm.resetFields();
-                            onReset();
-                        }}
-                    >
-                        Xóa lọc
-                    </Button>
-                    <Button type="primary" onClick={() => filterForm.submit()} loading={loading}>
-                        Tìm kiếm
-                    </Button>
-                </Space>
-            }
+    const resetFilters = () => {
+        filterForm.resetFields();
+        onReset();
+    };
+    const filterFormContent = (
+        <Form
+            className={compact ? "schedule-filter-sheet-body" : undefined}
+            form={filterForm}
+            layout="vertical"
+            onFinish={(values) => onSearch(cleanFilterValues(values))}
         >
-            <Form
-                form={filterForm}
-                layout="vertical"
-                onFinish={(values) => onSearch(cleanFilterValues(values))}
-            >
                 <Form.Item
                     name="subject_code"
                     label="Chương trình"
@@ -108,7 +95,50 @@ const LessonFilterDrawer = ({
                         </Form.Item>
                     </Space.Compact>
                 </Form.Item>
-            </Form>
+        </Form>
+    );
+
+    if (compact) {
+        return (
+            <MobilePopup
+                position="bottom"
+                visible={open}
+                onClose={onClose}
+                closeOnMaskClick
+                bodyClassName="schedule-filter-sheet"
+                bodyStyle={{ height: "min(430px, calc(100dvh - 48px))" }}
+            >
+                <div className="schedule-filter-sheet-header">
+                    <div>
+                        <Typography.Text strong>Bộ lọc đề cương</Typography.Text>
+                        <Typography.Text type="secondary">Lọc theo chương trình và khoảng bài</Typography.Text>
+                    </div>
+                    <Button type="text" aria-label="Đóng bộ lọc" icon={<CloseOutlined />} onClick={onClose} />
+                </div>
+                {filterFormContent}
+                <div className="schedule-filter-sheet-actions">
+                    <Button onClick={resetFilters}>Xóa lọc</Button>
+                    <Button type="primary" onClick={() => filterForm.submit()} loading={loading}>Tìm kiếm</Button>
+                </div>
+            </MobilePopup>
+        );
+    }
+
+    return (
+        <Drawer
+            title="Bộ lọc đề cương"
+            placement="right"
+            open={open}
+            onClose={onClose}
+            width="min(92vw, 400px)"
+            footer={
+                <Space className="responsive-modal-footer" style={{ width: "100%", justifyContent: "flex-end" }}>
+                    <Button onClick={resetFilters}>Xóa lọc</Button>
+                    <Button type="primary" onClick={() => filterForm.submit()} loading={loading}>Tìm kiếm</Button>
+                </Space>
+            }
+        >
+            {filterFormContent}
         </Drawer>
     );
 };

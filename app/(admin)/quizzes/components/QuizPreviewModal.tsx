@@ -33,6 +33,7 @@ const QuizPreviewModal = ({
 
     return (
         <Modal
+            rootClassName="quiz-responsive-modal quiz-preview-modal"
             title="Xem trước câu hỏi"
             open={open}
             onCancel={onClose}

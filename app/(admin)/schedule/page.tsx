@@ -4,13 +4,14 @@ import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useR
 import { useRouter, useSearchParams } from "next/navigation";
 import { ConfigProvider as MobileConfigProvider, DatePicker as MobileDatePicker, Popup as MobilePopup } from "antd-mobile";
 import viVN from "antd-mobile/es/locales/vi-VN";
+import { DatePicker, TimePicker } from "./components/MobileSchedulePickers";
 import CustomTable from "@/components/ui/Table";
 import type { ColumnsType } from "antd/es/table";
 import type { FilterDropdownProps } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
 import CustomSearchInput from "@/components/ui/Inputs/CustomSearchInput";
-import { notification, Alert, Card, Form, Input, InputNumber, List, Select, Button, Checkbox, Space, Modal, Radio, Row, Col, DatePicker, TimePicker, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress, Table, Spin } from "antd";
-import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, SearchOutlined, SortAscendingOutlined, SortDescendingOutlined, MoreOutlined, ApartmentOutlined, CloudUploadOutlined, SwapOutlined, LinkOutlined, ClockCircleOutlined, UserOutlined, EyeOutlined, PlusOutlined } from "@ant-design/icons";
+import { notification, Alert, Card, Collapse, Form, Input, InputNumber, List, Select, Button, Checkbox, Space, Modal, Radio, Row, Col, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress, Table, Spin } from "antd";
+import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, SearchOutlined, SortAscendingOutlined, SortDescendingOutlined, MoreOutlined, ApartmentOutlined, CloudUploadOutlined, SwapOutlined, LinkOutlined, ClockCircleOutlined, UserOutlined, EyeOutlined, PlusOutlined, CheckSquareOutlined } from "@ant-design/icons";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -948,8 +949,12 @@ const ScheduleFilterSheet = ({
         >
             <div className="schedule-filter-sheet-header">
                 <div>
-                    <Typography.Text strong>Bộ lọc lịch học</Typography.Text>
-                    <Typography.Text type="secondary">Lọc theo chương trình, thời gian và giáo viên</Typography.Text>
+                    <Typography.Text strong className ='!text-[16px]'>
+                        Bộ lọc lịch học
+                    </Typography.Text>
+                    <Typography.Text type="secondary">
+                        Lọc theo chương trình, thời gian và giáo viên
+                    </Typography.Text>
                 </div>
                 <Button type="text" aria-label="Đóng bộ lọc" icon={<CloseOutlined />} onClick={onClose} />
             </div>
@@ -1950,6 +1955,8 @@ const Page = () => {
     }, [moduleFieldsQuery.data]);
 
     const [openFilterDrawer, setOpenFilterDrawer] = useState(false);
+    const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
+    const [mobileActionGroup, setMobileActionGroup] = useState<string>();
     const activeProgramCode = String(submittedFilterValues.code || "").trim() || undefined;
     const canCreateSchedule = can(PermissionKey.SCHEDULE_CREATE, activeProgramCode);
     const canEditSchedule = can(PermissionKey.SCHEDULE_EDIT, activeProgramCode);
@@ -4199,6 +4206,9 @@ const Page = () => {
             ...(canEditSchedule ? [{ key: "mobile-bulk-edit", icon: <EditOutlined />, label: "Sửa hàng loạt" }] : []),
             ...(canDeleteSchedule ? [{ key: "mobile-bulk-delete", icon: <DeleteOutlined />, danger: true, label: "Xóa" + (selectedRowKeys.length ? " (" + selectedRowKeys.length + ")" : ""), disabled: selectingAllRows || !selectedRowKeys.length || !selectedRowsAllModifiable || deletingSelectedSchedules }] : []),
             { type: "divider" as const },
+            allRowsSelected
+                ? { key: "mobile-deselect-all", icon: <CloseOutlined />, label: `Bỏ chọn tất cả (${selectedRowKeys.length})` }
+                : { key: "mobile-select-all", icon: <CheckSquareOutlined />, label: hasSearched ? `Chọn tất cả${totalItems ? " (" + totalItems + ")" : ""}` : "Chọn tất cả", disabled: !hasSearched || selectingAllRows },
             { key: "mobile-refresh", icon: <ReloadOutlined />, label: "Làm mới", disabled: !hasSearched || refreshingScheduleList },
         ],
         onClick: ({ key }: { key: string }) => {
@@ -4206,11 +4216,31 @@ const Page = () => {
             else if (key === "mobile-auto") handleOpenAutoSchedule();
             else if (key === "mobile-bulk-edit") handleOpenBulkEdit();
             else if (key === "mobile-bulk-delete") handleDeleteSelected();
+            else if (key === "mobile-select-all") void handleSelectAll(true);
+            else if (key === "mobile-deselect-all") void handleSelectAll(false);
             else if (key === "mobile-refresh") void handleRefreshScheduleList();
             else if (exportMenuKeys.has(key)) exportMenu.onClick({ key });
             else if (syncMenuKeys.has(key)) syncMenu.onClick({ key });
         },
     };
+    const renderMobileMenuItems = (items: any[]) => (
+        <div className="lesson-actions-sheet-list">
+            {items.filter((item) => item?.key && !item.children).map((item) => (
+                <Button
+                    key={item.key}
+                    type="text"
+                    block
+                    icon={item.icon}
+                    danger={item.danger}
+                    disabled={item.disabled}
+                    onClick={() => {
+                        setMobileActionsOpen(false);
+                        mobileToolbarMenu.onClick({ key: String(item.key) });
+                    }}
+                >{item.label}</Button>
+            ))}
+        </div>
+    );
     const completedClassroomAssignments = batchClassroomItems.filter(
         (item) => ["success", "skipped", "error"].includes(item.status)
     ).length;
@@ -4514,9 +4544,39 @@ const Page = () => {
                         <Tooltip title="Lọc lịch học">
                             <Button className="schedule-mobile-toolbar-button" aria-label="Lọc lịch học" icon={<FilterOutlined />} onClick={() => setOpenFilterDrawer(true)} />
                         </Tooltip>
-                        <Dropdown trigger={["click"]} menu={mobileToolbarMenu} placement="bottomRight">
-                            <Button className="schedule-mobile-toolbar-button" aria-label="Mở menu thao tác" icon={<MoreOutlined />} loading={refreshingScheduleList || deletingSelectedSchedules} />
-                        </Dropdown>
+                        <Button
+                            className="schedule-mobile-toolbar-button"
+                            aria-label="Mở menu thao tác"
+                            icon={<MoreOutlined />}
+                            loading={refreshingScheduleList || deletingSelectedSchedules}
+                            onClick={() => { setMobileActionGroup(undefined); setMobileActionsOpen(true); }}
+                        />
+                        <MobilePopup
+                            position="bottom"
+                            visible={mobileActionsOpen}
+                            onClose={() => setMobileActionsOpen(false)}
+                            closeOnMaskClick
+                            bodyClassName="lesson-actions-sheet schedule-actions-sheet"
+                            bodyStyle={{ maxHeight: "min(80dvh, 560px)" }}
+                        >
+                            <div className="lesson-actions-sheet-header">
+                                <Typography.Text strong>Thao tác lịch học</Typography.Text>
+                                <Button type="text" aria-label="Đóng menu thao tác" icon={<CloseOutlined />} onClick={() => setMobileActionsOpen(false)} />
+                            </div>
+                            <div className="lesson-actions-sheet-body">
+                                <Collapse
+                                    accordion
+                                    ghost
+                                    activeKey={mobileActionGroup}
+                                    onChange={(key) => setMobileActionGroup(Array.isArray(key) ? key[0] : key)}
+                                    items={[
+                                        ...(canExportSchedule ? [{ key: "export", label: "Export", collapsible: selectingAllRows ? "disabled" as const : undefined, children: renderMobileMenuItems(exportMenu.items) }] : []),
+                                        { key: "sync", label: "Đồng bộ", collapsible: selectingAllRows ? "disabled" as const : undefined, children: renderMobileMenuItems(syncMenu.items) },
+                                        { key: "actions", label: "Thao tác khác", children: renderMobileMenuItems(mobileToolbarMenu.items) },
+                                    ]}
+                                />
+                            </div>
+                        </MobilePopup>
                     </div>
                 ) : (
                 <SearchAndActionsBar

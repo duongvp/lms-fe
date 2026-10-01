@@ -297,6 +297,42 @@ const QuizTable = ({
                         <Tag color="blue">Câu {record.quiz_index}</Tag>
                     </Space>
                 )}
+                responsiveCardExtra={(record) => screens.md || !canViewField("quiz_status")
+                    ? undefined
+                    : <Tag color={statusMeta(record.quiz_status).color} style={{ margin: 0 }}>{statusMeta(record.quiz_status).label}</Tag>}
+                responsiveCardContent={screens.md ? undefined : (record) => (
+                    <div className={styles.mobileCard}>
+                        {canViewField("quiz_name") && (
+                            <MathText as="div" className={styles.mobileQuestion} value={record.quiz_name} fallback="Chưa có nội dung câu hỏi" />
+                        )}
+                        <div className={styles.mobileMeta}>
+                            {canViewField("quiz_type") && <Tag color={record.quiz_type === 1 ? "blue" : record.quiz_type === 2 ? "purple" : "cyan"}>{quizTypeLabel(record.quiz_type)}</Tag>}
+                            {canViewField("ans_duration") && <span>{record.ans_duration} giây</span>}
+                            {canViewField("ans") && <span>{record.quiz_type === 1 ? `${record.ans?.length || 0} lựa chọn` : record.ans?.[0]?.text ? "Đã có đáp án" : "Chưa có đáp án"}</span>}
+                        </div>
+                        <div className={styles.mobileFooter}>
+                            {reorderMode ? (
+                                <span className={styles.mobileDrag}><DragOutlined /> Giữ và kéo để sắp xếp</span>
+                            ) : (
+                                <Space size={2}>
+                                    {(canEdit || canDelete) && <Tooltip title="Xem trước">
+                                        <Button type="text" size="small" aria-label="Xem trước câu hỏi" icon={<EyeOutlined />} onClick={() => onPreview(record)} />
+                                    </Tooltip>}
+                                    {canEdit && record.quiz_status !== "disable" && <Tooltip title="Chỉnh sửa">
+                                        <Button type="text" size="small" aria-label="Chỉnh sửa câu hỏi" icon={<EditOutlined />} onClick={() => onEdit(record)} />
+                                    </Tooltip>}
+                                    {canDelete && record.quiz_status !== "disable" && <Popconfirm title="Vô hiệu hóa câu hỏi này?" okText="Vô hiệu hóa" cancelText="Hủy" onConfirm={() => onDisable(record)}>
+                                        <Tooltip title="Vô hiệu hóa"><Button type="text" size="small" danger aria-label="Vô hiệu hóa câu hỏi" icon={<StopOutlined />} /></Tooltip>
+                                    </Popconfirm>}
+                                    {canEdit && record.quiz_status === "disable" && <Tooltip title="Khôi phục">
+                                        <Button type="text" size="small" aria-label="Khôi phục câu hỏi" icon={<UndoOutlined />} onClick={() => onRestore(record)} />
+                                    </Tooltip>}
+                                </Space>
+                            )}
+                            {canViewField("updated_at") && <span className={styles.mobileUpdated}>{formatQuizDate(record.updated_at)}</span>}
+                        </div>
+                    </div>
+                )}
                 rowKey="quiz_id"
                 columns={columns}
                 dataSource={data}
