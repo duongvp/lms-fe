@@ -63,6 +63,14 @@ interface SchedulePreviewModalProps {
     initialData?: any;
     loading?: boolean;
     errorMessage?: string | null;
+    conflicts?: Array<{
+        id: number;
+        code?: string | null;
+        learn_number?: number | null;
+        lesson_name?: string | null;
+        staff_type?: 'teacher' | 'assistant';
+        username?: string;
+    }>;
 }
 
 interface PreviewSession {
@@ -116,6 +124,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
     initialData,
     loading,
     errorMessage,
+    conflicts = [],
 }) => {
     const screens = Grid.useBreakpoint();
     const errorRef = useRef<HTMLDivElement>(null);
@@ -1352,7 +1361,30 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                             showIcon
                             closable={false}
                             message="Không thể cập nhật lịch"
-                            description={<div style={{ whiteSpace: 'pre-line' }}>{errorMessage}</div>}
+                            description={<Space direction="vertical" size={8} style={{ width: '100%' }}>
+                                <div style={{ whiteSpace: 'pre-line' }}>{errorMessage}</div>
+                                {conflicts.map((conflict) => {
+                                    const params = new URLSearchParams({ calendar_id: String(conflict.id) });
+                                    if (conflict.code) params.set('program', conflict.code);
+                                    const label = [
+                                        conflict.staff_type === 'teacher' ? 'Giáo viên' : 'Trợ giảng',
+                                        conflict.username ? `“${conflict.username}”` : null,
+                                        conflict.learn_number ? `Bài ${conflict.learn_number}` : null,
+                                        conflict.lesson_name ? conflict.lesson_name : null,
+                                    ].filter(Boolean).join(' · ');
+                                    return (
+                                        <Button
+                                            key={`${conflict.id}-${conflict.staff_type}-${conflict.username || ''}`}
+                                            size="small"
+                                            type="link"
+                                            style={{ paddingInline: 0, width: 'fit-content' }}
+                                            onClick={() => window.open(`/schedule?${params.toString()}`, '_blank', 'noopener,noreferrer')}
+                                        >
+                                            Mở lịch #{conflict.id}{label ? ` — ${label}` : ''}
+                                        </Button>
+                                    );
+                                })}
+                            </Space>}
                             style={{ marginTop: 12, marginBottom: 16 }}
                         />
                     </div>

@@ -335,6 +335,7 @@ export interface LivestreamListParams {
     page?: number;
     limit?: number;
     keyword?: string;
+    calendar_id?: number;
     teacher?: string | string[];
     code?: string;
     code_exact?: string;

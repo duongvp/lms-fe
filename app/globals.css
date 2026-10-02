@@ -600,7 +600,8 @@ body {
   }
 }
 
-.auto-schedule-preview-mobile {
+.auto-schedule-preview-mobile,
+.bulk-preview-mobile {
   display: none;
 }
 
@@ -640,6 +641,10 @@ body {
 
   .schedule-responsive-modal .ant-modal-body {
     overscroll-behavior-y: contain;
+  }
+
+  .bulk-preview-desktop {
+    display: none;
   }
 
   .responsive-schedule-form .ant-row>.ant-col {
@@ -703,24 +708,53 @@ body {
     display: none;
   }
 
-  .auto-schedule-preview-mobile {
+  .auto-schedule-preview-mobile,
+  .bulk-preview-mobile {
     display: flex;
     flex-direction: column;
     gap: 10px;
   }
 
-  .auto-schedule-preview-mobile .ant-card-head {
+  .auto-schedule-preview-mobile .ant-card-head,
+  .bulk-preview-mobile .ant-card-head {
     min-height: 0;
     padding: 10px 12px;
   }
 
   .auto-schedule-preview-mobile .ant-card-head-title,
-  .auto-schedule-preview-mobile .ant-card-extra {
+  .auto-schedule-preview-mobile .ant-card-extra,
+  .bulk-preview-mobile .ant-card-head-title,
+  .bulk-preview-mobile .ant-card-extra {
     white-space: normal;
   }
 
-  .auto-schedule-preview-mobile .ant-card-body {
+  .auto-schedule-preview-mobile .ant-card-body,
+  .bulk-preview-mobile .ant-card-body {
     padding: 12px;
+  }
+
+  .bulk-preview-field {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 8px;
+    gap: 2px;
+  }
+  .bulk-preview-field:last-child {
+    margin-bottom: 0;
+  }
+  .bulk-preview-field > .ant-typography-secondary {
+    font-size: 13px;
+    line-height: 1.2;
+  }
+
+  .bulk-preview-alert {
+    padding-inline: 12px !important;
+  }
+  .bulk-preview-alert .ant-alert-icon {
+    display: none !important;
+  }
+  .bulk-preview-alert .ant-alert-message {
+    margin-bottom: 12px;
   }
 
   .responsive-mapping-grid {

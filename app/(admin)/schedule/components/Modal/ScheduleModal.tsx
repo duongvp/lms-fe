@@ -110,19 +110,42 @@ const parseCalendarWallTime = (value: unknown): Dayjs | undefined => {
     return parsed.isValid() ? parsed.startOf('minute') : undefined;
 };
 
-const getScheduleSubmitError = (error: any) => {
+type ScheduleConflictDetail = {
+    id: number;
+    code?: string | null;
+    learn_number?: number | null;
+    lesson_name?: string | null;
+    staff_type?: 'teacher' | 'assistant';
+    username?: string;
+};
+
+type ScheduleSubmitError = {
+    message: string;
+    conflicts: ScheduleConflictDetail[];
+};
+
+const getScheduleSubmitError = (error: any): ScheduleSubmitError => {
+    const conflicts = Array.isArray(error?.detail?.conflicts)
+        ? error.detail.conflicts.filter((item: any) => Number.isInteger(Number(item?.id)))
+        : [];
     const detailErrors = error?.detail?.errors;
     if (Array.isArray(detailErrors) && detailErrors.length > 0) {
-        return detailErrors
+        return {
+            conflicts,
+            message: detailErrors
             .map((item: any, index: number) => (
                 item?.message || item?.error || `Lỗi ${index + 1}`
             ))
-            .join('; ');
+            .join('; '),
+        };
     }
 
-    return error?.detail?.message
-        || error?.message
-        || 'Không thể lưu lịch học. Vui lòng kiểm tra lại dữ liệu.';
+    return {
+        conflicts,
+        message: error?.detail?.message
+            || error?.message
+            || 'Không thể lưu lịch học. Vui lòng kiểm tra lại dữ liệu.',
+    };
 };
 
 const getTimeMinutes = (time?: Dayjs | null) => {
@@ -686,7 +709,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     // --- Preview State ---
     const [previewOpen, setPreviewOpen] = useState(false);
     const [previewValues, setPreviewValues] = useState<any>(null);
-    const [submitError, setSubmitError] = useState<string | null>(null);
+    const [submitError, setSubmitError] = useState<ScheduleSubmitError | null>(null);
 
     const handleFinish = async (values: any) => {
         let finalValues = { ...values };
@@ -1938,7 +1961,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                     isEdit={isEdit || false}
                     initialData={initialData}
                     loading={loading}
-                    errorMessage={submitError}
+                    errorMessage={submitError?.message}
+                    conflicts={submitError?.conflicts}
                 />
             )}
 

@@ -196,13 +196,70 @@ const uniqueHmoOptions = (options: HocmaiSectionOption[]) => Array.from(new Map(
     options.map((option) => [hmoOptionKey(option), option])
 ).values());
 
-const getErrorMessage = (error: unknown) => {
+type ScheduleConflictDetail = {
+    id: number;
+    code?: string | null;
+    learn_number?: number | null;
+    lesson_name?: string | null;
+    start_time?: string;
+    end_time?: string;
+    staff_type?: 'teacher' | 'assistant' | 'course';
+    username?: string;
+};
+
+type ScheduleSubmitError = {
+    message: string;
+    conflicts: ScheduleConflictDetail[];
+};
+
+const conflictsFromErrorMessage = (message: string): ScheduleConflictDetail[] => {
+    const code = message.match(/khóa\s+([^,\n]+)/i)?.[1]?.trim();
+    return Array.from(message.matchAll(/ID\s+lịch\s+(\d+)/gi)).map((match) => ({
+        id: Number(match[1]),
+        code,
+    }));
+};
+
+const formatConflictTime = (conflict: ScheduleConflictDetail) => {
+    // API gửi giờ nghiệp vụ Việt Nam với hậu tố Z; giữ nguyên giờ hiển thị.
+    const start = conflict.start_time ? dayjs(conflict.start_time.replace(/Z$/, '')) : null;
+    const end = conflict.end_time ? dayjs(conflict.end_time.replace(/Z$/, '')) : null;
+    if (!start?.isValid()) return '';
+    return `${start.format('DD/MM/YYYY HH:mm')}${end?.isValid()
+        ? `–${end.format(start.isSame(end, 'day') ? 'HH:mm' : 'DD/MM/YYYY HH:mm')}`
+        : ''}`;
+};
+
+const getSubmitError = (error: unknown): ScheduleSubmitError => {
     if (error && typeof error === 'object') {
-        const detail = (error as { detail?: { message?: unknown } }).detail;
+        const detail = (error as { detail?: { message?: unknown; conflicts?: unknown } }).detail;
         const messageText = (error as { message?: unknown }).message;
-        return String(detail?.message || messageText || 'Không thể cập nhật lịch học. Vui lòng thử lại.');
+        const message = String(detail?.message || messageText || 'Không thể cập nhật lịch học. Vui lòng thử lại.');
+        const structuredConflicts = Array.isArray(detail?.conflicts)
+            ? detail.conflicts.filter((item: any) => Number.isInteger(Number(item?.id)))
+            : [];
+        return {
+            message,
+            // Tương thích API đang chạy chưa được cập nhật: nội dung lỗi cũ
+            // vẫn có “ID lịch 123”, đủ để người dùng mở đúng lịch trùng.
+            conflicts: structuredConflicts.length ? structuredConflicts : conflictsFromErrorMessage(message),
+        };
     }
-    return 'Không thể cập nhật lịch học. Vui lòng thử lại.';
+    return { message: 'Không thể cập nhật lịch học. Vui lòng thử lại.', conflicts: [] };
+};
+
+// Fast Refresh có thể giữ lại state của bản trước (khi submitError còn là
+// string). Chuẩn hóa trước khi render để lỗi cũ không làm vỡ modal.
+const normalizeSubmitError = (value: unknown): ScheduleSubmitError | null => {
+    if (!value) return null;
+    if (typeof value === 'object') {
+        const error = value as Partial<ScheduleSubmitError>;
+        return {
+            message: String(error.message || 'Không thể cập nhật lịch học. Vui lòng thử lại.'),
+            conflicts: Array.isArray(error.conflicts) ? error.conflicts : [],
+        };
+    }
+    return { message: String(value), conflicts: [] };
 };
 
 const getTimeMinutes = (time?: Dayjs | null) => {
@@ -264,7 +321,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     const [selectedRows, setSelectedRows] = React.useState<any[]>([]);
     const [selectedRowKeys, setSelectedRowKeys] = React.useState<React.Key[]>([]);
     const [previewRows, setPreviewRows] = React.useState<any[]>([]);
-    const [submitError, setSubmitError] = React.useState<string | null>(null);
+    const [submitError, setSubmitError] = React.useState<ScheduleSubmitError | null>(null);
     const [hmoOptionsByLesson, setHmoOptionsByLesson] = React.useState<Record<string, HocmaiSectionOption[]>>({});
     const [loadingHmoLessons, setLoadingHmoLessons] = React.useState<Set<string>>(new Set());
     const [syncingHmoLessonIds, setSyncingHmoLessonIds] = React.useState(false);
@@ -1526,8 +1583,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             hideModalImmediately();
         } catch (err) {
             console.error("Lỗi cập nhật hàng loạt:", err);
-            const errorMessage = getErrorMessage(err);
-            setSubmitError(errorMessage);
+            setSubmitError(getSubmitError(err));
             message.error({
                 content: 'Không thể cập nhật. Xem thông tin chi tiết phía dưới bảng.',
                 duration: 5,
@@ -1543,6 +1599,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     const preparingRelatedData = !selectionReady
         || !loadRelatedData
         || !sourceDataReady;
+    const displayedSubmitError = normalizeSubmitError(submitError);
     return (
         <>
             <Modal
@@ -2467,31 +2524,32 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                 showIcon
                                 style={{ marginTop: 16 }}
                                 message={operation === 'update' ? 'Xem trước thay đổi trước khi cập nhật' : 'Xem trước thao tác hàng loạt'}
+                                className="bulk-preview-alert"
                                 description={
                                     <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                                        <div className="bulk-preview-mobile">
-                                            {previewRows.map((row, index) => (
-                                                <Card key={row.id ?? index} size="small" title={row.label || `Lịch ${index + 1}`} extra={row.is_holiday ? <Tag color="red">Nghỉ học</Tag> : undefined}>
-                                                    {operation === 'update' ? (
-                                                        <>
-                                                            <div className="bulk-preview-field"><Text type="secondary">Tên bài</Text>{renderPreviewChange(row.current_lesson_name, row.next_lesson_name)}</div>
-                                                            <div className="bulk-preview-field"><Text type="secondary">Thứ học</Text>{renderPreviewChange(row.current_weekday, row.next_weekday)}</div>
-                                                            <div className="bulk-preview-field"><Text type="secondary">Thời gian</Text>{renderPreviewChange(row.current_schedule, row.next_schedule)}</div>
-                                                            <div className="bulk-preview-field"><Text type="secondary">Giáo viên</Text>{renderPreviewChange(row.current_teacher, row.next_teacher)}</div>
-                                                            <div className="bulk-preview-field"><Text type="secondary">Trợ giảng</Text>{renderPreviewChange(row.current_assistant, row.next_assistant)}</div>
-                                                            <div className="bulk-preview-field"><Text type="secondary">Lesson ID HMO</Text>{renderMappingPreviewChange(row.current, row.next)}</div>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <div className="bulk-preview-field"><Text type="secondary">Tên bài sau thao tác</Text><Text>{row.next_lesson_name || '-'}</Text></div>
-                                                            <div className="bulk-preview-field"><Text type="secondary">Lịch hiện tại</Text><Text>{row.current || '-'}</Text></div>
-                                                            <div className="bulk-preview-field"><Text type="secondary">Sau thao tác</Text><Text>{row.next || '-'}</Text></div>
-                                                        </>
-                                                    )}
-                                                </Card>
-                                            ))}
-                                        </div>
-                                        <div className="bulk-preview-desktop">
+                                <div className="bulk-preview-mobile">
+                                    {previewRows.map((row, index) => (
+                                        <Card key={row.id ?? index} size="small" title={row.label || `Lịch ${index + 1}`} extra={row.is_holiday ? <Tag color="red">Nghỉ học</Tag> : undefined}>
+                                            {operation === 'update' ? (
+                                                <>
+                                                    <div className="bulk-preview-field"><Text type="secondary">Tên bài</Text><div>{renderPreviewChange(row.current_lesson_name, row.next_lesson_name)}</div></div>
+                                                    <div className="bulk-preview-field"><Text type="secondary">Thứ học</Text><div>{renderPreviewChange(row.current_weekday, row.next_weekday)}</div></div>
+                                                    <div className="bulk-preview-field"><Text type="secondary">Thời gian</Text><div>{renderPreviewChange(row.current_schedule, row.next_schedule)}</div></div>
+                                                    <div className="bulk-preview-field"><Text type="secondary">Giáo viên</Text><div>{renderPreviewChange(row.current_teacher, row.next_teacher)}</div></div>
+                                                    <div className="bulk-preview-field"><Text type="secondary">Trợ giảng</Text><div>{renderPreviewChange(row.current_assistant, row.next_assistant)}</div></div>
+                                                    <div className="bulk-preview-field"><Text type="secondary">Lesson ID HMO</Text><div>{renderMappingPreviewChange(row.current, row.next)}</div></div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="bulk-preview-field"><Text type="secondary">Tên bài sau thao tác</Text><div><Text>{row.next_lesson_name || '-'}</Text></div></div>
+                                                    <div className="bulk-preview-field"><Text type="secondary">Lịch hiện tại</Text><div><Text>{row.current || '-'}</Text></div></div>
+                                                    <div className="bulk-preview-field"><Text type="secondary">Sau thao tác</Text><div><Text>{row.next || '-'}</Text></div></div>
+                                                </>
+                                            )}
+                                        </Card>
+                                    ))}
+                                </div>
+                                <div className="bulk-preview-desktop">
                                             <Table
                                                 scroll={{ x: "max-content" }}
                                                 size="small"
@@ -2560,13 +2618,42 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                 ]}
                                             />
                                         </div>
-                                        {submitError && (
+                                        {displayedSubmitError && (
                                             <div ref={submitErrorRef} style={{ width: '100%', scrollMargin: 24 }}>
                                                 <Alert
                                                     type="error"
                                                     showIcon
                                                     message="Không thể cập nhật lịch"
-                                                    description={<div style={{ whiteSpace: 'pre-line' }}>{submitError}</div>}
+                                                    description={<Space direction="vertical" size={8} style={{ width: '100%' }}>
+                                                        <div>
+                                                            {displayedSubmitError.conflicts.length
+                                                                ? `Có ${displayedSubmitError.conflicts.length} lịch bị trùng. Vui lòng kiểm tra và điều chỉnh thời gian hoặc nhân sự.`
+                                                                : displayedSubmitError.message}
+                                                        </div>
+                                                        {displayedSubmitError.conflicts.map((conflict) => {
+                                                            const params = new URLSearchParams({ calendar_id: String(conflict.id) });
+                                                            if (conflict.code) params.set('program', conflict.code);
+                                                            const summary = [
+                                                                conflict.staff_type === 'course' ? 'Khóa học' : conflict.staff_type === 'teacher' ? 'Giáo viên' : conflict.staff_type === 'assistant' ? 'Trợ giảng' : null,
+                                                                conflict.username ? `“${conflict.username}”` : null,
+                                                                conflict.code && conflict.staff_type !== 'course' ? conflict.code : null,
+                                                                conflict.learn_number ? `Bài ${conflict.learn_number}` : null,
+                                                                conflict.lesson_name || null,
+                                                                formatConflictTime(conflict),
+                                                            ].filter(Boolean).join(' · ');
+                                                            return (
+                                                                <Button
+                                                                    key={conflict.id}
+                                                                    type="link"
+                                                                    size="small"
+                                                                    style={{ paddingInline: 0, maxWidth: '100%', height: 'auto', whiteSpace: 'normal', textAlign: 'left' }}
+                                                                    onClick={() => window.open(`/schedule?${params.toString()}`, '_blank', 'noopener,noreferrer')}
+                                                                >
+                                                                    Xem lịch trùng{summary ? ` — ${summary}` : ''}
+                                                                </Button>
+                                                            );
+                                                        })}
+                                                    </Space>}
                                                 />
                                             </div>
                                         )}

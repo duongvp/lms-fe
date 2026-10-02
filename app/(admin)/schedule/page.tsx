@@ -445,6 +445,7 @@ type BatchClassroomAssignmentItem = {
 
 interface ScheduleFilterValues {
     keyword?: string;
+    calendar_id?: number;
     code?: string;
     teacher?: string[];
     system_type?: Array<"topclass" | "topuni">;
@@ -661,6 +662,7 @@ const buildScheduleUrl = (values: ScheduleFilterValues, targetPage = 1) => {
     const teachers = Array.isArray(cleaned.teacher) ? cleaned.teacher : [];
     if (program) params.set("program", program);
     if (keyword) params.set("q", keyword);
+    if (cleaned.calendar_id !== undefined) params.set("calendar_id", String(cleaned.calendar_id));
     if (teachers.length) params.set("teacher", teachers.join(","));
     if (cleaned.system_type?.length) params.set("system_type", cleaned.system_type.join(","));
     if (cleaned.time_status?.length) params.set("status", cleaned.time_status.join(","));
@@ -1430,6 +1432,7 @@ const Page = () => {
             searchParams.get("q") || searchParams.get("teacher") || searchParams.get("system_type")
             || searchParams.get("status") || searchParams.get("weekdays")
             || searchParams.get("from_learn_number") || searchParams.get("to_learn_number")
+            || searchParams.get("calendar_id")
         );
         // Admin được phép xem liên chương trình theo thời gian, nên URL không
         // có `program` vẫn phải được khôi phục đầy đủ sau khi tải lại trang.
@@ -1452,6 +1455,10 @@ const Page = () => {
         const values: ScheduleFilterValues = cleanFilterValues({
             code: program,
             keyword: String(searchParams.get("q") || "").trim(),
+            calendar_id: (() => {
+                const parsed = Number(searchParams.get("calendar_id"));
+                return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+            })(),
             teacher: String(searchParams.get("teacher") || "")
                 .split(",")
                 .map((teacher) => teacher.trim())
