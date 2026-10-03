@@ -731,6 +731,7 @@ const TeacherProfilesPage = () => {
 
     return (
         <div
+            className="admin-responsive-page teacher-admin-page"
             style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -743,6 +744,13 @@ const TeacherProfilesPage = () => {
             {contextHolder}
 
             <TeacherProfileHeader
+                search={search}
+                onSearchChange={value => { setSearch(value); setSelectedHmidProfileIds([]); setPagination(current => ({ ...current, current: 1 })); }}
+                filterCount={Number(teacherType !== undefined) + Number(status !== undefined)}
+                filters={<TeacherProfileFilters mobileSheet search={search} teacherType={teacherType} status={status}
+                    onSearchChange={value => { setSearch(value); setSelectedHmidProfileIds([]); setPagination(current => ({ ...current, current: 1 })); }}
+                    onTeacherTypeChange={value => { setTeacherType(value); setSelectedHmidProfileIds([]); setPagination(current => ({ ...current, current: 1 })); }}
+                    onStatusChange={value => { setStatus(value); setSelectedHmidProfileIds([]); setPagination(current => ({ ...current, current: 1 })); }} />}
                 canImport={canImport}
                 canExport={canExport}
                 canCreate={canCreate}

@@ -50,7 +50,7 @@ const TeacherProfileImportModal = ({
     onDownloadTemplate,
 }: TeacherProfileImportModalProps) => {
     return (
-        <Modal
+        <Modal className="admin-responsive-modal"
             open={open}
             title="Nhập giáo viên và trợ giảng từ file"
             okText="Bắt đầu nhập"

@@ -9,7 +9,9 @@ import { getRoles, RoleApiResponse } from "@/services/roleService";
 import useRoleStore from "@/stores/roleStore";
 import RoleModal from "./components/RoleModal";
 import { ActionType } from "@/enums/action";
-import { notification } from "antd";
+import { Grid, Tag, notification } from "antd";
+import MobileAdminToolbar from "@/components/shared/MobileAdminToolbar";
+import MobileRecordCard from "@/components/shared/MobileRecordCard";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
 import { formatVietnamDateTime } from "@/helper/convertDate";
@@ -44,6 +46,7 @@ const columns: ColumnsType<DataType> = [
 ];
 
 const Page = () => {
+    const isMobile = !Grid.useBreakpoint().md;
     const searchParams = useSearchParams();
     const [data, setData] = useState<DataType[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
@@ -118,8 +121,15 @@ const Page = () => {
     }, [shouldReload]);
 
     return (
-        <>
+        <div className="admin-responsive-page">
             {contextHolder}
+            {isMobile ? <MobileAdminToolbar
+                search={searchText}
+                placeholder="Tìm vai trò"
+                onSearchChange={setSearchText}
+                onCreate={canCreateRole ? () => setModal({ open: true, type: ActionType.CREATE, role: null }) : undefined}
+                createLabel="Thêm vai trò"
+            /> : (
             <SearchAndActionsBar
                 searchValue={searchText}
                 placeholder="Tên vai trò"
@@ -129,7 +139,17 @@ const Page = () => {
                     ? () => setModal({ open: true, type: ActionType.CREATE, role: null })
                     : undefined}
             />
+            )}
             <CustomTable<DataType>
+                responsiveCardBreakpoint="md"
+                responsiveCardContent={(record, _index, controls) => <MobileRecordCard
+                    title={record.name}
+                    meta={record.description || "Chưa có mô tả"}
+
+                    expanded={controls.expanded}
+                    onToggle={controls.toggleExpanded}
+                    details={record.description_row}
+                />}
                 columns={columns}
                 dataSource={filteredData}
                 loading={loading}
@@ -147,7 +167,7 @@ const Page = () => {
                 })}
             />
             <RoleModal />
-        </>
+        </div>
     );
 };
 

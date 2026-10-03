@@ -61,7 +61,7 @@ const BranchModal = () => {
     return (
         <>
             <CustomSpin openSpin={loadingModalVisible} />
-            <Modal
+            <Modal className="admin-responsive-modal"
                 title={modal.title}
                 open={modal.open}
                 onCancel={onCloseModal}

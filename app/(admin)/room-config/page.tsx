@@ -23,6 +23,7 @@ import {
   Switch,
   message,
   Alert,
+  Grid,
 } from "antd";
 import {
   PlusOutlined,
@@ -47,6 +48,8 @@ import {
 import { useQuizClassesQuery, useQuizLessonsQuery } from "@/hooks/useQuizQueries";
 import type { QuizClassOption, QuizLessonOption } from "@/services/quizService";
 import { buildLessonSelectOptions } from "@/app/(admin)/quizzes/quiz.utils";
+import MobileAdminToolbar from "@/components/shared/MobileAdminToolbar";
+import MobileRecordCard from "@/components/shared/MobileRecordCard";
 import CustomTable from "@/components/ui/Table";
 import ImportFileDragger from "@/components/shared/ImportFileDragger";
 import { useAuthStore } from "@/stores/authStore";
@@ -73,6 +76,7 @@ const RoomConfigFormSection = ({
 );
 
 export default function RoomConfigPage() {
+  const isMobile = !Grid.useBreakpoint().md;
   const searchParams = useSearchParams();
   const positiveParam = (name: string, fallback: number) => {
     const value = Number(searchParams.get(name));
@@ -529,9 +533,9 @@ export default function RoomConfigPage() {
   ];
 
   return (
-    <div style={{ minHeight: 0 }}>
+    <div className="admin-responsive-page room-admin-page" style={{ minHeight: 0 }}>
       {/* Header section */}
-      <Card
+      <Card className="admin-page-heading"
         style={{
           marginBottom: 16,
           borderRadius: 12,
@@ -548,7 +552,7 @@ export default function RoomConfigPage() {
               Quản lý cấu hình livestream cho từng bài học trong Chương trình.
             </Text>
           </Col>
-          <Col>
+          {!isMobile && <Col>
             <Space wrap>
               <Button
                 icon={<ReloadOutlined />}
@@ -579,17 +583,24 @@ export default function RoomConfigPage() {
                 Thêm cấu hình mới
               </Button>}
             </Space>
-          </Col>
+          </Col>}
         </Row>
       </Card>
+      {isMobile && <MobileAdminToolbar search={search} placeholder="Tìm mã lớp, người cập nhật" onSearchChange={value => { setSearch(value); setPage(1); }} onCreate={canCreateRoomConfig ? () => handleOpenModal() : undefined} createLabel="Thêm cấu hình" filterCount={Number(filterLearnNumber !== null)} filters={<>
+          <label htmlFor="mobile-room-lesson">Bài thứ</label><InputNumber id="mobile-room-lesson" min={1} style={{ width: '100%' }} value={filterLearnNumber} placeholder="Tất cả bài học" onChange={value => { setFilterLearnNumber(value); setPage(1); }} />
+          <Button onClick={() => { setSearch(''); setFilterLearnNumber(null); setPage(1); }}>Xóa bộ lọc</Button>
+      </>} actions={<>
+          <Button icon={<ReloadOutlined />} loading={loading} onClick={fetchData}>Làm mới</Button>
+          {canImportRoomConfig && <Button icon={<FileExcelOutlined />} onClick={() => { setImportRows([]); setImportFile(undefined); setImportProgramCode(undefined); setImportErrors([]); setImportResult(null); setIsImportModalOpen(true); }}>Import file</Button>}
+      </>} />}
       {/* Main Data Table */}
-      <Card
+      <Card className="admin-list-card"
         style={{
           borderRadius: 12,
           boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
         }}
       >
-        <Row gutter={[16, 16]} align="middle" style={{ marginBottom: 16 }}>
+        {!isMobile && <Row gutter={[16, 16]} align="middle" style={{ marginBottom: 16 }}>
           <Col xs={24} sm={12} md={8}>
             <Input
               placeholder="Tìm kiếm môn học, mã môn hoặc người cập nhật..."
@@ -625,8 +636,15 @@ export default function RoomConfigPage() {
               Xóa bộ lọc
             </Button>
           </Col>
-        </Row>
+        </Row>}
         <CustomTable
+          responsiveCardBreakpoint="md"
+          responsiveCardContent={record => <MobileRecordCard title={record.code} status={<Tag color="blue">Bài {record.learn_number}</Tag>} meta={<>{record.updated_by || 'Hệ thống'} · {record.updated_at ? dayjs(record.updated_at).format('DD/MM/YYYY HH:mm') : '-'}</>} actions={<>
+              <Button type="link" onClick={() => handleViewDetail(record)}>Xem chi tiết</Button>
+              {canUpdateRoomConfig(record.code) && <Button aria-label="Chỉnh sửa cấu hình" icon={<EditOutlined />} onClick={() => handleOpenModal(record)} />}
+          </>}>
+              <Space wrap size={[4, 4]}><Tag color={record.config?.cam ? 'success' : 'default'}>Cam: {record.config?.cam ? 'Bật' : 'Tắt'}</Tag><Tag color={record.config?.mic ? 'success' : 'default'}>Mic: {record.config?.mic ? 'Bật' : 'Tắt'}</Tag><Tag color={record.config?.screen_share ? 'success' : 'default'}>Chia sẻ: {record.config?.screen_share ? 'Bật' : 'Tắt'}</Tag></Space>
+          </MobileRecordCard>}
           columns={columns}
           dataSource={data}
           rowKey={(record) => `${record.code}_${record.learn_number}`}
@@ -647,7 +665,7 @@ export default function RoomConfigPage() {
       </Card>
 
       {/* Modal Create / Edit Room Config */}
-      <Modal
+      <Modal className="admin-responsive-modal"
         title={
           <span>{editingRecord ? "Chỉnh sửa Cấu hình Phòng học" : "Tạo Cấu hình Phòng học mới"}</span>
         }
@@ -875,7 +893,7 @@ export default function RoomConfigPage() {
       </Drawer>
 
       {/* Modal Import Bulk */}
-      <Modal
+      <Modal className="admin-responsive-modal"
         title={
           <Space>
             <FileExcelOutlined style={{ color: "#52c41a" }} />

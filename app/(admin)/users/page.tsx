@@ -13,7 +13,9 @@ import { ActionType } from "@/enums/action";
 import BranchModal from "./components/BranchModal";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
-import { notification } from "antd";
+import { Grid, Tag, notification } from "antd";
+import MobileAdminToolbar from "@/components/shared/MobileAdminToolbar";
+import MobileRecordCard from "@/components/shared/MobileRecordCard";
 import { formatVietnamDateTime } from "@/helper/convertDate";
 
 
@@ -53,6 +55,7 @@ const columns: ColumnsType<DataType> = [
 ];
 
 const Page = () => {
+    const isMobile = !Grid.useBreakpoint().md;
     const searchParams = useSearchParams();
     const [data, setData] = useState<DataType[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
@@ -116,7 +119,8 @@ const Page = () => {
     };
 
     useEffect(() => {
-        void fetchUsers();
+        const timer = window.setTimeout(() => void fetchUsers(), 250);
+        return () => window.clearTimeout(timer);
     }, [currentPage, pageSize, searchText]);
 
     useEffect(() => {
@@ -144,8 +148,15 @@ const Page = () => {
     }, [shouldReload]);
 
     return (
-        <>
+        <div className="admin-responsive-page">
             {contextHolder}
+            {isMobile ? <MobileAdminToolbar
+                search={searchText}
+                placeholder="Tìm quản trị viên"
+                onSearchChange={value => { setSearchText(value); setCurrentPage(1); }}
+                onCreate={hasPermission(PermissionKey.USER_CREATE) ? handleAddBtn : undefined}
+                createLabel="Thêm quản trị viên"
+            /> : (
             <SearchAndActionsBar
                 searchValue={searchText}
                 placeholder="Tên đăng nhập, người dùng"
@@ -156,7 +167,17 @@ const Page = () => {
                 }}
                 handleAddBtn={hasPermission(PermissionKey.USER_CREATE) ? handleAddBtn : undefined}
             />
+            )}
             <CustomTable<DataType>
+                responsiveCardBreakpoint="md"
+                responsiveCardContent={(record, _index, controls) => <MobileRecordCard
+                    title={record.name || record.username}
+                    meta={record.username}
+                    status={<Tag color="blue">{record.roles?.length || 0} vai trò</Tag>}
+                    expanded={controls.expanded}
+                    onToggle={controls.toggleExpanded}
+                    details={record.description}
+                />}
                 columns={columns}
                 dataSource={data}
                 loading={loading}
@@ -184,7 +205,7 @@ const Page = () => {
             <UserModal />
             <RoleModal />
             <BranchModal />
-        </>
+        </div>
     );
 };
 

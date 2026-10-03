@@ -1,4 +1,5 @@
 "use client";
+import { createPortal } from "react-dom";
 import type { FormInstance } from 'antd';
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -11,7 +12,7 @@ import type { FilterDropdownProps } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
 import CustomSearchInput from "@/components/ui/Inputs/CustomSearchInput";
 import { notification, Alert, Card, Collapse, Form, Input, InputNumber, List, Select, Button, Checkbox, Space, Modal, Radio, Row, Col, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress, Table, Spin } from "antd";
-import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, SearchOutlined, SortAscendingOutlined, SortDescendingOutlined, MoreOutlined, ApartmentOutlined, CloudUploadOutlined, SwapOutlined, LinkOutlined, ClockCircleOutlined, UserOutlined, EyeOutlined, PlusOutlined, CheckSquareOutlined } from "@ant-design/icons";
+import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, SearchOutlined, SortAscendingOutlined, SortDescendingOutlined, MoreOutlined, ApartmentOutlined, CloudUploadOutlined, SwapOutlined, LinkOutlined, ClockCircleOutlined, UserOutlined, EyeOutlined, PlusOutlined } from "@ant-design/icons";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -308,6 +309,7 @@ type ImmediateSelectAllCheckboxProps = {
     busy: boolean;
     disabled: boolean;
     onChange: (checked: boolean) => void;
+    children?: React.ReactNode;
 };
 
 const ImmediateSelectAllCheckbox = React.memo(({
@@ -316,6 +318,7 @@ const ImmediateSelectAllCheckbox = React.memo(({
     busy,
     disabled,
     onChange,
+    children,
 }: ImmediateSelectAllCheckboxProps) => {
     return (
         <Checkbox
@@ -326,7 +329,7 @@ const ImmediateSelectAllCheckbox = React.memo(({
             title={busy ? "Đang chọn tất cả lịch học..." : undefined}
             disabled={disabled}
             onChange={(event) => onChange(event.target.checked)}
-        />
+        >{children}</Checkbox>
     );
 });
 ImmediateSelectAllCheckbox.displayName = "ImmediateSelectAllCheckbox";
@@ -967,12 +970,13 @@ const ScheduleFilterSheet = ({
                     rules={allowFilterWithoutProgram ? [] : [{ required: true, message: "Vui lòng chọn Chương trình" }]}
                 >
                     <Select
-                        allowClear
+                        className="schedule-filter-program"
+                        allowClear={allowFilterWithoutProgram ? { clearIcon: <CloseOutlined aria-label="Xóa chương trình đã chọn" /> } : false}
                         showSearch
                         loading={loadingPrograms}
                         options={programOptions}
                         optionFilterProp="label"
-                        placeholder="Chọn Chương trình"
+                        placeholder={allowFilterWithoutProgram ? "Tất cả Chương trình" : "Chọn Chương trình"}
                         notFoundContent={loadingPrograms ? "Đang tải..." : "Không có Chương trình"}
                     />
                 </Form.Item>
@@ -1230,6 +1234,8 @@ const EvgBannerOverrideInput = ({ onChange }: EvgBannerOverrideInputProps) => {
 const Page = () => {
     const pageScrollRef = useRef<HTMLDivElement>(null);
     const [showBackToTop, setShowBackToTop] = useState(false);
+    const [floatingActionsMounted, setFloatingActionsMounted] = useState(false);
+    useEffect(() => setFloatingActionsMounted(true), []);
     const { fieldPolicy, permissions, roles } = useAuthStore((state) => state.user);
     const isAdmin = permissions.includes("*") || roles?.some((role: any) => String(role?.code || role?.name || role).toLowerCase() === "admin");
     const hasPermission = useAuthStore(state => state.hasPermission);
@@ -4210,12 +4216,9 @@ const Page = () => {
             { key: "mobile-sync", icon: <DatabaseOutlined />, label: "Đồng bộ", children: syncMenu.items, disabled: selectingAllRows },
             { type: "divider" as const },
             ...(canCreateSchedule ? [{ key: "mobile-auto", icon: <CalendarOutlined />, label: "Tạo lịch tự động", disabled: !submittedFilterValues.code }] : []),
-            ...(canEditSchedule ? [{ key: "mobile-bulk-edit", icon: <EditOutlined />, label: "Sửa hàng loạt" }] : []),
-            ...(canDeleteSchedule ? [{ key: "mobile-bulk-delete", icon: <DeleteOutlined />, danger: true, label: "Xóa" + (selectedRowKeys.length ? " (" + selectedRowKeys.length + ")" : ""), disabled: selectingAllRows || !selectedRowKeys.length || !selectedRowsAllModifiable || deletingSelectedSchedules }] : []),
+            ...(canEditSchedule && viewMode === "calendar" ? [{ key: "mobile-bulk-edit", icon: <EditOutlined />, label: "Sửa hàng loạt" }] : []),
+            ...(canDeleteSchedule && viewMode === "calendar" ? [{ key: "mobile-bulk-delete", icon: <DeleteOutlined />, danger: true, label: "Xóa" + (selectedRowKeys.length ? " (" + selectedRowKeys.length + ")" : ""), disabled: selectingAllRows || !selectedRowKeys.length || !selectedRowsAllModifiable || deletingSelectedSchedules }] : []),
             { type: "divider" as const },
-            allRowsSelected
-                ? { key: "mobile-deselect-all", icon: <CloseOutlined />, label: `Bỏ chọn tất cả (${selectedRowKeys.length})` }
-                : { key: "mobile-select-all", icon: <CheckSquareOutlined />, label: hasSearched ? `Chọn tất cả${totalItems ? " (" + totalItems + ")" : ""}` : "Chọn tất cả", disabled: !hasSearched || selectingAllRows },
             { key: "mobile-refresh", icon: <ReloadOutlined />, label: "Làm mới", disabled: !hasSearched || refreshingScheduleList },
         ],
         onClick: ({ key }: { key: string }) => {
@@ -4223,8 +4226,6 @@ const Page = () => {
             else if (key === "mobile-auto") handleOpenAutoSchedule();
             else if (key === "mobile-bulk-edit") handleOpenBulkEdit();
             else if (key === "mobile-bulk-delete") handleDeleteSelected();
-            else if (key === "mobile-select-all") void handleSelectAll(true);
-            else if (key === "mobile-deselect-all") void handleSelectAll(false);
             else if (key === "mobile-refresh") void handleRefreshScheduleList();
             else if (exportMenuKeys.has(key)) exportMenu.onClick({ key });
             else if (syncMenuKeys.has(key)) syncMenu.onClick({ key });
@@ -4465,28 +4466,39 @@ const Page = () => {
                     </Space>;
                 })()}
             </Modal>
-            {isMobile && canCreateSchedule && (
-                <FloatButton
-                    className="schedule-add-fab"
-                    type="primary"
-                    tooltip="Thêm mới"
-                    aria-label="Thêm mới lịch học"
-                    icon={<PlusOutlined />}
-                    onClick={handleMobileAddBtn}
-                    style={{ right: 16, bottom: showBackToTop ? 80 : 16 }}
-                />
+            {isMobile && floatingActionsMounted && (canCreateSchedule || showBackToTop) && createPortal(
+                <div className="schedule-mobile-floating-actions" style={{ position: 'fixed', insetInlineEnd: 'calc(16px + env(safe-area-inset-right, 0px))', bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))', zIndex: 999 }}>
+                    {showBackToTop && <FloatButton
+                        tooltip="Lên đầu trang"
+                        aria-label="Lên đầu trang"
+                        icon={<UpOutlined />}
+                        style={{ position: 'static', width: 48, height: 48, margin: 0 }}
+                        onClick={() => {
+                            const scrollContainer = pageScrollRef.current?.closest(".ant-layout-content") as HTMLElement | null;
+                            scrollContainer?.scrollTo({ top: 0, behavior: "smooth" });
+                            window.scrollTo({ top: 0, behavior: "smooth" });
+                        }}
+                    />}
+                    {canCreateSchedule && <FloatButton
+                        className="schedule-add-fab"
+                        type="primary"
+                        tooltip="Thêm mới"
+                        aria-label="Thêm mới lịch học"
+                        icon={<PlusOutlined />}
+                        onClick={handleMobileAddBtn}
+                        style={{ position: 'static', width: 48, height: 48, margin: 0 }}
+                    />}
+                </div>, document.body
             )}
-            {showBackToTop && (
-                <FloatButton
-                    tooltip="Lên đầu trang"
-                    icon={<UpOutlined />}
-                    onClick={() => {
-                        const scrollContainer = pageScrollRef.current?.closest(".ant-layout-content") as HTMLElement | null;
-                        scrollContainer?.scrollTo({ top: 0, behavior: "smooth" });
-                        window.scrollTo({ top: 0, behavior: "smooth" });
-                    }}
-                />
-            )}
+            {!isMobile && showBackToTop && <FloatButton
+                tooltip="Lên đầu trang"
+                icon={<UpOutlined />}
+                onClick={() => {
+                    const scrollContainer = pageScrollRef.current?.closest(".ant-layout-content") as HTMLElement | null;
+                    scrollContainer?.scrollTo({ top: 0, behavior: "smooth" });
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+            />}
             {viewMode === "table" && <>
                 {/* <div
                     style={{
@@ -4548,9 +4560,6 @@ const Page = () => {
                                 fetchApi={handleSearch}
                             />
                         </div>
-                        <Tooltip title="Lọc lịch học">
-                            <Button className="schedule-mobile-toolbar-button" aria-label="Lọc lịch học" icon={<FilterOutlined />} onClick={() => setOpenFilterDrawer(true)} />
-                        </Tooltip>
                         <Button
                             className="schedule-mobile-toolbar-button"
                             aria-label="Mở menu thao tác"
@@ -4558,6 +4567,9 @@ const Page = () => {
                             loading={refreshingScheduleList || deletingSelectedSchedules}
                             onClick={() => { setMobileActionGroup(undefined); setMobileActionsOpen(true); }}
                         />
+                         <Tooltip title="Lọc lịch học">
+                            <Button className="schedule-mobile-toolbar-button" aria-label="Lọc lịch học" icon={<FilterOutlined />} onClick={() => setOpenFilterDrawer(true)} />
+                        </Tooltip>
                         <MobilePopup
                             position="bottom"
                             visible={mobileActionsOpen}
@@ -4571,15 +4583,16 @@ const Page = () => {
                                 <Button type="text" aria-label="Đóng menu thao tác" icon={<CloseOutlined />} onClick={() => setMobileActionsOpen(false)} />
                             </div>
                             <div className="lesson-actions-sheet-body">
+                                <div className="schedule-mobile-menu-context">{selectedRowKeys.length ? `Đang chọn ${selectedRowKeys.length} lịch học` : 'Chọn lịch trong danh sách để thao tác hàng loạt.'}</div>
+                                {renderMobileMenuItems(mobileToolbarMenu.items)}
                                 <Collapse
                                     accordion
                                     ghost
                                     activeKey={mobileActionGroup}
                                     onChange={(key) => setMobileActionGroup(Array.isArray(key) ? key[0] : key)}
                                     items={[
-                                        ...(canExportSchedule ? [{ key: "export", label: "Export", collapsible: selectingAllRows ? "disabled" as const : undefined, children: renderMobileMenuItems(exportMenu.items) }] : []),
+                                        ...(canExportSchedule ? [{ key: "export", label: "Xuất dữ liệu", collapsible: selectingAllRows ? "disabled" as const : undefined, children: renderMobileMenuItems(exportMenu.items) }] : []),
                                         { key: "sync", label: "Đồng bộ", collapsible: selectingAllRows ? "disabled" as const : undefined, children: renderMobileMenuItems(syncMenu.items) },
-                                        { key: "actions", label: "Thao tác khác", children: renderMobileMenuItems(mobileToolbarMenu.items) },
                                     ]}
                                 />
                             </div>
@@ -4709,7 +4722,7 @@ const Page = () => {
                     }
                 />
                 )}
-                {(selectingAllRows || allRowsSelected) && (
+                {!isMobile && (selectingAllRows || allRowsSelected) && (
                     <Alert
                         style={{ marginTop: 8, marginBottom: 12 }}
                         type="info"
@@ -4785,6 +4798,31 @@ const Page = () => {
                     }}
                 />
             </div>
+
+            {isMobile && viewMode === "table" && hasSearched && displayedTotalItems > 0 && (
+                <div className="schedule-mobile-selection-bar">
+                    <div className="schedule-mobile-selection-heading">
+                        <ImmediateSelectAllCheckbox
+                            checked={allRowsSelected}
+                            indeterminate={!allRowsSelected && selectedRowKeys.length > 0}
+                            busy={selectingAllRows}
+                            disabled={loading || deletingSelectedSchedules || (hasActiveTableColumnFilters || totalItems <= data.length) && selectableRowKeys.size === 0}
+                            onChange={checked => void handleSelectAll(checked)}
+                        >Chọn tất cả</ImmediateSelectAllCheckbox>
+                        {(selectedRowKeys.length > 0 || selectingAllRows) && <Button type="link" onClick={() => void handleSelectAll(false)} disabled={deletingSelectedSchedules}>Bỏ chọn</Button>}
+                    </div>
+                    <div className="schedule-mobile-selection-status" role="status" aria-live="polite">
+                        {selectingAllRows ? <><Spin size="small" /> Đang tải {Math.min(selectionLoadedCount, totalItems)}/{totalItems} lịch…</> : selectedRowKeys.length
+                            ? `Đã chọn ${selectedRowKeys.length} lịch${allRowsSelected && !hasActiveTableColumnFilters ? ' trên tất cả các trang' : ''}`
+                            : hasActiveTableColumnFilters ? 'Chọn các lịch đang hiển thị sau khi lọc.' : 'Áp dụng cho lịch có thể chọn trên tất cả các trang theo bộ lọc.'}
+                    </div>
+                    {selectedRowKeys.length > 0 && <div className="schedule-mobile-selection-actions">
+                        {canEditSchedule && <Button icon={<EditOutlined />} disabled={selectingAllRows || deletingSelectedSchedules || !selectedScheduleRecords.some(record => record && canModifySchedule(record))} onClick={handleOpenBulkEdit}>Sửa</Button>}
+                        {canDeleteSchedule && <Button danger icon={<DeleteOutlined />} loading={deletingSelectedSchedules} disabled={selectingAllRows || !selectedRowsAllModifiable} onClick={handleDeleteSelected}>Xóa</Button>}
+                        <Button type="primary" icon={<MoreOutlined />} disabled={selectingAllRows || deletingSelectedSchedules} onClick={() => { setMobileActionGroup('sync'); setMobileActionsOpen(true); }}>Đồng bộ</Button>
+                    </div>}
+                </div>
+            )}
 
             <Form
                 form={form}

@@ -436,7 +436,7 @@ const RoleModal = () => {
     // Chỉ hiện Skeleton khi chưa load xong VÀ modal đang mở
     if (modal.open && !structuresLoaded) {
         return (
-            <Modal
+            <Modal className="admin-responsive-modal"
                 title={modal.title}
                 open={modal.open}
                 onCancel={onCloseModal}
@@ -453,7 +453,7 @@ const RoleModal = () => {
 
     if (modal.open && structuresError) {
         return (
-            <Modal
+            <Modal className="admin-responsive-modal"
                 title={modal.title}
                 open={modal.open}
                 onCancel={onCloseModal}
@@ -474,7 +474,7 @@ const RoleModal = () => {
     return (
         <>
             <CustomSpin openSpin={loadingModalVisible} />
-            <Modal
+            <Modal className="admin-responsive-modal"
                 title={modal.title}
                 open={modal.open}
                 onCancel={onCloseModal}

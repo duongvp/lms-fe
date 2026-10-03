@@ -33,7 +33,7 @@ const TeacherProfileFormModal = ({
     fixedTeacherType,
 }: TeacherProfileFormModalProps) => {
     return (
-        <Modal
+        <Modal className="admin-responsive-modal"
             open={open}
             title={
                 editing

@@ -4,6 +4,7 @@ import CustomSearchInput from '@/components/ui/Inputs/CustomSearchInput';
 import { Flex, Input, Select, Button } from 'antd';
 
 interface TeacherProfileFiltersProps {
+    mobileSheet?: boolean;
     search: string;
     teacherType: 0 | 1 | undefined;
     status: 0 | 1 | undefined;
@@ -17,6 +18,7 @@ interface TeacherProfileFiltersProps {
 }
 
 const TeacherProfileFilters = ({
+    mobileSheet = false,
     search,
     teacherType,
     status,
@@ -26,19 +28,19 @@ const TeacherProfileFilters = ({
 }: TeacherProfileFiltersProps) => {
     return (
         <Flex
-            className="responsive-filter-flex"
+            className={`responsive-filter-flex ${mobileSheet ? "admin-sheet-filters" : "admin-desktop-filters"}`}
             gap={12}
             wrap
             style={{ marginBottom: 16 }}
         >
-            <Input.Search
+            {!mobileSheet && <Input.Search
                 allowClear
                 placeholder="Tìm Tên đăng nhập hoặc họ tên"
                 style={{ width: 320 }}
                 value={search}
                 onSearch={onSearchChange}
                 onChange={(event) => onSearchChange(event.target.value)}
-            />
+            />}
 
             <Select
                 allowClear

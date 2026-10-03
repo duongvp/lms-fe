@@ -9,6 +9,7 @@ import {
     Switch,
     Tag,
 } from 'antd';
+import MobileRecordCard from '@/components/shared/MobileRecordCard';
 import CustomTable from '@/components/ui/Table';
 import {
     DeleteOutlined,
@@ -115,53 +116,7 @@ const TeacherProfileTable = ({
             observer.disconnect();
     }, []);
 
-    return (
-        <div
-            ref={containerRef}
-            style={{
-                flex: '1 1 0',
-                minHeight: 0,
-                overflow: 'hidden',
-            }}
-        >
-            <CustomTable<TeacherProfile>
-                rowKey={(record) =>
-                    String(record.id)
-                }
-                loading={loading}
-                dataSource={rows}
-                rowSelection={{
-                    selectedRowKeys,
-                    preserveSelectedRowKeys: true,
-                    onChange: (keys) => onSelectedRowKeysChange(keys.map(String)),
-                    columnTitle: (
-                        <Checkbox
-                            aria-label="Chọn toàn bộ nhân sự ở tất cả các trang"
-                            checked={totalRowCount > 0 && selectedRowKeys.length >= totalRowCount}
-                            indeterminate={selectedRowKeys.length > 0 && selectedRowKeys.length < totalRowCount}
-                            disabled={selectingAll || totalRowCount === 0}
-                            onChange={(event) => onSelectAllAcrossPages(event.target.checked)}
-                        />
-                    ),
-                }}
-                pagination={{
-                    ...pagination,
-                    showSizeChanger: true,
-                    showTotal: (total) => `Tổng số: ${total} nhân sự`,
-                    onChange: (
-                        page,
-                        pageSize
-                    ) =>
-                        onPageChange(
-                            page,
-                            pageSize
-                        ),
-                }}
-                scroll={{
-                    x: 1180,
-                    y: tableScrollY,
-                }}
-                columns={[
+    const columns: import("antd/es/table").ColumnsType<TeacherProfile> = [
                 {
                     title: 'Tên đăng nhập',
                     dataIndex: 'username',
@@ -333,7 +288,66 @@ const TeacherProfileTable = ({
                         </Space>
                     ),
                 },
-                ]}
+                ];
+
+    return (
+        <div
+            ref={containerRef}
+            style={{
+                flex: '1 1 0',
+                minHeight: 0,
+                overflow: 'hidden',
+            }}
+        >
+            <div className="admin-mobile-select-all"><Checkbox checked={totalRowCount > 0 && selectedRowKeys.length >= totalRowCount} indeterminate={selectedRowKeys.length > 0 && selectedRowKeys.length < totalRowCount} disabled={selectingAll || !totalRowCount} onChange={event => onSelectAllAcrossPages(event.target.checked)}>Chọn tất cả ({totalRowCount})</Checkbox></div>
+            <CustomTable<TeacherProfile>
+                rowKey={(record) =>
+                    String(record.id)
+                }
+                responsiveCardBreakpoint="md"
+                responsiveCardTitle={record => record.display_name || record.username}
+                responsiveCardContent={(record, index, controls) => <MobileRecordCard
+                    title={record.username}
+                    meta={<Tag color={record.can_view_stream_key === 0 ? 'blue' : 'green'}>{record.can_view_stream_key === 0 ? 'Trợ giảng' : 'Giáo viên'}</Tag>}
+                    status={columns[5].render?.(record.status, record, index) as React.ReactNode}
+                    actions={columns[7].render?.(undefined, record, index) as React.ReactNode}
+                    expanded={controls.expanded} onToggle={controls.toggleExpanded}
+                    details={<><div>HMID: {record.student_hmid || '-'}</div>{columns[4].render?.(record.hmid_sync_status, record, index) as React.ReactNode}<div>Ngày tạo: {formatVietnamDateTime(record.created_at, 'DD/MM/YYYY HH:mm')}</div>{record.hmid_sync_error && <div>{record.hmid_sync_error}</div>}</>}
+                />}
+                loading={loading}
+                dataSource={rows}
+                rowSelection={{
+                    selectedRowKeys,
+                    preserveSelectedRowKeys: true,
+                    onChange: (keys) => onSelectedRowKeysChange(keys.map(String)),
+                    columnTitle: (
+                        <Checkbox
+                            aria-label="Chọn toàn bộ nhân sự ở tất cả các trang"
+                            checked={totalRowCount > 0 && selectedRowKeys.length >= totalRowCount}
+                            indeterminate={selectedRowKeys.length > 0 && selectedRowKeys.length < totalRowCount}
+                            disabled={selectingAll || totalRowCount === 0}
+                            onChange={(event) => onSelectAllAcrossPages(event.target.checked)}
+                        />
+                    ),
+                }}
+                pagination={{
+                    ...pagination,
+                    showSizeChanger: true,
+                    showTotal: (total) => `Tổng số: ${total} nhân sự`,
+                    onChange: (
+                        page,
+                        pageSize
+                    ) =>
+                        onPageChange(
+                            page,
+                            pageSize
+                        ),
+                }}
+                scroll={{
+                    x: 1180,
+                    y: tableScrollY,
+                }}
+                columns={columns}
             />
         </div>
     );

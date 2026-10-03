@@ -1,12 +1,18 @@
 "use client";
+import type { ReactNode } from 'react';
+import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Avatar, Button, Card, Col, Descriptions, Form, Image, Input, Modal, Popconfirm, Radio, Row, Select, Space, Spin, Switch, Table, Tag, Tooltip, Typography, Upload, message } from 'antd';
+import { Alert, Avatar, Button, Card, Col, Descriptions, Form, Image, Input, Modal, Popconfirm, Radio, Row, Select, Space, Spin, Switch, Grid, Tag, Tooltip, Typography, Upload, message } from 'antd';
 import { CheckCircleOutlined, DeleteOutlined, DownloadOutlined, EditOutlined, ExportOutlined, FileExcelOutlined, InboxOutlined, LinkOutlined, PlusOutlined, ReloadOutlined, UploadOutlined, InfoCircleOutlined, WarningOutlined, PictureOutlined, ExpandOutlined, CloseOutlined } from '@ant-design/icons';
 import { createProgramTeacherBanner, deleteProgramTeacherBanner, downloadProgramTeacherBannerTemplate, exportProgramTeacherBanners, getProgramTeacherBannerOptions, getProgramTeacherBanners, importProgramTeacherBanners, ProgramTeacherBanner, ProgramTeacherBannerPayload, updateProgramTeacherBanner } from '@/services/programTeacherBannerService';
 import { useAuthStore } from '@/stores/authStore';
+import CustomTable from '@/components/ui/Table';
+import MobileAdminToolbar from '@/components/shared/MobileAdminToolbar';
+import MobileRecordCard from '@/components/shared/MobileRecordCard';
 import { PermissionKey } from '@/types/permissions';
 
 export default function ProgramTeacherBannersPage() {
+  const isMobile = !Grid.useBreakpoint().md;
   const [rows, setRows] = useState<ProgramTeacherBanner[]>([]);
   const [teachers, setTeachers] = useState<Array<{ id: number; username: string; display_name?: string | null }>>([]);
   const [programs, setPrograms] = useState<Array<{ code: string; subject_name?: string | null }>>([]);
@@ -61,6 +67,12 @@ export default function ProgramTeacherBannersPage() {
   }, [pagination.current, pagination.pageSize, search]);
 
   useEffect(() => { load(1); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!isMobile) return;
+    const timer = window.setTimeout(() => void load(1, pagination.pageSize, search), 250);
+    return () => window.clearTimeout(timer);
+  }, [search, isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const loadInitialOptions = async () => {
     const requestId = ++optionsRequestRef.current;
     setLoadingPrograms(true);
@@ -173,20 +185,31 @@ export default function ProgramTeacherBannersPage() {
     catch (e: any) { const errors = e?.detail?.errors; message.error(Array.isArray(errors) && errors.length ? `Dòng ${errors[0].row}: ${errors[0].message}` : e?.message || 'Import thất bại'); }
     finally { setImporting(false); }
   };
-  return <div>
+  const columns: ColumnsType<ProgramTeacherBanner> = [
+            { title: 'Chương trình', dataIndex: 'program_code', width: 260, render: (code: string) => <Typography.Text strong copyable={{ text: code }}>{code}</Typography.Text> },
+            { title: 'Giáo viên', width: 300, render: (_: unknown, r: ProgramTeacherBanner) => <Space size={10}><Avatar style={{ background: '#e6f4ff', color: '#1677ff' }}>{(r.display_name || r.username || 'G').trim().charAt(0).toUpperCase()}</Avatar><div><Typography.Text strong>{r.display_name || r.username}</Typography.Text><br/><Typography.Text type="secondary">{r.username}</Typography.Text></div></Space> },
+            { title: 'Banner', dataIndex: 'banner_url', width: 440, render: (url: string) => <Space size={12}><Image width={112} height={56} style={{ objectFit: 'cover', borderRadius: 6, border: '1px solid #f0f0f0' }} src={url} fallback="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" /><div style={{ minWidth: 0 }}><Typography.Text ellipsis={{ tooltip: url }} style={{ display: 'block', maxWidth: 260 }}>{url}</Typography.Text><Typography.Link href={url} target="_blank"><LinkOutlined /> Mở ảnh gốc</Typography.Link></div></Space> },
+            { title: 'Trạng thái', dataIndex: 'status', width: 130, align: 'center' as const, render: (v: number) => <Tag color={v ? 'success' : 'default'}>{v ? 'Hoạt động' : 'Đã tắt'}</Tag> },
+            { title: 'Thao tác', width: 110, fixed: 'right' as const, align: 'center' as const, render: (_: unknown, r: ProgramTeacherBanner) => <Space size={4}>{canUpdate && <Tooltip title="Chỉnh sửa"><Button type="text" icon={<EditOutlined />} onClick={() => showForm(r)} /></Tooltip>}{canDelete && <Popconfirm title="Xóa banner?" description="Cấu hình này sẽ bị xóa khỏi hệ thống." okText="Xóa" cancelText="Hủy" okButtonProps={{ danger: true }} onConfirm={async () => { await deleteProgramTeacherBanner(r.id); message.success('Đã xóa banner'); void load(); }}><Tooltip title="Xóa"><Button danger type="text" icon={<DeleteOutlined />} /></Tooltip></Popconfirm>}</Space> },
+          ];
+  return <div className="admin-responsive-page banner-admin-page">
     <Space direction="vertical" size={20} style={{ width: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+      <div className="admin-page-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <Typography.Title level={2} style={{ margin: 0, fontSize: 26 }}>Banner chương trình – giáo viên</Typography.Title>
           <Typography.Text type="secondary">Quản lý hình ảnh hiển thị theo từng chương trình và giáo viên</Typography.Text>
         </div>
-        <Space wrap>
+        {!isMobile && <Space wrap>
           {canImport && <Button icon={<ExportOutlined />} loading={exporting} onClick={() => void exportBanners()}>Export</Button>}
           {canImport && <Button icon={<UploadOutlined />} onClick={() => setImportOpen(true)}>Import</Button>}
           {canCreate && <Button type="primary" icon={<PlusOutlined />} onClick={() => showForm()}>Thêm banner</Button>}
-        </Space>
+        </Space>}
       </div>
-      <Card styles={{ body: { padding: 16 } }}>
+      {isMobile ? <MobileAdminToolbar search={search} placeholder="Tìm chương trình, giáo viên" onSearchChange={setSearch} onSearch={value => void load(1, pagination.pageSize, value)} onCreate={canCreate ? () => showForm() : undefined} createLabel="Thêm banner" actions={<>
+        {canImport && <Button icon={<ExportOutlined />} loading={exporting} onClick={() => void exportBanners()}>Export</Button>}
+        {canImport && <Button icon={<UploadOutlined />} onClick={() => { setImportOpen(true); }}>Import</Button>}
+        <Button icon={<ReloadOutlined />} loading={loading} onClick={() => void load()}>Làm mới</Button>
+      </>} /> : <Card styles={{ body: { padding: 16 } }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <Input.Search
             allowClear
@@ -202,26 +225,24 @@ export default function ProgramTeacherBannersPage() {
             <Tooltip title="Tải lại danh sách"><Button icon={<ReloadOutlined />} onClick={() => void load()} /></Tooltip>
           </Space>
         </div>
-      </Card>
-      <Card styles={{ body: { padding: 0 } }}>
-        <Table
+      </Card>}
+      <Card className="admin-list-card" styles={{ body: { padding: 0 } }}>
+        <CustomTable<ProgramTeacherBanner>
           rowKey="id"
           loading={loading}
           dataSource={rows}
           scroll={{ x: 980 }}
-          pagination={{ ...pagination, showSizeChanger: true, showTotal: total => `Tổng ${total} banner`, pageSizeOptions: [10, 20, 50, 100] }}
-          onChange={p => void load(p.current, p.pageSize)}
-          columns={[
-            { title: 'Chương trình', dataIndex: 'program_code', width: 260, render: (code: string) => <Typography.Text strong copyable={{ text: code }}>{code}</Typography.Text> },
-            { title: 'Giáo viên', width: 300, render: (_: unknown, r: ProgramTeacherBanner) => <Space size={10}><Avatar style={{ background: '#e6f4ff', color: '#1677ff' }}>{(r.display_name || r.username || 'G').trim().charAt(0).toUpperCase()}</Avatar><div><Typography.Text strong>{r.display_name || r.username}</Typography.Text><br/><Typography.Text type="secondary">{r.username}</Typography.Text></div></Space> },
-            { title: 'Banner', dataIndex: 'banner_url', width: 440, render: (url: string) => <Space size={12}><Image width={112} height={56} style={{ objectFit: 'cover', borderRadius: 6, border: '1px solid #f0f0f0' }} src={url} fallback="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" /><div style={{ minWidth: 0 }}><Typography.Text ellipsis={{ tooltip: url }} style={{ display: 'block', maxWidth: 260 }}>{url}</Typography.Text><Typography.Link href={url} target="_blank"><LinkOutlined /> Mở ảnh gốc</Typography.Link></div></Space> },
-            { title: 'Trạng thái', dataIndex: 'status', width: 130, align: 'center' as const, render: (v: number) => <Tag color={v ? 'success' : 'default'}>{v ? 'Hoạt động' : 'Đã tắt'}</Tag> },
-            { title: 'Thao tác', width: 110, fixed: 'right' as const, align: 'center' as const, render: (_: unknown, r: ProgramTeacherBanner) => <Space size={4}>{canUpdate && <Tooltip title="Chỉnh sửa"><Button type="text" icon={<EditOutlined />} onClick={() => showForm(r)} /></Tooltip>}{canDelete && <Popconfirm title="Xóa banner?" description="Cấu hình này sẽ bị xóa khỏi hệ thống." okText="Xóa" cancelText="Hủy" okButtonProps={{ danger: true }} onConfirm={async () => { await deleteProgramTeacherBanner(r.id); message.success('Đã xóa banner'); void load(); }}><Tooltip title="Xóa"><Button danger type="text" icon={<DeleteOutlined />} /></Tooltip></Popconfirm>}</Space> },
-          ]}
+          pagination={{ ...pagination, showSizeChanger: true, showTotal: total => `Tổng ${total} banner`, pageSizeOptions: [10, 20, 50, 100], onChange: (page, size) => void load(page, size) }}
+          responsiveCardBreakpoint="md"
+          responsiveCardContent={(record) => <MobileRecordCard title={record.program_code} meta={<>{record.display_name || record.username}<br />{record.username}</>} status={<Tag color={record.status ? 'success' : 'default'}>{record.status ? 'Hoạt động' : 'Đã tắt'}</Tag>} actions={columns[4].render?.(undefined, record, 0) as ReactNode}>
+            <Image className="admin-mobile-banner" width="100%" src={record.banner_url} style={{ borderRadius: 8, objectFit: 'cover' }} />
+            <Typography.Link href={record.banner_url} target="_blank" rel="noopener noreferrer"><LinkOutlined /> Mở ảnh gốc</Typography.Link>
+          </MobileRecordCard>}
+          columns={columns}
         />
       </Card>
     </Space>
-    <Modal
+    <Modal className="admin-responsive-modal"
       title={editing ? 'Cập nhật banner' : 'Thêm banner'}
       open={open}
       onCancel={closeForm}
@@ -241,12 +262,12 @@ export default function ProgramTeacherBannersPage() {
         />
 
         <Row gutter={16}>
-          <Col span={12}>
+          <Col xs={24} sm={12}>
             <Form.Item name="program_code" label="Chương trình" rules={[{ required: true, message: 'Vui lòng chọn chương trình' }]}>
               <Select allowClear showSearch optionFilterProp="label" placeholder="Tìm theo tên/mã" loading={loadingPrograms} disabled={saving} notFoundContent={loadingPrograms ? <Space><Spin size="small" /> Đang tải...</Space> : 'Không có dữ liệu'} options={programs.map(p => ({ value: p.code, label: p.subject_name && p.subject_name !== p.code ? `${p.subject_name} (${p.code})` : p.code }))} onChange={(code?: string) => { form.setFieldValue('teacher_profile_id', undefined); if (code) void loadTeachersForProgram(code); else setTeachers(allTeachers); }} />
             </Form.Item>
           </Col>
-          <Col span={12}>
+          <Col xs={24} sm={12}>
             <Form.Item name="teacher_profile_id" label="Giáo viên" rules={[{ required: true, message: 'Vui lòng chọn giáo viên' }]}>
               <Select allowClear showSearch optionFilterProp="label" placeholder={selectedProgramCode ? 'Tìm giáo viên' : 'Chọn chương trình trước'} loading={loadingTeachers} disabled={saving || loadingTeachers || !selectedProgramCode} notFoundContent={loadingTeachers ? <Space><Spin size="small" /> Đang tải...</Space> : 'Không có dữ liệu'} options={teachers.map(t => ({ value: t.id, label: `${t.display_name || t.username} (${t.username})` }))} />
             </Form.Item>
@@ -280,7 +301,7 @@ export default function ProgramTeacherBannersPage() {
         </Form.Item>
       </Form>
     </Modal>
-    <Modal title="Import banner" open={importOpen} onCancel={() => setImportOpen(false)} onOk={submitImport} confirmLoading={importing} okText="Bắt đầu import" width={680} destroyOnClose>
+    <Modal className="admin-responsive-modal" title="Import banner" open={importOpen} onCancel={() => setImportOpen(false)} onOk={submitImport} confirmLoading={importing} okText="Bắt đầu import" width={680} destroyOnClose>
       <Space direction="vertical" style={{ width: '100%' }} size={20}>
         <Alert showIcon type="info" message="Import theo file quản lý hiện tại" description={<span>Hỗ trợ <b>CSV</b> và <b>XLSX</b>, với ba cột: <Typography.Text code>code</Typography.Text>, <Typography.Text code>teacher</Typography.Text>, <Typography.Text code>banner_url</Typography.Text>.</span>} />
         <Upload.Dragger accept=".csv,.xlsx" maxCount={1} beforeUpload={(file) => { setImportFile(file); return false; }} onRemove={() => setImportFile(null)} fileList={importFile ? [{ uid: 'banner-import', name: importFile.name, status: 'done' }] : []} disabled={importing} style={{ padding: '8px 0' }}>

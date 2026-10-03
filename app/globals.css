@@ -1592,3 +1592,207 @@ body {
     white-space: normal;
   }
 }
+
+/* Compact management pages follow the schedule mobile layout. */
+.admin-mobile-select-all { display: none; }
+@media (max-width: 767px) {
+  .admin-add-fab.ant-float-btn .ant-float-btn-icon {
+    font-size: 24px;
+    width: auto;
+  }
+  .admin-responsive-page:has(.admin-mobile-toolbar[data-can-create="true"]) {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+  .admin-responsive-page {
+    min-width: 0;
+    height: auto !important;
+    overflow: visible !important;
+    padding-bottom: 12px;
+  }
+  .admin-responsive-page .responsive-table-spin,
+  .admin-responsive-page .responsive-table-spin > .ant-spin-container,
+  .admin-responsive-page .responsive-table-scroll {
+    height: auto !important;
+    overflow: visible !important;
+    overscroll-behavior-y: auto;
+  }
+  .teacher-admin-page > div:has(> .responsive-table-spin) {
+    flex: none !important;
+    overflow: visible !important;
+  }
+  .admin-desktop-filters { display: none !important; }
+  .admin-mobile-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 12px;
+    min-width: 0;
+  }
+  .admin-mobile-toolbar > .ant-input-group-wrapper { flex: 1; min-width: 0; }
+  .admin-mobile-toolbar > .ant-btn,
+  .admin-mobile-toolbar > .ant-badge .ant-btn {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+  }
+  .admin-mobile-toolbar .ant-input-affix-wrapper,
+  .admin-mobile-toolbar .ant-input-search-button { height: 40px; }
+  .admin-mobile-sheet {
+    padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+    max-height: 85dvh;
+    overflow-y: auto;
+  }
+  .admin-mobile-sheet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 16px;
+  }
+  .admin-mobile-sheet-body,
+  .admin-sheet-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .admin-mobile-sheet-body .ant-btn,
+  .admin-mobile-sheet-body .ant-select {
+    width: 100% !important;
+    min-height: 40px;
+    text-align: left;
+  }
+  .admin-page-heading .ant-typography { font-size: 18px !important; }
+  .admin-page-heading .ant-typography-secondary { font-size: 12px !important; }
+  .room-admin-page > .admin-page-heading > .ant-card-body { padding: 12px; }
+  .admin-list-card { border: 0; box-shadow: none !important; background: transparent; }
+  .admin-list-card > .ant-card-body { padding: 0 !important; }
+  .admin-responsive-page .responsive-table-card { border-radius: 10px; border-color: #e8edf3; }
+  .admin-mobile-record {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .admin-mobile-record-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .admin-mobile-record-heading > strong { flex: 1; min-width: 0; font-size: 14px; }
+  .admin-mobile-record-meta { color: #64748b; font-size: 12px; line-height: 1.6; }
+  .admin-mobile-record-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    border-top: 1px solid #f0f0f0;
+    padding-top: 6px;
+  }
+  .admin-mobile-record-footer > .ant-btn-link { padding-inline: 0; }
+  .admin-mobile-record-footer .ant-btn { min-height: 40px; min-width: 40px; }
+  .admin-mobile-record-detail { border-top: 1px solid #f0f0f0; padding-top: 10px; min-width: 0; }
+  .admin-mobile-record-detail .ant-row { row-gap: 12px; }
+  .admin-mobile-record-detail .ant-col { flex: 0 0 100%; max-width: 100%; }
+  .admin-mobile-banner { max-height: 180px; }
+  .admin-mobile-select-all { display: block; margin-bottom: 10px; }
+  .admin-responsive-modal .ant-modal-body {
+    max-height: 70dvh;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .admin-responsive-modal .ant-modal-footer { display: flex; gap: 8px; }
+  .admin-responsive-modal .ant-modal-footer .ant-btn {
+    flex: 1;
+    min-height: 40px;
+    margin-inline-start: 0 !important;
+    height: auto;
+    white-space: normal;
+  }
+}
+
+@media (max-width: 767px) {
+  .schedule-mobile-selection-bar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    background: #f8fbff;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+  }
+  .schedule-mobile-selection-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+  }
+  .schedule-mobile-selection-heading .ant-checkbox-wrapper {
+    min-height: 40px;
+    align-items: center;
+    font-weight: 600;
+  }
+  .schedule-mobile-selection-heading .ant-btn { min-height: 40px; padding-inline: 4px; }
+  .schedule-mobile-selection-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .schedule-mobile-selection-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .schedule-mobile-selection-actions .ant-btn {
+    flex: 1;
+    min-height: 40px;
+    padding-inline: 8px;
+  }
+  .schedule-mobile-menu-context {
+    padding: 10px 4px;
+    color: #64748b;
+    font-size: 13px;
+  }
+}
+
+/* Replace the program arrow with its native clear icon whenever selected. */
+.schedule-filter-program.ant-select .ant-select-clear {
+  opacity: 1 !important;
+  width: 32px;
+  height: 32px;
+  margin-top: -16px;
+  inset-inline-end: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+.schedule-filter-program.ant-select:has(.ant-select-clear) .ant-select-arrow {
+  display: none;
+}
+.schedule-filter-program.ant-select:has(.ant-select-clear) .ant-select-selection-item {
+  padding-inline-end: 32px;
+}
+
+.schedule-mobile-floating-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+@media (max-width: 767px) {
+  .page--flush-bottom:has(.schedule-data-table) {
+    padding-bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+}
