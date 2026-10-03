@@ -930,6 +930,13 @@ body {
     background: #fff;
   }
 
+  /* The popup spring disables pointer events while entering. Show this filter
+     sheet in its final position immediately so its clear icon accepts a tap. */
+  .schedule-filter-sheet-open {
+    transform: none !important;
+    pointer-events: auto !important;
+  }
+
   .schedule-filter-sheet::before {
     width: 36px;
     height: 4px;
@@ -1778,6 +1785,14 @@ body {
   justify-content: center;
   font-size: 16px;
 }
+.schedule-filter-program-clear-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  touch-action: manipulation;
+}
 .schedule-filter-program.ant-select:has(.ant-select-clear) .ant-select-arrow {
   display: none;
 }
@@ -1794,5 +1809,77 @@ body {
 @media (max-width: 767px) {
   .page--flush-bottom:has(.schedule-data-table) {
     padding-bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 767px) {
+  .attendance-reset-modal {
+    max-width: calc(100vw - 24px);
+    margin-inline: auto;
+  }
+  .attendance-reset-modal .ant-modal-content { padding: 16px 12px; }
+  .attendance-reset-modal .ant-modal-title {
+    padding-inline-end: 24px;
+    overflow-wrap: anywhere;
+  }
+  .attendance-reset-modal .ant-modal-title .ant-space { align-items: flex-start; }
+  .attendance-reset-modal .ant-modal-body {
+    max-height: calc(100dvh - 200px);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .attendance-reset-modal .ant-space,
+  .attendance-reset-modal .ant-space-item,
+  .attendance-reset-modal .ant-col {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .attendance-reset-modal .ant-select { min-width: 0; max-width: 100%; }
+  .attendance-reset-modal .ant-select-single { height: 40px; }
+  .attendance-reset-modal .ant-select-selection-item {
+    min-width: 0;
+    max-width: 100%;
+    font-size: 14px !important;
+  }
+  .attendance-reset-modal .ant-select-single .ant-select-selection-item {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .attendance-reset-modal .ant-select-multiple .ant-select-selector { min-height: 40px; }
+  .attendance-reset-modal .ant-select-multiple .ant-select-selection-overflow { min-width: 0; max-width: 100%; }
+  .attendance-reset-modal .ant-select-selection-overflow-item { max-width: 100%; }
+  .attendance-reset-modal .ant-select-selection-item-content {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .attendance-reset-modal .ant-select-selection-search-input { font-size: 16px !important; }
+  .attendance-reset-student-heading { flex-wrap: wrap; gap: 4px !important; }
+  .attendance-reset-student-heading > .ant-typography-secondary { font-size: 12px; }
+  .attendance-reset-modal .ant-alert-message,
+  .attendance-reset-modal .ant-alert-description { overflow-wrap: anywhere; }
+  .attendance-reset-modal .ant-modal-footer { display: flex; gap: 8px; }
+  .attendance-reset-modal .ant-modal-footer .ant-btn {
+    flex: 1;
+    min-width: 0;
+    min-height: 40px;
+    height: auto;
+    white-space: normal;
+    margin-inline-start: 0 !important;
+  }
+  .attendance-reset-select-popup {
+    max-width: calc(100vw - 24px);
+    font-size: 14px;
+  }
+  .attendance-reset-select-popup .ant-select-item-option-content {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+    font-size: 14px;
+  }
+  .attendance-reset-select-popup .ant-select-item-option {
+    align-items: flex-start;
+    min-height: 40px;
+    padding-block: 10px;
   }
 }

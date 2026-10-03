@@ -949,7 +949,7 @@ const ScheduleFilterSheet = ({
             visible={open}
             onClose={onClose}
             closeOnMaskClick
-            bodyClassName="schedule-filter-sheet"
+            bodyClassName={`schedule-filter-sheet${open ? " schedule-filter-sheet-open" : ""}`}
             bodyStyle={{ height: "calc(100dvh - 48px)" }}
         >
             <div className="schedule-filter-sheet-header">
@@ -971,7 +971,15 @@ const ScheduleFilterSheet = ({
                 >
                     <Select
                         className="schedule-filter-program"
-                        allowClear={allowFilterWithoutProgram ? { clearIcon: <CloseOutlined aria-label="Xóa chương trình đã chọn" /> } : false}
+                        allowClear={allowFilterWithoutProgram ? { clearIcon: <span
+                            className="schedule-filter-program-clear-icon"
+                            aria-label="Xóa chương trình đã chọn"
+                            onTouchEnd={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                filterForm.setFieldValue("code", undefined);
+                            }}
+                        ><CloseOutlined /></span> } : false}
                         showSearch
                         loading={loadingPrograms}
                         options={programOptions}
@@ -4272,6 +4280,7 @@ const Page = () => {
         }}>
             {contextHolder}
             <Modal
+                className="attendance-reset-modal"
                 open={attendanceResetOpen}
                 title={<Space><ReloadOutlined style={{ color: "#fa8c16" }} /><span>Đặt lại trạng thái học</span></Space>}
                 width={824}
@@ -4296,6 +4305,10 @@ const Page = () => {
                             <Col xs={24} md={12}>
                                 <Typography.Text strong style={{ display: "block", marginBottom: 8 }}>1. Chương trình <Typography.Text type="danger">*</Typography.Text></Typography.Text>
                                 <Select
+                                    aria-label="Chương trình đặt lại trạng thái"
+                                    popupClassName="attendance-reset-select-popup"
+                                    virtual={!isMobile}
+                                    listHeight={240}
                                     value={attendanceResetProgram}
                                     placeholder="Chọn chương trình"
                                     options={programOptions}
@@ -4308,6 +4321,10 @@ const Page = () => {
                             <Col xs={24} md={12}>
                                 <Typography.Text strong style={{ display: "block", marginBottom: 8 }}>2. Lịch học đã kết thúc <Typography.Text type="danger">*</Typography.Text></Typography.Text>
                                 <Select
+                                    aria-label="Lịch học đã kết thúc"
+                                    popupClassName="attendance-reset-select-popup"
+                                    virtual={!isMobile}
+                                    listHeight={240}
                                     value={attendanceResetScheduleId}
                                     placeholder={attendanceResetProgram ? "Chọn lịch học" : "Chọn chương trình trước"}
                                     disabled={!attendanceResetProgram}
@@ -4327,11 +4344,15 @@ const Page = () => {
                         </Row>
                     </div>
                     <div>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+                        <div className="attendance-reset-student-heading" style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
                             <Typography.Text strong>3. Học viên cần đưa về chưa học <Typography.Text type="danger">*</Typography.Text></Typography.Text>
                             {attendanceResetScheduleId && !attendanceResetLoadingStudents && <Typography.Text type="secondary">{attendanceResetStudents.length} học viên đang được đánh dấu đã học</Typography.Text>}
                         </div>
                         <Select
+                            aria-label="Học viên đặt lại trạng thái"
+                            popupClassName="attendance-reset-select-popup"
+                            virtual={!isMobile}
+                            listHeight={240}
                             mode="multiple"
                             value={attendanceResetStudentIds}
                             disabled={!attendanceResetScheduleId}
@@ -4339,7 +4360,8 @@ const Page = () => {
                             placeholder={attendanceResetScheduleId ? "Tìm và chọn học viên" : "Chọn lịch học trước"}
                             showSearch
                             optionFilterProp="label"
-                            maxTagCount="responsive"
+                            maxTagCount={isMobile ? 2 : "responsive"}
+                            maxTagTextLength={isMobile ? 18 : undefined}
                             style={{ width: "100%" }}
                             options={attendanceResetStudents.map((student) => ({
                                 value: student.id,
