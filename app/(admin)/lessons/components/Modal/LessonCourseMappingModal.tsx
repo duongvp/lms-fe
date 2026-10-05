@@ -1,7 +1,9 @@
 "use client";
 
+import Select from "@/components/ui/MobileSelect";
+import Table from "@/components/ui/ModalTable";
 import { ClearOutlined } from "@ant-design/icons";
-import { Alert, Button, Col, Form, message, Modal, Radio, Row, Select, Space, Table, Typography } from "antd";
+import { Alert, Button, Col, Form, message, Modal, Radio, Row, Space, Typography } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import {
     getLessonCourseMappings,

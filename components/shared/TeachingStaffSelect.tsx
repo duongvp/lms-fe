@@ -1,7 +1,8 @@
 "use client";
 
+import Select from "@/components/ui/MobileSelect";
 import { PlusOutlined } from "@ant-design/icons";
-import { Button, Form, message, Select, Space, Tooltip, type SelectProps } from "antd";
+import { Button, Form, message, Space, Tooltip, type SelectProps } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import TeacherProfileFormModal from "@/app/(admin)/teacher-profiles/components/TeacherProfileFormModal";
 import {

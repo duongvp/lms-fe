@@ -1,5 +1,6 @@
 'use client';
-import { Alert, Modal, Input, Row, Col, Form, Grid, Button, Typography, Select, Radio, Checkbox, Card, message, Space, Tooltip } from 'antd';
+import Select from "@/components/ui/MobileSelect";
+import { Alert, Modal, Input, Row, Col, Form, Grid, Button, Typography, Radio, Checkbox, Card, message, Space, Tooltip } from 'antd';
 import { DatePicker, TimePicker } from "../MobileSchedulePickers";
 import { CloseCircleOutlined, CompressOutlined, ExpandOutlined, EyeFilled, HolderOutlined, PlusOutlined } from '@ant-design/icons';
 import React, { useMemo, useState } from 'react';

@@ -1,4 +1,6 @@
 "use client";
+import Select from "@/components/ui/MobileSelect";
+import Table from "@/components/ui/ModalTable";
 import { createPortal } from "react-dom";
 import type { FormInstance } from 'antd';
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
@@ -11,7 +13,7 @@ import type { ColumnsType } from "antd/es/table";
 import type { FilterDropdownProps } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
 import CustomSearchInput from "@/components/ui/Inputs/CustomSearchInput";
-import { notification, Alert, Card, Collapse, Form, Input, InputNumber, List, Select, Button, Checkbox, Space, Modal, Radio, Row, Col, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress, Table, Spin } from "antd";
+import { notification, Alert, Card, Collapse, Form, Input, InputNumber, List, Button, Checkbox, Space, Modal, Radio, Row, Col, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress, Spin } from "antd";
 import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, SearchOutlined, SortAscendingOutlined, SortDescendingOutlined, MoreOutlined, ApartmentOutlined, CloudUploadOutlined, SwapOutlined, LinkOutlined, ClockCircleOutlined, UserOutlined, EyeOutlined, PlusOutlined } from "@ant-design/icons";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
@@ -19,6 +21,7 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import viLocale from "@fullcalendar/core/locales/vi";
 import ScheduleModal from "./components/Modal/ScheduleModal";
+import AttendanceResetStudentPicker from "./components/AttendanceResetStudentPicker";
 import CopyScheduleModal from "./components/Modal/CopyScheduleModal";
 import SwapScheduleModal from "./components/Modal/SwapScheduleModal";
 import ScheduleImportModal, { type ScheduleImportError } from "./components/Modal/ScheduleImportModal";
@@ -954,7 +957,7 @@ const ScheduleFilterSheet = ({
         >
             <div className="schedule-filter-sheet-header">
                 <div>
-                    <Typography.Text strong className ='!text-[16px]'>
+                    <Typography.Text strong className="schedule-filter-sheet-title">
                         Bộ lọc lịch học
                     </Typography.Text>
                     <Typography.Text type="secondary">
@@ -1275,6 +1278,7 @@ const Page = () => {
     // searchParams cũ không ghi đè những điều kiện lọc người dùng vừa chọn.
     const filterRevisionRef = useRef(0);
     const pendingScheduleUrlRef = useRef<string | null>(null);
+    const mobileUnfilteredSearchRef = useRef(false);
     const scheduleModalRef = useRef<ScheduleModalControllerRef>(null);
     const [openImportModal, setOpenImportModal] = useState(false);
     const [sheetExportOpen, setSheetExportOpen] = useState(false);
@@ -1321,6 +1325,7 @@ const Page = () => {
     const [attendanceResetScheduleId, setAttendanceResetScheduleId] = useState<string>();
     const [attendanceResetStudents, setAttendanceResetStudents] = useState<AttendanceResetStudent[]>([]);
     const [attendanceResetStudentIds, setAttendanceResetStudentIds] = useState<number[]>([]);
+    const [attendanceResetStudentPickerOpen, setAttendanceResetStudentPickerOpen] = useState(false);
     const [attendanceResetLoadingSchedules, setAttendanceResetLoadingSchedules] = useState(false);
     const [attendanceResetLoadingStudents, setAttendanceResetLoadingStudents] = useState(false);
     const [attendanceResetSubmitting, setAttendanceResetSubmitting] = useState(false);
@@ -1450,7 +1455,9 @@ const Page = () => {
         );
         // Admin được phép xem liên chương trình theo thời gian, nên URL không
         // có `program` vẫn phải được khôi phục đầy đủ sau khi tải lại trang.
-        if (!program && (!isAdmin || (!hasDateFilter && !hasOtherFilter))) {
+        // Empty filters submitted by a mobile admin are a valid search, even
+        // though their URL is identical to an initial visit without filters.
+        if (!program && (!isAdmin || (!hasDateFilter && !hasOtherFilter && !mobileUnfilteredSearchRef.current))) {
             setOpenFilterDrawer(true);
             return;
         }
@@ -2028,6 +2035,7 @@ const Page = () => {
             return;
         }
         const cleaned = cleanFilterValues({ ...values, keyword: searchText });
+        mobileUnfilteredSearchRef.current = isMobile && Boolean(isAdmin) && !cleaned.code;
         setFilterValues(cleaned);
         setSubmittedFilterValues(cleaned);
         setTableColumnFilters({});
@@ -2048,11 +2056,12 @@ const Page = () => {
                 || ""
             ).trim();
         const cleaned = cleanFilterValues({ code: retainedProgram || undefined, keyword: "" });
+        mobileUnfilteredSearchRef.current = isMobile && Boolean(isAdmin) && !retainedProgram;
         setSearchText("");
         setFilterValues(cleaned);
         setSubmittedFilterValues(cleaned);
         setTableColumnFilters({});
-        setHasSearched(Boolean(retainedProgram));
+        setHasSearched(Boolean(retainedProgram) || mobileUnfilteredSearchRef.current);
         setCurrentPage(1);
         replaceScheduleUrl(cleaned);
         setOpenFilterDrawer(false);
@@ -4348,32 +4357,51 @@ const Page = () => {
                             <Typography.Text strong>3. Học viên cần đưa về chưa học <Typography.Text type="danger">*</Typography.Text></Typography.Text>
                             {attendanceResetScheduleId && !attendanceResetLoadingStudents && <Typography.Text type="secondary">{attendanceResetStudents.length} học viên đang được đánh dấu đã học</Typography.Text>}
                         </div>
-                        <Select
+                        {isMobile && attendanceResetScheduleId && attendanceResetStudents.length > 0 && !attendanceResetLoadingStudents && <Checkbox
+                            className="attendance-reset-student-select-all"
+                            checked={attendanceResetStudentIds.length === attendanceResetStudents.length}
+                            indeterminate={attendanceResetStudentIds.length > 0 && attendanceResetStudentIds.length < attendanceResetStudents.length}
+                            onChange={event => setAttendanceResetStudentIds(event.target.checked ? Array.from(new Set(attendanceResetStudents.map(student => student.id))) : [])}
+                        >Chọn tất cả {attendanceResetStudents.length} học viên</Checkbox>}
+                        {isMobile ? <Button
+                            block
+                            className="attendance-reset-student-trigger"
+                            disabled={!attendanceResetScheduleId || attendanceResetLoadingStudents || !attendanceResetStudents.length}
+                            onClick={() => setAttendanceResetStudentPickerOpen(true)}
+                            aria-label="Mở danh sách chọn học viên"
+                        >
+                            <span>{attendanceResetStudentIds.length ? `Đã chọn ${attendanceResetStudentIds.length} học viên · Chỉnh sửa` : attendanceResetScheduleId ? "Tìm và chọn học viên" : "Chọn lịch học trước"}</span>
+                            <DownOutlined />
+                        </Button> : <Select
                             aria-label="Học viên đặt lại trạng thái"
                             popupClassName="attendance-reset-select-popup"
-                            virtual={!isMobile}
-                            listHeight={240}
-                            mode="multiple"
                             value={attendanceResetStudentIds}
                             disabled={!attendanceResetScheduleId}
                             loading={attendanceResetLoadingStudents}
                             placeholder={attendanceResetScheduleId ? "Tìm và chọn học viên" : "Chọn lịch học trước"}
                             showSearch
                             optionFilterProp="label"
-                            maxTagCount={isMobile ? 2 : "responsive"}
-                            maxTagTextLength={isMobile ? 18 : undefined}
+                            mode="multiple"
+                            maxTagCount="responsive"
                             style={{ width: "100%" }}
                             options={attendanceResetStudents.map((student) => ({
                                 value: student.id,
                                 label: [student.name, student.username, student.student_hmid].filter(Boolean).join(" · "),
                             }))}
                             onChange={(values) => setAttendanceResetStudentIds(values.map(Number))}
-                        />
+                        />}
                         {!attendanceResetLoadingStudents && attendanceResetScheduleId && !attendanceResetStudents.length && <Alert type="info" showIcon message="Không có học viên nào đang được đánh dấu đã học ở lịch này." style={{ marginTop: 10 }} />}
                         {attendanceResetStudentIds.length > 0 && <Typography.Text type="warning" style={{ display: "block", marginTop: 10 }}>Đã chọn {attendanceResetStudentIds.length} học viên để đặt lại trạng thái.</Typography.Text>}
                     </div>
                 </Space>
             </Modal>
+            <AttendanceResetStudentPicker
+                open={attendanceResetOpen && attendanceResetStudentPickerOpen}
+                students={attendanceResetStudents}
+                selectedIds={attendanceResetStudentIds}
+                onChange={setAttendanceResetStudentIds}
+                onClose={() => setAttendanceResetStudentPickerOpen(false)}
+            />
             <Modal
                 open={attendanceModalOpen}
                 title={<Space><DatabaseOutlined style={{ color: "#1677ff" }} /><span>Cập nhật trạng thái học</span></Space>}
@@ -5380,11 +5408,11 @@ const Page = () => {
                                     key: "schedule",
                                     width: 270,
                                     render: (_, item) => (
-                                        <Space direction="vertical" size={0} style={{ maxWidth: 250 }}>
-                                            <Typography.Text strong ellipsis={{ tooltip: item.lessonName }}>
+                                        <Space direction="vertical" size={0} style={{ maxWidth: isMobile ? "100%" : 250 }}>
+                                            <Typography.Text strong ellipsis={isMobile ? false : { tooltip: item.lessonName }}>
                                                 {item.code || "Chưa có chương trình"} · Bài {item.learnNumber || "-"}
                                             </Typography.Text>
-                                            <Typography.Text type="secondary" ellipsis={{ tooltip: item.lessonName }}>
+                                            <Typography.Text type="secondary" ellipsis={isMobile ? false : { tooltip: item.lessonName }}>
                                                 {item.lessonName || `Lịch ID ${item.calendarId}`}
                                             </Typography.Text>
                                             {item.startTime && (

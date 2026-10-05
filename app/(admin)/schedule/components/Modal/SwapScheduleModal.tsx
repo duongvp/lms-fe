@@ -1,7 +1,8 @@
 "use client";
 
+import Select from "@/components/ui/MobileSelect";
 import React, { useEffect, useState } from "react";
-import { Alert, Card, Col, Divider, Form, Input, Modal, notification, Row, Select, Space, Tag, Typography } from "antd";
+import { Alert, Card, Col, Divider, Form, Input, Modal, notification, Row, Space, Tag, Typography } from "antd";
 import { DatePicker } from "../MobileSchedulePickers";
 import dayjs, { Dayjs } from "dayjs";
 import { getLivestreams, swapLivestreamTimes } from "@/services/livestreamService";
@@ -94,6 +95,9 @@ const SwapScheduleModal = ({ open, source, programs, onClose, onSuccess }: {
 
     const selectCandidate = (id: string | number) => {
         const target = candidates.find((item) => String(item.id) === String(id));
+        if (!target) {
+            form.setFieldsValue({ first_range: undefined, second_range: undefined });
+        }
         if (!target || !source) return;
         form.setFieldsValue({
             first_range: [dayjs(target.start_time), dayjs(target.end_time)],

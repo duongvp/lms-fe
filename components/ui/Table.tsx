@@ -8,7 +8,6 @@ import {
   Empty,
   Grid,
   Pagination,
-  Select,
   Space,
   Spin,
   Table,
@@ -16,6 +15,7 @@ import {
 } from "antd";
 import { DownOutlined, UpOutlined } from "@ant-design/icons";
 import type { GetProp, TableProps } from "antd";
+import Select from "./MobileSelect";
 
 type ColumnsType<T extends object> = GetProp<TableProps<T>, "columns">;
 
@@ -188,7 +188,19 @@ function CustomTable<T extends object>({
                 value: String(column.dataIndex ?? column.key),
                 label: column.title,
               }))}
-              onChange={(value) => applyMobileSort(value)}
+              onChange={(value) => {
+                if (value === undefined) {
+                  setMobileSortKey(undefined);
+                  onChange?.(
+                    paginationConfig as any,
+                    {},
+                    {},
+                    { action: "sort", currentDataSource: dataSource }
+                  );
+                  return;
+                }
+                applyMobileSort(value);
+              }}
             />
             <Button
               disabled={!mobileSortKey}

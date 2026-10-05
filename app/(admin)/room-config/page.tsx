@@ -1,5 +1,6 @@
 "use client";
 
+import Select from "@/components/ui/MobileSelect";
 import React, { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import {
@@ -19,7 +20,6 @@ import {
   Tooltip,
   Badge,
   Tabs,
-  Select,
   Switch,
   message,
   Alert,

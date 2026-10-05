@@ -1,5 +1,6 @@
 "use client";
 
+import Select from "@/components/ui/MobileSelect";
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -17,7 +18,6 @@ import {
     Modal,
     Progress,
     Row,
-    Select,
     Skeleton,
     Space,
     Statistic,

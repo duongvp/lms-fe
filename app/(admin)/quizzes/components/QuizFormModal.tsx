@@ -1,5 +1,6 @@
 "use client";
 
+import Select from "@/components/ui/MobileSelect";
 import {
     Button,
     Col,
@@ -9,7 +10,6 @@ import {
     InputNumber,
     Modal,
     Row,
-    Select,
     Spin,
     Space,
 } from "antd";

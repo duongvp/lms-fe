@@ -1,5 +1,6 @@
 "use client";
-import { Modal, Form, Input, Button, Row, Col, Select, Radio, Alert, Typography } from "antd";
+import Select from "@/components/ui/MobileSelect";
+import { Modal, Form, Input, Button, Row, Col, Radio, Alert, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { CloseCircleOutlined, SaveOutlined } from "@ant-design/icons";
 import CustomSpin from "@/components/ui/Spins";

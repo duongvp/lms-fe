@@ -1,4 +1,5 @@
 "use client";
+import Table from "@/components/ui/ModalTable";
 import {
     Modal,
     Form,
@@ -10,7 +11,6 @@ import {
     Typography,
     Tabs,
     Collapse,
-    Table,
     Alert,
     Skeleton,
     TableProps,

@@ -1,10 +1,10 @@
 'use client';
 
+import Select from "@/components/ui/MobileSelect";
 import {
     Form,
     Input,
     Modal,
-    Select,
 } from 'antd';
 import type {
     TeacherProfile,

@@ -1,6 +1,7 @@
 "use client";
 
-import { Alert, Button, Col, Form, Input, InputNumber, Modal, Row, Select, Typography } from "antd";
+import Select from "@/components/ui/MobileSelect";
+import { Alert, Button, Col, Form, Input, InputNumber, Modal, Row, Typography } from "antd";
 import { useEffect } from "react";
 import { useLessonSubjectOptions } from "@/hooks/useLessonSubjectOptions";
 import type { CreateLessonProgramPayload } from "@/services/lessonService";

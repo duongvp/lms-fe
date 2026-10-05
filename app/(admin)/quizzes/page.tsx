@@ -1,9 +1,10 @@
 "use client";
 
+import Select from "@/components/ui/MobileSelect";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Key } from "react";
-import { Alert, Button, FloatButton, Form, Modal, notification, Select, Space, Empty, Dropdown, Spin, Tag, Grid, Radio, Typography } from "antd";
+import { Alert, Button, FloatButton, Form, Modal, notification, Space, Empty, Dropdown, Spin, Tag, Grid, Radio, Typography } from "antd";
 import { DownOutlined, InfoCircleOutlined, UpOutlined, EditOutlined, ReloadOutlined, DownloadOutlined, FilterOutlined, MoreOutlined, PlusOutlined, CloseOutlined, SaveOutlined, StopOutlined, UploadOutlined } from "@ant-design/icons";
 import type { UploadFile } from "antd/es/upload/interface";
 import { useAuthStore } from "@/stores/authStore";

@@ -1,7 +1,8 @@
 "use client";
 
+import Table from "@/components/ui/ModalTable";
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Button, Card, Col, Descriptions, Empty, InputNumber, Modal, Progress, Radio, Row, Space, Spin, Statistic, Table, Tag, Typography, notification } from "antd";
+import { Alert, Button, Card, Col, Descriptions, Empty, InputNumber, Modal, Progress, Radio, Row, Space, Spin, Statistic, Tag, Typography, notification } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import {
     applyStudentClassroomAssignment,

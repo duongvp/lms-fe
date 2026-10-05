@@ -1,8 +1,9 @@
 "use client";
+import Select from "@/components/ui/MobileSelect";
 import type { ReactNode } from 'react';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Avatar, Button, Card, Col, Descriptions, Form, Image, Input, Modal, Popconfirm, Radio, Row, Select, Space, Spin, Switch, Grid, Tag, Tooltip, Typography, Upload, message } from 'antd';
+import { Alert, Avatar, Button, Card, Col, Descriptions, Form, Image, Input, Modal, Popconfirm, Radio, Row, Space, Spin, Switch, Grid, Tag, Tooltip, Typography, Upload, message } from 'antd';
 import { CheckCircleOutlined, DeleteOutlined, DownloadOutlined, EditOutlined, ExportOutlined, FileExcelOutlined, InboxOutlined, LinkOutlined, PlusOutlined, ReloadOutlined, UploadOutlined, InfoCircleOutlined, WarningOutlined, PictureOutlined, ExpandOutlined, CloseOutlined } from '@ant-design/icons';
 import { createProgramTeacherBanner, deleteProgramTeacherBanner, downloadProgramTeacherBannerTemplate, exportProgramTeacherBanners, getProgramTeacherBannerOptions, getProgramTeacherBanners, importProgramTeacherBanners, ProgramTeacherBanner, ProgramTeacherBannerPayload, updateProgramTeacherBanner } from '@/services/programTeacherBannerService';
 import { useAuthStore } from '@/stores/authStore';

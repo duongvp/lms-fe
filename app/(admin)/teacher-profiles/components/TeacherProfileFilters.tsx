@@ -1,7 +1,8 @@
 'use client';
 
+import Select from "@/components/ui/MobileSelect";
 import CustomSearchInput from '@/components/ui/Inputs/CustomSearchInput';
-import { Flex, Input, Select, Button } from 'antd';
+import { Flex, Input, Button } from 'antd';
 
 interface TeacherProfileFiltersProps {
     mobileSheet?: boolean;

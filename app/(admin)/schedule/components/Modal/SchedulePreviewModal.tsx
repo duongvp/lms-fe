@@ -1,3 +1,5 @@
+import Select from "@/components/ui/MobileSelect";
+import Table from "@/components/ui/ModalTable";
 import React, { useEffect, useRef, useState } from 'react';
 import {
     Alert,
@@ -9,9 +11,7 @@ import {
     Input,
     message,
     Modal,
-    Select,
     Space,
-    Table,
     Tooltip,
     Typography,
 } from 'antd';

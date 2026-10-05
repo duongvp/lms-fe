@@ -1883,3 +1883,150 @@ body {
     padding-block: 10px;
   }
 }
+
+@media (max-width: 767px) {
+  .attendance-reset-student-trigger.ant-btn {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    min-height: 44px;
+    height: auto;
+    padding: 8px 12px;
+    text-align: left;
+    white-space: normal;
+  }
+  .attendance-reset-student-trigger > span:first-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .attendance-reset-student-trigger .anticon { flex: 0 0 auto; }
+  .attendance-reset-student-picker {
+    display: flex;
+    flex-direction: column;
+    height: min(82dvh, 720px);
+    max-height: calc(100dvh - 16px);
+    overflow: hidden;
+    border-radius: 18px 18px 0 0;
+    background: #fff;
+  }
+  .attendance-reset-student-picker-header,
+  .attendance-reset-student-picker-search,
+  .attendance-reset-student-picker-footer { flex: 0 0 auto; padding-inline: 16px; }
+  .attendance-reset-student-picker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding-block: 12px 8px;
+  }
+  .attendance-reset-student-picker-header > div { display: flex; flex-direction: column; min-width: 0; }
+  .attendance-reset-student-picker-header strong { font-size: 16px; }
+  .attendance-reset-student-picker-header .ant-typography { font-size: 12px; }
+  .attendance-reset-student-picker-header .ant-btn { width: 40px; height: 40px; }
+  .attendance-reset-student-picker-search { padding-bottom: 10px; }
+  .attendance-reset-student-picker-search .ant-input-affix-wrapper,
+  .attendance-reset-student-picker-search .ant-input-search-button { min-height: 42px; }
+  .attendance-reset-student-picker-search input { font-size: 16px; }
+  .attendance-reset-student-picker-search > .ant-typography { display: block; margin-top: 6px; font-size: 12px; }
+  .attendance-reset-student-picker-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 12px;
+  }
+  .attendance-reset-student-option.ant-checkbox-wrapper {
+    display: flex;
+    align-items: flex-start;
+    width: 100%;
+    min-width: 0;
+    min-height: 64px;
+    margin: 0;
+    padding: 12px 8px;
+    border-bottom: 1px solid #f0f0f0;
+    border-radius: 8px;
+  }
+  .attendance-reset-student-option-selected.ant-checkbox-wrapper { background: #f0f7ff; }
+  .attendance-reset-student-option .ant-checkbox { flex: 0 0 auto; margin-top: 3px; }
+  .attendance-reset-student-option .ant-checkbox + span {
+    flex: 1;
+    min-width: 0;
+  }
+  .attendance-reset-student-option-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; overflow-wrap: anywhere; }
+  .attendance-reset-student-option-info strong { font-size: 14px; line-height: 1.4; }
+  .attendance-reset-student-option-info > span {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .attendance-reset-student-picker-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-block: 10px calc(10px + env(safe-area-inset-bottom));
+    border-top: 1px solid #f0f0f0;
+  }
+  .attendance-reset-student-picker-footer .ant-btn { min-width: 120px; min-height: 42px; }
+}
+
+.schedule-filter-sheet-header .schedule-filter-sheet-title { font-size: 16px; }
+
+/* Touch controls and modal headings apply only below the mobile breakpoint. */
+@media (max-width: 767px) {
+  .schedule-filter-sheet-header .ant-typography:not(.ant-typography-secondary),
+  .lesson-actions-sheet-header .ant-typography,
+  .admin-mobile-sheet-header > strong {
+    font-size: 20px !important;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+  .ant-modal .ant-modal-content {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100dvh - 24px);
+    overflow: hidden;
+  }
+  .ant-modal .ant-modal-body {
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .ant-modal .ant-modal-title,
+  .ant-modal .ant-modal-confirm-title {
+    font-size: 20px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    padding-inline-end: 24px;
+  }
+  .attendance-reset-student-picker-header strong { font-size: 20px; }
+  .attendance-reset-student-select-all.ant-checkbox-wrapper {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    margin-top: 6px;
+  }
+  .ant-select-single:not(.ant-select-disabled) .ant-select-clear {
+    opacity: 1 !important;
+    width: 32px;
+    height: 32px;
+    margin-top: -16px;
+    inset-inline-end: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    touch-action: manipulation;
+  }
+  .ant-select-single:has(.ant-select-clear) .ant-select-arrow { display: none; }
+  .ant-select-single:has(.ant-select-clear) .ant-select-selection-item,
+  .ant-select-single:has(.ant-select-clear) .ant-select-selection-placeholder {
+    padding-inline-end: 32px;
+  }
+}

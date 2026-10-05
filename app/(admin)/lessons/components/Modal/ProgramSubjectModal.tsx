@@ -1,6 +1,7 @@
 "use client";
 
-import { Alert, Button, Form, Modal, Select, Typography } from "antd";
+import Select from "@/components/ui/MobileSelect";
+import { Alert, Button, Form, Modal, Typography } from "antd";
 import { useEffect } from "react";
 import { useLessonSubjectOptions } from "@/hooks/useLessonSubjectOptions";
 

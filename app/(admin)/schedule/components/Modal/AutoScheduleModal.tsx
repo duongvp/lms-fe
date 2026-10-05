@@ -1,7 +1,8 @@
 "use client";
 
+import Select from "@/components/ui/MobileSelect";
 import { PlusOutlined, SyncOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Checkbox, DatePicker, Empty, Form, Grid, Input, InputNumber, message, Modal, Progress, Radio, Select, Space, Spin, Table, TimePicker, Typography } from "antd";
+import { Alert, Button, Card, Checkbox, DatePicker, Empty, Form, Grid, Input, InputNumber, message, Modal, Progress, Radio, Space, Spin, Table, TimePicker, Typography } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import {
     commitAutoSchedule,

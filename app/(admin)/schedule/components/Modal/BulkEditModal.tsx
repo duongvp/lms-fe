@@ -1,12 +1,12 @@
 'use client';
 
+import Select from "@/components/ui/MobileSelect";
 import React, { useEffect } from 'react';
 import {
     Modal,
     Form,
     Grid,
     Radio,
-    Select,
     Checkbox,
     Row,
     Col,

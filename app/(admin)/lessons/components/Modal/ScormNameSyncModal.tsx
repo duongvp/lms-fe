@@ -1,5 +1,7 @@
 "use client";
 
+import Select from "@/components/ui/MobileSelect";
+import Table from "@/components/ui/ModalTable";
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -8,10 +10,8 @@ import {
   Modal,
   Progress,
   Radio,
-  Select,
   Space,
   Spin,
-  Table,
   Tag,
   Typography,
 } from "antd";

@@ -1,7 +1,8 @@
 "use client";
 
+import Select from "@/components/ui/MobileSelect";
 import { useEffect } from "react";
-import { Button, Drawer, Form, Grid, InputNumber, Select, Space, Typography } from "antd";
+import { Button, Drawer, Form, Grid, InputNumber, Space, Typography } from "antd";
 import { CloseOutlined } from "@ant-design/icons";
 import { Popup as MobilePopup } from "antd-mobile";
 import { useLessonProgramOptions } from "@/hooks/useLessonSubjectOptions";

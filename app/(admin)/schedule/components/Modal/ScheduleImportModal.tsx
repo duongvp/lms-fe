@@ -1,5 +1,6 @@
 "use client";
 
+import Table from "@/components/ui/ModalTable";
 import { useEffect, useState } from "react";
 import {
     Alert,
@@ -9,7 +10,6 @@ import {
     Input,
     Radio,
     Space,
-    Table,
     Typography,
 } from "antd";
 import {
