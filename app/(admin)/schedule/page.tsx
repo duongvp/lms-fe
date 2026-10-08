@@ -729,13 +729,10 @@ const canModifySchedule = (record: ScheduleDataType) => {
     return startTime.isValid() && startTime.isAfter(dayjs());
 };
 
-// Checkbox còn phục vụ thao tác gửi lại HMO, vì vậy cho chọn cả buổi đang
-// diễn ra. Buổi đã kết thúc và buổi đã đánh dấu nghỉ vẫn không được chọn.
+// Cho chọn lịch cũ để sửa/đồng bộ mapping HMO. Các thao tác đổi lịch
+// vẫn kiểm tra canModifySchedule riêng.
 const canSelectScheduleForSync = (record: ScheduleDataType) => {
-    if (Number(record.lesson_status) === 1) return false;
-    if (!record.end_time) return canModifySchedule(record);
-    const endTime = dayjs(record.end_time);
-    return endTime.isValid() && !endTime.isBefore(dayjs());
+    return Number(record.id) > 0;
 };
 
 const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
@@ -1791,7 +1788,7 @@ const Page = () => {
                 disabled: selectingAllRows || !canSelect,
                 title: canSelect
                     ? undefined
-                    : "Buổi học đã kết thúc hoặc đã nghỉ, không thể chọn",
+                    : "Không xác định được lịch học",
             };
         },
         columnWidth: 32,
@@ -4009,19 +4006,13 @@ const Page = () => {
             });
             return;
         }
-        const selectedRows = requestedRows.filter(canModifySchedule);
+        const selectedRows = requestedRows;
         if (!selectedRows.length) {
             api.warning({
                 message: "Không có lịch nào được chọn",
-                description: "Lịch đã bắt đầu hoặc đã nghỉ không thể chỉnh sửa. Hãy chọn ít nhất một lịch chưa diễn ra.",
+                description: "Hãy chọn ít nhất một lịch học cần cập nhật.",
             });
             return;
-        }
-        if (selectedRows.length < requestedRows.length) {
-            api.info({
-                message: "Đã bỏ qua một số lịch",
-                description: "Chỉ mở trang chỉnh sửa cho các lịch chưa bắt đầu. Các lịch đã diễn ra hoặc đã nghỉ bị bỏ qua.",
-            });
         }
         sessionStorage.setItem("schedule:auto-edit:rows", JSON.stringify(selectedRows));
         const params = new URLSearchParams({
@@ -4166,7 +4157,7 @@ const Page = () => {
                 key: "sync-teaching-users",
                 icon: <ReloadOutlined />,
                 label: "Quét user nhân sự",
-                disabled: syncingTeachingUsers,
+                disabled: syncingTeachingUsers || !canEditSchedule || !canEditTeachingAssignment,
             },
             ...(canEditSchedule ? [{
                 key: "sync-students",
@@ -4867,7 +4858,7 @@ const Page = () => {
                             : hasActiveTableColumnFilters ? 'Chọn các lịch đang hiển thị sau khi lọc.' : 'Áp dụng cho lịch có thể chọn trên tất cả các trang theo bộ lọc.'}
                     </div>
                     {selectedRowKeys.length > 0 && <div className="schedule-mobile-selection-actions">
-                        {canEditSchedule && <Button icon={<EditOutlined />} disabled={selectingAllRows || deletingSelectedSchedules || !selectedScheduleRecords.some(record => record && canModifySchedule(record))} onClick={handleOpenBulkEdit}>Sửa</Button>}
+                        {canEditSchedule && <Button icon={<EditOutlined />} disabled={selectingAllRows || deletingSelectedSchedules || !selectedScheduleRecords.length} onClick={handleOpenBulkEdit}>Sửa</Button>}
                         {canDeleteSchedule && <Button danger icon={<DeleteOutlined />} loading={deletingSelectedSchedules} disabled={selectingAllRows || !selectedRowsAllModifiable} onClick={handleDeleteSelected}>Xóa</Button>}
                         <Button type="primary" icon={<MoreOutlined />} disabled={selectingAllRows || deletingSelectedSchedules} onClick={() => { setMobileActionGroup('sync'); setMobileActionsOpen(true); }}>Đồng bộ</Button>
                     </div>}

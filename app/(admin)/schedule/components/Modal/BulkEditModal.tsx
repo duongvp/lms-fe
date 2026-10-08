@@ -52,6 +52,8 @@ import {
 
 const { Text, Title } = Typography;
 const SEPARATE_RENDER_BATCH_SIZE = 25;
+const isScheduleTimeLocked = (record: any) => Number(record?.lesson_status) === 1
+    || !record?.start_time || !dayjs(record.start_time).isAfter(dayjs());
 
 type SubmitProgress = {
     total: number;
@@ -622,6 +624,8 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         () => Array.isArray(selectedLessons) ? selectedLessons as (string | number)[] : [],
         [selectedLessons]
     );
+    const lockedScheduleIds = new Set(selectedRows.filter(isScheduleTimeLocked).map((row) => String(row.id)));
+    const hasLockedSchedules = selectedLessonKeys.some((id) => lockedScheduleIds.has(String(id)));
     const autoFillLessonKeys = React.useMemo(() => {
         const selectedIds = new Set(selectedLessonKeys.map(String));
         return selectedRows
@@ -772,6 +776,10 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             form.setFieldsValue({
                 operation: 'update',
                 config_mode: 'common',
+                enable_teacher: !selectedRows.some(isScheduleTimeLocked),
+                enable_assistant: false,
+                enable_time: false,
+                enable_lesson_name_pattern: false,
                 hmo_sync_name_source: 'lesson',
                 canceled_lesson_name_prefix: DEFAULT_CANCELED_LESSON_PREFIX,
                 canceled_lesson_name_suffix: '',
@@ -788,6 +796,10 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     }, [open, selectedRowKeys, selectedRows, form, lessonContexts, calendarContexts]);
 
     const handleAutoFillDates = () => {
+        if (hasLockedSchedules) {
+            message.warning('Không thể tự điền ngày giờ khi có lịch đã diễn ra hoặc đã nghỉ.');
+            return;
+        }
         if (!autoFillStartDate) {
             message.warning("Vui lòng chọn ngày bắt đầu.");
             return;
@@ -1488,6 +1500,13 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 return Object.keys(update).length > 1 ? [update] : [];
             });
 
+            for (const update of changedUpdates) {
+                if (lockedScheduleIds.has(String(update.id))
+                    && Object.keys(update).some((key) => key !== 'id' && key !== 'package_lesson_mappings')) {
+                    throw new Error('Lịch đã diễn ra hoặc đã nghỉ chỉ được cập nhật Package/Course/Lesson ID. Hãy giữ nguyên ngày giờ và các thông tin lịch khác.');
+                }
+            }
+
             if (!changedUpdates.length) {
                 message.info('Không có thay đổi nào cần cập nhật.');
                 setPreviewRows([]);
@@ -1727,12 +1746,13 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                             className="bulk-operation-radio-group"
                             options={[
                                 { value: 'update', label: 'Cập nhật lịch' },
-                                { value: 'cancel', label: 'Nghỉ hẳn' },
-                                { value: 'makeup', label: 'Nghỉ & thêm lịch bù' },
+                                { value: 'cancel', label: 'Nghỉ hẳn', disabled: hasLockedSchedules },
+                                { value: 'makeup', label: 'Nghỉ & thêm lịch bù', disabled: hasLockedSchedules },
                             ]}
                             optionType="button"
                         />
                     </Form.Item>
+                    {hasLockedSchedules && <Alert showIcon type="info" style={{ marginBottom: 16 }} message="Có lịch đã diễn ra hoặc đã nghỉ: có thể đồng bộ Package/Course/Lesson ID, ngày giờ và các thông tin lịch khác được giữ nguyên." />}
 
                     {operation === 'update' && (
                         <>
@@ -1768,7 +1788,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                     <Row gutter={[8, 8]} align="middle" style={{ marginBottom: 16, marginTop: 8 }}>
                                         <Col xs={24} sm={8}>
                                             <Form.Item name="enable_teacher" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                                <Checkbox><Text strong>Đổi Giáo viên</Text></Checkbox>
+                                                <Checkbox disabled={hasLockedSchedules}><Text strong>Đổi Giáo viên</Text></Checkbox>
                                             </Form.Item>
                                         </Col>
                                         <Col xs={24} sm={16}>
@@ -1799,7 +1819,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                     <Row gutter={[8, 8]} align="middle" style={{ marginBottom: 16 }}>
                                         <Col xs={24} sm={8}>
                                             <Form.Item name="enable_assistant" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                                <Checkbox><Text strong>Đổi Trợ giảng</Text></Checkbox>
+                                                <Checkbox disabled={hasLockedSchedules}><Text strong>Đổi Trợ giảng</Text></Checkbox>
                                             </Form.Item>
                                         </Col>
                                         <Col xs={24} sm={16}>
@@ -1826,7 +1846,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                     <Row gutter={16} align="middle" style={{ marginBottom: 16 }}>
                                         <Col span={8}>
                                             <Form.Item name="enable_time" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                                <Checkbox><Text strong>Đổi Khung giờ</Text></Checkbox>
+                                                <Checkbox disabled={hasLockedSchedules}><Text strong>Đổi Khung giờ</Text></Checkbox>
                                             </Form.Item>
                                         </Col>
                                         <Col span={16}>
@@ -1883,7 +1903,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                     <Row gutter={16} align="top" style={{ marginBottom: 8 }}>
                                         <Col span={8}>
                                             <Form.Item name="enable_lesson_name_pattern" valuePropName="checked" style={{ marginBottom: 0 }}>
-                                                <Checkbox><Text strong>Thêm tiền tố / hậu tố tên bài</Text></Checkbox>
+                                                <Checkbox disabled={hasLockedSchedules}><Text strong>Thêm tiền tố / hậu tố tên bài</Text></Checkbox>
                                             </Form.Item>
                                             <Text type="secondary" style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
                                                 Dùng <Text code>{'{n}'}</Text> để chèn số lần diễn ra của từng bài. Ví dụ tiền tố “Lịch {'{n}'} - ” với tên “Bài 1” sẽ thành “Lịch 1 - Bài 1”. {!hasSingleSelectedLesson && 'Mặc định mẫu chỉ áp dụng từ buổi thứ hai; tích chọn bên phải để áp dụng ngay từ buổi đầu.'}
@@ -2265,7 +2285,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                                 name={['separate_config', lessonKey, 'start_date']}
                                                                 style={{ marginBottom: 0 }}
                                                             >
-                                                                <DatePicker format="dddd - DD/MM/YYYY" style={{ width: '100%' }} />
+                                                                <DatePicker disabled={lockedScheduleIds.has(String(lessonKey))} format="dddd - DD/MM/YYYY" style={{ width: '100%' }} />
                                                             </Form.Item>
                                                         </Col>
                                                         <Col xs={12} md={8} xl={2}>
@@ -2278,6 +2298,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                                     format="HH:mm"
                                                                     style={{ width: '100%' }}
                                                                     onChange={(value) => revalidateOrClearEndTime(['separate_config', lessonKey, 'end_time'], value)}
+                                                                    disabled={lockedScheduleIds.has(String(lessonKey))}
                                                                 />
                                                             </Form.Item>
                                                         </Col>
@@ -2297,7 +2318,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                                                 style={{ width: '100%' }}
                                                                                 disabledTime={() => getEndDisabledTime(separateStartTime)}
                                                                                 defaultOpenValue={separateStartTime}
-                                                                                disabled={!separateStartTime}
+                                                                                disabled={!separateStartTime || lockedScheduleIds.has(String(lessonKey))}
                                                                             />
                                                                         </Form.Item>
                                                                     );
@@ -2311,7 +2332,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                                 name={['separate_config', lessonKey, 'teacher']}
                                                                 style={{ marginBottom: 0 }}
                                                             >
-                                                                <TeachingStaffSelect teacherType={1} teacherValueMode="displayName" showSearch optionFilterProp="label" placeholder="Chọn giáo viên" />
+                                                                <TeachingStaffSelect disabled={lockedScheduleIds.has(String(lessonKey))} teacherType={1} teacherValueMode="displayName" showSearch optionFilterProp="label" placeholder="Chọn giáo viên" />
                                                             </Form.Item>
                                                         </Col>
                                                         <Col xs={24} md={12} xl={6}>

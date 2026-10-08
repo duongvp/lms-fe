@@ -28,11 +28,13 @@ export interface LivestreamPayload {
 }
 
 const serializeAssistantTeachers = (value: unknown) => {
+    // Không gửi trường khi chưa chỉnh sửa; gửi chuỗi rỗng khi chủ động bỏ hết.
+    if (value === undefined) return undefined;
     const values = Array.isArray(value) ? value : String(value ?? '').split(',');
     const normalized = Array.from(new Set(
         values.map((item) => String(item).trim()).filter(Boolean)
     ));
-    return normalized.length ? normalized.join(',') : undefined;
+    return normalized.join(',');
 };
 
 export interface BulkLivestreamPayload {
@@ -43,6 +45,9 @@ export interface AutoSchedulePayload {
     program_code: string;
     system_type: "topclass" | "topuni";
     start_date: string;
+    /** Khoảng số bài trong đề cương, bao gồm cả hai đầu. */
+    from_learn_number?: number;
+    to_learn_number?: number;
     /** Các thứ lặp lại của lịch TopUni: 1 = Thứ 2, ..., 7 = Chủ nhật. */
     topuni_weekdays?: number[];
     topuni_per_lesson_schedule?: boolean;

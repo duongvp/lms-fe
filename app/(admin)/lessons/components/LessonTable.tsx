@@ -329,7 +329,6 @@ const LessonTable = ({
                         },
                         onSelectAll: (selected) => onSelectAll(selected),
                         columnTitle: () => {
-                            const selectableOnPage = data.filter((record) => !isPastLesson(record)).length;
                             return (
                                 <Checkbox
                                     aria-label="Chọn tất cả đề cương"
@@ -337,18 +336,12 @@ const LessonTable = ({
                                     checked={allRowsSelected}
                                     indeterminate={!allRowsSelected && selectedRowKeys.length > 0}
                                     title={selectingAllRows ? "Đang chọn tất cả đề cương..." : undefined}
-                                    disabled={totalItems <= 0 || (totalItems <= data.length && selectableOnPage === 0)}
+                                    disabled={totalItems <= 0}
                                     onChange={(event) => onSelectAll(event.target.checked)}
                                 />
                             );
                         },
                         columnWidth: 32,
-                        getCheckboxProps: (record) => ({
-                            disabled: isPastLesson(record),
-                            title: isPastLesson(record)
-                                ? "Bài học đã diễn ra, không thể thao tác hàng loạt"
-                                : undefined,
-                        }),
                     }}
                     onRow={(record) => ({
                         draggable: reorderMode && !isPastLesson(record),

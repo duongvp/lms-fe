@@ -104,12 +104,7 @@ const LessonCourseMappingModal = ({ open, programCode, selectedLessonIds, onClos
                 lesson_ids: values.scope === "selected" ? selectedLessonIds : undefined,
             });
             const result = response?.data || {};
-            const skippedPast = Number(result.skipped_past ?? 0);
-            message.success(
-                skippedPast > 0
-                    ? `Đã xử lý ${result.affected ?? 0} bài; bỏ qua ${skippedPast} bài đã diễn ra.`
-                    : `Đã xử lý ${result.affected ?? 0} bài.`,
-            );
+            message.success(`Đã xử lý ${result.affected ?? 0} bài.`);
             await loadMappings();
         } catch (error: any) {
             message.error(error?.message || "Không thể cập nhật Course ID");
@@ -127,6 +122,7 @@ const LessonCourseMappingModal = ({ open, programCode, selectedLessonIds, onClos
                     <>
                         Package ID và Course ID được tải từ <Typography.Link href={packageCourseSheetUrl} target="_blank" rel="noreferrer">Google Sheet</Typography.Link>.
                         {" "}Có thể chọn mục nào trước; danh sách còn lại sẽ được lọc theo lựa chọn đó.
+                        {" "}Có thể cập nhật Course ID cho cả bài đã diễn ra.
                     </>
                 }
                 style={{ marginBottom: 16 }}

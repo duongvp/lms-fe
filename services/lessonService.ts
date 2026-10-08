@@ -93,6 +93,7 @@ export interface LessonSubjectOption {
 export interface LessonProgramOption extends LessonSubjectOption {
   grade?: number | null;
   system_type?: "topclass" | "topuni" | null;
+  calendar_count?: number | string;
 }
 
 export interface CreateLessonProgramPayload {
@@ -100,11 +101,12 @@ export interface CreateLessonProgramPayload {
   system_type: "topclass" | "topuni";
   subject_code: string;
   subject_name: string;
-  lesson_name: string;
+  lesson_name?: string;
 }
 
 export interface LessonProgramSubjectUpdatePayload {
   subject_name: string;
+  subject_code?: string;
 }
 
 export interface LessonExportParams extends LessonListParams {

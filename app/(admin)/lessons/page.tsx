@@ -156,6 +156,7 @@ const Page = () => {
   const [openFormModal, setOpenFormModal] = useState(false);
   const [openProgramModal, setOpenProgramModal] = useState(false);
   const [openProgramSubjectModal, setOpenProgramSubjectModal] = useState(false);
+  const [renameProgramCode, setRenameProgramCode] = useState(false);
   const [openProgramImportModal, setOpenProgramImportModal] = useState(false);
   const [openImportModal, setOpenImportModal] = useState(false);
   const [openCourseMappingModal, setOpenCourseMappingModal] = useState(false);
@@ -428,9 +429,7 @@ const Page = () => {
         Array.from(
           new Set([
             ...current,
-            ...data
-              .filter((record) => Number(record.past_scheduled_count || 0) <= 0)
-              .map((record) => String(record.id)),
+            ...data.map((record) => String(record.id)),
           ]),
         ),
       );
@@ -458,9 +457,7 @@ const Page = () => {
           },
         });
         if (requestId !== selectAllRequestRef.current) return;
-        const selectableKeys = rows
-          .filter((record) => Number(record.past_scheduled_count || 0) <= 0)
-          .map((record) => String(record.id));
+        const selectableKeys = rows.map((record) => String(record.id));
         setSelectedRowKeys(selectableKeys);
         setAllRowsSelected(selectableKeys.length > 0);
       } catch (error: any) {
@@ -794,17 +791,19 @@ const Page = () => {
     }
   };
 
-  const handleUpdateProgramSubject = async (subjectName: string) => {
+  const handleUpdateProgramSubject = async (subjectName: string, newProgramCode?: string) => {
     const programCode = String(submittedFilterValues.subject_code || "").trim();
     if (!programCode) return;
     try {
       setSaving(true);
       const response: any = await updateLessonProgramSubject(programCode, {
         subject_name: subjectName,
+        subject_code: newProgramCode,
       });
       const updated = response?.data;
       const next = cleanFilterValues({
         ...submittedFilterValues,
+        subject_code: updated?.program_code || newProgramCode || programCode,
         subject: updated?.subject_name || subjectName,
       });
       setFilterValues(next);
@@ -812,12 +811,12 @@ const Page = () => {
       setOpenProgramSubjectModal(false);
       await Promise.all([refreshLessons(), refreshSchedules()]);
       api.success({
-        message: "Đã cập nhật môn học",
-        description: `Đã cập nhật ${updated?.lessons_updated || 0} bài và ${updated?.calendars_updated || 0} lịch.`,
+        message: newProgramCode !== undefined ? "Đã đổi tên chương trình" : "Đã đổi tên môn học",
+        description: `Chương trình: ${updated?.program_code || newProgramCode || programCode} — ${updated?.subject_name || subjectName}.`,
       });
     } catch (error: any) {
       api.error({
-        message: "Không thể cập nhật môn học",
+        message: newProgramCode !== undefined ? "Không thể đổi tên chương trình" : "Không thể đổi tên môn học",
         description: error?.message || "Vui lòng thử lại.",
       });
     } finally {
@@ -1325,12 +1324,23 @@ const Page = () => {
               </Tag>
             )}
             {canEdit && submittedFilterValues.subject_code && (
+              <>
+              <Button size="small" onClick={() => {
+                setRenameProgramCode(false);
+                setOpenProgramSubjectModal(true);
+              }}>Đổi tên môn học</Button>
               <Button
                 size="small"
-                onClick={() => setOpenProgramSubjectModal(true)}
+                disabled={Number(lessonPrograms.find((item) => item.subject_code === submittedFilterValues.subject_code)?.calendar_count || 0) > 0}
+                title="Chỉ được đổi tên khi chương trình chưa có lịch học nào"
+                onClick={() => {
+                  setRenameProgramCode(true);
+                  setOpenProgramSubjectModal(true);
+                }}
               >
-                Đổi môn học
+                Đổi tên chương trình
               </Button>
+              </>
             )}
             {!secondaryUnlocked && !secondaryChecking && (
               <Button
@@ -1524,6 +1534,7 @@ const Page = () => {
           />
           <ProgramSubjectModal
             open={openProgramSubjectModal}
+            renameCode={renameProgramCode}
             loading={saving}
             programCode={String(submittedFilterValues.subject_code || "")}
             currentSubject={String(

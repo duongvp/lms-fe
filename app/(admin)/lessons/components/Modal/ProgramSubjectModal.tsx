@@ -1,24 +1,25 @@
 "use client";
 
 import Select from "@/components/ui/MobileSelect";
-import { Alert, Button, Form, Modal, Typography } from "antd";
+import { Alert, Button, Form, Input, Modal } from "antd";
 import { useEffect } from "react";
 import { useLessonSubjectOptions } from "@/hooks/useLessonSubjectOptions";
 
-type Props = { open: boolean; loading: boolean; programCode: string; currentSubject: string; systemType?: string | null; grade?: number | null; onClose: () => void; onSubmit: (subject: string) => Promise<void>; };
+type Props = { open: boolean; loading: boolean; programCode: string; currentSubject: string; renameCode?: boolean; systemType?: string | null; grade?: number | null; onClose: () => void; onSubmit: (subject: string, programCode?: string) => Promise<void>; };
 
-export default function ProgramSubjectModal({ open, loading, programCode, currentSubject, systemType, grade, onClose, onSubmit }: Props) {
-  const [form] = Form.useForm<{ subject_name: string[] }>();
+export default function ProgramSubjectModal({ open, loading, programCode, currentSubject, renameCode = false, onClose, onSubmit }: Props) {
+  const [form] = Form.useForm<{ subject_name: string[]; subject_code: string }>();
   const options = useLessonSubjectOptions(open, true);
-  const selected = Form.useWatch("subject_name", form);
-  const subjectName = String((selected || [currentSubject]).at(-1) || "").trim();
-  const calendarSubject = systemType === "topclass" && grade ? subjectName + " " + grade : subjectName;
-  useEffect(() => { if (open) form.setFieldsValue({ subject_name: currentSubject ? [currentSubject] : [] }); }, [currentSubject, form, open]);
-  return <Modal open={open} title="Đổi môn học của Chương trình" destroyOnClose onCancel={onClose} footer={[<Button key="cancel" onClick={onClose}>Hủy</Button>, <Button key="save" type="primary" loading={loading} onClick={() => form.submit()}>Cập nhật môn học</Button>]}>
-    <Alert showIcon type="warning" style={{ marginBottom: 16 }} message={"Chương trình: " + programCode} description={"Calendar.subject mới: " + (calendarSubject || "-") + ". Toàn bộ đề cương và lịch của chương trình sẽ được cập nhật."} />
-    <Form form={form} layout="vertical" onFinish={({ subject_name }) => onSubmit(String((subject_name || []).at(-1) || "").trim())}>
-      <Form.Item name="subject_name" label="Môn học mới" rules={[{ validator: (_, value: string[]) => { const name = String((value || []).at(-1) || "").trim(); return name ? Promise.resolve() : Promise.reject(new Error("Chọn hoặc nhập môn học")); } }]}><Select autoFocus showSearch mode="tags" maxCount={1} optionFilterProp="label" placeholder="Chọn hoặc nhập môn học mới" options={options} /></Form.Item>
-      <Typography.Text type="secondary">Mã chương trình, khối, bài học và lịch học không thay đổi.</Typography.Text>
+  useEffect(() => { if (open) form.setFieldsValue({ subject_code: programCode, subject_name: currentSubject ? [currentSubject] : [] }); }, [currentSubject, programCode, form, open]);
+  return <Modal open={open} title={renameCode ? "Đổi tên chương trình" : "Đổi tên môn học"} destroyOnClose onCancel={onClose} footer={[<Button key="cancel" onClick={onClose}>Hủy</Button>, <Button key="save" type="primary" loading={loading} onClick={() => form.submit()}>Lưu thay đổi</Button>]}>
+    <Alert showIcon type="info" style={{ marginBottom: 16 }} message={"Chương trình: " + programCode} description={renameCode ? "Chỉ được đổi mã chương trình khi chưa có lịch học nào được tạo." : "Tên môn học sẽ được cập nhật cho toàn bộ đề cương và lịch học, kể cả lịch đã diễn ra. Ngày giờ của lịch học được giữ nguyên."} />
+    <Form form={form} layout="vertical" onFinish={({ subject_name, subject_code }) => onSubmit(String((subject_name || []).at(-1) || "").trim(), renameCode ? subject_code.trim() : undefined)}>
+      {renameCode && <Form.Item name="subject_code" label="Mã chương trình" rules={[
+        { required: true, whitespace: true, message: "Nhập mã chương trình" },
+        { max: 100, message: "Mã chương trình không được quá 100 ký tự" },
+        { pattern: /^[A-Za-z0-9_-]+$/, message: "Chỉ dùng chữ không dấu, số, dấu gạch ngang hoặc gạch dưới" },
+      ]}><Input autoFocus maxLength={100} placeholder="VD: toan-6-2027" /></Form.Item>}
+      <Form.Item name="subject_name" label="Tên môn học" rules={[{ validator: (_, value: string[]) => { const name = String((value || []).at(-1) || "").trim(); return name && name.length <= 100 ? Promise.resolve() : Promise.reject(new Error("Nhập tên môn học tối đa 100 ký tự")); } }]}><Select showSearch mode="tags" maxCount={1} optionFilterProp="label" placeholder="Chọn hoặc nhập môn học mới" options={options} /></Form.Item>
     </Form>
   </Modal>;
 }

@@ -2,7 +2,7 @@
 
 import Select from "@/components/ui/MobileSelect";
 import { PlusOutlined, SyncOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Checkbox, DatePicker, Empty, Form, Grid, Input, InputNumber, message, Modal, Progress, Radio, Space, Spin, Table, TimePicker, Typography } from "antd";
+import { Alert, Button, Card, Checkbox, DatePicker, Empty, Form, Grid, Input, InputNumber, message, Modal, Progress, Radio, Space, Spin, Table, TimePicker, Typography, type InputNumberProps } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import {
     commitAutoSchedule,
@@ -22,6 +22,7 @@ import {
     matchHmoLessonsByCourse,
     normalizeLessonTitle,
 } from "@/helper/hmoLessonMatching";
+import { createDeferredRangeUpdate, getDefaultLessonRange, getLessonRangeFieldError, selectLessonsInRange, validateLessonRange } from "@/helper/autoScheduleRange";
 import { useLessonProgramOptions } from "@/hooks/useLessonSubjectOptions";
 
 type Props = {
@@ -246,6 +247,73 @@ const buildTopuniTemplateSequence = (
     return sequence;
 };
 
+const ImmediateRangeInput = ({ invalid, feedbackId, ...props }: InputNumberProps & {
+    invalid: boolean; feedbackId: string;
+}) => <InputNumber {...props} aria-invalid={invalid} aria-describedby={invalid ? feedbackId : undefined} />;
+
+const LessonRangeFields = ({ max, disabled, onBlur, appliedRange }: {
+    max: number; disabled: boolean; onBlur: () => void;
+    appliedRange: { from: number; to: number } | null;
+}) => {
+    const form = Form.useFormInstance();
+    const from = Form.useWatch("from_learn_number", form);
+    const to = Form.useWatch("to_learn_number", form);
+    const pending = !getLessonRangeFieldError(from, "from", max)
+        && !getLessonRangeFieldError(to, "to", max, from)
+        && (Number(from) !== appliedRange?.from || Number(to) !== appliedRange?.to);
+    const validator = (value: unknown, field: "from" | "to") => {
+        const error = getLessonRangeFieldError(value, field, max, form.getFieldValue("from_learn_number"));
+        return error ? Promise.reject(new Error(error)) : Promise.resolve();
+    };
+    const fieldError = (field: "from" | "to", value: unknown) => {
+        const name = field === "from" ? "from_learn_number" : "to_learn_number";
+        if (disabled || (!form.isFieldTouched(name) && !form.getFieldError(name).length)) return undefined;
+        return getLessonRangeFieldError(value, field, max, from);
+    };
+    const fromError = fieldError("from", from);
+    const toError = fieldError("to", to);
+    return <div className="auto-lesson-range" style={{ width: 248, maxWidth: "100%", marginBottom: 24, position: "relative" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, alignItems: "start" }}>
+            <div style={{ minWidth: 0 }}>
+                <Form.Item name="from_learn_number" label="Từ bài" required
+                    tooltip="Số bài trong đề cương; chỉ tạo các bài chưa có lịch trong khoảng đã chọn."
+                    help={false} validateStatus={fromError ? "error" : ""} style={{ marginBottom: 0 }}
+                    rules={[{ validator: (_, value) => validator(value, "from") }]}>
+                    <ImmediateRangeInput step={1} changeOnBlur={false} disabled={disabled} onBlur={onBlur}
+                        feedbackId="from_learn_number_feedback" invalid={Boolean(fromError)} style={{ width: "100%" }} />
+                </Form.Item>
+                <div id="from_learn_number_feedback" className="auto-range-feedback" aria-live="polite">
+                    {fromError && <span className="ant-form-item-explain-error">{fromError}</span>}
+                </div>
+            </div>
+            <div style={{ minWidth: 0 }}>
+                <Form.Item name="to_learn_number" label="Đến bài" required dependencies={["from_learn_number"]}
+                    help={false} validateStatus={toError ? "error" : ""} style={{ marginBottom: 0 }}
+                    rules={[{ validator: (_, value) => validator(value, "to") }]}>
+                    <ImmediateRangeInput step={1} changeOnBlur={false} disabled={disabled} onBlur={onBlur}
+                        feedbackId="to_learn_number_feedback" invalid={Boolean(toError)} style={{ width: "100%" }} />
+                </Form.Item>
+                <div id="to_learn_number_feedback" className="auto-range-feedback" aria-live="polite">
+                    {toError && <span className="ant-form-item-explain-error">{toError}</span>}
+                </div>
+            </div>
+        </div>
+        {pending && <Typography.Text type="secondary" style={{ position: "absolute", left: 0, bottom: -22, lineHeight: "22px" }}>Đang cập nhật danh sách bài...</Typography.Text>}
+    </div>;
+};
+
+const RangePreviewButton = ({ form, lessons, loading, disabled, max, onClick }: {
+    form: ReturnType<typeof Form.useForm>[0]; lessons: SchedulingLesson[]; loading: boolean;
+    disabled: boolean; max: number; onClick: () => void;
+}) => {
+    const from = Form.useWatch("from_learn_number", form);
+    const to = Form.useWatch("to_learn_number", form);
+    const valid = !getLessonRangeFieldError(from, "from", max)
+        && !getLessonRangeFieldError(to, "to", max, from);
+    const count = valid ? selectLessonsInRange(lessons, Number(from), Number(to)).length : 0;
+    return <Button loading={loading} disabled={disabled || !count} onClick={onClick}>Xem trước</Button>;
+};
+
 const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen = false }: Props) => {
     const screens = Grid.useBreakpoint();
     const isDesktopPreview = Boolean(screens.md);
@@ -257,7 +325,9 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     const [loadingLessons, setLoadingLessons] = useState(false);
     const [loadedLessonsProgramCode, setLoadedLessonsProgramCode] = useState<string | null>(null);
     const [blockSize, setBlockSize] = useState<1 | 2>(2);
-    const [lessonLimit, setLessonLimit] = useState(0);
+    const [appliedRange, setAppliedRange] = useState<{ from: number; to: number; count: number } | null>(null);
+    const rangeUpdate = useRef(createDeferredRangeUpdate());
+    const appliedRangeKey = useRef("");
     const [visibleBlockCount, setVisibleBlockCount] = useState(8);
     const [commitProgress, setCommitProgress] = useState<CreateProgress | null>(null);
     const [previewError, setPreviewError] = useState("");
@@ -269,6 +339,9 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     const requestedHmoLessonIds = useRef(new Set<string>());
     const hmoOptionsRef = useRef<Record<string, HocmaiSectionOption[]>>({});
     const hmoRequestPromises = useRef(new Map<string, Promise<HocmaiSectionOption[]>>());
+    const hmoGeneration = useRef(0);
+    const loadingHmoIdsRef = useRef(new Set<string>());
+    const hmoPublishTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const previewRef = useRef<HTMLDivElement>(null);
     const previewErrorRef = useRef<HTMLDivElement>(null);
 
@@ -330,33 +403,43 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     }, [commitProgress?.completed, commitProgress?.total]);
 
 
+    const publishHmoState = () => {
+        if (hmoPublishTimer.current !== undefined) return;
+        hmoPublishTimer.current = setTimeout(() => {
+            hmoPublishTimer.current = undefined;
+            setHmoOptions(hmoOptionsRef.current);
+            setLoadingHmoLessonIds(new Set(loadingHmoIdsRef.current));
+        }, 50);
+    };
+
     const loadHmoOptions = (lessonId: string): Promise<HocmaiSectionOption[]> => {
         if (Object.prototype.hasOwnProperty.call(hmoOptionsRef.current, lessonId)) {
             return Promise.resolve(hmoOptionsRef.current[lessonId]);
         }
         const pending = hmoRequestPromises.current.get(lessonId);
         if (pending) return pending;
-
+        const generation = hmoGeneration.current;
         requestedHmoLessonIds.current.add(lessonId);
-        setLoadingHmoLessonIds((current) => new Set(current).add(lessonId));
+        loadingHmoIdsRef.current.add(lessonId);
+        publishHmoState();
         const request = getHocmaiSectionsForSchedulingLesson(programCode, lessonId)
             .then((response: any) => {
+                if (generation !== hmoGeneration.current) return [];
                 const options = Array.isArray(response?.data) ? response.data : [];
                 hmoOptionsRef.current = { ...hmoOptionsRef.current, [lessonId]: options };
-                setHmoOptions(hmoOptionsRef.current);
+                publishHmoState();
                 return options;
             })
             .catch((error: any) => {
+                if (generation !== hmoGeneration.current) return [];
                 requestedHmoLessonIds.current.delete(lessonId);
                 throw error;
             })
             .finally(() => {
+                if (generation !== hmoGeneration.current) return;
                 hmoRequestPromises.current.delete(lessonId);
-                setLoadingHmoLessonIds((current) => {
-                    const next = new Set(current);
-                    next.delete(lessonId);
-                    return next;
-                });
+                loadingHmoIdsRef.current.delete(lessonId);
+                publishHmoState();
             });
         hmoRequestPromises.current.set(lessonId, request);
         return request;
@@ -396,22 +479,30 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
         setPayload(null);
     };
 
-    const divideIntoBlocks = (source: SchedulingLesson[], size: 1 | 2, requestedLimit = lessonLimit) => {
+    const divideIntoBlocks = (source: SchedulingLesson[], size: 1 | 2, preserveLessons = false) => {
+        rangeUpdate.current.cancel();
+        const from = form.getFieldValue("from_learn_number");
+        const to = form.getFieldValue("to_learn_number");
+        const max = Math.max(1, ...source.map((lesson) => Number(lesson.learn_number)));
+        const valid = !getLessonRangeFieldError(from, "from", max)
+            && !getLessonRangeFieldError(to, "to", max, from);
+        if (!valid) return;
+        const rangeKey = `${programCode}:${from}:${to}:${size}`;
+        if (preserveLessons && appliedRangeKey.current === rangeKey) return;
         const currentBlocks = form.getFieldValue("blocks") || [];
+        const configuredLessons = new Map<string, any>();
         const mappingKeysByLesson = new Map<string, string[][]>();
         currentBlocks.forEach((block: any) => (block.lessons || []).forEach((lesson: any) => {
+            configuredLessons.set(String(lesson.session_id || lesson.learn_number), lesson);
             mappingKeysByLesson.set(
                 String(lesson.session_id || lesson.learn_number),
                 (lesson.sessions || []).map((session: any) => session.hmo_mapping_keys || [])
             );
         }));
-        const remaining = source.filter((lesson) => Number(lesson.scheduled_count || 0) === 0);
-        const topuni = form.getFieldValue("system_type") === "topuni";
-        const normalizedLimit = Math.min(
-            remaining.length,
-            topuni ? remaining.length : Math.max(0, Number(requestedLimit) || 0)
+        const available = selectLessonsInRange(
+            source, Number(form.getFieldValue("from_learn_number")), Number(form.getFieldValue("to_learn_number"))
         );
-        const available = remaining.slice(0, normalizedLimit);
+        const topuni = form.getFieldValue("system_type") === "topuni";
         const blocks = [];
         const effectiveSize = topuni ? 1 : size;
         const topuniSequence = topuni
@@ -427,7 +518,9 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             const blockLessons = available.slice(index, index + effectiveSize);
             blocks.push({
                 block_name: `Block ${blocks.length + 1}`,
-                lessons: blockLessons.map((lesson, lessonIndex) => ({
+                lessons: blockLessons.map((lesson, lessonIndex) => preserveLessons && configuredLessons.has(String(lesson.id))
+                    ? configuredLessons.get(String(lesson.id))
+                    : ({
                     learn_number: lesson.learn_number,
                     session_id: lesson.id,
                     lesson_name: lesson.lesson_name,
@@ -443,14 +536,39 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             });
         }
         form.setFieldValue("blocks", blocks);
+        appliedRangeKey.current = rangeKey;
+        setAppliedRange({ from: Number(from), to: Number(to), count: available.length });
         setHmoSyncNotes({});
         setPreview([]);
         setPreviewError("");
         setPayload(null);
     };
 
+    const scheduleRangeUpdate = () => {
+        const max = Math.max(1, ...lessons.map((lesson) => Number(lesson.learn_number)));
+        const from = form.getFieldValue("from_learn_number");
+        const to = form.getFieldValue("to_learn_number");
+        const valid = !getLessonRangeFieldError(from, "from", max)
+            && !getLessonRangeFieldError(to, "to", max, from);
+        rangeUpdate.current.cancel();
+        if (!valid) return;
+        rangeUpdate.current.schedule(() => {
+            setVisibleBlockCount(8);
+            divideIntoBlocks(lessons, blockSize, true);
+        });
+    };
+
+    useEffect(() => () => rangeUpdate.current.cancel(), []);
+    useEffect(() => {
+        if (!open) {
+            rangeUpdate.current.cancel();
+        }
+    }, [open]);
+
     const applyScheduleTemplateToAllLessons = async () => {
         try {
+            await form.validateFields(["from_learn_number", "to_learn_number"]);
+            rangeUpdate.current.flush();
             const mode = form.getFieldValue("template_mode") === "within_block" ? "within_block" : "common";
             await form.validateFields(mode === "within_block"
                     ? ["first_lesson_schedule_template", "second_lesson_schedule_template"]
@@ -498,17 +616,26 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     useEffect(() => {
         if (!open || !programCode) return;
         let active = true;
+        hmoGeneration.current += 1;
+        clearTimeout(hmoPublishTimer.current);
+        hmoPublishTimer.current = undefined;
+        hmoRequestPromises.current.clear();
+        requestedHmoLessonIds.current.clear();
+        loadingHmoIdsRef.current.clear();
+        hmoOptionsRef.current = {};
+        setHmoOptions({});
+        setLoadingHmoLessonIds(new Set());
+        rangeUpdate.current.cancel();
+        appliedRangeKey.current = "";
+        setAppliedRange(null);
         setLoadingLessons(true);
         getProgramLessonsForScheduling(programCode)
             .then((response: any) => {
                 if (!active) return;
                 const rows = Array.isArray(response?.data) ? response.data : [];
-                const remainingCount = rows.filter(
-                    (lesson: SchedulingLesson) => Number(lesson.scheduled_count || 0) === 0
-                ).length;
+                form.setFieldsValue({ ...getDefaultLessonRange(rows), blocks: [] });
                 setLessons(rows);
                 setLoadedLessonsProgramCode(programCode);
-                setLessonLimit(remainingCount);
                 setVisibleBlockCount(8);
                 setHmoOptions({});
                 hmoOptionsRef.current = {};
@@ -516,7 +643,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                 requestedHmoLessonIds.current.clear();
                 const initialBlockSize: 1 | 2 = programSystemType === "topuni" ? 1 : 2;
                 setBlockSize(initialBlockSize);
-                divideIntoBlocks(rows, initialBlockSize, remainingCount);
+                divideIntoBlocks(rows, initialBlockSize);
             })
             .catch((error: any) => {
                 if (!active) return;
@@ -525,7 +652,13 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                 message.error(error?.message || "Không thể tải bài học của chương trình");
             })
             .finally(() => active && setLoadingLessons(false));
-        return () => { active = false; };
+        return () => {
+            active = false;
+            hmoGeneration.current += 1;
+            rangeUpdate.current.cancel();
+            clearTimeout(hmoPublishTimer.current);
+            hmoPublishTimer.current = undefined;
+        };
         // form ổn định trong suốt vòng đời component.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, programCode]);
@@ -536,7 +669,6 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
         form.setFieldValue("system_type", programSystemType);
 
         if (programSystemType === "topuni") {
-            const remaining = lessons.filter((lesson) => Number(lesson.scheduled_count || 0) === 0).length;
             const startDate = form.getFieldValue("start_date");
             const weekday = weekdayFromDate(startDate);
             const currentTemplates = cloneScheduleTemplate(form.getFieldValue("schedule_template") || []);
@@ -555,8 +687,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                 topuni_weekdays: selectedWeekdays,
             });
             setBlockSize(1);
-            setLessonLimit(remaining);
-            if (lessons.length) divideIntoBlocks(lessons, 1, remaining);
+            if (lessons.length) divideIntoBlocks(lessons, 1);
             setPreview([]);
             setPayload(null);
         }
@@ -564,7 +695,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     }, [open, programCode, programSystemType, lessons, form]);
 
     useEffect(() => {
-        if (!open || !programCode) return;
+        if (!open || !programCode || !appliedRange || loadingLessons) return;
         const visibleLessons = (form.getFieldValue("blocks") || [])
             .slice(0, visibleBlockCount)
             .flatMap((block: any) => block.lessons || []);
@@ -591,9 +722,16 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
         return () => { cancelled = true; };
         // loadHmoOptions dùng cache/ref nội bộ để tránh gọi trùng API.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [lessonLimit, lessons, open, programCode, visibleBlockCount]);
+    }, [appliedRange, loadingLessons, open, programCode, visibleBlockCount]);
 
     const handleSyncHmoLessonIds = async () => {
+        try {
+            await form.validateFields(["from_learn_number", "to_learn_number"]);
+            rangeUpdate.current.flush();
+        } catch {
+            return;
+        }
+        const generation = hmoGeneration.current;
         const blocks = form.getFieldValue("blocks") || [];
         const blockLessons = blocks.flatMap((block: any) => block.lessons || []);
         const syncNameSource = form.getFieldValue("hmo_sync_name_source") === "calendar"
@@ -729,6 +867,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                 }),
             }));
 
+            if (generation !== hmoGeneration.current) return;
             form.setFieldsValue({ blocks: nextBlocks });
             form.setFields(nextBlocks.flatMap((block: any, blockIndex: number) => (
                 (block.lessons || []).flatMap((lesson: any, lessonIndex: number) => (
@@ -754,6 +893,8 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     };
 
     const buildPayload = async (): Promise<AutoSchedulePayload> => {
+        await form.validateFields(["from_learn_number", "to_learn_number"]);
+        rangeUpdate.current.flush();
         const values = await form.validateFields();
         const topuniWeekdays: number[] = Array.from(new Set<number>(
             ((values.topuni_weekdays || []) as unknown[]).map((value) => Number(value))
@@ -797,28 +938,26 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                 }
             }
         }
-        const configuredTopuniLessons = new Map<string, any>(
-            (values.blocks || []).flatMap((block: any) => block.lessons || [])
-                .map((lesson: any) => [String(lesson.session_id), lesson])
-        );
+        const fromLearnNumber = Number(values.from_learn_number);
+        const toLearnNumber = Number(values.to_learn_number);
+        validateLessonRange(fromLearnNumber, toLearnNumber);
+        const selectedLessons = selectLessonsInRange(lessons, fromLearnNumber, toLearnNumber);
+        if (!selectedLessons.length) {
+            throw new Error("Không có bài chưa được gán lịch trong khoảng đã chọn.");
+        }
+        const selectedIds = new Set(selectedLessons.map((lesson) => String(lesson.id)));
+        const selectedBlocks = (values.blocks || []).map((block: any) => ({
+            ...block,
+            lessons: (block.lessons || []).filter((lesson: any) => selectedIds.has(String(lesson.session_id))),
+        })).filter((block: any) => block.lessons.length);
         const sourceBlocks = values.system_type === "topuni"
-            ? [{
-                block_name: "TopUni",
-                lessons: lessons
-                    .filter((lesson) => Number(lesson.scheduled_count || 0) === 0)
-                    .map((lesson) => ({
-                        learn_number: lesson.learn_number,
-                        session_id: lesson.id,
-                        lesson_name: lesson.lesson_name,
-                        lesson_name_prefix: configuredTopuniLessons.get(String(lesson.id))?.lesson_name_prefix || "",
-                        lesson_name_suffix: configuredTopuniLessons.get(String(lesson.id))?.lesson_name_suffix || "",
-                        sessions: configuredTopuniLessons.get(String(lesson.id))?.sessions || [],
-                    })),
-            }]
-            : (values.blocks || []);
+            ? [{ block_name: "TopUni", lessons: selectedBlocks.flatMap((block: any) => block.lessons) }]
+            : selectedBlocks;
         const holidayRules = normalizeHolidayPeriods(values.holiday_periods || []);
         return {
             program_code: programCode,
+            from_learn_number: fromLearnNumber,
+            to_learn_number: toLearnNumber,
             system_type: values.system_type,
             strategy: values.system_type === "topuni" ? "by_block" : values.strategy,
             start_date: values.start_date.format("YYYY-MM-DD"),
@@ -859,7 +998,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                             ).map((value: unknown) => String(value).trim()).filter(Boolean)
                         )).join(",") || undefined,
                         hmo_mappings: (session.hmo_mapping_keys || [])
-                            .map((key: string) => (hmoOptions[String(lesson.session_id)] || [])
+                            .map((key: string) => (hmoOptionsRef.current[String(lesson.session_id)] || [])
                                 .find((option) => hmoOptionKey(option) === key))
                             .filter(Boolean),
                     })),
@@ -936,6 +1075,8 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     const pastCount = lessons.filter((lesson) => Number(lesson.past_scheduled_count || 0) > 0).length;
     const assignedCount = lessons.filter((lesson) => Number(lesson.scheduled_count || 0) > 0).length;
     const remainingCount = Math.max(0, lessons.length - assignedCount);
+    const selectedLessonCount = appliedRange?.count || 0;
+    const maxLearnNumber = Math.max(1, ...lessons.map((lesson) => Number(lesson.learn_number)));
 
     const renderTemplateFields = (name: string, title: string, lockToOneSession = false) => (
         <Card size="small" title={title} style={{ marginBottom: 10 }}>
@@ -966,7 +1107,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                         }}
                                     />
                                 </Form.Item>
-                                <Form.Item noStyle shouldUpdate>
+                                <Form.Item noStyle dependencies={[[name, field.name, "start_time"]]}>
                                     {({ getFieldValue }) => {
                                         const startTime = getFieldValue([name, field.name, "start_time"]);
                                         return (
@@ -1035,7 +1176,8 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             maskClosable={!loading}
             footer={[
                 <Button key="cancel" onClick={onClose} disabled={loading}>Đóng</Button>,
-                <Button key="preview" loading={loading} disabled={!programSystemType || loadingLessons || remainingCount === 0} onClick={() => void handlePreview()}>Xem trước</Button>,
+                <RangePreviewButton key="preview" form={form} lessons={lessons} max={maxLearnNumber}
+                    loading={loading} disabled={!programSystemType || loadingLessons} onClick={() => void handlePreview()} />,
                 <Button key="commit" type="primary" disabled={!preview.length} loading={loading} onClick={() => void handleCommit()}>
                     Xác nhận tạo {preview.length || ""} lịch
                 </Button>,
@@ -1053,6 +1195,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                     form={form}
                     layout="vertical"
                     initialValues={{
+                        ...getDefaultLessonRange(lessons),
                         system_type: programSystemType,
                         strategy: "interleaved",
                         start_date: dayjs(),
@@ -1088,7 +1231,10 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                         ],
                         blocks: [],
                     }}
-                    onValuesChange={() => {
+                    onValuesChange={(changedValues) => {
+                        if ("from_learn_number" in changedValues || "to_learn_number" in changedValues) {
+                            scheduleRangeUpdate();
+                        }
                         if (Object.keys(hmoSyncNotes).length) setHmoSyncNotes({});
                         if (preview.length) setPreview([]);
                         if (previewError) setPreviewError("");
@@ -1128,28 +1274,13 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                 <Form.Item name="strategy" label="Thứ tự lên lịch" rules={[{ required: true }]}>
                                     <Select style={{ width: 280 }} options={[{ value: "interleaved", label: "Xen kẽ hai bài trong từng nhóm" }, { value: "by_block", label: "Hoàn thành từng bài lần lượt" }]} />
                                 </Form.Item>
-                                <Form.Item label="Số bài muốn tạo">
-                                    <InputNumber
-                                        min={remainingCount > 0 ? 1 : 0}
-                                        max={remainingCount}
-                                        value={lessonLimit}
-                                        disabled={remainingCount === 0}
-                                        style={{ width: 150 }}
-                                        onChange={(value) => {
-                                            const nextValue = Math.min(
-                                                remainingCount,
-                                                Math.max(remainingCount > 0 ? 1 : 0, Number(value) || 0)
-                                            );
-                                            setLessonLimit(nextValue);
-                                            divideIntoBlocks(lessons, blockSize, nextValue);
-                                        }}
-                                    />
-                                </Form.Item>
                             </>
                         )}
-                        <Form.Item name="start_date" label="Ngày bắt đầu" rules={[{ required: true }]}>
+                         <Form.Item name="start_date" label="Ngày bắt đầu" rules={[{ required: true }]}>
                             <DatePicker format="DD/MM/YYYY" />
                         </Form.Item>
+                        <LessonRangeFields max={maxLearnNumber} disabled={loadingLessons || remainingCount === 0}
+                            appliedRange={appliedRange} onBlur={() => rangeUpdate.current.flush()} />
                         {isTopuni && (
                             <>
                                 <Form.Item
@@ -1184,9 +1315,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                                 topuni_schedule_frequency: frequency,
                                                 topuni_week_interval: interval,
                                             });
-                                            divideIntoBlocks(lessons, 1, lessons.filter(
-                                                (lesson) => Number(lesson.scheduled_count || 0) === 0
-                                            ).length);
+                                            divideIntoBlocks(lessons, 1);
                                         }}
                                     >
                                         <Space wrap align="center">
@@ -1212,9 +1341,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                                                 style={{ width: 180 }}
                                                                 onChange={(value) => {
                                                                     form.setFieldValue("topuni_week_interval", Math.max(3, Number(value ?? 3)));
-                                                                    divideIntoBlocks(lessons, 1, lessons.filter(
-                                                                        (lesson) => Number(lesson.scheduled_count || 0) === 0
-                                                                    ).length);
+                                                                    divideIntoBlocks(lessons, 1);
                                                                 }}
                                                             />
                                                         </Space>
@@ -1398,18 +1525,20 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                             </>
                         )}
                         <Button type="primary" onClick={() => void applyScheduleTemplateToAllLessons()} disabled={remainingCount === 0}>
-                            {isTopuni ? "Áp dụng lịch tuần cho tất cả bài" : "Áp dụng lịch mẫu cho tất cả nhóm bài"}
+                            {isTopuni ? "Áp dụng lịch tuần cho các bài đã chọn" : "Áp dụng lịch mẫu cho các nhóm bài đã chọn"}
                         </Button>
                     </Card>
 
                     {!!lessons.length && (
                         <Alert
                             showIcon
-                            type={remainingCount > 0 ? "info" : "warning"}
+                            type={selectedLessonCount > 0 ? "info" : "warning"}
                             style={{ marginBottom: 12 }}
                             message={`Chương trình có ${lessons.length} bài · ${assignedCount} bài đã được gán lịch · ${remainingCount} bài chưa có lịch`}
                             description={remainingCount > 0
-                                ? `Hệ thống chỉ tạo cho bài chưa có lịch. Trong đó có ${pastCount} bài đã diễn ra; lần này đang chọn ${lessonLimit}/${remainingCount} bài còn lại.`
+                                ? selectedLessonCount > 0
+                                    ? `Hệ thống chỉ tạo cho bài chưa có lịch. Trong đó có ${pastCount} bài đã diễn ra; lần này đang chọn ${selectedLessonCount} bài chưa có lịch trong khoảng bài ${appliedRange?.from}–${appliedRange?.to}.`
+                                    : "Không có bài chưa được gán lịch trong khoảng đã chọn. Vui lòng chọn lại Từ bài và Đến bài."
                                 : "Tất cả bài đã được gán lịch nên không còn bài nào để tạo tự động."}
                         />
                     )}
@@ -1509,7 +1638,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                                                             }}
                                                                         />
                                                                     </Form.Item>
-                                                                    <Form.Item noStyle shouldUpdate>
+                                                                    <Form.Item noStyle dependencies={[["blocks", blockField.name, "lessons", lessonField.name, "sessions", sessionField.name, "start_time"]]}>
                                                                         {({ getFieldValue }) => {
                                                                             const startTime = getFieldValue(["blocks", blockField.name, "lessons", lessonField.name, "sessions", sessionField.name, "start_time"]);
                                                                             return (
@@ -1632,7 +1761,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                                                                         }}
                                                                                     />
                                                                                 </Form.Item>
-                                                                                <Form.Item noStyle shouldUpdate>
+                                                                                <Form.Item noStyle dependencies={[["blocks", blockField.name, "lessons", lessonField.name, "sessions", sessionField.name, "start_time"]]}>
                                                                                     {({ getFieldValue }) => {
                                                                                         const startTime = getFieldValue(["blocks", blockField.name, "lessons", lessonField.name, "sessions", sessionField.name, "start_time"]);
                                                                                         return (
@@ -1784,6 +1913,21 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                     color: #cf1322 !important;
                 }
 
+                .auto-range-feedback {
+                    min-height: 22px;
+                    margin-top: 4px;
+                    line-height: 22px;
+                    color: var(--ant-color-error, #ff4d4f);
+                    overflow-wrap: anywhere;
+                }
+
+                @media (min-width: 768px) {
+                    .auto-range-feedback {
+                        white-space: nowrap;
+                        overflow-wrap: normal;
+                    }
+                }
+
                 /* Mobile only — không ảnh hưởng desktop */
                 @media (max-width: 767px) {
 
@@ -1799,6 +1943,13 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                         max-width: 100% !important;
                         min-width: 0 !important;
                         margin: 0 !important;
+                    }
+
+                    .auto-main-settings > .ant-space-item:has(.auto-lesson-range) {
+                        flex: 1 1 100% !important;
+                    }
+                    .auto-lesson-range {
+                        width: 100% !important;
                     }
 
                     /* Mỗi buổi (Buổi mẫu N / Buổi N) chuyển sang flex wrap */
