@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import type { ColumnsType } from 'antd/es/table';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Avatar, Button, Card, Col, Descriptions, Form, Image, Input, Modal, Popconfirm, Radio, Row, Space, Spin, Switch, Grid, Tag, Tooltip, Typography, Upload, message } from 'antd';
-import { CheckCircleOutlined, DeleteOutlined, DownloadOutlined, EditOutlined, ExportOutlined, FileExcelOutlined, InboxOutlined, LinkOutlined, PlusOutlined, ReloadOutlined, UploadOutlined, InfoCircleOutlined, WarningOutlined, PictureOutlined, ExpandOutlined, CloseOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, CopyOutlined, DeleteOutlined, DownloadOutlined, EditOutlined, ExportOutlined, FileExcelOutlined, InboxOutlined, LinkOutlined, PlusOutlined, ReloadOutlined, UploadOutlined, InfoCircleOutlined, WarningOutlined, PictureOutlined, ExpandOutlined, CloseOutlined } from '@ant-design/icons';
 import { createProgramTeacherBanner, deleteProgramTeacherBanner, downloadProgramTeacherBannerTemplate, exportProgramTeacherBanners, getProgramTeacherBannerOptions, getProgramTeacherBanners, importProgramTeacherBanners, ProgramTeacherBanner, ProgramTeacherBannerPayload, updateProgramTeacherBanner } from '@/services/programTeacherBannerService';
 import { useAuthStore } from '@/stores/authStore';
 import CustomTable from '@/components/ui/Table';
@@ -22,6 +22,8 @@ export default function ProgramTeacherBannersPage() {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ProgramTeacherBanner | null>(null);
+  const [copying, setCopying] = useState<ProgramTeacherBanner | null>(null);
+  const [copyOptionsError, setCopyOptionsError] = useState(false);
   const [search, setSearch] = useState('');
   const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 });
   const [form] = Form.useForm<ProgramTeacherBannerPayload>();
@@ -80,15 +82,15 @@ export default function ProgramTeacherBannersPage() {
     setLoadingTeachers(true);
     try {
       const response: any = await getProgramTeacherBannerOptions();
-      if (requestId !== optionsRequestRef.current) return;
       const nextPrograms = response?.data?.programs || [];
       const nextTeachers = response?.data?.teachers || [];
       setAllPrograms(nextPrograms);
       setAllTeachers(nextTeachers);
+      if (requestId !== optionsRequestRef.current) return;
       setPrograms(nextPrograms);
       setTeachers(nextTeachers);
     }
-    catch (e: any) { message.error(e?.message || 'Không thể tải chương trình và giáo viên'); }
+    catch (e: any) { if (requestId === optionsRequestRef.current) message.error(e?.message || 'Không thể tải chương trình và giáo viên'); }
     finally {
       if (requestId === optionsRequestRef.current) {
         setLoadingPrograms(false);
@@ -103,11 +105,16 @@ export default function ProgramTeacherBannersPage() {
     try {
       const response: any = await getProgramTeacherBannerOptions(programCode);
       if (requestId === optionsRequestRef.current) setTeachers(response?.data?.teachers || []);
-    } catch (e: any) { message.error(e?.message || 'Không thể tải giáo viên'); }
+    } catch (e: any) { if (requestId === optionsRequestRef.current) message.error(e?.message || 'Không thể tải giáo viên'); }
     finally { if (requestId === optionsRequestRef.current) setLoadingTeachers(false); }
   };
   useEffect(() => { loadInitialOptions(); }, []);
   const showForm = (row?: ProgramTeacherBanner) => {
+    optionsRequestRef.current += 1;
+    setCopying(null);
+    setLoadingPrograms(false);
+    setLoadingTeachers(false);
+    setPreviewUrl(row?.banner_url || '');
     setEditing(row || null);
     setPreviewError(false);
     form.resetFields();
@@ -125,16 +132,64 @@ export default function ProgramTeacherBannersPage() {
       ? [currentTeacher, ...allTeachers]
       : allTeachers);
     setOpen(true);
+    if (!allPrograms.length || !allTeachers.length) void loadInitialOptions();
   };
+  const showCopyForm = async (row: ProgramTeacherBanner) => {
+    if (!canCreate) return;
+    setEditing(null);
+    setCopying(row);
+    setPreviewError(false);
+    setPreviewUrl(row.banner_url);
+    form.resetFields();
+    form.setFieldsValue({ teacher_profile_id: row.teacher_profile_id, banner_url: row.banner_url, status: row.status });
+    setPrograms([]);
+    setTeachers([{ id: row.teacher_profile_id, username: row.username, display_name: row.display_name }]);
+    setLoadingTeachers(false);
+    setOpen(true);
+    await loadCopyPrograms(row);
+  };
+  const loadCopyPrograms = async (row: ProgramTeacherBanner) => {
+    const requestId = ++optionsRequestRef.current;
+    setCopyOptionsError(false);
+    setLoadingPrograms(true);
+    try {
+      const response: any = await getProgramTeacherBannerOptions(undefined, row.teacher_profile_id);
+      if (requestId !== optionsRequestRef.current) return;
+      const availablePrograms = (response?.data?.programs || []).filter(
+        (program: { code: string }) => program.code.trim().toLowerCase() !== row.program_code.trim().toLowerCase()
+      );
+      setPrograms(availablePrograms);
+    } catch (e: any) {
+      if (requestId === optionsRequestRef.current) {
+        setCopyOptionsError(true);
+        message.error(e?.message || 'Không thể tải chương trình của giáo viên');
+      }
+    } finally {
+      if (requestId === optionsRequestRef.current) setLoadingPrograms(false);
+    }
+  };
+  const bannerLinks = (url: string) => <Space wrap>
+    <Typography.Link href={url} target="_blank" rel="noopener noreferrer"><LinkOutlined /> Mở ảnh gốc</Typography.Link>
+    <Typography.Text copyable={{
+      text: url,
+      icon: [<span key="copy"><CopyOutlined /> Copy link banner</span>, <span key="copied"><CheckCircleOutlined /> Đã copy</span>],
+      tooltips: ['Copy link banner', 'Đã copy link banner'],
+      onCopy: () => message.success('Đã copy link banner'),
+    }} />
+  </Space>;
   const closeForm = () => {
     if (saving) return;
     optionsRequestRef.current += 1;
     setOpen(false);
   };
   const save = async () => {
-    if (saving) return;
+    if (saving || (copying && (loadingPrograms || !programs.length))) return;
     try {
       const values = await form.validateFields();
+      if (copying && (values.teacher_profile_id !== copying.teacher_profile_id || !programs.some(program => program.code === values.program_code))) {
+        message.error('Vui lòng chọn chương trình khác của giáo viên này');
+        return;
+      }
       setSaving(true);
       const response: any = editing
         ? await updateProgramTeacherBanner(editing.id, values)
@@ -149,6 +204,7 @@ export default function ProgramTeacherBannersPage() {
         }
       }
       message.success(editing ? 'Đã cập nhật banner' : 'Đã thêm banner');
+      optionsRequestRef.current += 1;
       setOpen(false);
       form.resetFields();
       // Chỉ tải lại khi bản ghi mới không thuộc trang hiện tại. Cập nhật/sửa
@@ -189,9 +245,9 @@ export default function ProgramTeacherBannersPage() {
   const columns: ColumnsType<ProgramTeacherBanner> = [
             { title: 'Chương trình', dataIndex: 'program_code', width: 260, render: (code: string) => <Typography.Text strong copyable={{ text: code }}>{code}</Typography.Text> },
             { title: 'Giáo viên', width: 300, render: (_: unknown, r: ProgramTeacherBanner) => <Space size={10}><Avatar style={{ background: '#e6f4ff', color: '#1677ff' }}>{(r.display_name || r.username || 'G').trim().charAt(0).toUpperCase()}</Avatar><div><Typography.Text strong>{r.display_name || r.username}</Typography.Text><br/><Typography.Text type="secondary">{r.username}</Typography.Text></div></Space> },
-            { title: 'Banner', dataIndex: 'banner_url', width: 440, render: (url: string) => <Space size={12}><Image width={112} height={56} style={{ objectFit: 'cover', borderRadius: 6, border: '1px solid #f0f0f0' }} src={url} fallback="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" /><div style={{ minWidth: 0 }}><Typography.Text ellipsis={{ tooltip: url }} style={{ display: 'block', maxWidth: 260 }}>{url}</Typography.Text><Typography.Link href={url} target="_blank"><LinkOutlined /> Mở ảnh gốc</Typography.Link></div></Space> },
+            { title: 'Banner', dataIndex: 'banner_url', width: 440, render: (url: string) => <Space size={12}><Image width={112} height={56} style={{ objectFit: 'cover', borderRadius: 6, border: '1px solid #f0f0f0' }} src={url} fallback="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" /><div style={{ minWidth: 0 }}><Typography.Text ellipsis={{ tooltip: url }} style={{ display: 'block', maxWidth: 260 }}>{url}</Typography.Text>{bannerLinks(url)}</div></Space> },
             { title: 'Trạng thái', dataIndex: 'status', width: 130, align: 'center' as const, render: (v: number) => <Tag color={v ? 'success' : 'default'}>{v ? 'Hoạt động' : 'Đã tắt'}</Tag> },
-            { title: 'Thao tác', width: 110, fixed: 'right' as const, align: 'center' as const, render: (_: unknown, r: ProgramTeacherBanner) => <Space size={4}>{canUpdate && <Tooltip title="Chỉnh sửa"><Button type="text" icon={<EditOutlined />} onClick={() => showForm(r)} /></Tooltip>}{canDelete && <Popconfirm title="Xóa banner?" description="Cấu hình này sẽ bị xóa khỏi hệ thống." okText="Xóa" cancelText="Hủy" okButtonProps={{ danger: true }} onConfirm={async () => { await deleteProgramTeacherBanner(r.id); message.success('Đã xóa banner'); void load(); }}><Tooltip title="Xóa"><Button danger type="text" icon={<DeleteOutlined />} /></Tooltip></Popconfirm>}</Space> },
+            { title: 'Thao tác', width: 150, fixed: 'right' as const, align: 'center' as const, render: (_: unknown, r: ProgramTeacherBanner) => <Space size={4}>{canCreate && <Tooltip title="Sao chép để tạo banner"><Button type="text" aria-label="Sao chép để tạo banner" icon={<CopyOutlined />} onClick={() => void showCopyForm(r)} /></Tooltip>}{canUpdate && <Tooltip title="Chỉnh sửa"><Button type="text" icon={<EditOutlined />} onClick={() => showForm(r)} /></Tooltip>}{canDelete && <Popconfirm title="Xóa banner?" description="Cấu hình này sẽ bị xóa khỏi hệ thống." okText="Xóa" cancelText="Hủy" okButtonProps={{ danger: true }} onConfirm={async () => { await deleteProgramTeacherBanner(r.id); message.success('Đã xóa banner'); void load(); }}><Tooltip title="Xóa"><Button danger type="text" icon={<DeleteOutlined />} /></Tooltip></Popconfirm>}</Space> },
           ];
   return <div className="admin-responsive-page banner-admin-page">
     <Space direction="vertical" size={20} style={{ width: '100%' }}>
@@ -237,18 +293,19 @@ export default function ProgramTeacherBannersPage() {
           responsiveCardBreakpoint="md"
           responsiveCardContent={(record) => <MobileRecordCard title={record.program_code} meta={<>{record.display_name || record.username}<br />{record.username}</>} status={<Tag color={record.status ? 'success' : 'default'}>{record.status ? 'Hoạt động' : 'Đã tắt'}</Tag>} actions={columns[4].render?.(undefined, record, 0) as ReactNode}>
             <Image className="admin-mobile-banner" width="100%" src={record.banner_url} style={{ borderRadius: 8, objectFit: 'cover' }} />
-            <Typography.Link href={record.banner_url} target="_blank" rel="noopener noreferrer"><LinkOutlined /> Mở ảnh gốc</Typography.Link>
+            {bannerLinks(record.banner_url)}
           </MobileRecordCard>}
           columns={columns}
         />
       </Card>
     </Space>
     <Modal className="admin-responsive-modal"
-      title={editing ? 'Cập nhật banner' : 'Thêm banner'}
+      title={editing ? 'Cập nhật banner' : copying ? 'Sao chép banner' : 'Thêm banner'}
       open={open}
       onCancel={closeForm}
       onOk={save}
       confirmLoading={saving}
+      okButtonProps={{ disabled: !!copying && (loadingPrograms || !programs.length) }}
       cancelButtonProps={{ disabled: saving }}
       okText={editing ? 'Lưu thay đổi' : 'Thêm banner'}
       width={600}
@@ -258,19 +315,22 @@ export default function ProgramTeacherBannersPage() {
         <Alert
           showIcon
           type="info"
-          message="Mẹo: Chọn chương trình trước để lọc giáo viên chính xác hơn."
+          message={copying ? `Sao chép banner của ${copying.display_name || copying.username}. Chọn chương trình khác để tạo banner mới.` : 'Mẹo: Chọn chương trình trước để lọc giáo viên chính xác hơn.'}
+          description={copying ? `Đã loại chương trình gốc (${copying.program_code}). Giáo viên, đường dẫn ảnh và trạng thái được giữ lại.` : undefined}
           style={{ marginBottom: 16, padding: '8px 12px' }}
         />
+
+        {copying && !loadingPrograms && !programs.length && <Alert showIcon type="warning" message={copyOptionsError ? 'Không thể tải chương trình của giáo viên.' : 'Giáo viên không còn chương trình khác để sao chép banner.'} action={copyOptionsError ? <Button size="small" onClick={() => void loadCopyPrograms(copying)}>Thử lại</Button> : undefined} style={{ marginBottom: 16 }} />}
 
         <Row gutter={16}>
           <Col xs={24} sm={12}>
             <Form.Item name="program_code" label="Chương trình" rules={[{ required: true, message: 'Vui lòng chọn chương trình' }]}>
-              <Select allowClear showSearch optionFilterProp="label" placeholder="Tìm theo tên/mã" loading={loadingPrograms} disabled={saving} notFoundContent={loadingPrograms ? <Space><Spin size="small" /> Đang tải...</Space> : 'Không có dữ liệu'} options={programs.map(p => ({ value: p.code, label: p.subject_name && p.subject_name !== p.code ? `${p.subject_name} (${p.code})` : p.code }))} onChange={(code?: string) => { form.setFieldValue('teacher_profile_id', undefined); if (code) void loadTeachersForProgram(code); else setTeachers(allTeachers); }} />
+              <Select allowClear showSearch optionFilterProp="label" placeholder="Tìm theo tên/mã" loading={loadingPrograms} disabled={saving || loadingPrograms} notFoundContent={loadingPrograms ? <Space><Spin size="small" /> Đang tải...</Space> : 'Không có dữ liệu'} options={programs.map(p => ({ value: p.code, label: p.subject_name && p.subject_name !== p.code ? `${p.subject_name} (${p.code})` : p.code }))} onChange={(code?: string) => { if (copying) return; form.setFieldValue('teacher_profile_id', undefined); if (code) void loadTeachersForProgram(code); else { optionsRequestRef.current += 1; setLoadingTeachers(false); setTeachers(allTeachers); } }} />
             </Form.Item>
           </Col>
           <Col xs={24} sm={12}>
             <Form.Item name="teacher_profile_id" label="Giáo viên" rules={[{ required: true, message: 'Vui lòng chọn giáo viên' }]}>
-              <Select allowClear showSearch optionFilterProp="label" placeholder={selectedProgramCode ? 'Tìm giáo viên' : 'Chọn chương trình trước'} loading={loadingTeachers} disabled={saving || loadingTeachers || !selectedProgramCode} notFoundContent={loadingTeachers ? <Space><Spin size="small" /> Đang tải...</Space> : 'Không có dữ liệu'} options={teachers.map(t => ({ value: t.id, label: `${t.display_name || t.username} (${t.username})` }))} />
+              <Select allowClear showSearch optionFilterProp="label" placeholder={copying || selectedProgramCode ? 'Tìm giáo viên' : 'Chọn chương trình trước'} loading={loadingTeachers} disabled={saving || !!copying || loadingTeachers || !selectedProgramCode} notFoundContent={loadingTeachers ? <Space><Spin size="small" /> Đang tải...</Space> : 'Không có dữ liệu'} options={teachers.map(t => ({ value: t.id, label: `${t.display_name || t.username} (${t.username})` }))} />
             </Form.Item>
           </Col>
         </Row>
