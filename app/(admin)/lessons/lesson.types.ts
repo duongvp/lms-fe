@@ -5,6 +5,7 @@ export interface LessonDataType extends LessonApiResponse {
 }
 
 export interface LessonFilterValues {
+    calendar_source?: "livestream" | "feed";
     keyword?: string;
     grade?: number;
     subject_code?: string;

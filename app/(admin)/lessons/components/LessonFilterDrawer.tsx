@@ -8,6 +8,7 @@ import { Popup as MobilePopup } from "antd-mobile";
 import { useLessonProgramOptions } from "@/hooks/useLessonSubjectOptions";
 import type { LessonFilterValues } from "../lesson.types";
 import { cleanFilterValues } from "../lesson.utils";
+import { calendarSourceFromCode } from "@/helper/lesson";
 
 interface LessonFilterDrawerProps {
     open: boolean;
@@ -29,8 +30,13 @@ const LessonFilterDrawer = ({
     const [filterForm] = Form.useForm();
     const screens = Grid.useBreakpoint();
     const compact = !screens.md;
+    const selectedSource = Form.useWatch("calendar_source", filterForm)
+        ?? value.calendar_source
+        ?? calendarSourceFromCode(value.subject_code);
     const lessonPrograms = useLessonProgramOptions();
-    const programOptions = lessonPrograms.map((program) => ({
+    const programOptions = lessonPrograms
+        .filter((program) => calendarSourceFromCode(program.subject_code) === selectedSource)
+        .map((program) => ({
         value: program.subject_code,
         label: program.subject_name
             ? `${program.subject_code} — ${program.subject_name}`
@@ -41,8 +47,11 @@ const LessonFilterDrawer = ({
 
     useEffect(() => {
         filterForm.resetFields();
-        filterForm.setFieldsValue(value);
-    }, [filterForm, value]);
+        filterForm.setFieldsValue({
+            ...value,
+            calendar_source: value.calendar_source ?? calendarSourceFromCode(value.subject_code),
+        });
+    }, [filterForm, value, open]);
 
     const resetFilters = () => {
         filterForm.resetFields();
@@ -55,6 +64,22 @@ const LessonFilterDrawer = ({
             layout="vertical"
             onFinish={(values) => onSearch(cleanFilterValues(values))}
         >
+                <Form.Item name="calendar_source" label="Nguồn lịch">
+                    <Select
+                        options={[
+                            { value: "livestream", label: "Livestream" },
+                            { value: "feed", label: "Feed" },
+                        ]}
+                        placeholder="Chọn nguồn lịch"
+                        onChange={() => {
+                            filterForm.setFieldsValue({
+                                subject_code: undefined,
+                                grade: undefined,
+                                subject: undefined,
+                            });
+                        }}
+                    />
+                </Form.Item>
                 <Form.Item
                     name="subject_code"
                     label="Chương trình"
@@ -107,12 +132,12 @@ const LessonFilterDrawer = ({
                 onClose={onClose}
                 closeOnMaskClick
                 bodyClassName="schedule-filter-sheet"
-                bodyStyle={{ height: "min(430px, calc(100dvh - 48px))" }}
+                bodyStyle={{ height: "min(520px, calc(100dvh - 48px))" }}
             >
                 <div className="schedule-filter-sheet-header">
                     <div>
                         <Typography.Text strong>Bộ lọc đề cương</Typography.Text>
-                        <Typography.Text type="secondary">Lọc theo chương trình và khoảng bài</Typography.Text>
+                        <Typography.Text type="secondary">Lọc theo nguồn lịch, chương trình và khoảng bài</Typography.Text>
                     </div>
                     <Button type="text" aria-label="Đóng bộ lọc" icon={<CloseOutlined />} onClick={onClose} />
                 </div>

@@ -1,6 +1,7 @@
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import type { LessonFilterValues } from "./lesson.types";
+import { calendarSourceFromCode } from "@/helper/lesson";
 
 dayjs.extend(utc);
 
@@ -17,6 +18,10 @@ export const cleanFilterValues = (values: LessonFilterValues): LessonFilterValue
         if (value === undefined || value === null || value === "") return;
         (cleaned as Record<string, unknown>)[key] = typeof value === "string" ? value.trim() : value;
     });
+
+    if (cleaned.subject_code) {
+        cleaned.calendar_source = calendarSourceFromCode(cleaned.subject_code);
+    }
 
     return cleaned;
 };

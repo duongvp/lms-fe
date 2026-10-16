@@ -68,3 +68,12 @@ export const formatLessonScheduleOption = (lesson: LessonApiResponse) => {
 
     return `${baseLabel} - Đã gán lịch: ${scheduledCount} buổi`;
 };
+
+
+export const calendarSourceFromCode = (code: unknown): 'livestream' | 'feed' =>
+    /^feed-/i.test(String(code || '')) ? 'feed' : 'livestream';
+
+export const withProgramSourcePrefix = (code: string, source: 'livestream' | 'feed') => {
+    if (!code) return '';
+    return source === 'feed' && calendarSourceFromCode(code) !== 'feed' ? `feed-${code}` : code;
+};

@@ -27,9 +27,10 @@ export const useLessonsQuery = (params: LessonListParams | null) => {
 
 export const useSchedulesQuery = (params: LivestreamListParams | null) => {
     const userId = useAuthCacheScope();
+    const queryParams = params ? { ...params, calendar_source: params.calendar_source ?? "livestream" } : null;
     return useSWR(
-        params ? swrKeys.scheduleList(userId, params) : null,
-        () => getLivestreams(params!),
+        queryParams ? swrKeys.scheduleList(userId, queryParams) : null,
+        () => getLivestreams(queryParams!),
         { dedupingInterval: 15_000 }
     );
 };

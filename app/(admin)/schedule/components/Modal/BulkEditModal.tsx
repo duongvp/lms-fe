@@ -199,6 +199,7 @@ const uniqueHmoOptions = (options: HocmaiSectionOption[]) => Array.from(new Map(
 ).values());
 
 type ScheduleConflictDetail = {
+    calendar_source?: 'livestream' | 'feed';
     id: number;
     code?: string | null;
     learn_number?: number | null;
@@ -1775,6 +1776,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                 </Text>
                             </div>
 
+
                             {/* CHẾ ĐỘ 1: CẤU HÌNH CHUNG */}
                             {configMode === 'common' && (
                                 <Card className="bulk-common-card" size="small" style={{ borderRadius: 8, border: '1px solid #e8e8e8', padding: '8px 12px' }}>
@@ -2326,6 +2328,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                             </Form.Item>
                                                         </Col>
 
+
                                                         <Col xs={24} md={12} xl={4}>
                                                             <Form.Item
                                                                 label={<Text>Giáo viên</Text>}
@@ -2548,29 +2551,29 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                 className="bulk-preview-alert"
                                 description={
                                     <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                                <div className="bulk-preview-mobile">
-                                    {previewRows.map((row, index) => (
-                                        <Card key={row.id ?? index} size="small" title={row.label || `Lịch ${index + 1}`} extra={row.is_holiday ? <Tag color="red">Nghỉ học</Tag> : undefined}>
-                                            {operation === 'update' ? (
-                                                <>
-                                                    <div className="bulk-preview-field"><Text type="secondary">Tên bài</Text><div>{renderPreviewChange(row.current_lesson_name, row.next_lesson_name)}</div></div>
-                                                    <div className="bulk-preview-field"><Text type="secondary">Thứ học</Text><div>{renderPreviewChange(row.current_weekday, row.next_weekday)}</div></div>
-                                                    <div className="bulk-preview-field"><Text type="secondary">Thời gian</Text><div>{renderPreviewChange(row.current_schedule, row.next_schedule)}</div></div>
-                                                    <div className="bulk-preview-field"><Text type="secondary">Giáo viên</Text><div>{renderPreviewChange(row.current_teacher, row.next_teacher)}</div></div>
-                                                    <div className="bulk-preview-field"><Text type="secondary">Trợ giảng</Text><div>{renderPreviewChange(row.current_assistant, row.next_assistant)}</div></div>
-                                                    <div className="bulk-preview-field"><Text type="secondary">Lesson ID HMO</Text><div>{renderMappingPreviewChange(row.current, row.next)}</div></div>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <div className="bulk-preview-field"><Text type="secondary">Tên bài sau thao tác</Text><div><Text>{row.next_lesson_name || '-'}</Text></div></div>
-                                                    <div className="bulk-preview-field"><Text type="secondary">Lịch hiện tại</Text><div><Text>{row.current || '-'}</Text></div></div>
-                                                    <div className="bulk-preview-field"><Text type="secondary">Sau thao tác</Text><div><Text>{row.next || '-'}</Text></div></div>
-                                                </>
-                                            )}
-                                        </Card>
-                                    ))}
-                                </div>
-                                <div className="bulk-preview-desktop">
+                                        <div className="bulk-preview-mobile">
+                                            {previewRows.map((row, index) => (
+                                                <Card key={row.id ?? index} size="small" title={row.label || `Lịch ${index + 1}`} extra={row.is_holiday ? <Tag color="red">Nghỉ học</Tag> : undefined}>
+                                                    {operation === 'update' ? (
+                                                        <>
+                                                            <div className="bulk-preview-field"><Text type="secondary">Tên bài</Text><div>{renderPreviewChange(row.current_lesson_name, row.next_lesson_name)}</div></div>
+                                                            <div className="bulk-preview-field"><Text type="secondary">Thứ học</Text><div>{renderPreviewChange(row.current_weekday, row.next_weekday)}</div></div>
+                                                            <div className="bulk-preview-field"><Text type="secondary">Thời gian</Text><div>{renderPreviewChange(row.current_schedule, row.next_schedule)}</div></div>
+                                                            <div className="bulk-preview-field"><Text type="secondary">Giáo viên</Text><div>{renderPreviewChange(row.current_teacher, row.next_teacher)}</div></div>
+                                                            <div className="bulk-preview-field"><Text type="secondary">Trợ giảng</Text><div>{renderPreviewChange(row.current_assistant, row.next_assistant)}</div></div>
+                                                            <div className="bulk-preview-field"><Text type="secondary">Lesson ID HMO</Text><div>{renderMappingPreviewChange(row.current, row.next)}</div></div>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <div className="bulk-preview-field"><Text type="secondary">Tên bài sau thao tác</Text><div><Text>{row.next_lesson_name || '-'}</Text></div></div>
+                                                            <div className="bulk-preview-field"><Text type="secondary">Lịch hiện tại</Text><div><Text>{row.current || '-'}</Text></div></div>
+                                                            <div className="bulk-preview-field"><Text type="secondary">Sau thao tác</Text><div><Text>{row.next || '-'}</Text></div></div>
+                                                        </>
+                                                    )}
+                                                </Card>
+                                            ))}
+                                        </div>
+                                        <div className="bulk-preview-desktop">
                                             <Table
                                                 scroll={{ x: "max-content" }}
                                                 size="small"
@@ -2654,6 +2657,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                         {displayedSubmitError.conflicts.map((conflict) => {
                                                             const params = new URLSearchParams({ calendar_id: String(conflict.id) });
                                                             if (conflict.code) params.set('program', conflict.code);
+                                                            if (conflict.calendar_source === 'feed') params.set('calendar_source', 'feed');
                                                             const summary = [
                                                                 conflict.staff_type === 'course' ? 'Khóa học' : conflict.staff_type === 'teacher' ? 'Giáo viên' : conflict.staff_type === 'assistant' ? 'Trợ giảng' : null,
                                                                 conflict.username ? `“${conflict.username}”` : null,

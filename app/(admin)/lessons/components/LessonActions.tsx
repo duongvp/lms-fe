@@ -11,6 +11,7 @@ import {
   StopOutlined,
   UnorderedListOutlined,
   ReloadOutlined,
+  SyncOutlined,
   LinkOutlined,
   FolderAddOutlined,
   UploadOutlined,
@@ -160,12 +161,28 @@ const LessonActions = ({
         </Button>
       )}
       {canEdit && (
-        <Button onClick={onSyncScormNames}>Đồng bộ từ Google Sheets</Button>
-      )}
-      {canEdit && (
-        <Button disabled={!canManageCourseIds} onClick={onSyncHocmaiScormNames}>
-          Đồng bộ tên SCORM từ HOCMAI
-        </Button>
+        <Dropdown
+          menu={{
+            items: [
+              {
+                key: "google-sheets",
+                label: "Đồng bộ từ Google Sheets",
+                onClick: onSyncScormNames,
+              },
+              {
+                key: "hocmai-scorm",
+                label: "Đồng bộ tên SCORM từ HOCMAI",
+                disabled: !canManageCourseIds,
+                onClick: onSyncHocmaiScormNames,
+              },
+            ],
+          }}
+          trigger={["click"]}
+        >
+          <Button icon={<SyncOutlined />}>
+            Đồng bộ <DownOutlined />
+          </Button>
+        </Dropdown>
       )}
       {canEdit && (
         <Button icon={<UnorderedListOutlined />} onClick={onEnableReorder}>

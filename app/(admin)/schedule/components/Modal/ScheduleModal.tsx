@@ -21,7 +21,7 @@ import { resolveFieldRule } from '@/helper/fieldPolicy';
 import { GRADE_OPTIONS } from '@/constants/subjects';
 import { useLessonProgramOptions, useLessonSubjectOptions } from '@/hooks/useLessonSubjectOptions';
 import { createLesson, type LessonApiResponse, type LessonListParams } from '@/services/lessonService';
-import { buildLessonSubjectCode, formatLessonScheduleOption, getSuggestedSchoolYear } from '@/helper/lesson';
+import { buildLessonSubjectCode, formatLessonScheduleOption, getSuggestedSchoolYear, calendarSourceFromCode } from '@/helper/lesson';
 import { useAuthStore } from '@/stores/authStore';
 import { PermissionKey } from '@/types/permissions';
 import { useLessonsQuery, useLmsCache, usePackageCoursesQuery, useSchedulesQuery } from '@/hooks/useLmsQueries';
@@ -225,7 +225,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const tripleColumnSpan = modalFrame.width < 680 ? 24 : 8;
     const usesProgramContext = !isEdit && Boolean(programCode);
     const [loading, setLoading] = useState(false);
-    const [modalContentReady, setModalContentReady] = useState(false);
+    const formInitialized = React.useRef(false);
     // Cho modal render trước, rồi mới tải các lựa chọn phụ để thao tác mở không bị khựng.
     const [loadSupportingData, setLoadSupportingData] = useState(false);
 
@@ -251,6 +251,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const selectedBulkSubject = Form.useWatch('bulk_subject_name', form);
     const selectedBulkSubjectCode = Form.useWatch('bulk_subject_code', form);
     const selectedBulkCourseCode = Form.useWatch('bulk_code', form);
+    const calendarSource = calendarSourceFromCode(usesProgramContext ? programCode : addMode === 'bulk' ? selectedBulkSubjectCode : selectedSubjectCode);
     const newSessionStartTime = Form.useWatch(['new_session', 'start_time'], form) as Dayjs | undefined;
     const newSessionDate = Form.useWatch(['new_session', 'date'], form) as Dayjs | undefined;
     const singleStartTime = Form.useWatch('start_time', form) as Dayjs | undefined;
@@ -293,13 +294,10 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     }, [draftDate, draftEndTime, draftLessonName, draftTeacher, isEdit, onDraftChange, open, selectedLessonName, singleStartTime]);
 
     React.useEffect(() => {
-        setLoadSupportingData(false);
-        if (!open || !modalContentReady) return;
-        const timer = window.setTimeout(() => setLoadSupportingData(true), 50);
-        return () => window.clearTimeout(timer);
-    }, [modalContentReady, open]);
+        if (!open) setLoadSupportingData(false);
+    }, [open]);
 
-    React.useEffect(() => {
+    React.useLayoutEffect(() => {
         if (!open || typeof window === 'undefined') return;
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
@@ -392,6 +390,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         grade: selectedGrade || undefined,
         subject_code: contextProgramCode,
         course_code: selectedCourseCode?.trim() || undefined,
+        calendar_source: calendarSource,
         sort_by: 'learn_number',
         sort_order: 'asc',
     } : null;
@@ -403,6 +402,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         grade: selectedBulkGrade,
         subject_code: selectedBulkSubjectCode,
         course_code: selectedBulkCourseCode?.trim() || undefined,
+        calendar_source: calendarSource,
         sort_by: 'learn_number',
         sort_order: 'asc',
     } : null;
@@ -410,10 +410,11 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const bulkLessonsQuery = useLessonsQuery(bulkLessonParams);
     const courseCode = initialData?.code || initialData?.class_code;
     const courseEndQuery = useSchedulesQuery(
-        open && modalContentReady && isEdit && courseCode ? {
+        open && loadSupportingData && isEdit && courseCode ? {
             page: 1,
             limit: 100,
             code_exact: courseCode,
+            calendar_source: initialData?.calendar_source || 'livestream',
             system_type: initialData?.system_type,
             sort_by: 'start_time',
             sort_order: 'desc',
@@ -436,7 +437,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         if (!open || !usesProgramContext || !contextProgramCode || addMode !== 'single') return;
         let active = true;
         setLoadingProgramLessons(true);
-        getProgramLessonsForScheduling(contextProgramCode)
+        getProgramLessonsForScheduling(contextProgramCode, calendarSource)
             .then((response: any) => {
                 if (!active) return;
                 setLessonOptions((Array.isArray(response?.data) ? response.data : []).map((lesson: any) => ({
@@ -453,7 +454,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             })
             .finally(() => active && setLoadingProgramLessons(false));
         return () => { active = false; };
-    }, [addMode, contextProgramCode, messageApi, open, usesProgramContext]);
+    }, [addMode, calendarSource, contextProgramCode, messageApi, open, usesProgramContext]);
 
     React.useEffect(() => {
         if (usesProgramContext) return;
@@ -659,7 +660,6 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         setCourseEndDate(null);
         setCourseLastStartTime(null);
         setCourseCadenceDays(undefined);
-        setModalContentReady(false);
     };
 
     const handleCreateQuickLesson = async ({
@@ -818,8 +818,15 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     };
 
 
-    React.useEffect(() => {
-        if (open && modalContentReady) {
+    // Khởi tạo trước khi trình duyệt vẽ modal; dữ liệu nền không được reset
+    // lại form khi người dùng đã bắt đầu nhập.
+    React.useLayoutEffect(() => {
+        if (!open) {
+            formInitialized.current = false;
+            return;
+        }
+        if (!formInitialized.current) {
+            formInitialized.current = true;
             if (isEdit) {
                 form.setFieldsValue({
                     ...initialData,
@@ -883,7 +890,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                 }
             }
         }
-    }, [open, modalContentReady, initialData, form, isEdit, afterCancel, programCode, selectedProgram]);
+    }, [open, initialData, form, isEdit, afterCancel, programCode, selectedProgram]);
 
     React.useEffect(() => {
         const rows: any[] = courseEndQuery.data?.data?.data ?? [];
@@ -939,10 +946,10 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                 open={open}
                 onCancel={handleClose}
                 afterOpenChange={(visible) => {
-                    if (visible) setModalContentReady(true);
+                    if (visible) setLoadSupportingData(true);
                 }}
                 afterClose={resetAfterClose}
-                destroyOnClose
+                forceRender
                 onOk={() => form.submit()}
                 width={modalFrame.width}
                 style={{
@@ -1009,26 +1016,11 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                         onClick={() => form.submit()}
                         icon={<EyeFilled />}
                         loading={loading}
-                        disabled={!modalContentReady}
                     >
                         Xem trước
                     </Button>,
                 ]}
             >
-                {!modalContentReady ? (
-                    <div style={{ minHeight: 180, display: 'grid', placeItems: 'center' }}>
-                        <Typography.Text type="secondary">Đang mở biểu mẫu...</Typography.Text>
-                    </div>
-                ) : (<>
-                {!loadSupportingData && (
-                    <Alert
-                        showIcon
-                        type="info"
-                        message="Đang chuẩn bị biểu mẫu"
-                        description="Danh sách bài học và dữ liệu liên kết được nạp ở nền. Bạn có thể bắt đầu nhập thông tin ngay."
-                        style={{ marginBottom: 16 }}
-                    />
-                )}
                 {isEdit && (
                     <div style={{ marginBottom: 24 }}>
                         <Radio.Group
@@ -1093,6 +1085,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                 >
 
                     {isEdit && updateMode !== 'makeup' && updateMode !== 'following' && renderChangeReason()}
+
 
                     {/* Form fields for Single Add and Current Update */}
                     {((!isEdit && addMode === 'single') || (isEdit && updateMode === 'current')) && (
@@ -1947,7 +1940,6 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                     )}
 
                 </Form>
-                </>)}
             </Modal>
 
             {previewOpen && previewValues && (

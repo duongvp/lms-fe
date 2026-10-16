@@ -1,4 +1,5 @@
 "use client";
+import { calendarSourceFromCode } from "@/helper/lesson";
 
 import Select from "@/components/ui/MobileSelect";
 import { PlusOutlined, SyncOutlined } from "@ant-design/icons";
@@ -335,6 +336,8 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     const [loadingHmoLessonIds, setLoadingHmoLessonIds] = useState<Set<string>>(new Set());
     const [syncingHmoLessonIds, setSyncingHmoLessonIds] = useState(false);
     const [hmoSyncNotes, setHmoSyncNotes] = useState<Record<string, { type: "success" | "warning"; message: string }>>({});
+    const calendarSource = calendarSourceFromCode(programCode);
+    const lessonContextKey = `${programCode}:${calendarSource}`;
     const hmoSyncNameSource = Form.useWatch("hmo_sync_name_source", form) || "lesson";
     const requestedHmoLessonIds = useRef(new Set<string>());
     const hmoOptionsRef = useRef<Record<string, HocmaiSectionOption[]>>({});
@@ -351,8 +354,8 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     // Lịch tự động phải ưu tiên system_type trả về cùng đề cương đang tạo lịch.
     // Danh sách option chương trình có thể chưa tải xong hoặc bị giới hạn quyền,
     // nhưng lessons đã là nguồn dữ liệu bắt buộc của màn hình này.
-    const programLessonsReady = loadedLessonsProgramCode === programCode;
-    const programSystemType = programLessonsReady
+    const programLessonsReady = loadedLessonsProgramCode === lessonContextKey;
+    const programSystemType = loadedLessonsProgramCode?.startsWith(`${programCode}:`)
         ? lessons.find((lesson) => lesson.system_type === "topuni")?.system_type
             || lessons.find((lesson) => lesson.system_type === "topclass")?.system_type
             || selectedProgram?.system_type
@@ -616,6 +619,8 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     useEffect(() => {
         if (!open || !programCode) return;
         let active = true;
+        setPreview([]);
+        setPayload(null);
         hmoGeneration.current += 1;
         clearTimeout(hmoPublishTimer.current);
         hmoPublishTimer.current = undefined;
@@ -629,13 +634,13 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
         appliedRangeKey.current = "";
         setAppliedRange(null);
         setLoadingLessons(true);
-        getProgramLessonsForScheduling(programCode)
+        getProgramLessonsForScheduling(programCode, calendarSource)
             .then((response: any) => {
                 if (!active) return;
                 const rows = Array.isArray(response?.data) ? response.data : [];
                 form.setFieldsValue({ ...getDefaultLessonRange(rows), blocks: [] });
                 setLessons(rows);
-                setLoadedLessonsProgramCode(programCode);
+                setLoadedLessonsProgramCode(lessonContextKey);
                 setVisibleBlockCount(8);
                 setHmoOptions({});
                 hmoOptionsRef.current = {};
@@ -648,7 +653,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             .catch((error: any) => {
                 if (!active) return;
                 setLessons([]);
-                setLoadedLessonsProgramCode(programCode);
+                setLoadedLessonsProgramCode(lessonContextKey);
                 message.error(error?.message || "Không thể tải bài học của chương trình");
             })
             .finally(() => active && setLoadingLessons(false));
@@ -661,7 +666,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
         };
         // form ổn định trong suốt vòng đời component.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, programCode]);
+    }, [open, programCode, calendarSource]);
 
     // Tự động fill system_type từ Chương trình đã chọn
     useEffect(() => {
@@ -893,6 +898,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     };
 
     const buildPayload = async (): Promise<AutoSchedulePayload> => {
+        if (!programLessonsReady || loadingLessons) throw new Error("Đang tải bài học cho nguồn lịch đã chọn");
         await form.validateFields(["from_learn_number", "to_learn_number"]);
         rangeUpdate.current.flush();
         const values = await form.validateFields();
@@ -1177,7 +1183,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             footer={[
                 <Button key="cancel" onClick={onClose} disabled={loading}>Đóng</Button>,
                 <RangePreviewButton key="preview" form={form} lessons={lessons} max={maxLearnNumber}
-                    loading={loading} disabled={!programSystemType || loadingLessons} onClick={() => void handlePreview()} />,
+                    loading={loading} disabled={!programSystemType || !programLessonsReady || loadingLessons} onClick={() => void handlePreview()} />,
                 <Button key="commit" type="primary" disabled={!preview.length} loading={loading} onClick={() => void handleCommit()}>
                     Xác nhận tạo {preview.length || ""} lịch
                 </Button>,
@@ -1242,6 +1248,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                     }}
                 >
                     <Space className="auto-main-settings" align="start" wrap>
+
                         <Form.Item
                             name="system_type"
                             label="Hệ thống"

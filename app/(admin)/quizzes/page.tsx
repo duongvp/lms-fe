@@ -11,6 +11,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { rememberProgramContextUrl } from "@/components/layouts/AdminLayout/SideMenu";
 import { PermissionKey } from "@/types/permissions";
 import { resolveModuleFieldPermissions, sanitizeEditablePayload } from "@/helper/fieldPolicy";
+import { calendarSourceFromCode } from "@/helper/lesson";
 import type { ModuleField } from "@/types/fieldPolicy";
 import { useModuleFieldsQuery } from "@/hooks/useLmsQueries";
 import {
@@ -194,6 +195,20 @@ const QuizManagementPage = () => {
         const sharedProgram = String(useAuthStore.getState().currentProgram || "").trim();
         const program = urlProgram || sharedProgram;
         if (!program) return;
+        if (calendarSourceFromCode(program) !== "livestream") {
+            setFilters({});
+            setSubmittedFilters({});
+            submittedFiltersRef.current = {};
+            setKeyword("");
+            setSubmittedKeyword("");
+            setHasSearched(false);
+            setPage(1);
+            if (currentUrl !== "/quizzes") {
+                window.history.replaceState(window.history.state, "", "/quizzes");
+            }
+            rememberProgramContextUrl("/quizzes");
+            return;
+        }
         useAuthStore.getState().setCurrentProgram(program);
         if (!urlProgram) {
             const params = new URLSearchParams(searchParams.toString());
@@ -422,6 +437,9 @@ const QuizManagementPage = () => {
             searchText: `${item.code} ${item.subject_name || ""}`,
         }));
     }, [classRows]);
+    const livestreamClassOptions = classOptions.filter(
+        (item) => calendarSourceFromCode(item.value) === "livestream"
+    );
 
     const resetEditor = () => {
         setEditing(null);
@@ -467,13 +485,14 @@ const QuizManagementPage = () => {
             || useAuthStore.getState().currentProgram
             || ""
         ).trim();
-        const resetFilters: QuizFilterValues = program ? { code: program } : {};
+        const livestreamProgram = calendarSourceFromCode(program) === "livestream" ? program : "";
+        const resetFilters: QuizFilterValues = livestreamProgram ? { code: livestreamProgram } : {};
         setFilters(resetFilters);
         setKeyword("");
         setSubmittedFilters(resetFilters);
         submittedFiltersRef.current = resetFilters;
         setSubmittedKeyword("");
-        setHasSearched(Boolean(program));
+        setHasSearched(Boolean(livestreamProgram));
         setPage(1);
         replaceQuizUrl(resetFilters);
     };
@@ -832,7 +851,7 @@ const QuizManagementPage = () => {
                             filterOption={(input, option) =>
                                 String(option?.label || "").toLowerCase().includes(input.toLowerCase())
                             }
-                            options={classOptions}
+                            options={livestreamClassOptions}
                             value={filters.code || undefined}
                             onChange={(value) => setFilters((previous) => ({
                                 ...previous,

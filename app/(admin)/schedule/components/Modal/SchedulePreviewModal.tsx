@@ -65,6 +65,7 @@ interface SchedulePreviewModalProps {
     errorMessage?: string | null;
     conflicts?: Array<{
         id: number;
+        calendar_source?: 'livestream' | 'feed';
         code?: string | null;
         learn_number?: number | null;
         lesson_name?: string | null;
@@ -344,6 +345,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     page,
                     limit: 100,
                     code_exact: code,
+                    calendar_source: initialData?.calendar_source || 'livestream',
                     system_type: initialData?.system_type,
                     start_time: currentStart.subtract(1, 'second').toISOString(),
                     sort_by: 'start_time,id',
@@ -1366,6 +1368,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                                 {conflicts.map((conflict) => {
                                     const params = new URLSearchParams({ calendar_id: String(conflict.id) });
                                     if (conflict.code) params.set('program', conflict.code);
+                                    if (conflict.calendar_source === 'feed') params.set('calendar_source', 'feed');
                                     const label = [
                                         conflict.staff_type === 'teacher' ? 'Giáo viên' : 'Trợ giảng',
                                         conflict.username ? `“${conflict.username}”` : null,

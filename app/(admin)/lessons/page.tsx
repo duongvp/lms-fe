@@ -121,6 +121,7 @@ const buildLessonUrl = (values: LessonFilterValues, page = 1) => {
   const params = new URLSearchParams();
   const program = String(cleaned.subject_code || "").trim();
   if (program) params.set("program", program);
+  if (cleaned.calendar_source) params.set("calendar_source", cleaned.calendar_source);
   if (cleaned.grade !== undefined) params.set("grade", String(cleaned.grade));
   if (cleaned.subject) params.set("subject", String(cleaned.subject).trim());
   if (cleaned.from_learn_number !== undefined) {

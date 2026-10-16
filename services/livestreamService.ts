@@ -4,7 +4,10 @@ import { fetchInstance } from "@/ultils/fetchInstance";
 
 const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://localhost:5000"}/api/livestreams`;
 
+export type CalendarSource = 'livestream' | 'feed';
+
 export interface LivestreamPayload {
+    calendar_source?: CalendarSource;
     system_type: string;
     code: string;
     teacher: string;
@@ -42,6 +45,7 @@ export interface BulkLivestreamPayload {
 }
 
 export interface AutoSchedulePayload {
+    calendar_source?: CalendarSource;
     program_code: string;
     system_type: "topclass" | "topuni";
     start_date: string;
@@ -141,8 +145,8 @@ export interface HocmaiSectionsBatchData {
     errors_by_lesson_id: Record<string, string[]>;
 }
 
-export const getProgramLessonsForScheduling = (programCode: string) =>
-    fetchInstance(`${API_BASE_URL}/programs/${encodeURIComponent(programCode)}/lessons`, {
+export const getProgramLessonsForScheduling = (programCode: string, source?: CalendarSource) =>
+    fetchInstance(`${API_BASE_URL}/programs/${encodeURIComponent(programCode)}/lessons${source ? `?calendar_source=${source}` : ""}`, {
         method: "GET",
         credentials: "include",
         cache: "no-store",
@@ -337,6 +341,7 @@ export const importLivestreamMappings = (payload: any) =>
 
 // Hàm mới: lấy danh sách lịch
 export interface LivestreamListParams {
+    calendar_source?: CalendarSource;
     page?: number;
     limit?: number;
     keyword?: string;
@@ -370,7 +375,7 @@ const asCalendarWallTime = (value: unknown) => {
 
 export const getLivestreams = async (params: LivestreamListParams) => {
     const query = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
+    Object.entries({ ...params, calendar_source: params.calendar_source ?? "livestream" }).forEach(([key, value]) => {
         if (value === undefined || value === null || value === "") return;
         query.append(key, String(value));
     });
@@ -719,6 +724,7 @@ export const toLivestreamPayload = (values: any): LivestreamPayload => {
     const payload = normalizeSchedulePayload(values);
 
     return {
+
         system_type: payload.system_type,
         code: payload.class_code,
         teacher: payload.teacher,
@@ -749,6 +755,7 @@ export const toBulkLivestreamPayload = (values: any): BulkLivestreamPayload => {
             : values;
 
         return {
+
             system_type: values.bulk_system_type,
             code: values.bulk_code,
             teacher: config?.teacher ?? config?.bulk_teacher,
@@ -775,6 +782,7 @@ export const toUpdateLivestreamPayload = (values: any): any => {
 
     if (payload.update_mode === 'following') {
         return {
+
             update_mode: 'following',
             lesson_status: 1,
             new_session: {
@@ -790,6 +798,7 @@ export const toUpdateLivestreamPayload = (values: any): any => {
 
     // current mode
     return {
+
         update_mode: 'current',
         send_notification: payload.send_notification !== false,
         change_reason: String(payload.change_reason || payload.reason || '').trim(),
@@ -807,6 +816,7 @@ export const toRescheduleLivestreamPayload = (values: any): any => {
 
     if (mode === "cancel") {
         return {
+
             mode: "cancel",
             send_notification: payload.send_notification !== false,
             reason: String(payload.change_reason || payload.reason || "").trim(),
@@ -816,6 +826,7 @@ export const toRescheduleLivestreamPayload = (values: any): any => {
     }
 
     return {
+
         mode,
         source_state: payload.source_state,
         send_notification: payload.send_notification !== false,

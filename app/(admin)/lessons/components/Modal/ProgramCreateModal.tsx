@@ -1,12 +1,13 @@
 "use client";
 
 import Select from "@/components/ui/MobileSelect";
+import { Select as SourceSelect } from "antd";
 import { Alert, Button, Col, Form, Input, InputNumber, Modal, Row, Space, Typography } from "antd";
 import { useEffect } from "react";
 import { useLessonSubjectOptions } from "@/hooks/useLessonSubjectOptions";
 import type { CreateLessonProgramPayload } from "@/services/lessonService";
 import { GRADE_OPTIONS } from "@/constants/subjects";
-import { buildLessonSubjectCode, buildTopuniProgramCode, getSuggestedSchoolYear } from "@/helper/lesson";
+import { buildLessonSubjectCode, buildTopuniProgramCode, getSuggestedSchoolYear, withProgramSourcePrefix } from "@/helper/lesson";
 import { getTopuniPathwayOptions, TOPUNI_EXAM_OPTIONS, TOPUNI_PHASE_OPTIONS, TOPUNI_SUBJECT_OPTIONS } from "@/constants/topuniProgram";
 
 type Props = {
@@ -24,6 +25,7 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
     const [form] = Form.useForm<CreateLessonProgramPayload & { school_year: number; phase: string; phase_number?: number | null; exam: string; pathway: string }>();
     // Chỉ lấy các môn đã có trong cột lessons.subject_name; người dùng vẫn có thể nhập môn mới.
     const subjectOptions = useLessonSubjectOptions(true, false);
+    const selectedSource = Form.useWatch("calendar_source", form) || "livestream";
     const selectedGrade = Form.useWatch("grade", form);
     const selectedSystemType = Form.useWatch("system_type", form);
     const selectedSubject = Form.useWatch("subject_name", form);
@@ -73,8 +75,8 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
             && Number.isInteger(grade) && grade >= 1 && grade <= 12
             && Number.isInteger(schoolYear) && schoolYear >= 2020 && schoolYear <= 2100
             ? buildLessonSubjectCode(subjectName, grade, schoolYear) : "";
-        form.setFieldValue("subject_code", generatedCode || undefined);
-    }, [form, open, selectedGrade, selectedSchoolYear, selectedSubject, selectedSystemType, selectedPhase, selectedPhaseNumber, selectedExam, selectedPathway]);
+        form.setFieldValue("subject_code", withProgramSourcePrefix(generatedCode, selectedSource) || undefined);
+    }, [form, open, selectedSource, selectedGrade, selectedSchoolYear, selectedSubject, selectedSystemType, selectedPhase, selectedPhaseNumber, selectedExam, selectedPathway]);
 
     return (
         <Modal
@@ -101,14 +103,14 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
                 className="responsive-modal-form"
                 form={form}
                 layout="vertical"
-                initialValues={{ school_year: getSuggestedSchoolYear(), system_type: "topclass", phase: "tongon" }}
+                initialValues={{ calendar_source: "livestream", school_year: getSuggestedSchoolYear(), system_type: "topclass", phase: "tongon" }}
                 onFinish={({ school_year: _schoolYear, phase: _phase, phase_number: _phaseNumber, exam: _exam, pathway: _pathway, subject_name, ...values }) => onSubmit({
                     ...values,
                     subject_name: normalizeSubjectName(subject_name),
                 })}
             >
                 <Row gutter={12}>
-                    <Col xs={24} md={isTopuni ? 8 : 7}>
+                    <Col xs={24} md={isTopuni ? 8 : 6}>
                         <Form.Item name="system_type" label="Hệ thống" rules={[{ required: true }]}> 
                             <Select options={[
                                 { value: "topclass", label: "Topclass" },
@@ -116,7 +118,7 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
                             ]} />
                         </Form.Item>
                     </Col>
-                    <Col xs={24} md={7} style={{ display: isTopuni ? "none" : undefined }}>
+                    <Col xs={24} md={5} style={{ display: isTopuni ? "none" : undefined }}>
                         <Form.Item
                             name="grade"
                             label="Khối"
@@ -125,7 +127,7 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
                             <Select options={GRADE_OPTIONS} placeholder="Chọn khối" />
                         </Form.Item>
                     </Col>
-                    <Col xs={24} md={isTopuni ? 8 : 10}>
+                    <Col xs={24} md={8}>
                         <Form.Item
                             name="subject_name"
                             label="Môn học"
@@ -141,7 +143,7 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
                             />
                         </Form.Item>
                     </Col>
-                    <Col xs={24} md={isTopuni ? 8 : 7}>
+                    <Col xs={24} md={isTopuni ? 8 : 5}>
                         <Form.Item
                             name="school_year"
                             label={isTopuni ? "Năm học (năm kết thúc)" : "Năm kết thúc"}
@@ -184,6 +186,13 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
                         </Form.Item>
                     </Col>
                 </Row>}
+                <Row gutter={12}>
+                    <Col xs={24} md={8}>
+                        <Form.Item name="calendar_source" label="Nguồn lịch" rules={[{ required: true, message: 'Chọn nguồn lịch' }]}>
+                            <SourceSelect options={[{ value: 'livestream', label: 'Livestream' }, { value: 'feed', label: 'Feed' }]} />
+                        </Form.Item>
+                    </Col>
+                    <Col xs={24} md={16}>
                 <Form.Item
                     name="subject_code"
                     label="Mã chương trình"
@@ -192,12 +201,14 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
                         : "Tự sinh từ môn học, khối và năm kết thúc. Bạn có thể nhập môn mới trực tiếp và sửa mã khi cần."}</Typography.Text>}
                     rules={[
                         { required: true, whitespace: true, message: "Nhập Mã chương trình" },
-                        { max: 100, message: "Mã chương trình không được quá 100 ký tự" },
+                        { max: selectedSource === "feed" ? 30 : 100, message: selectedSource === "feed" ? "Mã Feed không được quá 30 ký tự, bao gồm feed-" : "Mã chương trình không được quá 100 ký tự" },
                         { pattern: /^[A-Za-z0-9_-]+$/, message: "Chỉ dùng chữ không dấu, số, dấu gạch ngang hoặc gạch dưới" },
                     ]}
                 >
                     <Input placeholder={isTopuni ? "VD: tongontoantsav2027" : "VD: nguvan-6-2027"} maxLength={100} />
                 </Form.Item>
+                    </Col>
+                </Row>
                 <Form.Item
                     name="lesson_name"
                     label="Tên bài học đầu tiên"

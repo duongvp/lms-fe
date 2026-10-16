@@ -71,6 +71,7 @@ export interface LessonApiResponse {
 }
 
 export interface LessonListParams {
+  calendar_source?: 'livestream' | 'feed';
   page?: number;
   limit?: number;
   keyword?: string;
@@ -97,6 +98,7 @@ export interface LessonProgramOption extends LessonSubjectOption {
 }
 
 export interface CreateLessonProgramPayload {
+  calendar_source?: "livestream" | "feed";
   grade?: number;
   system_type: "topclass" | "topuni";
   subject_code: string;
