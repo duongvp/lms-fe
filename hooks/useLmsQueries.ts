@@ -84,7 +84,10 @@ export const useLmsCache = () => {
     const { mutate } = useSWRConfig();
     return {
         refreshLessons: () => mutate(
-            (key) => isSWRNamespace(key, SWR_NAMESPACES.lessons),
+            // Danh sách chương trình xếp lịch cũng lấy từ đề cương, kể cả
+            // chương trình mới chưa có lịch. Xóa cache này khi đề cương đổi.
+            (key) => isSWRNamespace(key, SWR_NAMESPACES.lessons)
+                || (Array.isArray(key) && key[0] === SWR_NAMESPACES.schedules && key[1] === "programs"),
             undefined,
             { revalidate: true }
         ),
