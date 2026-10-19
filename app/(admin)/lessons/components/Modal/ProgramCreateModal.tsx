@@ -7,7 +7,7 @@ import { useEffect } from "react";
 import { useLessonSubjectOptions } from "@/hooks/useLessonSubjectOptions";
 import type { CreateLessonProgramPayload } from "@/services/lessonService";
 import { GRADE_OPTIONS } from "@/constants/subjects";
-import { buildLessonSubjectCode, buildTopuniProgramCode, getSuggestedSchoolYear, withProgramSourcePrefix } from "@/helper/lesson";
+import { buildLessonSubjectCode, buildTopuniProgramCode, getSuggestedSchoolYear, topuniPhaseHasPathway, withProgramSourcePrefix } from "@/helper/lesson";
 import { getTopuniPathwayOptions, TOPUNI_EXAM_OPTIONS, TOPUNI_PHASE_OPTIONS, TOPUNI_SUBJECT_OPTIONS } from "@/constants/topuniProgram";
 
 type Props = {
@@ -35,6 +35,7 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
     const selectedExam = Form.useWatch("exam", form);
     const selectedPathway = Form.useWatch("pathway", form);
     const isTopuni = selectedSystemType === "topuni";
+    const hasPathway = topuniPhaseHasPathway(selectedPhase);
     const pathwayOptions = getTopuniPathwayOptions(selectedExam, normalizeSubjectName(selectedSubject));
     const programSubjectOptions = isTopuni
         ? [...TOPUNI_SUBJECT_OPTIONS, ...subjectOptions.filter((option) => !TOPUNI_SUBJECT_OPTIONS.some((item) => item.value === option.value))]
@@ -52,12 +53,16 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
 
     useEffect(() => {
         if (!open || selectedSystemType !== "topuni") return;
+        if (!hasPathway) {
+            form.setFieldValue("pathway", undefined);
+            return;
+        }
         const options = getTopuniPathwayOptions(selectedExam, normalizeSubjectName(selectedSubject));
         const currentPathway = form.getFieldValue("pathway");
         const nextPathway = options.length === 1 ? options[0].value
             : options.some((option) => option.value === currentPathway) ? currentPathway : undefined;
         if (nextPathway !== currentPathway) form.setFieldValue("pathway", nextPathway);
-    }, [form, open, selectedSystemType, selectedExam, selectedSubject]);
+    }, [form, open, selectedSystemType, selectedExam, selectedSubject, hasPathway]);
 
     useEffect(() => {
         if (!open) return;
@@ -173,8 +178,8 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
                             <Select options={TOPUNI_EXAM_OPTIONS} placeholder="Chọn kỳ thi" />
                         </Form.Item>
                     </Col>
-                    <Col xs={24} md={8}>
-                        <Form.Item name="pathway" label="Lộ trình"
+                    {hasPathway && <Col xs={24} md={8}>
+                        <Form.Item name="pathway" label="Lộ trình" preserve={false}
                             tooltip="Lộ trình theo quy tắc đã có; môn khác có thể chọn V, A hoặc S."
                             rules={[
                                 { required: true, message: "Chọn lộ trình" },
@@ -184,7 +189,7 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
                             <Select options={pathwayOptions} disabled={pathwayOptions.length <= 1}
                                 placeholder={selectedExam ? "Chọn lộ trình" : "Chọn kỳ thi trước"} />
                         </Form.Item>
-                    </Col>
+                    </Col>}
                 </Row>}
                 <Row gutter={12}>
                     <Col xs={24} md={8}>
@@ -197,7 +202,9 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
                     name="subject_code"
                     label="Mã chương trình"
                     extra={<Typography.Text type="secondary">{isTopuni
-                        ? "Ghép liền: Giai đoạn + Số (nếu có) + Môn + Kỳ thi + Lộ trình + Năm học. Ví dụ: tongon3toantsav2027."
+                        ? hasPathway
+                            ? "Ghép liền: Giai đoạn + Số (nếu có) + Môn + Kỳ thi + Lộ trình + Năm học. Ví dụ: tongon3toantsav2027."
+                            : "Ghép liền: Giai đoạn + Số (nếu có) + Môn + Kỳ thi + Năm học. Ví dụ: nentangtoantsa2027."
                         : "Tự sinh từ môn học, khối và năm kết thúc. Bạn có thể nhập môn mới trực tiếp và sửa mã khi cần."}</Typography.Text>}
                     rules={[
                         { required: true, whitespace: true, message: "Nhập Mã chương trình" },
@@ -205,7 +212,7 @@ const ProgramCreateModal = ({ open, loading, onClose, onSubmit }: Props) => {
                         { pattern: /^[A-Za-z0-9_-]+$/, message: "Chỉ dùng chữ không dấu, số, dấu gạch ngang hoặc gạch dưới" },
                     ]}
                 >
-                    <Input placeholder={isTopuni ? "VD: tongontoantsav2027" : "VD: nguvan-6-2027"} maxLength={100} />
+                    <Input placeholder={isTopuni ? hasPathway ? "VD: tongontoantsav2027" : "VD: nentangtoantsa2027" : "VD: nguvan-6-2027"} maxLength={100} />
                 </Form.Item>
                     </Col>
                 </Row>

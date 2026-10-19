@@ -27,7 +27,11 @@ export const getTopuniPathwayOptions = (exam?: string, subjectName?: string) => 
     return values.map((value) => ({ value, label: value.toUpperCase() }));
 };
 
-export const TOPUNI_PHASE_OPTIONS = [{ value: "tongon", label: "Tổng ôn" }];
+export const TOPUNI_PHASE_OPTIONS = [
+    { value: "tongon", label: "Tổng ôn" },
+    { value: "nentang", label: "Nền tảng" },
+    { value: "thucchien", label: "Thực chiến" },
+];
 export const TOPUNI_EXAM_OPTIONS = [
     { value: "tsa", label: "TSA" },
     { value: "vact", label: "VACT" },

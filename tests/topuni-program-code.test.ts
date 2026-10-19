@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildLessonSubjectCode, buildTopuniProgramCode } from '../helper/lesson';
-import { getTopuniPathwayOptions } from '../constants/topuniProgram';
+import { getTopuniPathwayOptions, TOPUNI_EXAM_OPTIONS } from '../constants/topuniProgram';
 
 test('sinh đúng các mã Tổng ôn trong sheet, thay vact-v bằng vact', () => {
     const examples = [
@@ -89,4 +89,17 @@ test('số giai đoạn được chèn sau Tổng ôn, để trống không thê
         assert.equal(buildTopuniProgramCode({ ...complete, phaseNumber }), '');
     }
     assert.equal(buildTopuniProgramCode({ ...complete, exam: undefined, phaseNumber: 3 }), '');
+});
+
+test('Nền tảng và Thực chiến dùng các kỳ thi như Tổng ôn và không ghép lộ trình vào mã', () => {
+    for (const [phase, phaseCode] of [['Nền tảng', 'nentang'], ['Thực chiến', 'thucchien']]) {
+        for (const { value: exam } of TOPUNI_EXAM_OPTIONS) {
+            const program = { phase, subjectName: 'Toán', exam, schoolYear: 2027 };
+            assert.equal(buildTopuniProgramCode(program), `${phaseCode}toan${exam}2027`);
+            // Bỏ cả lộ trình cũ khi chuyển từ Tổng ôn sang giai đoạn mới.
+            assert.equal(buildTopuniProgramCode({ ...program, pathway: 'v' }), `${phaseCode}toan${exam}2027`);
+            assert.equal(buildTopuniProgramCode({ ...program, phaseNumber: 2 }), `${phaseCode}2toan${exam}2027`);
+            assert.equal(buildTopuniProgramCode({ ...program, exam: undefined }), '');
+        }
+    }
 });

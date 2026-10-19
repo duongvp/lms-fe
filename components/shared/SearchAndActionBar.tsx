@@ -16,6 +16,8 @@ interface SearchAndActionsBarProps {
     handleDeleteProducts?: () => void;
     placeholder?: string;
     searchValue?: string;
+    onSearchValueChange?: (value: string) => void;
+    searchResetKey?: number;
     extraButtons?: React.ReactNode;
     extraExportButton?: React.ReactNode;
     secondaryActions?: React.ReactNode;
@@ -32,6 +34,8 @@ export default function SearchAndActionsBar({
     handleAddBtn,
     placeholder = 'Tìm kiếm...',
     searchValue,
+    onSearchValueChange,
+    searchResetKey,
     extraButtons,
     extraExportButton,
     secondaryActions,
@@ -70,6 +74,8 @@ export default function SearchAndActionsBar({
                         placeholder={placeholder}
                         value={searchValue}
                         fetchApi={onSearch}
+                        onValueChange={onSearchValueChange}
+                        resetKey={searchResetKey}
                     />
                 )}
             </Col>

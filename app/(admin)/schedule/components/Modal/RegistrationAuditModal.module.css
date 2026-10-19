@@ -1,0 +1,146 @@
+.modal :global(.ant-modal) {
+    top: 24px;
+    max-width: calc(100vw - 32px);
+    padding-bottom: 0;
+}
+
+.modal :global(.ant-modal-content) {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100dvh - 48px);
+}
+
+.modal :global(.ant-modal-header),
+.modal :global(.ant-modal-footer) {
+    flex-shrink: 0;
+}
+
+.modal :global(.ant-modal-body) {
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-gutter: stable;
+}
+
+.content,
+.cards {
+    display: grid;
+    min-width: 0;
+    gap: 16px;
+    overflow-wrap: anywhere;
+}
+
+.content > *,
+.stats > * {
+    min-width: 0;
+}
+
+.modal :global(.ant-table-cell) {
+    overflow-wrap: anywhere;
+}
+
+.stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.modal .actions :global(.ant-btn) {
+    margin-inline-start: 0;
+    white-space: normal;
+    height: auto;
+    min-height: 32px;
+}
+
+.card {
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid #f0f0f0;
+    border-radius: 8px;
+    background: #fafafa;
+}
+
+.metrics,
+.details {
+    display: grid;
+    gap: 8px;
+    margin: 10px 0 0;
+}
+
+.metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metrics dt,
+.details dt {
+    color: #595959;
+    font-size: 12px;
+}
+
+.metrics dd,
+.details dd {
+    margin: 0;
+}
+
+.details > div {
+    display: grid;
+    grid-template-columns: 84px minmax(0, 1fr);
+    gap: 8px;
+}
+
+@media (max-width: 767px) {
+    .modal :global(.ant-modal) {
+        top: 8px;
+        max-width: calc(100vw - 16px);
+        margin: 0 auto;
+    }
+
+    .modal :global(.ant-modal-content) {
+        max-height: calc(100dvh - 16px);
+        padding: 16px 14px;
+    }
+
+    .modal :global(.ant-modal-title) {
+        padding-right: 28px;
+    }
+
+    .modal :global(.ant-modal-body) {
+        scrollbar-gutter: auto;
+    }
+
+    .modal :global(.ant-modal-footer) {
+        position: static;
+        margin: 12px 0 0;
+        padding: 12px 0 0;
+    }
+
+    .stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .cards {
+        gap: 12px;
+    }
+
+    .actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .modal .actions :global(.ant-btn) {
+        min-height: 44px;
+        padding: 8px;
+    }
+
+    .applyButton {
+        grid-column: 1 / -1;
+    }
+}

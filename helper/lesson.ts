@@ -41,6 +41,8 @@ export const getTopuniSubjectCode = (subjectName?: string) => {
     return subjectAliases[subject] || subject;
 };
 
+export const topuniPhaseHasPathway = (phase?: string) => !["nentang", "thucchien"].includes(topuniSlug(phase));
+
 export const buildTopuniProgramCode = ({ phase, phaseNumber, subjectName, exam, pathway, schoolYear }: {
     phase?: string;
     phaseNumber?: number | null;
@@ -53,8 +55,9 @@ export const buildTopuniProgramCode = ({ phase, phaseNumber, subjectName, exam, 
     const examCode = topuniSlug(exam);
     const normalizedExam = examCode === "vactv" ? "vact" : examCode;
     const phaseCode = topuniSlug(phase);
-    const pathwayCode = topuniSlug(pathway);
-    if (!phaseCode || !subject || !normalizedExam || !pathwayCode
+    const hasPathway = topuniPhaseHasPathway(phase);
+    const pathwayCode = hasPathway ? topuniSlug(pathway) : "";
+    if (!phaseCode || !subject || !normalizedExam || (hasPathway && !pathwayCode)
         || !Number.isInteger(schoolYear) || Number(schoolYear) < 2020 || Number(schoolYear) > 2100) return "";
     if (phaseNumber != null && (!Number.isSafeInteger(phaseNumber) || phaseNumber < 1)) return "";
     return `${phaseCode}${phaseNumber ?? ""}${subject}${normalizedExam}${pathwayCode}${schoolYear}`;

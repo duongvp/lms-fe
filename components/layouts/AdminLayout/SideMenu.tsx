@@ -17,6 +17,7 @@ import Image from "next/image";
 import { useAuthStore } from "@/stores/authStore";
 import { PermissionKey } from "@/types/permissions";
 import { logoutUser } from "@/services/authService";
+import { calendarSourceFromCode } from "@/helper/lesson";
 
 const { useBreakpoint } = Grid;
 
@@ -177,6 +178,9 @@ export const withProgramContext = (path: string, programCode?: string | null) =>
     if (isProgramContextPath(path)) {
         if (program) params.set("program", program);
         else params.delete("program");
+        if (pathname === "/schedule" && program) {
+            params.set("calendar_source", calendarSourceFromCode(program));
+        }
     } else {
         params.delete("program");
     }

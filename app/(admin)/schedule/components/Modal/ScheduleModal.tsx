@@ -252,6 +252,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const selectedBulkSubjectCode = Form.useWatch('bulk_subject_code', form);
     const selectedBulkCourseCode = Form.useWatch('bulk_code', form);
     const calendarSource = calendarSourceFromCode(usesProgramContext ? programCode : addMode === 'bulk' ? selectedBulkSubjectCode : selectedSubjectCode);
+    const scheduleMinDate = !isEdit && calendarSource === 'feed' ? undefined : dayjs();
     const newSessionStartTime = Form.useWatch(['new_session', 'start_time'], form) as Dayjs | undefined;
     const newSessionDate = Form.useWatch(['new_session', 'date'], form) as Dayjs | undefined;
     const singleStartTime = Form.useWatch('start_time', form) as Dayjs | undefined;
@@ -1348,7 +1349,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                 <Row gutter={24}>
                                     <Col span={tripleColumnSpan}>
                                         <Form.Item label="Ngày học" name="date" rules={requiredWhenEditable('start_time', 'Nhập ngày học')}>
-                                            <DatePicker format="DD/MM/YYYY" minDate={dayjs()} style={{ width: '100%' }} placeholder="DD/MM/YYYY" disabled={!isFieldEditable('start_time')} />
+                                            <DatePicker format="DD/MM/YYYY" minDate={scheduleMinDate} style={{ width: '100%' }} placeholder="DD/MM/YYYY" disabled={!isFieldEditable('start_time')} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={tripleColumnSpan}>
@@ -1432,7 +1433,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                 <Row gutter={24}>
                                     <Col span={12}>
                                         <Form.Item label="Ngày bắt đầu" name="bulk_start_date" rules={[{ required: true, message: 'Chọn ngày bắt đầu' }]}>
-                                            <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} placeholder="DD/MM/YYYY" minDate={dayjs()} />
+                                            <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} placeholder="DD/MM/YYYY" minDate={scheduleMinDate} />
                                         </Form.Item>
                                     </Col>
                                     <Col span={12}>
