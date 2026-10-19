@@ -25,6 +25,7 @@ import {
 } from "@/helper/hmoLessonMatching";
 import { createDeferredRangeUpdate, getDefaultLessonRange, getLessonRangeFieldError, selectLessonsInRange, validateLessonRange } from "@/helper/autoScheduleRange";
 import { useLessonProgramOptions } from "@/hooks/useLessonSubjectOptions";
+import { syncTopuniTemplateChanges } from "@/helper/autoScheduleTemplate";
 
 type Props = {
     open: boolean;
@@ -1238,6 +1239,13 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                         blocks: [],
                     }}
                     onValuesChange={(changedValues) => {
+                        if (form.getFieldValue("system_type") === "topuni" && changedValues.schedule_template) {
+                            form.setFieldValue("blocks", syncTopuniTemplateChanges(
+                                form.getFieldValue("blocks") || [],
+                                form.getFieldValue("schedule_template") || [],
+                                changedValues.schedule_template,
+                            ));
+                        }
                         if ("from_learn_number" in changedValues || "to_learn_number" in changedValues) {
                             scheduleRangeUpdate();
                         }

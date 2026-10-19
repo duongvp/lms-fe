@@ -22,6 +22,7 @@ import { GRADE_OPTIONS } from '@/constants/subjects';
 import { useLessonProgramOptions, useLessonSubjectOptions } from '@/hooks/useLessonSubjectOptions';
 import { createLesson, type LessonApiResponse, type LessonListParams } from '@/services/lessonService';
 import { buildLessonSubjectCode, formatLessonScheduleOption, getSuggestedSchoolYear, calendarSourceFromCode } from '@/helper/lesson';
+import { resolveScheduleProgramMetadata } from '@/helper/scheduleProgram';
 import { useAuthStore } from '@/stores/authStore';
 import { PermissionKey } from '@/types/permissions';
 import { useLessonsQuery, useLmsCache, usePackageCoursesQuery, useSchedulesQuery } from '@/hooks/useLmsQueries';
@@ -234,7 +235,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const [bulkConfigMode, setBulkConfigMode] = useState<"common" | "separate">("common");
     const needsManualProgramOptions = open && loadSupportingData && (isEdit || !usesProgramContext || addMode === 'bulk');
     const subjectOptions = useLessonSubjectOptions(needsManualProgramOptions);
-    const lessonPrograms = useLessonProgramOptions(needsManualProgramOptions);
+    const lessonPrograms = useLessonProgramOptions(open && loadSupportingData);
     const selectedProgram = lessonPrograms.find((program) => program.subject_code === programCode);
 
     // For Update
@@ -267,6 +268,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const [loadingHmoOptions, setLoadingHmoOptions] = useState(false);
     const [loadingProgramLessons, setLoadingProgramLessons] = useState(false);
     const [bulkLessonOptions, setBulkLessonOptions] = useState<LessonApiResponse[]>([]);
+    const contextProgramMetadata = resolveScheduleProgramMetadata(programCode, [...lessonOptions, ...bulkLessonOptions], lessonPrograms);
     const [quickLessonOpen, setQuickLessonOpen] = useState(false);
     const [creatingLesson, setCreatingLesson] = useState(false);
     const [courseEndDate, setCourseEndDate] = useState<Dayjs | null>(null);
@@ -500,6 +502,19 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         );
     }, [bulkLessonsQuery.data, form]);
 
+    React.useEffect(() => {
+        if (!open || !usesProgramContext || !contextProgramMetadata) return;
+        // Dữ liệu tải sau khi mở chỉ bổ sung thông tin chương trình, không reset form.
+        form.setFieldsValue({
+            system_type: contextProgramMetadata.system_type,
+            bulk_system_type: contextProgramMetadata.system_type,
+            grade: contextProgramMetadata.grade ?? undefined,
+            subject_name: contextProgramMetadata.subject_name,
+            bulk_grade: contextProgramMetadata.grade ?? undefined,
+            bulk_subject_name: contextProgramMetadata.subject_name,
+        });
+    }, [open, usesProgramContext, contextProgramMetadata, form]);
+
     const scheduledBulkLessons = bulkLessonOptions.filter(
         (lesson) => Number(lesson.scheduled_count ?? 0) > 0
     );
@@ -716,6 +731,10 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const handleFinish = async (values: any) => {
         let finalValues = { ...values };
         if (!isEdit) {
+            if (usesProgramContext && contextProgramMetadata) {
+                finalValues.system_type = contextProgramMetadata.system_type;
+                finalValues.bulk_system_type = contextProgramMetadata.system_type;
+            }
             finalValues.addMode = addMode;
             if (addMode === 'bulk') {
                 finalValues.bulkConfigMode = bulkConfigMode;
@@ -870,7 +889,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                     || calendarStart?.startOf('day');
                 if (programCode) {
                     const inferredGrade = Number(String(programCode).match(/-(\d{1,2})-/)?.[1]) || undefined;
-                    const programSystemType = selectedProgram?.system_type || 'topclass';
+                    const programSystemType = selectedProgram?.system_type || undefined;
                     form.setFieldsValue({
                         grade: selectedProgram?.grade || inferredGrade,
                         subject_name: selectedProgram?.subject_name || String(programCode),
@@ -1017,6 +1036,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                         onClick={() => form.submit()}
                         icon={<EyeFilled />}
                         loading={loading}
+                        disabled={usesProgramContext && !contextProgramMetadata}
                     >
                         Xem trước
                     </Button>,
