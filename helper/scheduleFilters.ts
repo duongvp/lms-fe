@@ -1,5 +1,5 @@
 import dayjs, { type Dayjs } from "dayjs";
-import type { CalendarSource } from "@/services/livestreamService";
+import type { CalendarSource, LivestreamListParams } from "@/services/livestreamService";
 import { calendarSourceFromCode } from "@/helper/lesson";
 
 export interface ScheduleFilterValues {
@@ -55,6 +55,18 @@ export const buildScheduleApiParams = (values: ScheduleFilterValues) => {
         end_time: date_range?.[1]?.endOf("day").format("YYYY-MM-DDTHH:mm:ss.SSS[Z]"),
     };
 };
+
+export const buildCalendarRoomReportParams = (
+    values: ScheduleFilterValues,
+    columnParams: Partial<LivestreamListParams>,
+    selectedIds: Array<string | number | bigint>,
+    visibleIds?: Array<string | number | bigint>,
+): LivestreamListParams => ({
+    ...buildScheduleApiParams(values),
+    ...columnParams,
+    ...(selectedIds.length ? { calendar_ids: selectedIds.map(Number) }
+        : visibleIds !== undefined ? { calendar_ids: visibleIds.map(Number) } : {}),
+});
 
 export const buildScheduleUrl = (values: ScheduleFilterValues, targetPage = 1) => {
     // Đây là lớp bảo vệ cuối cùng trước khi ghi URL. Không phụ thuộc việc

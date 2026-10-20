@@ -1,4 +1,5 @@
 import type { HocmaiSectionOption } from '@/services/livestreamService';
+import { calendarSourceFromCode } from '@/helper/lesson';
 
 export type HmoLessonMatchRow = {
     key: string;
@@ -6,6 +7,7 @@ export type HmoLessonMatchRow = {
     teacher?: unknown;
     occurrence?: number;
     startTime?: unknown;
+    programCode?: string;
 };
 
 export type HmoLessonMatch = {
@@ -183,6 +185,7 @@ type EvaluatedCandidate = {
     teacherMatchQuality: number;
     sessionQuality: number;
     sessionKey: string;
+    nonMonthlySession: boolean;
     normalizedHmoTitle: string;
 };
 
@@ -210,6 +213,7 @@ const evaluateCandidate = (
                 ? sessionMatchQuality(rowStartTime, option.section_name)
                 : 0,
             sessionKey: hmoSessionKey(option),
+            nonMonthlySession: !sectionMonthYear(option.section_name),
             normalizedHmoTitle: parsed.title,
         };
         if (!best
@@ -283,11 +287,19 @@ export const matchHmoLessonsByCourse = (
             const exactSessionEvaluated = row.startTime
                 ? allEvaluated.filter((item) => item.sessionQuality === 2)
                 : allEvaluated;
-            const sessionEvaluated = exactSessionEvaluated.length
+            let sessionEvaluated = exactSessionEvaluated.length
                 ? exactSessionEvaluated
                 : row.startTime && inferredSessionKey
                     ? allEvaluated.filter((item) => item.sessionKey === inferredSessionKey)
                     : [];
+            if (!sessionEvaluated.length && calendarSourceFromCode(row.programCode) === 'feed') {
+                // Feed có các chuyên đề không chia theo tháng. Chỉ ghép tên
+                // chính xác, đúng giáo viên và xác định được một session duy nhất.
+                let fallback = allEvaluated.filter((item) => item.nonMonthlySession && item.exactTitle);
+                const bestQuality = fallback[0]?.teacherMatchQuality;
+                fallback = fallback.filter((item) => item.teacherMatchQuality === bestQuality);
+                if (new Set(fallback.map((item) => item.sessionKey)).size === 1) sessionEvaluated = fallback;
+            }
             if (row.startTime && allEvaluated.length && !sessionEvaluated.length) {
                 unmatchedReasonsByRow.get(row.key)!.set(courseId, 'SESSION_UNCERTAIN');
             }

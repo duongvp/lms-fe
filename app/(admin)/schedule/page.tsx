@@ -1,6 +1,6 @@
 "use client";
 import { calendarSourceFromCode } from "@/helper/lesson";
-import { cleanFilterValues, buildScheduleApiParams, buildScheduleUrl, type ScheduleFilterValues } from "@/helper/scheduleFilters";
+import { cleanFilterValues, buildScheduleApiParams, buildCalendarRoomReportParams, buildScheduleUrl, type ScheduleFilterValues } from "@/helper/scheduleFilters";
 import { isYesterdayRegistrationRange } from "@/ultils/registrationAuditDate";
 import Select from "@/components/ui/MobileSelect";
 import Table from "@/components/ui/ModalTable";
@@ -26,6 +26,7 @@ import viLocale from "@fullcalendar/core/locales/vi";
 import ScheduleModal from "./components/Modal/ScheduleModal";
 import AttendanceResetStudentPicker from "./components/AttendanceResetStudentPicker";
 import RegistrationAuditModal from "./components/Modal/RegistrationAuditModal";
+import CalendarRoomReportModal from "./components/Modal/CalendarRoomReportModal";
 import CopyScheduleModal from "./components/Modal/CopyScheduleModal";
 import SwapScheduleModal from "./components/Modal/SwapScheduleModal";
 import ScheduleImportModal, { type ScheduleImportError } from "./components/Modal/ScheduleImportModal";
@@ -438,6 +439,8 @@ interface ScheduleDataType {
     classroom_assigned_at?: string | null;
     student_synced_at?: string | null;
     evg_stream?: string | null;
+    evg_provisioned?: boolean;
+    evg_provisioning_status?: 'not_created' | 'incomplete' | 'ready';
     [key: string]: any;
 }
 
@@ -606,6 +609,8 @@ const mapScheduleRows = (rows: any[]): ScheduleDataType[] => rows.map((item: any
     classroom_assigned_at: item.classroom_assigned_at || null,
     student_synced_at: item.student_synced_at || null,
     evg_stream: item.evg_stream || null,
+    evg_provisioned: item.evg_provisioned === true,
+    evg_provisioning_status: item.evg_provisioning_status || 'not_created',
 }));
 const REQUIRED_QUICK_EDIT_FIELDS = new Set([
     "start_time",
@@ -684,7 +689,7 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
     };
     const mappings = Array.isArray(record.package_lesson_mappings) ? record.package_lesson_mappings : [];
     const DetailItem = ({ label, children }: { label: string; children: React.ReactNode }) => (
-        <div style={{ minWidth: 0 }}>
+        <div className="schedule-detail-item">
             <Typography.Text type="secondary" style={{ display: "block", fontSize: 12, marginBottom: 3 }}>
                 {label}
             </Typography.Text>
@@ -693,8 +698,8 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
     );
 
     return (
-        <div style={{ padding: "4px 8px 8px" }}>
-            <div style={{ padding: "4px 0 18px", borderBottom: "1px solid #f0f0f0", marginBottom: 18 }}>
+        <div className="schedule-detail">
+            <div className="schedule-detail-heading">
                 <Space direction="vertical" size={6} style={{ width: "100%" }}>
                     <Space size={16} wrap>
                         <Typography.Text type="secondary">Bài {record.learn_number ?? "-"}</Typography.Text>
@@ -708,44 +713,60 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
                         <Tag color={statusColor}>{status}</Tag>
                         {!isCancelled && record.student_synced_at && <Tag color="blue">Đã đồng bộ học viên</Tag>}
                         {!isCancelled && record.classroom_assigned && <Tag color="green">Đã chia lớp</Tag>}
-                        {!isCancelled && record.evg_stream && <Tag color="purple">Đã tạo EVG</Tag>}
+                        {!isCancelled && record.evg_provisioned && <Tag color="purple">Đã tạo EVG</Tag>}
+                        {!isCancelled && record.evg_provisioning_status === 'incomplete' && <Tag color="orange">EVG chưa hoàn tất</Tag>}
                     </Space>
                 </Space>
             </div>
 
-            <Row gutter={[24, 16]}>
-                <Col xs={24} sm={12} lg={6}><DetailItem label="Chương trình"><Tag color="blue">{record.code || "-"}</Tag></DetailItem></Col>
-                <Col xs={24} sm={12} lg={6}><DetailItem label="Hệ thống">{record.system_type || "-"}</DetailItem></Col>
-                <Col xs={24} sm={12} lg={6}><DetailItem label="Lớp học">{record.class_name || "-"}</DetailItem></Col>
-                <Col xs={24} sm={12} lg={6}><DetailItem label="Môn học">{record.subject || "-"}</DetailItem></Col>
-                <Col xs={24} sm={12} lg={6}><DetailItem label="Giáo viên">{record.teacher || "-"}</DetailItem></Col>
-                <Col xs={24} sm={12} lg={6}><DetailItem label="Trợ giảng">{record.assistant_teacher || "-"}</DetailItem></Col>
-                <Col xs={24} sm={12} lg={6}><DetailItem label="Phòng/Kênh học">{record.room || "-"}</DetailItem></Col>
-                {!isCancelled && (
-                    <Col xs={24} sm={12} lg={6}><DetailItem label="Trạng thái phân lớp">
-                        {record.classroom_assigned ? (
-                            <Space size={6} wrap>
-                                <Tag color="green">Đã chia lớp</Tag>
-                                {record.classroom_assigned_at && (
-                                    <Typography.Text type="secondary">
-                                        {dayjs(record.classroom_assigned_at).format("DD/MM/YYYY HH:mm")}
-                                    </Typography.Text>
-                                )}
-                            </Space>
-                        ) : <Tag>Chưa chia lớp</Tag>}
-                    </DetailItem></Col>
-                )}
-                <Col xs={24} sm={12} lg={6}><DetailItem label="Link học">
-                    {record.lesson_link ? <Typography.Link href={record.lesson_link} target="_blank" rel="noreferrer">Mở liên kết buổi học</Typography.Link> : "-"}
-                </DetailItem></Col>
-                {isCancelled && <Col span={24}><DetailItem label="Lý do nghỉ">{record.cancel_reason || "Chưa có lý do"}</DetailItem></Col>}
-            </Row>
-            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #eee" }}>
+            <div className="schedule-detail-sections">
+                <section className="schedule-detail-section">
+                    <h3>Thông tin lớp học</h3>
+                    <div className="schedule-detail-grid">
+                        <DetailItem label="Chương trình"><Tag color="blue">{record.code || "-"}</Tag></DetailItem>
+                        <DetailItem label="Hệ thống">{record.system_type || "-"}</DetailItem>
+                        <DetailItem label="Lớp học">{record.class_name || "-"}</DetailItem>
+                        <DetailItem label="Môn học">{record.subject || "-"}</DetailItem>
+                    </div>
+                </section>
+                <section className="schedule-detail-section">
+                    <h3>Giáo viên & trợ giảng</h3>
+                    <div className="schedule-detail-grid">
+                        <DetailItem label="Giáo viên">{record.teacher || "-"}</DetailItem>
+                        <DetailItem label="Trợ giảng">{record.assistant_teacher || "-"}</DetailItem>
+                    </div>
+                </section>
+                <section className="schedule-detail-section schedule-detail-section-wide">
+                    <h3>Phòng học & liên kết</h3>
+                    <div className="schedule-detail-grid">
+                        <DetailItem label="Phòng/Kênh học">{record.room || "-"}</DetailItem>
+                        {!isCancelled && <DetailItem label="Trạng thái phân lớp">
+                            {record.classroom_assigned ? (
+                                <Space size={6} wrap>
+                                    <Tag color="green">Đã chia lớp</Tag>
+                                    {record.classroom_assigned_at && (
+                                        <Typography.Text type="secondary">
+                                            {dayjs(record.classroom_assigned_at).format("DD/MM/YYYY HH:mm")}
+                                        </Typography.Text>
+                                    )}
+                                </Space>
+                            ) : <Tag>Chưa chia lớp</Tag>}
+                        </DetailItem>}
+                        <div className="schedule-detail-field-wide">
+                            <DetailItem label="Link học">
+                                {record.lesson_link ? <Typography.Link href={record.lesson_link} target="_blank" rel="noreferrer">Mở liên kết buổi học</Typography.Link> : "-"}
+                            </DetailItem>
+                        </div>
+                        {isCancelled && <div className="schedule-detail-field-wide"><DetailItem label="Lý do nghỉ">{record.cancel_reason || "Chưa có lý do"}</DetailItem></div>}
+                    </div>
+                </section>
+            </div>
+            <div className="schedule-detail-mappings">
                 <Typography.Text type="secondary" style={{ display: "block", fontSize: 12, marginBottom: 10 }}>Liên kết HOCMAI</Typography.Text>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
                     {mappings.length ? mappings.map((mapping: any, index: number) => (
-                        <div key={index} style={{ background: "#fff", border: "1px solid #e8e8e8", borderRadius: 8, padding: "12px 16px", flex: "0 1 420px", minWidth: 0, maxWidth: "100%" }}>
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 16 }}>
+                        <div key={index} style={{ background: "#fff", border: "1px solid #e8e8e8", borderRadius: 8, padding: "10px 12px", flex: "0 1 420px", minWidth: 0, maxWidth: "100%" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 }}>
                                 <DetailItem label="Lesson ID"><Typography.Text style={{ fontFamily: "monospace" }}>{mappingIds(mapping.lesson_ids ?? mapping.lesson_id)}</Typography.Text></DetailItem>
                                 <DetailItem label="Package ID"><Typography.Text style={{ fontFamily: "monospace" }}>{mappingIds(mapping.package_ids ?? mapping.package_id)}</Typography.Text></DetailItem>
                                 <DetailItem label="Course ID"><Typography.Text style={{ fontFamily: "monospace" }}>{mappingIds(mapping.course_id)}</Typography.Text></DetailItem>
@@ -1167,6 +1188,7 @@ const EvgBannerOverrideInput = ({ onChange }: EvgBannerOverrideInputProps) => {
 const Page = () => {
     const pageScrollRef = useRef<HTMLDivElement>(null);
     const [showBackToTop, setShowBackToTop] = useState(false);
+    const [roomReportOpen, setRoomReportOpen] = useState(false);
     const [floatingActionsMounted, setFloatingActionsMounted] = useState(false);
     useEffect(() => setFloatingActionsMounted(true), []);
     const { fieldPolicy, permissions, roles } = useAuthStore((state) => state.user);
@@ -3743,7 +3765,10 @@ const Page = () => {
                 {record.classroom_assigned ? (
                     <Tooltip title={record.classroom_assigned_at ? "Lần chia gần nhất: " + dayjs(record.classroom_assigned_at).format("DD/MM/YYYY HH:mm") : "Buổi học đã được chia lớp"}><Tag color="green">Đã chia lớp</Tag></Tooltip>
                 ) : <Tag>Chưa chia lớp</Tag>}
-                {record.evg_stream ? <Tag color="purple">Đã tạo EVG</Tag> : <Tag>Chưa tạo EVG</Tag>}
+                {record.evg_provisioned ? <Tag color="purple">Đã tạo EVG</Tag>
+                    : record.evg_provisioning_status === 'incomplete'
+                        ? <Tooltip title="Đã có dữ liệu EVG trên lịch nhưng chưa đủ cấu hình stream/phòng. Chạy tạo/đồng bộ EVG để hoàn tất."><Tag color="orange">EVG chưa hoàn tất</Tag></Tooltip>
+                        : <Tag>Chưa tạo EVG</Tag>}
             </Space>;
         },
     });
@@ -4022,6 +4047,8 @@ const Page = () => {
 
     const exportMenu = {
         items: [
+            { key: "room-report", label: "Báo cáo lớp học theo chương trình/buổi", disabled: !hasSearched },
+            { type: "divider" as const },
             { key: "all-programs", label: "Excel toàn bộ chương trình (theo mẫu gốc)" },
             { key: "google-sheet", label: "Google Sheets toàn bộ chương trình", disabled: sheetExportLoading },
             { type: "divider" as const },
@@ -4032,6 +4059,7 @@ const Page = () => {
         ],
         onClick: ({ key }: { key: string }) => {
             if (selectingAllRows) return;
+            if (key === "room-report") { setRoomReportOpen(true); return; }
             if (key === "google-sheet") {
                 setSheetExportOpen(true);
                 return;
@@ -4170,6 +4198,7 @@ const Page = () => {
     const syncMenuKeys = new Set(syncMenu.items.flatMap((item: any) => item?.key ? [String(item.key)] : []));
     const mobileToolbarMenu = {
         items: [
+            { key: "mobile-room-report", icon: <EyeOutlined />, label: "Báo cáo lớp học", disabled: !hasSearched },
             ...((canImportSchedule || canEditSchedule) ? [{ key: "mobile-import", icon: <UploadOutlined />, label: "Import" }] : []),
             ...(canExportSchedule ? [{ key: "mobile-export", icon: <DownloadOutlined />, label: "Export", children: exportMenu.items }] : []),
             { key: "mobile-sync", icon: <DatabaseOutlined />, label: "Đồng bộ", children: syncMenu.items, disabled: selectingAllRows },
@@ -4181,7 +4210,8 @@ const Page = () => {
             { key: "mobile-refresh", icon: <ReloadOutlined />, label: "Làm mới", disabled: !hasSearched || refreshingScheduleList },
         ],
         onClick: ({ key }: { key: string }) => {
-            if (key === "mobile-import") handleOpenScheduleImport();
+            if (key === "mobile-room-report") setRoomReportOpen(true);
+            else if (key === "mobile-import") handleOpenScheduleImport();
             else if (key === "mobile-auto") handleOpenAutoSchedule();
             else if (key === "mobile-bulk-edit") handleOpenBulkEdit();
             else if (key === "mobile-bulk-delete") handleDeleteSelected();
@@ -4634,6 +4664,7 @@ const Page = () => {
                                 )}
                             </div>
                             <div className="schedule-utility-actions">
+                                <Button icon={<EyeOutlined />} disabled={!hasSearched} onClick={() => setRoomReportOpen(true)}>Báo cáo lớp học</Button>
                                 {(canImportSchedule || canEditSchedule || canExportSchedule) && (
                                     <Space.Compact className="schedule-file-actions">
                                         {(canImportSchedule || canEditSchedule) && (
@@ -4665,6 +4696,7 @@ const Page = () => {
                                 />
                             </div>
                         </> : <div className="schedule-mobile-actions">
+                            <Button icon={<EyeOutlined />} disabled={!hasSearched} onClick={() => setRoomReportOpen(true)}>Báo cáo lớp học</Button>
                             {(canImportSchedule || canEditSchedule) && (
                                 <Button icon={<UploadOutlined />} onClick={handleOpenScheduleImport}>Import</Button>
                             )}
@@ -4823,20 +4855,17 @@ const Page = () => {
             <Form
                 form={form}
                 component={false}
-                style={{
+            >
+                <div className="schedule-view-container" style={{
                     // Bảng đi theo luồng của trang; chỉ lịch cần một khung cao cố định.
+                    // Form component={false} không sinh DOM, nên chiều cao phải
+                    // đặt trên div thật để lịch không bị co về 0 trên mobile.
                     flex: viewMode === "calendar" && isDesktop ? "1 1 0" : "0 0 auto",
                     height: viewMode === "calendar" && !isDesktop ? "65dvh" : undefined,
                     minHeight: viewMode === "calendar" ? (isDesktop ? 0 : 420) : 0,
                     overflow: viewMode === "calendar" ? "hidden" : "visible",
                     display: "flex",
                     flexDirection: "column",
-                }}
-            >
-                <div style={{
-                    flex: viewMode === "calendar" ? "1 1 0" : "0 0 auto",
-                    minHeight: 0,
-                    overflow: viewMode === "calendar" ? "hidden" : "visible",
                 }}>
                     {!hasSearched ? (
                         <Empty
@@ -5236,6 +5265,10 @@ const Page = () => {
                         <Typography.Text type="secondary">Topclass và Topuni được xuất vào sheet riêng theo hệ của đề cương chương trình. Toàn bộ tab cũ trong hai sheet được thay bằng dữ liệu mới, gồm cả tab sai hệ và bản có hậu tố LMS. Tên tab chỉ giữ tên chương trình.</Typography.Text>
                     </Space>
                 </Modal>
+                <CalendarRoomReportModal open={roomReportOpen} params={buildCalendarRoomReportParams(
+                    filterValues, serverTableFilterParams, selectedRowKeys,
+                    hasActiveTableColumnFilters ? tableDisplayData.map((row) => Number(row.id)) : undefined,
+                )} canExport={canExportSchedule} onClose={() => setRoomReportOpen(false)} />
                 <ScheduleImportModal
                     open={openImportModal}
                     loading={importing}
@@ -5296,7 +5329,7 @@ const Page = () => {
                             </div>
                             <div style={{ display: "flex", gap: 14, position: "relative" }}>
                                 <div style={{ width: 32, height: 32, borderRadius: "50%", background: isWorkflowEvgProvisioned ? "#e6f4ff" : batchClassroomItems.length && !batchClassroomAssigning ? "#1677ff" : "#f0f0f0", color: isWorkflowEvgProvisioned ? "#1677ff" : batchClassroomItems.length && !batchClassroomAssigning ? "#fff" : "#8c8c8c", display: "grid", placeItems: "center", fontWeight: 600 }}>{isWorkflowEvgProvisioned ? "✓" : "4"}</div>
-                                <div><Typography.Text strong>4. Tạo / đồng bộ EVG</Typography.Text><br /><Typography.Text type="secondary">Tạo stream và phòng EVG sau khi đã hoàn tất chia lớp.</Typography.Text><br /><Button size="small" icon={<CloudUploadOutlined />} disabled={!selectedRowKeys.length || !isWorkflowClassroomAssigned || batchClassroomAssigning || provisioningEvgBulk} onClick={() => openWorkflowAction(handleProvisionEvgBulk)}>Tạo / đồng bộ EVG</Button></div>
+                                <div><Typography.Text strong>4. Tạo / đồng bộ EVG</Typography.Text><br /><Typography.Text type="secondary">Tạo stream và phòng EVG sau khi đã hoàn tất chia lớp.</Typography.Text><br /><Button size="small" icon={<CloudUploadOutlined />} disabled={Boolean(evgDisabledReason) || !isWorkflowClassroomAssigned || batchClassroomAssigning} onClick={() => openWorkflowAction(handleProvisionEvgBulk)}>Tạo / đồng bộ EVG</Button></div>
                             </div>
                         </div>
                     </Space>

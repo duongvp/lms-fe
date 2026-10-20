@@ -187,7 +187,7 @@ test('bài 67 và 81 cùng tên vẫn ghép theo đúng tháng của session', (
     assert.equal(result.matchesByRow.get('81-chi')?.get('1768')?.lessonId, '168559');
 });
 
-test('session không có dạng Tháng M/YYYY không được modal tự gán', () => {
+test('session Livestream không có dạng Tháng M/YYYY không được modal tự gán', () => {
     const result = matchHmoLessonsByCourse([{
         package_id: '9149',
         course_id: '1768',
@@ -206,6 +206,44 @@ test('session không có dạng Tháng M/YYYY không được modal tự gán', 
         result.unmatchedReasonsByRow.get('uncertain')?.get('1768'),
         'SESSION_UNCERTAIN',
     );
+});
+
+test('Feed ghép bài giảng trong chuyên đề không chia tháng cho từng Course', () => {
+    const title = 'Chia sẻ cách ôn luyện cân bằng giữa việc học trên trường và kỳ thi TSA';
+    const result = matchHmoLessonsByCourse(['3124', '3449', '3485'].map((courseId) => ({
+        package_id: '1', course_id: courseId, lesson_id: `lesson-${courseId}`,
+        lesson_name: title, section_name: 'Trạm tiếp sức tri thức', section_id: `section-${courseId}`,
+    })), [{ key: 'feed', title, programCode: 'feed-tramtiepsuctrithuc', startTime: '2026-10-14T22:00:00Z' }]);
+    for (const courseId of ['3124', '3449', '3485']) {
+        assert.equal(result.matchesByRow.get('feed')?.get(courseId)?.lessonId, `lesson-${courseId}`);
+        assert.equal(result.unmatchedReasonsByRow.get('feed')?.has(courseId), false);
+    }
+});
+
+test('Feed ghép tên bài khi HMO không có tên session và vẫn phân biệt giáo viên', () => {
+    const result = matchHmoLessonsByCourse([
+        { package_id: '1', course_id: '3124', lesson_id: 'a', lesson_name: 'Bài giảng_Cô Mai' },
+        { package_id: '1', course_id: '3124', lesson_id: 'b', lesson_name: 'Bài giảng_Cô Lan' },
+    ], [{ key: 'feed', title: 'Bài giảng', teacher: 'Nguyễn Thị Mai', programCode: 'feed-topic', startTime: '2026-10-14' }]);
+    assert.equal(result.matchesByRow.get('feed')?.get('3124')?.lessonId, 'a');
+});
+
+test('Feed không tự chọn giữa hai session chuyên đề cùng tên bài và giáo viên', () => {
+    const result = matchHmoLessonsByCourse(['a', 'b'].map((id) => ({
+        package_id: '1', course_id: '3124', lesson_id: id, lesson_name: 'Bài giảng', section_id: id, section_name: 'Chuyên đề',
+    })), [{ key: 'feed', title: 'Bài giảng', programCode: 'feed-topic', startTime: '2026-10-14' }]);
+    assert.equal(result.matchesByRow.get('feed')?.has('3124'), false);
+    assert.equal(result.unmatchedReasonsByRow.get('feed')?.get('3124'), 'SESSION_UNCERTAIN');
+});
+
+test('Feed có session theo tháng vẫn ưu tiên đúng tháng và không lấy nhầm tháng khác', () => {
+    const options = [
+        { package_id: '1', course_id: '3124', lesson_id: 'oct', lesson_name: 'Bài giảng', section_name: 'Tháng 10/2026' },
+        { package_id: '1', course_id: '3124', lesson_id: 'topic', lesson_name: 'Bài giảng', section_name: 'Chuyên đề' },
+    ];
+    const row = { key: 'feed', title: 'Bài giảng', programCode: 'feed-topic', startTime: '2026-10-14' };
+    assert.equal(matchHmoLessonsByCourse(options, [row]).matchesByRow.get('feed')?.get('3124')?.lessonId, 'oct');
+    assert.equal(matchHmoLessonsByCourse(options.slice(0, 1), [{ ...row, startTime: '2026-11-14' }]).matchesByRow.get('feed')?.has('3124'), false);
 });
 
 

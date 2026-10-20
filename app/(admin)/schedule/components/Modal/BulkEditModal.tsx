@@ -1090,6 +1090,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     teacher: teacherValue(row.teacher),
                     occurrence: hmoCalendarOccurrence(row.lesson_name, row.lesson_count),
                     startTime: row.start_time,
+                    programCode: row.code,
                 }));
 
                 if (matchingRows.some((row) => !normalizeLessonTitle(row.title))) {
@@ -1119,7 +1120,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                             notes[String(row.id)] = {
                                 type: 'warning',
                                 message: uncertainSessionCourseIds.length
-                                    ? `Không tự gán vì Course ${uncertainSessionCourseIds.join(', ')} không có session Tháng M/YYYY khớp ngày lịch; vui lòng chọn Session/Lesson ID thủ công.`
+                                    ? `Không xác định được session phù hợp ở Course ${uncertainSessionCourseIds.join(', ')}; vui lòng chọn Session/Lesson ID thủ công.`
                                     : `Không thể tự gán Lesson ID HMO cho “${row.lesson_name}”: ${hmoCourseMatchSummary(matching)}. Tên cần đạt ít nhất 92%, đúng P1/P2 và đúng giáo viên nếu HMO có hậu tố Cô/Thầy.`,
                             };
                             return;
@@ -1171,7 +1172,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     const details = unmatchedCourseIds.map((courseId) => {
                         if (matching.unmatchedReasonsByRow
                             .get(String(row.id))?.get(courseId) === 'SESSION_UNCERTAIN') {
-                            return `Course ${courseId}: không có session Tháng M/YYYY khớp ngày lịch; cần chọn Session/Lesson ID thủ công`;
+                            return `Course ${courseId}: chưa xác định được session phù hợp theo ngày lịch hoặc tên bài và giáo viên; cần chọn Session/Lesson ID thủ công`;
                         }
                         const sameTitleOptions = availableOptions.filter((option) => (
                             String(option.course_id) === courseId

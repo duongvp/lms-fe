@@ -346,6 +346,7 @@ export interface LivestreamListParams {
     limit?: number;
     keyword?: string;
     calendar_id?: number;
+    calendar_ids?: number[];
     teacher?: string | string[];
     code?: string;
     code_exact?: string;
@@ -363,6 +364,29 @@ export interface LivestreamListParams {
     sort_by?: string;
     sort_order?: string;
 }
+
+export interface CalendarRoomReportRow {
+    key: string; calendar_id: number; code: string; calendar_source: CalendarSource;
+    system_type: string; learn_number: number; lesson_name: string; teacher: string; lesson_status: number;
+    scheduled_start_time: string; scheduled_end_time: string; session_id: string | null;
+    actual_start_time: string | null; actual_end_time: string | null;
+    room_id: number | null; class_id: string | null; attended_students: number; added_students: number;
+}
+export interface CalendarRoomReport {
+    total_schedules: number; page: number; limit: number; rooms: Array<number | null>; data: CalendarRoomReportRow[];
+}
+type RoomReportParams = LivestreamListParams & { room_id?: number | 'unassigned'; group_by?: 'program' | 'room' };
+const roomReportQuery = (params: RoomReportParams) => {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+    });
+    return query.toString();
+};
+export const getCalendarRoomReport = (params: RoomReportParams) =>
+    fetchInstance(`${API_BASE_URL}/room-report?${roomReportQuery(params)}`, { credentials: 'include' }, 'json', 60_000);
+export const exportCalendarRoomReport = (params: RoomReportParams) =>
+    fetchInstance(`${API_BASE_URL}/room-report/export?${roomReportQuery(params)}`, { credentials: 'include' }, 'blob', 120_000);
 
 const asCalendarWallTime = (value: unknown) => {
     if (typeof value !== "string") return value;

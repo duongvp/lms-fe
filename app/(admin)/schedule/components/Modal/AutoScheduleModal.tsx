@@ -788,6 +788,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                             ? getCalendarLessonName(lesson, sessionIndex + 1, formValues)
                             : lesson.lesson_name,
                         teacher: session.teacher,
+                        programCode,
                     }));
                     const matching = matchHmoLessonsByCourse(availableOptions, matchingRows);
                     const courseIds = matching.courseIds;

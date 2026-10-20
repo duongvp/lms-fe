@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     title: "Học trực tuyến - livestream",
     description: 'Welcome to My Site',
     icons: {
-        icon: "/A2S.png",
+        icon: { url: "/logo.png", type: "image/png" },
     },
 };
 
