@@ -370,12 +370,14 @@ export interface CalendarRoomReportRow {
     system_type: string; learn_number: number; lesson_name: string; teacher: string; lesson_status: number;
     scheduled_start_time: string; scheduled_end_time: string; session_id: string | null;
     actual_start_time: string | null; actual_end_time: string | null;
-    room_id: number | null; class_id: string | null; attended_students: number; added_students: number;
+    room_id: number | null; class_id: string | null; attendance_status?: 'pending' | 'error'; attended_students: number | null; added_students: number | null;
+    lesson_attended_students: number | null; lesson_added_students: number | null;
+    live_recording?: { status: 'ready' | 'empty' | 'error' | 'no_stream'; error_code?: 'rate_limited'; ranges: Array<{ start_time: string; end_time: string }> };
 }
 export interface CalendarRoomReport {
     total_schedules: number; page: number; limit: number; rooms: Array<number | null>; data: CalendarRoomReportRow[];
 }
-type RoomReportParams = LivestreamListParams & { room_id?: number | 'unassigned'; group_by?: 'program' | 'room' };
+type RoomReportParams = LivestreamListParams & { room_id?: number | 'unassigned'; group_by?: 'program' | 'room'; include_recordings?: boolean; include_attendance?: boolean };
 const roomReportQuery = (params: RoomReportParams) => {
     const query = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -385,6 +387,8 @@ const roomReportQuery = (params: RoomReportParams) => {
 };
 export const getCalendarRoomReport = (params: RoomReportParams) =>
     fetchInstance(`${API_BASE_URL}/room-report?${roomReportQuery(params)}`, { credentials: 'include' }, 'json', 60_000);
+export const getCalendarRoomReportLiveTimes = (params: LivestreamListParams) =>
+    fetchInstance(`${API_BASE_URL}/room-report/live-times?${roomReportQuery(params)}`, { credentials: 'include' }, 'json', 120_000);
 export const exportCalendarRoomReport = (params: RoomReportParams) =>
     fetchInstance(`${API_BASE_URL}/room-report/export?${roomReportQuery(params)}`, { credentials: 'include' }, 'blob', 120_000);
 

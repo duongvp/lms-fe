@@ -2083,3 +2083,54 @@ body {
   .schedule-detail-section { padding: 10px 12px; }
   .schedule-detail-grid { gap: 10px 12px; }
 }
+
+/* Keep the lesson report within its modal; narrow screens show labelled rows. */
+.calendar-room-report-table .ant-table-cell {
+  overflow-wrap: anywhere;
+}
+.calendar-room-report-table .ant-space-vertical {
+  max-width: 100%;
+}
+@media (max-width: 767px) {
+  .calendar-room-report-table .ant-table-header,
+  .calendar-room-report-table colgroup {
+    display: none;
+  }
+  .calendar-room-report-table .ant-table-body table,
+  .calendar-room-report-table .ant-table-tbody {
+    display: block;
+    width: 100% !important;
+  }
+  .calendar-room-report-table .ant-table-row {
+    display: block;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    border: 1px solid #edf0f3;
+    border-radius: 8px;
+  }
+  .calendar-room-report-table .ant-table-row > .ant-table-cell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: 12px;
+    width: 100%;
+    padding: 8px 0;
+    border-bottom: 0;
+  }
+  .calendar-room-report-table .ant-table-row > .ant-table-cell::before {
+    content: attr(data-label);
+    color: #737373;
+    font-size: 12px;
+  }
+  .calendar-room-report-table .ant-table-row > .ant-table-cell:first-child {
+    display: block;
+    border-bottom: 1px solid #f0f0f0;
+    margin-bottom: 4px;
+  }
+  .calendar-room-report-table .ant-table-row > .ant-table-cell:first-child::before {
+    display: none;
+  }
+  .calendar-room-report-table .ant-table-cell > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
