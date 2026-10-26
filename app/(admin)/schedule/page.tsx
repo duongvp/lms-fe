@@ -56,6 +56,7 @@ import {
     updateLivestream,
 } from "@/services/livestreamService";
 import dayjs, { Dayjs } from "dayjs";
+import { mergeScheduleClock } from "@/helper/scheduleClock";
 import type { ModuleField, ResolvedFieldPermission } from "@/types/fieldPolicy";
 import { canEditAnyField, resolveModuleFieldPermissions, sanitizeEditablePayload } from "@/helper/fieldPolicy";
 import { useLmsCache, useModuleFieldsQuery, useSchedulesQuery, useScheduleTeacherFilterOptionsQuery, useSchedulingProgramsQuery, useTeachingStaffQuery } from "@/hooks/useLmsQueries";
@@ -3701,7 +3702,10 @@ const Page = () => {
                     return (
                         <Space size={4} wrap={false}>
                             {canEditStart ? (
-                                <Form.Item name="start_time" noStyle rules={[{ required: true, message: "Nhập thời gian bắt đầu" }]}>
+                                <Form.Item name="start_time" noStyle rules={[{ required: true, message: "Nhập thời gian bắt đầu" }]}
+                                    normalize={(time: Dayjs | null, previous: Dayjs | null) => mergeScheduleClock(
+                                        previous ?? form.getFieldValue("end_time") ?? parseCalendarWallTime(record.start_time), time
+                                    )}>
                                     <TimePicker size="small" format="HH:mm" style={{ width: 68 }} />
                                 </Form.Item>
                             ) : null}
@@ -3710,6 +3714,9 @@ const Page = () => {
                                 <Form.Item
                                     name="end_time"
                                     noStyle
+                                    normalize={(time: Dayjs | null, previous: Dayjs | null) => mergeScheduleClock(
+                                        previous ?? form.getFieldValue("start_time") ?? parseCalendarWallTime(record.end_time), time
+                                    )}
                                     dependencies={["start_time"]}
                                     rules={[
                                         { required: true, message: "Nhập thời gian kết thúc" },
