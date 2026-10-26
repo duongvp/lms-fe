@@ -468,6 +468,13 @@ export const resendLivestreamsToHocmai = (ids: number[]) =>
         credentials: "include",
     }, "json", 120_000);
 
+export const retryCanceledLivestreamStatus = (id: number) =>
+    fetchInstance(`${API_BASE_URL}/${id}/hocmai-canceled-status/retry`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+    }, "json", 30_000);
+
 export interface ClassroomAssignmentSummary {
     roomId: number;
     classId: string;

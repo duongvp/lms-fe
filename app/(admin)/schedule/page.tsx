@@ -46,6 +46,7 @@ import {
     importLivestreamsFile,
     provisionLivestreamEvg,
     resendLivestreamsToHocmai,
+    retryCanceledLivestreamStatus,
     getCalendarAttendanceResetStudents,
     resetCalendarAttendance,
     syncCalendarAttendance,
@@ -403,6 +404,50 @@ const renderScheduleDocuments = (value: unknown) => {
             ))}
         </Space>
     );
+};
+
+const CanceledStatusRetryButton = ({ calendarId, notify }: {
+    calendarId: number;
+    notify: (kind: "success" | "info" | "error", message: string) => void;
+}) => {
+    const [busy, setBusy] = useState(false);
+    const pending = useRef(false);
+    const retry = () => {
+        if (pending.current) return;
+        pending.current = true;
+        Modal.confirm({
+            title: "Đồng bộ lại lịch nghỉ sang HMO?",
+            content: "Yêu cầu chuyển nghỉ và thông báo chỉ được gửi sau khi HMO xác nhận tạo lịch. Nếu lần gửi trước bị gián đoạn, thông báo có thể được gửi lại. Trạng thái nghỉ trên LMS được giữ nguyên.",
+            okText: "Đồng bộ lại",
+            cancelText: "Hủy",
+            afterClose: () => { pending.current = false; },
+            onOk: async () => {
+                setBusy(true);
+                try {
+                    const response: any = await retryCanceledLivestreamStatus(calendarId);
+                    const result = response?.data ?? response ?? {};
+                    const messages: Record<string, string> = {
+                        queued: "Đã tạo yêu cầu đồng bộ lại lịch nghỉ. HMO sẽ xử lý theo hàng đợi.",
+                        waiting_create: "Đang chờ HMO tạo lịch thành công trước khi gửi trạng thái nghỉ và thông báo.",
+                        pending: "Lịch nghỉ đã có yêu cầu đang chờ hoặc đang xử lý; không tạo trùng.",
+                        already_synced: "Trạng thái nghỉ đã đồng bộ thành công; không gửi lại thông báo.",
+                    };
+                    notify(result.state === "queued" ? "success" : "info", messages[result.state] || "Đã tiếp nhận yêu cầu.");
+                } catch (error: any) {
+                    notify("error", error?.message || "Không thể đồng bộ lại lịch nghỉ.");
+                } finally {
+                    setBusy(false);
+                }
+            },
+        });
+    };
+    return <Tooltip title="Đồng bộ lại lịch nghỉ sang HMO">
+        <Button
+            type="link" size="small" icon={<ReloadOutlined />}
+            aria-label="Đồng bộ lại lịch nghỉ sang HMO" loading={busy}
+            onClick={event => { event.stopPropagation(); retry(); }}
+        />
+    </Tooltip>;
 };
 
 const downloadBlob = (blob: Blob, filename: string) => {
@@ -3826,6 +3871,15 @@ const Page = () => {
                     </Space>
                 ) : (
                     <Space size={4} wrap={false}>
+                        {Number(record.lesson_status) === 1
+                            && calendarSourceFromCode(record.code) !== "feed"
+                            && can(PermissionKey.SCHEDULE_EDIT, record.code)
+                            && Number(record.id) > 0 && (
+                            <CanceledStatusRetryButton
+                                calendarId={Number(record.id)}
+                                notify={(kind, message) => { api[kind]({ message }); }}
+                            />
+                        )}
                         {canMakeupAfterCancel && (
                             <Tooltip title="Tạo lịch bù hoặc dời chuỗi">
                                 <Button
