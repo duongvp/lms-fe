@@ -4,7 +4,7 @@ import { MenuOutlined } from "@ant-design/icons";
 import { Avatar, Button, Dropdown, Flex, Layout, Space, Menu, Grid } from "antd";
 import { MenuProps } from "antd/lib";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -37,6 +37,12 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
   const screens = useBreakpoint();
   const isMobile = screens && !screens.xl;
   const isPhone = screens && !screens.sm;
+  const [openMenuKeys, setOpenMenuKeys] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Close popups without remounting the menu and resetting overflow measurements.
+    setOpenMenuKeys([]);
+  }, [pathname]);
 
   // Deep link hoặc tab mới có `program` là nguồn ưu tiên. URL trống không xóa
   // context, vì người dùng có thể đang đi qua Tổng quan hay module không lọc.
@@ -220,9 +226,10 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
           </Flex>
           {!isMobile && (
             <Menu
-              key={pathname}
               mode="horizontal"
               selectedKeys={selectedMenuKeys}
+              openKeys={openMenuKeys}
+              onOpenChange={setOpenMenuKeys}
               items={headerItems}
               style={{
                 borderBottom: 'none',

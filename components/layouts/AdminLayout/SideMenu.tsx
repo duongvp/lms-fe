@@ -121,6 +121,14 @@ export const menuConfig: IMenuItem[] = [
         permission: PermissionKey.ROLE_VIEW,
     },
     {
+        key: "user_guide",
+        icon: <BookOutlined />,
+        label: "Hướng dẫn sử dụng",
+        path: "/user-guide",
+        // Available to signed-in users; article visibility is checked separately.
+        permission: null,
+    },
+    {
         key: "9",
         icon: <LogoutOutlined />,
         label: "Đăng xuất",

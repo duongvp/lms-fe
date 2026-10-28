@@ -332,7 +332,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     const appliedRangeKey = useRef("");
     const [visibleBlockCount, setVisibleBlockCount] = useState(8);
     const [commitProgress, setCommitProgress] = useState<CreateProgress | null>(null);
-    const [previewError, setPreviewError] = useState("");
+    const [scheduleError, setScheduleError] = useState<{ title: string; detail: string } | null>(null);
     const [hmoOptions, setHmoOptions] = useState<Record<string, HocmaiSectionOption[]>>({});
     const [loadingHmoLessonIds, setLoadingHmoLessonIds] = useState<Set<string>>(new Set());
     const [syncingHmoLessonIds, setSyncingHmoLessonIds] = useState(false);
@@ -347,7 +347,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     const loadingHmoIdsRef = useRef(new Set<string>());
     const hmoPublishTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const previewRef = useRef<HTMLDivElement>(null);
-    const previewErrorRef = useRef<HTMLDivElement>(null);
+    const scheduleErrorRef = useRef<HTMLDivElement>(null);
 
     // Lấy system_type từ Chương trình đã chọn
     const lessonPrograms = useLessonProgramOptions(Boolean(open && programCode));
@@ -385,12 +385,12 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     }, [preview.length]);
 
     useEffect(() => {
-        if (!previewError) return;
+        if (!scheduleError) return;
         const frame = requestAnimationFrame(() => {
-            previewErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+            scheduleErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
         });
         return () => cancelAnimationFrame(frame);
-    }, [previewError]);
+    }, [scheduleError]);
 
     // Việc tạo lịch được lưu đồng thời sau khi backend xử lý xong. Trong lúc
     // chờ, thanh tiến trình tăng dần và dừng ở 92% cho tới khi có kết quả thật.
@@ -479,7 +479,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
         ));
         form.setFieldsValue({ topuni_weekdays: weekdays, schedule_template: scheduleTemplate });
         setPreview([]);
-        setPreviewError("");
+        setScheduleError(null);
         setPayload(null);
     };
 
@@ -544,7 +544,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
         setAppliedRange({ from: Number(from), to: Number(to), count: available.length });
         setHmoSyncNotes({});
         setPreview([]);
-        setPreviewError("");
+        setScheduleError(null);
         setPayload(null);
     };
 
@@ -1017,7 +1017,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
 
     const handlePreview = async () => {
         setLoading(true);
-        setPreviewError("");
+        setScheduleError(null);
         try {
             const nextPayload = await buildPayload();
             const response: any = await previewAutoSchedule(nextPayload);
@@ -1030,9 +1030,13 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                     block: "center",
                     behavior: "smooth",
                 }));
-                message.error(firstError.errors?.[0] || "Vui lòng kiểm tra lại thông tin chưa hợp lệ");
+                message.error("Vui lòng kiểm tra lại thông tin chưa hợp lệ");
             } else {
-                setPreviewError(error?.message || "Không thể tạo bản xem trước");
+                setScheduleError({
+                    title: "Chưa thể tạo bản xem trước",
+                    detail: error?.message || "Không thể tạo bản xem trước",
+                });
+                message.error("Không thể tạo bản xem trước. Vui lòng xem chi tiết bên dưới.");
             }
         } finally {
             setLoading(false);
@@ -1041,6 +1045,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
 
     const handleCommit = async () => {
         if (!payload) return;
+        setScheduleError(null);
         setLoading(true);
         // Dòng ngày nghỉ chỉ phục vụ xem trước, không tính vào số lịch gửi tạo.
         const total = preview.filter((row) => !row.preview_only_holiday).length;
@@ -1073,7 +1078,11 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
             onClose();
         } catch (error: any) {
-            message.error(error?.message || "Không thể tạo lịch tự động");
+            setScheduleError({
+                title: "Chưa thể tạo lịch tự động",
+                detail: error?.message || "Không thể tạo lịch tự động. Vui lòng thử lại.",
+            });
+            message.error("Không thể tạo lịch tự động. Vui lòng xem chi tiết bên dưới.");
         } finally {
             setLoading(false);
             setCommitProgress(null);
@@ -1252,7 +1261,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                         }
                         if (Object.keys(hmoSyncNotes).length) setHmoSyncNotes({});
                         if (preview.length) setPreview([]);
-                        if (previewError) setPreviewError("");
+                        if (scheduleError) setScheduleError(null);
                         if (payload) setPayload(null);
                     }}
                 >
@@ -1867,13 +1876,22 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                 </Form>
             </Spin>}
 
-            {previewError && (
-                <div ref={previewErrorRef} style={{ scrollMarginTop: 16 }}>
+            {scheduleError && (
+                <div ref={scheduleErrorRef} style={{ scrollMarginTop: 16 }}>
                     <Alert
                         showIcon
                         type="error"
-                        message="Chưa thể tạo bản xem trước"
-                        description={previewError}
+                        message={scheduleError.title}
+                        description={
+                            <div
+                                role="region"
+                                aria-label="Chi tiết lỗi tạo lịch tự động"
+                                tabIndex={0}
+                                style={{ maxHeight: 240, overflowY: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
+                            >
+                                {scheduleError.detail}
+                            </div>
+                        }
                         style={{ marginTop: 16 }}
                     />
                 </div>
