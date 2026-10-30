@@ -669,6 +669,13 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, programCode, calendarSource]);
 
+    useEffect(() => {
+        if (!open) return;
+        form.setFieldValue("allow_shared_staff_schedule", false);
+        setPreview([]);
+        setPayload(null);
+    }, [open, programCode, calendarSource, form]);
+
     // Tự động fill system_type từ Chương trình đã chọn
     useEffect(() => {
         if (!open || !programSystemType) return;
@@ -963,6 +970,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             : selectedBlocks;
         const holidayRules = normalizeHolidayPeriods(values.holiday_periods || []);
         return {
+            allow_shared_staff_schedule: values.allow_shared_staff_schedule === true,
             program_code: programCode,
             from_learn_number: fromLearnNumber,
             to_learn_number: toLearnNumber,
@@ -1265,6 +1273,10 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                         if (payload) setPayload(null);
                     }}
                 >
+                    <Form.Item name="allow_shared_staff_schedule" valuePropName="checked" initialValue={false}
+                        extra="Chỉ cho phép ở các chương trình khác nhau, cùng tên bài và khớp cả thời gian bắt đầu lẫn kết thúc. Các trường hợp trùng khác vẫn bị chặn.">
+                        <Checkbox>Cho phép trùng giáo viên/trợ giảng cho buổi học chung</Checkbox>
+                    </Form.Item>
                     <Space className="auto-main-settings" align="start" wrap>
 
                         <Form.Item
@@ -1899,6 +1911,9 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
 
             {preview.length > 0 && (
                 <div ref={previewRef} style={{ scrollMarginTop: 16 }}>
+                    {payload?.allow_shared_staff_schedule && <Alert type="warning" showIcon style={{ marginBottom: 12 }}
+                        message="Đang bật cho phép trùng giáo viên/trợ giảng cho buổi học chung"
+                        description="Chỉ chấp nhận khác chương trình, cùng tên bài, cùng giờ bắt đầu và kết thúc. Hãy kiểm tra kỹ trước khi xác nhận tạo lịch." />}
                     <Typography.Title level={5} style={{ marginTop: 16 }}>
                         Xem trước {preview.filter((row) => !row.preview_only_holiday).length} lịch
                     </Typography.Title>

@@ -1,0 +1,54 @@
+// QA_FIXTURE=shared-staff-auto.fixture.txt node tests/auto-schedule-range.e2e.cjs
+import '@ant-design/v5-patch-for-react-19';
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {Form, message} from 'antd';
+import dayjs from 'dayjs';
+import customParseFormat from 'dayjs/plugin/customParseFormat';
+import AutoScheduleModal from './app/(admin)/schedule/components/Modal/AutoScheduleModal';
+dayjs.extend(customParseFormat);
+const qa=window as any;
+qa.qaCount=1;qa.qaHmo=[];qa.qaHmoReleases=[];
+qa.qaCalendars=[{start_time:'2031-11-02T08:00:00Z',end_time:'2031-11-02T10:00:00Z',learn_number:1,lesson_name:'Bài QA',teacher:'GV QA'}];
+const original=Form.useForm;
+(Form as any).useForm=(...args:any[])=>{const value=original(...args);qa.qaForm=value[0];return value;};
+const wait=(ms:number)=>new Promise(r=>setTimeout(r,ms));
+const check=(ok:any,msg:string)=>{if(!ok)throw Error(msg)};
+const button=(text:string)=>[...document.querySelectorAll('button')].find(b=>b.textContent?.includes(text))!;
+const checkbox=()=>document.querySelector('input[id="allow_shared_staff_schedule"]') as HTMLInputElement;
+const root=createRoot(document.getElementById('root')!);
+const report=[];
+(async()=>{
+ for(const system of ['topclass','topuni']) {
+  qa.qaSystem=system;qa.qaPayload=undefined;qa.qaCommitPayload=undefined;
+  const render=(open:boolean)=>root.render(<AutoScheduleModal key={system} open={open} fullscreen programCode="qa" onClose={()=>{}} onSuccess={()=>{throw Error('Unexpected success')}} />);
+  render(true);await wait(1200);
+  check(checkbox() && !checkbox().checked,'Opt-in must default OFF');
+  const form=qa.qaForm;
+  form.setFieldsValue({
+   blocks:form.getFieldValue('blocks').map((b:any)=>({...b,lessons:b.lessons.map((l:any)=>({...l,sessions:l.sessions.map((s:any)=>({...s,teacher:'GV QA'}))}))})),
+   schedule_template:(form.getFieldValue('schedule_template')||[]).map((s:any)=>({...s,teacher:'GV QA'})),
+  });
+  button('Xem trước').click();await wait(400);
+  check(qa.qaPayload?.allow_shared_staff_schedule===false,'Default preview must send false');
+  checkbox().click();await wait(200);
+  check(checkbox().checked,'Checkbox did not enable opt-in');
+  check(button('Xác nhận tạo').disabled,'Changing opt-in must invalidate previous preview');
+  button('Xem trước').click();await wait(400);
+  check(qa.qaPayload?.allow_shared_staff_schedule===true,'Preview lost enabled flag');
+  check(document.body.textContent?.includes('Đang bật cho phép trùng giáo viên/trợ giảng'),'Missing preview warning');
+  button('Xác nhận tạo').click();await wait(500);
+  check(qa.qaCommitPayload?.allow_shared_staff_schedule===true,'Commit lost enabled flag');
+  checkbox().click();await wait(200);
+  check(button('Xác nhận tạo').disabled,'Disabling flag must invalidate preview');
+  button('Xem trước').click();await wait(400);
+  button('Xác nhận tạo').click();await wait(500);
+  check(qa.qaCommitPayload?.allow_shared_staff_schedule===false,'Commit retained stale true flag');
+  checkbox().click();await wait(100);
+  render(false);await wait(300);render(true);await wait(700);
+  check(!checkbox().checked,'Opt-in must reset OFF after reopening');
+  report.push({system,checks:['default off','false preview payload','enable and invalidate preview','true preview and commit payload','preview warning','disable and false commit payload','reset off on reopen']});
+  root.render(<></>);await wait(300);message.destroy();
+ }
+ document.getElementById('qa-result')!.textContent=JSON.stringify({ok:true,report});
+})().catch(e=>document.getElementById('qa-result')!.textContent=JSON.stringify({ok:false,error:String(e),stack:e.stack}));

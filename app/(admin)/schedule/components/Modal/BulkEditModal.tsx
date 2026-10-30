@@ -297,6 +297,7 @@ interface BulkEditModalProps {
     onClose: () => void;
     onSuccess: () => void | Promise<void>;
     requestedIds?: string[];
+    initialRows?: any[];
     fullscreen?: boolean;
 }
 
@@ -305,6 +306,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     onClose,
     onSuccess,
     requestedIds = [],
+    initialRows,
     fullscreen = false,
 }) => {
     const screens = Grid.useBreakpoint();
@@ -346,6 +348,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     // watcher khi các Form.Item tạm unmount, tránh vòng lặp bật/tắt tải dữ liệu.
     const watchedConfigMode = Form.useWatch('config_mode', { form, preserve: true }) || 'common';
     const mappingEnabled = Boolean(Form.useWatch('enable_mapping', { form, preserve: true }));
+    const allowSharedStaffSchedule = Form.useWatch('allow_shared_staff_schedule', { form, preserve: true }) === true;
     useEffect(() => {
         setLoadRelatedData(false);
         setSelectionReady(false);
@@ -406,7 +409,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             return;
         }
         try {
-            const savedRows = JSON.parse(sessionStorage.getItem("schedule:auto-edit:rows") || "[]");
+            const savedRows = initialRows ?? JSON.parse(sessionStorage.getItem("schedule:auto-edit:rows") || "[]");
             const rows = Array.isArray(savedRows) ? savedRows : [];
             const requestedSet = new Set(requestedIds);
             const filtered = rows.filter((row) => requestedSet.has(String(row.id)));
@@ -418,7 +421,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         } finally {
             setSelectionReady(true);
         }
-    }, [open, requestedIds]);
+    }, [open, requestedIds, initialRows]);
 
     useEffect(() => {
         if (!open || !fullscreen) return;
@@ -776,6 +779,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
 
             form.setFieldsValue({
                 operation: 'update',
+                allow_shared_staff_schedule: false,
                 config_mode: 'common',
                 enable_teacher: !selectedRows.some(isScheduleTimeLocked),
                 enable_assistant: false,
@@ -917,8 +921,8 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
     }, []);
 
     const handleClose = () => {
-        // Cho browser vẽ lại trang không còn dialog/mask trước khi router
-        // unmount hàng trăm Form.Item của cấu hình riêng.
+        // Cho browser vẽ lại danh sách bên dưới trước khi unmount
+        // hàng trăm Form.Item của cấu hình riêng.
         hideModalImmediately();
         window.requestAnimationFrame(() => {
             window.requestAnimationFrame(onClose);
@@ -1587,6 +1591,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             const response = await updateLivestreamBulk({
                 ids: targetIds,
                 config_mode: 'separate',
+                allow_shared_staff_schedule: values.allow_shared_staff_schedule === true,
                 update_data: changedUpdates,
             });
             const committedCount = Array.isArray(response?.data)
@@ -1716,6 +1721,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     }}
                     initialValues={{
                         operation: 'update',
+                        allow_shared_staff_schedule: false,
                         config_mode: 'common',
                         enable_teacher: true,
                         enable_assistant: false,
@@ -1758,6 +1764,10 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
 
                     {operation === 'update' && (
                         <>
+                            <Form.Item name="allow_shared_staff_schedule" valuePropName="checked"
+                                extra="Chỉ cho phép ở các chương trình khác nhau, cùng tên bài và khớp cả thời gian bắt đầu lẫn kết thúc. Các trường hợp trùng khác vẫn bị chặn.">
+                                <Checkbox>Cho phép trùng giáo viên/trợ giảng cho buổi học chung</Checkbox>
+                            </Form.Item>
                             {/* Chọn chế độ cấu hình */}
                             <div className="responsive-config-mode" style={{ marginBottom: 24, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 16, background: '#f8f9fa', padding: '12px 16px', borderRadius: 8, border: '1px solid #f0f0f0' }}>
                                 <Text strong style={{ whiteSpace: 'nowrap', color: '#595959' }}>Cách cấu hình:</Text>
@@ -2544,6 +2554,9 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     )}
                     {previewRows.length > 0 && (
                         <div ref={previewRef} style={{ scrollMarginTop: 16 }}>
+                            {operation === 'update' && allowSharedStaffSchedule && <Alert type="warning" showIcon style={{ marginTop: 16 }}
+                                message="Đang bật cho phép trùng giáo viên/trợ giảng cho buổi học chung"
+                                description="Chỉ chấp nhận khác chương trình, cùng tên bài, cùng giờ bắt đầu và kết thúc. Hãy kiểm tra kỹ trước khi xác nhận cập nhật." />}
                             <Alert
                                 type="info"
                                 showIcon

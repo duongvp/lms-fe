@@ -1495,10 +1495,6 @@ body {
 
 /* Dropdowns in the mobile auto-schedule modal follow the trigger width. */
 @media (max-width: 767px) {
-  .schedule-auto-route-hint {
-    display: none;
-  }
-
   .schedule-mobile-staff-popup {
     max-width: calc(100vw - 24px);
   }
@@ -2132,5 +2128,17 @@ body {
   .calendar-room-report-table .ant-table-cell > * {
     min-width: 0;
     max-width: 100%;
+  }
+}
+
+/* Fit the short add-schedule form on desktop and laptop screens. */
+@media (min-width: 992px) {
+  .schedule-entry-add-modal .responsive-schedule-form {
+    --schedule-section-padding: 14px 16px 4px;
+    --schedule-section-gap: 16px;
+  }
+
+  .schedule-entry-add-modal .responsive-schedule-form .ant-form-item {
+    margin-bottom: 16px;
   }
 }

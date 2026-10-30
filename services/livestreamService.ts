@@ -7,6 +7,7 @@ const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://local
 export type CalendarSource = 'livestream' | 'feed';
 
 export interface LivestreamPayload {
+    allow_shared_staff_schedule?: boolean;
     calendar_source?: CalendarSource;
     system_type: string;
     code: string;
@@ -41,10 +42,12 @@ const serializeAssistantTeachers = (value: unknown) => {
 };
 
 export interface BulkLivestreamPayload {
+    allow_shared_staff_schedule?: boolean;
     calendars: LivestreamPayload[];
 }
 
 export interface AutoSchedulePayload {
+    allow_shared_staff_schedule?: boolean;
     calendar_source?: CalendarSource;
     program_code: string;
     system_type: "topclass" | "topuni";
@@ -886,6 +889,7 @@ export const toRescheduleLivestreamPayload = (values: any): any => {
 
 //update hàng loạt
 export interface BulkUpdateLivestreamPayload {
+    allow_shared_staff_schedule?: boolean;
     ids: (string | number)[];
     // Backend của bạn yêu cầu cấu trúc update như thế nào thì bạn điều chỉnh ở đây.
     // Ví dụ phổ biến:

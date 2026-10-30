@@ -49,8 +49,8 @@ export const FormSection = ({ title, children }: { title: string; children: Reac
             style={{
                 border: `1px solid rgba(0, 0, 0, 0.1)`,
                 borderRadius: 6,
-                padding: "20px 16px 16px 16px",
-                marginBottom: 24,
+                padding: "var(--schedule-section-padding, 20px 16px 16px 16px)",
+                marginBottom: "var(--schedule-section-gap, 24px)",
                 backgroundColor: "transparent",
             }}
         >
@@ -305,8 +305,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
         const mobile = viewportWidth < 992;
-        const width = mobile ? viewportWidth - 12 : Math.min(900, Math.max(320, viewportWidth - 32));
-        const height = mobile ? viewportHeight - 12 : Math.min(760, Math.max(420, viewportHeight - 32));
+        const width = mobile ? viewportWidth - 12 : Math.min(isEdit ? 900 : 940, Math.max(320, viewportWidth - 24));
+        const height = mobile ? viewportHeight - 12 : Math.min(isEdit ? 760 : 740, Math.max(420, viewportHeight - 24));
         setModalFrame({
             x: mobile ? 6 : Math.max(8, (viewportWidth - width) / 2),
             y: mobile ? 6 : Math.max(8, (viewportHeight - height) / 2),
@@ -314,14 +314,14 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             height,
         });
         setIsModalCompact(false);
-    }, [open]);
+    }, [open, isEdit]);
 
     const toggleModalCompact = (event: React.MouseEvent<HTMLElement>) => {
         event.stopPropagation();
         if (typeof window === 'undefined') return;
         const nextCompact = !isModalCompact;
-        const width = Math.min(nextCompact ? 520 : 900, window.innerWidth - 16);
-        const height = Math.min(nextCompact ? 480 : 760, window.innerHeight - 16);
+        const width = Math.min(nextCompact ? 520 : isEdit ? 900 : 940, window.innerWidth - 16);
+        const height = Math.min(nextCompact ? 480 : isEdit ? 760 : 740, window.innerHeight - 16);
         setModalFrame({
             x: Math.max(8, (window.innerWidth - width) / 2),
             y: Math.max(8, (window.innerHeight - height) / 2),
@@ -930,7 +930,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         <>
             {contextHolder}
             <Modal
-                rootClassName="schedule-responsive-modal schedule-entry-modal"
+                rootClassName={`schedule-responsive-modal schedule-entry-modal${!isEdit && addMode === 'single' ? ' schedule-entry-add-modal' : ''}`}
                 title={
                     <div
                         className="schedule-entry-title"
@@ -1104,6 +1104,11 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                         }));
                     }}
                 >
+
+                    {!isEdit && (<Form.Item name="allow_shared_staff_schedule" valuePropName="checked" initialValue={false}
+                        extra="Chỉ cho phép ở các chương trình khác nhau, cùng tên bài và khớp cả thời gian bắt đầu lẫn kết thúc. Các trường hợp trùng khác vẫn bị chặn.">
+                        <Checkbox>Cho phép trùng giáo viên/trợ giảng cho buổi học chung</Checkbox>
+                    </Form.Item>)}
 
                     {isEdit && updateMode !== 'makeup' && updateMode !== 'following' && renderChangeReason()}
 

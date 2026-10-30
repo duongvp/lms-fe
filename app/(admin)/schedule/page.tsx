@@ -24,6 +24,8 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import viLocale from "@fullcalendar/core/locales/vi";
 import ScheduleModal from "./components/Modal/ScheduleModal";
+import AutoScheduleModal from "./components/Modal/AutoScheduleModal";
+import BulkEditModal from "./components/Modal/BulkEditModal";
 import AttendanceResetStudentPicker from "./components/AttendanceResetStudentPicker";
 import RegistrationAuditModal from "./components/Modal/RegistrationAuditModal";
 import CalendarRoomReportModal from "./components/Modal/CalendarRoomReportModal";
@@ -1300,6 +1302,11 @@ const Page = () => {
     // Bản nháp được vẽ trực tiếp trên lịch khi người dùng kéo/click để tạo lịch.
     // Nó chỉ tồn tại trong lúc modal tạo mới đang mở, không phải dữ liệu đã lưu.
     const [calendarDraftPreview, setCalendarDraftPreview] = useState<ScheduleDataType | null>(null);
+    const [autoScheduleProgram, setAutoScheduleProgram] = useState<string | null>(null);
+    const [bulkEditSelection, setBulkEditSelection] = useState<{
+        ids: string[];
+        rows: ScheduleDataType[];
+    } | null>(null);
     const [copySource, setCopySource] = useState<ScheduleDataType | null>(null);
     const [swapSource, setSwapSource] = useState<ScheduleDataType | null>(null);
     // Khởi tạo thu gọn để không chớp phần hướng dẫn trước khi đọc thiết lập
@@ -3985,11 +3992,9 @@ const Page = () => {
     }
 
     const handleOpenAutoSchedule = () => {
-        const params = new URLSearchParams({
-            program: String(submittedFilterValues.code),
-            returnTo: buildScheduleUrl(submittedFilterValues, currentPage),
-        });
-        router.push(`/schedule/auto?${params.toString()}`);
+        const programCode = String(submittedFilterValues.code || "").trim();
+        if (!programCode) return;
+        setAutoScheduleProgram(programCode);
     };
 
     const handleOpenBulkEdit = async () => {
@@ -4035,13 +4040,10 @@ const Page = () => {
             });
             return;
         }
-        sessionStorage.setItem("schedule:auto-edit:rows", JSON.stringify(selectedRows));
-        const params = new URLSearchParams({
-            ids: selectedRows.map((item) => String(item.id)).join(","),
-            program: String(submittedFilterValues.code || ""),
-            returnTo: buildScheduleUrl(submittedFilterValues, currentPage),
+        setBulkEditSelection({
+            ids: selectedRows.map((item) => String(item.id)),
+            rows: selectedRows,
         });
-        router.push(`/schedule/auto-edit?${params.toString()}`);
     };
 
     const handleOpenScheduleImport = () => {
@@ -5275,6 +5277,28 @@ const Page = () => {
                 >
                     {calendarDetail && <ScheduleDetailRow record={calendarDetail} />}
                 </Modal>
+                {autoScheduleProgram && <AutoScheduleModal
+                    open
+                    fullscreen
+                    programCode={autoScheduleProgram}
+                    onClose={() => setAutoScheduleProgram(null)}
+                    onSuccess={async () => {
+                        await refreshSchedules();
+                        api.success({ message: "Đã tạo lịch tự động" });
+                    }}
+                />}
+                {bulkEditSelection && <BulkEditModal
+                    open
+                    fullscreen
+                    requestedIds={bulkEditSelection.ids}
+                    initialRows={bulkEditSelection.rows}
+                    onClose={() => setBulkEditSelection(null)}
+                    onSuccess={async () => {
+                        await refreshSchedules();
+                        api.success({ message: "Đã cập nhật lịch học" });
+                        setBulkEditSelection(null);
+                    }}
+                />}
                 <ScheduleModalController
                     ref={scheduleModalRef}
                     onCloseCleanup={() => {

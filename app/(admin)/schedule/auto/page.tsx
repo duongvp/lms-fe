@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, Result, message } from "antd";
+import { Button, Result, message } from "antd";
 import { useRouter, useSearchParams } from "next/navigation";
 import AutoScheduleModal from "../components/Modal/AutoScheduleModal";
 import { useLmsCache } from "@/hooks/useLmsQueries";
@@ -27,25 +27,16 @@ const AutoSchedulePage = () => {
     }
 
     return (
-        <>
-            <Alert
-                className="schedule-auto-route-hint"
-                banner
-                showIcon
-                message={`Tạo lịch tự động cho Chương trình ${programCode}`}
-                description="Bạn có thể cấu hình riêng lịch và nhân sự theo Block, sau đó tinh chỉnh từng lịch trước khi xem trước và xác nhận."
-            />
-            <AutoScheduleModal
-                open
-                fullscreen
-                programCode={programCode}
-                onClose={() => router.replace(returnTo)}
-                onSuccess={async () => {
-                    await refreshSchedules();
-                    message.success("Đã tạo lịch tự động");
-                }}
-            />
-        </>
+        <AutoScheduleModal
+            open
+            fullscreen
+            programCode={programCode}
+            onClose={() => router.replace(returnTo)}
+            onSuccess={async () => {
+                await refreshSchedules();
+                message.success("Đã tạo lịch tự động");
+            }}
+        />
     );
 };
 

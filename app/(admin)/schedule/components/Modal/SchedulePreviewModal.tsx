@@ -922,6 +922,9 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
             });
         }
 
+        if (!isEdit) {
+            finalPayload.allow_shared_staff_schedule = formValues.allow_shared_staff_schedule === true;
+        }
         onConfirm(finalPayload, payloadType);
     };
 
@@ -1210,6 +1213,9 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     },
                 }}
             >
+                {!isEdit && formValues.allow_shared_staff_schedule === true && <Alert type="warning" showIcon style={{ marginBottom: 16 }}
+                    message="Đang bật cho phép trùng giáo viên/trợ giảng cho buổi học chung"
+                    description="Chỉ chấp nhận khác chương trình, cùng tên bài, cùng giờ bắt đầu và kết thúc. Hãy kiểm tra kỹ trước khi xác nhận lưu." />}
                 <div style={{ marginBottom: 16 }}>
                     <Text type="secondary">
                         {isEdit
