@@ -1,5 +1,6 @@
 "use client";
 import { calendarSourceFromCode } from "@/helper/lesson";
+import { getScheduleConflictLinks, type ScheduleConflictLink } from "@/helper/scheduleConflictLinks";
 
 import Select from "@/components/ui/MobileSelect";
 import { PlusOutlined, SyncOutlined } from "@ant-design/icons";
@@ -332,7 +333,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
     const appliedRangeKey = useRef("");
     const [visibleBlockCount, setVisibleBlockCount] = useState(8);
     const [commitProgress, setCommitProgress] = useState<CreateProgress | null>(null);
-    const [scheduleError, setScheduleError] = useState<{ title: string; detail: string } | null>(null);
+    const [scheduleError, setScheduleError] = useState<{ title: string; detail: string; links?: ScheduleConflictLink[] } | null>(null);
     const [hmoOptions, setHmoOptions] = useState<Record<string, HocmaiSectionOption[]>>({});
     const [loadingHmoLessonIds, setLoadingHmoLessonIds] = useState<Set<string>>(new Set());
     const [syncingHmoLessonIds, setSyncingHmoLessonIds] = useState(false);
@@ -1043,6 +1044,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                 setScheduleError({
                     title: "Chưa thể tạo bản xem trước",
                     detail: error?.message || "Không thể tạo bản xem trước",
+                    links: getScheduleConflictLinks(error),
                 });
                 message.error("Không thể tạo bản xem trước. Vui lòng xem chi tiết bên dưới.");
             }
@@ -1089,6 +1091,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             setScheduleError({
                 title: "Chưa thể tạo lịch tự động",
                 detail: error?.message || "Không thể tạo lịch tự động. Vui lòng thử lại.",
+                links: getScheduleConflictLinks(error),
             });
             message.error("Không thể tạo lịch tự động. Vui lòng xem chi tiết bên dưới.");
         } finally {
@@ -1901,7 +1904,15 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                 tabIndex={0}
                                 style={{ maxHeight: 240, overflowY: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
                             >
-                                {scheduleError.detail}
+                                <div>{scheduleError.detail}</div>
+                                {!!scheduleError.links?.length && <Space direction="vertical" size={4} style={{ width: "100%", marginTop: 8, whiteSpace: "normal" }}>
+                                    {scheduleError.links.map((link) => (
+                                        <Typography.Link key={link.id} href={link.href} target="_blank" rel="noopener noreferrer"
+                                            style={{ overflowWrap: "anywhere" }}>
+                                            {link.label} ↗
+                                        </Typography.Link>
+                                    ))}
+                                </Space>}
                             </div>
                         }
                         style={{ marginTop: 16 }}
