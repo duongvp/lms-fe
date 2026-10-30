@@ -2242,14 +2242,14 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                                         <Form.Item
                                                                             name={[field.name, 'handling']}
                                                                             label="Cách xử lý"
-                                                                            initialValue="create_canceled"
+                                                                            initialValue="next_session"
                                                                             style={{ marginBottom: 0 }}
                                                                         >
                                                                             <Select
                                                                                 style={{ width: 290 }}
                                                                                 options={[
-                                                                                    { value: 'create_canceled', label: 'Tạo lịch ngày nghỉ và đánh dấu Nghỉ' },
                                                                                     { value: 'next_session', label: 'Không tạo ngày nghỉ, giữ nguyên thứ tự bài' },
+                                                                                    { value: 'create_canceled', label: 'Tạo lịch ngày nghỉ và đánh dấu Nghỉ' },
                                                                                 ]}
                                                                             />
                                                                         </Form.Item>
@@ -2261,7 +2261,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                                 <Button
                                                                     type="dashed"
                                                                     icon={<PlusOutlined />}
-                                                                    onClick={() => add({ date_range: null, handling: 'create_canceled' })}
+                                                                    onClick={() => add({ date_range: null, handling: 'next_session' })}
                                                                     style={{ alignSelf: 'flex-start' }}
                                                                 >
                                                                     Thêm ngày hoặc đợt nghỉ

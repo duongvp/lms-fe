@@ -1,6 +1,7 @@
 "use client";
 import { calendarSourceFromCode } from "@/helper/lesson";
 import { getScheduleConflictLinks, type ScheduleConflictLink } from "@/helper/scheduleConflictLinks";
+import { ScheduleConflictDetails } from "./ScheduleConflictDetails";
 
 import Select from "@/components/ui/MobileSelect";
 import { PlusOutlined, SyncOutlined } from "@ant-design/icons";
@@ -1230,7 +1231,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                         topuni_weekdays: [],
                         topuni_week_interval: 1,
                         topuni_schedule_frequency: "weekly",
-                        holiday_handling: "create_canceled",
+                        holiday_handling: "next_session",
                         holiday_periods: [],
                         customize_lesson_names: false,
                         hmo_sync_name_source: "lesson",
@@ -1429,14 +1430,14 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                                 <Form.Item
                                                     name={[field.name, "handling"]}
                                                     label="Cách xử lý"
-                                                    initialValue="create_canceled"
+                                                    initialValue="next_session"
                                                     style={{ marginBottom: 0 }}
                                                 >
                                                     <Select
                                                         style={{ width: 330 }}
                                                         options={[
-                                                            { value: "create_canceled", label: "Tạo lịch ngày nghỉ và đánh dấu Nghỉ" },
                                                             { value: "next_session", label: "Không tạo ngày nghỉ, giữ nguyên thứ tự bài" },
+                                                            { value: "create_canceled", label: "Tạo lịch ngày nghỉ và đánh dấu Nghỉ" },
                                                         ]}
                                                     />
                                                 </Form.Item>
@@ -1448,7 +1449,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                         <Button
                                             type="dashed"
                                             icon={<PlusOutlined />}
-                                            onClick={() => add({ date_range: null, handling: "create_canceled" })}
+                                            onClick={() => add({ date_range: null, handling: "next_session" })}
                                             style={{ alignSelf: "flex-start" }}
                                         >
                                             Thêm ngày hoặc đợt nghỉ
@@ -1892,7 +1893,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             </Spin>}
 
             {scheduleError && (
-                <div ref={scheduleErrorRef} style={{ scrollMarginTop: 16 }}>
+                <div ref={scheduleErrorRef} style={{ scrollMarginTop: 16, marginBottom: 20 }}>
                     <Alert
                         showIcon
                         type="error"
@@ -1904,15 +1905,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                                 tabIndex={0}
                                 style={{ maxHeight: 240, overflowY: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
                             >
-                                <div>{scheduleError.detail}</div>
-                                {!!scheduleError.links?.length && <Space direction="vertical" size={4} style={{ width: "100%", marginTop: 8, whiteSpace: "normal" }}>
-                                    {scheduleError.links.map((link) => (
-                                        <Typography.Link key={link.id} href={link.href} target="_blank" rel="noopener noreferrer"
-                                            style={{ overflowWrap: "anywhere" }}>
-                                            {link.label} ↗
-                                        </Typography.Link>
-                                    ))}
-                                </Space>}
+                                <ScheduleConflictDetails detail={scheduleError.detail} links={scheduleError.links} />
                             </div>
                         }
                         style={{ marginTop: 16 }}
@@ -1921,7 +1914,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
             )}
 
             {preview.length > 0 && (
-                <div ref={previewRef} style={{ scrollMarginTop: 16 }}>
+                <div ref={previewRef} style={{ scrollMarginTop: 16, marginTop: 20 }}>
                     {payload?.allow_shared_staff_schedule && <Alert type="warning" showIcon style={{ marginBottom: 12 }}
                         message="Đang bật cho phép trùng giáo viên/trợ giảng cho buổi học chung"
                         description="Chỉ chấp nhận khác chương trình, cùng tên bài, cùng giờ bắt đầu và kết thúc. Hãy kiểm tra kỹ trước khi xác nhận tạo lịch." />}

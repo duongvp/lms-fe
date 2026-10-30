@@ -25,12 +25,18 @@ const report=[];
   render(true);await wait(1200);
   check(checkbox() && !checkbox().checked,'Opt-in must default OFF');
   const form=qa.qaForm;
+  button('Thêm ngày hoặc đợt nghỉ').click();await wait(150);
+  check(form.getFieldValue(['holiday_periods',0,'handling'])==='next_session','New holiday must default to preserving lesson order without creating canceled sessions');
+  const holiday=dayjs().add(3,'day');
+  form.setFieldValue(['holiday_periods',0,'date_range'],[holiday,holiday]);
+
   form.setFieldsValue({
    blocks:form.getFieldValue('blocks').map((b:any)=>({...b,lessons:b.lessons.map((l:any)=>({...l,sessions:l.sessions.map((s:any)=>({...s,teacher:'GV QA'}))}))})),
    schedule_template:(form.getFieldValue('schedule_template')||[]).map((s:any)=>({...s,teacher:'GV QA'})),
   });
   button('Xem trước').click();await wait(400);
   check(qa.qaPayload?.allow_shared_staff_schedule===false,'Default preview must send false');
+  check(qa.qaPayload.holiday_rules?.[0]?.handling==='next_session','Preview must preserve default holiday handling');
   checkbox().click();await wait(200);
   check(checkbox().checked,'Checkbox did not enable opt-in');
   check(button('Xác nhận tạo').disabled,'Changing opt-in must invalidate previous preview');
