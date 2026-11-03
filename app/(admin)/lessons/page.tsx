@@ -130,6 +130,7 @@ const buildLessonUrl = (values: LessonFilterValues, page = 1) => {
   if (cleaned.to_learn_number !== undefined) {
     params.set("to_learn_number", String(cleaned.to_learn_number));
   }
+  if (cleaned.taught_status) params.set("taught_status", cleaned.taught_status);
   if (cleaned.keyword) params.set("q", String(cleaned.keyword).trim());
   if (page > 1) params.set("page", String(page));
   return params.size ? `/lessons?${params.toString()}` : "/lessons";
@@ -305,6 +306,9 @@ const Page = () => {
       from_learn_number: fromLesson || legacyLesson,
       to_learn_number: toLesson || legacyLesson,
       keyword,
+      taught_status: searchParams.get("taught_status") === "taught"
+        ? "taught"
+        : searchParams.get("taught_status") === "untaught" ? "untaught" : undefined,
     });
     if (
       values.from_learn_number !== undefined &&
@@ -1446,6 +1450,15 @@ const Page = () => {
             pageSize={pageSize}
             totalItems={totalItems}
             sortState={sortState}
+            taughtStatus={submittedFilterValues.taught_status}
+            onTaughtStatusChange={(taught_status) => {
+              if (!hasSearched) return;
+              const next = cleanFilterValues({ ...submittedFilterValues, taught_status });
+              setFilterValues((prev) => cleanFilterValues({ ...prev, taught_status }));
+              setSubmittedFilterValues(next);
+              setCurrentPage(1);
+              replaceLessonUrl(next);
+            }}
             visibleFieldPermissions={visibleFieldPermissions}
             selectedRowKeys={selectedRowKeys}
             allRowsSelected={allRowsSelected}

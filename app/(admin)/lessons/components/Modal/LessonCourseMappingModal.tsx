@@ -27,6 +27,13 @@ const LessonCourseMappingModal = ({ open, programCode, selectedLessonIds, onClos
     const packageCoursesQuery = usePackageCoursesQuery(open);
     const packageCourses: PackageCourseOption[] = packageCoursesQuery.data?.data ?? [];
     const loadingPackageCourses = packageCoursesQuery.isLoading || packageCoursesQuery.isValidating;
+    const scope = Form.useWatch("scope", form);
+    const visibleRows = useMemo(() => {
+        const activeScope = scope ?? (selectedLessonIds.length ? "selected" : "all");
+        if (activeScope === "all") return rows;
+        const selectedIds = new Set(selectedLessonIds.map(String));
+        return rows.filter((row) => selectedIds.has(String(row.lesson_id)));
+    }, [rows, scope, selectedLessonIds]);
     const selectedPackageId = Form.useWatch("package_id", form);
     const selectedCourseId = Form.useWatch("course_id", form);
     const packageCourseSheetUrl = process.env.NEXT_PUBLIC_PACKAGE_COURSE_SHEET_URL
@@ -197,16 +204,16 @@ const LessonCourseMappingModal = ({ open, programCode, selectedLessonIds, onClos
                 className="lesson-course-mapping-table"
                 size="small"
                 loading={loading}
-                rowKey="id"
-                dataSource={rows}
+                rowKey={(row) => row.id ? `mapping-${row.id}` : `lesson-${row.lesson_id}`}
+                dataSource={visibleRows}
                 pagination={false}
                 scroll={{ x: 560, y: "calc(100dvh - 480px)" }}
                 tableLayout="fixed"
                 columns={[
                     { title: "Bài", dataIndex: "learn_number", width: 70 },
                     { title: "Tên bài", dataIndex: "lesson_name" },
-                    { title: "Package ID", dataIndex: "package_id", width: 130 },
-                    { title: "Course ID", dataIndex: "course_id", width: 120 },
+                    { title: "Package ID", dataIndex: "package_id", width: 130, render: (value) => value || "—" },
+                    { title: "Course ID", dataIndex: "course_id", width: 120, render: (value) => value || "—" },
                 ]}
             />
         </Modal>

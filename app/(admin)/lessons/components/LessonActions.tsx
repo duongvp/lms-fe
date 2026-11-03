@@ -352,7 +352,7 @@ const LessonActions = ({
                       { label: "Đổi chỗ", value: "swap" },
                     ]}
                   />
-                  <Button icon={<StopOutlined />} onClick={onCancelReorder}>
+                  <Button danger icon={<StopOutlined />} onClick={onCancelReorder}>
                     Hủy sắp xếp
                   </Button>
                   <Button

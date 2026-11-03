@@ -71,6 +71,7 @@ export interface LessonApiResponse {
 }
 
 export interface LessonListParams {
+  taught_status?: "taught" | "untaught";
   calendar_source?: 'livestream' | 'feed';
   page?: number;
   limit?: number;
@@ -139,10 +140,10 @@ export interface LessonReorderPayload {
 }
 
 export interface LessonCourseMapping {
-  id: string;
+  id: string | null;
   lesson_id: string;
-  package_id: string;
-  course_id: string;
+  package_id: string | null;
+  course_id: string | null;
   learn_number: number;
   lesson_name: string;
 }

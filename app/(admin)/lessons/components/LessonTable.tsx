@@ -16,7 +16,7 @@ import type { ColumnsType } from "antd/es/table";
 import type { SorterResult } from "antd/es/table/interface";
 import { FIELD_LABELS } from "./Modal/LessonFormModal";
 import { SORTABLE_FIELDS } from "../lesson.constants";
-import type { LessonDataType, LessonSortState } from "../lesson.types";
+import type { LessonDataType, LessonFilterValues, LessonSortState } from "../lesson.types";
 import { formatLessonDateTime } from "../lesson.utils";
 import { useTableViewport } from "@/hooks/useTableViewport";
 
@@ -27,6 +27,8 @@ interface LessonTableProps {
     pageSize: number;
     totalItems: number;
     sortState: LessonSortState;
+    taughtStatus: LessonFilterValues["taught_status"];
+    onTaughtStatusChange: (value: LessonFilterValues["taught_status"]) => void;
     visibleFieldPermissions: ResolvedFieldPermission[];
     selectedRowKeys: React.Key[];
     allRowsSelected: boolean;
@@ -63,6 +65,8 @@ const LessonTable = ({
     pageSize,
     totalItems,
     sortState,
+    taughtStatus,
+    onTaughtStatusChange,
     visibleFieldPermissions,
     selectedRowKeys,
     allRowsSelected,
@@ -189,7 +193,13 @@ const LessonTable = ({
         columns.push({
             title: "Trạng thái",
             key: "taught",
-            width: 92,
+            width: 120,
+            filters: [
+                { text: "Đã dạy", value: "taught" },
+                { text: "Chưa dạy", value: "untaught" },
+            ],
+            filterMultiple: false,
+            filteredValue: taughtStatus ? [taughtStatus] : null,
             render: (_: unknown, record: LessonDataType) => isPastLesson(record)
                 ? <Tag color="green">Đã dạy</Tag>
                 : <Tag>Chưa dạy</Tag>,
@@ -385,7 +395,12 @@ const LessonTable = ({
                         showTotal: (total) => `Tổng ${total} bài học`,
                         onChange: onPageChange,
                     }}
-                    onChange={(_, __, sorter, extra) => {
+                    onChange={(_, filters, sorter, extra) => {
+                        if (extra.action === "filter") {
+                            const value = filters.taught?.[0];
+                            onTaughtStatusChange(value === "taught" || value === "untaught" ? value : undefined);
+                            return;
+                        }
                         if (extra.action !== "sort") return;
                         const activeSorter = Array.isArray(sorter)
                             ? sorter[0]

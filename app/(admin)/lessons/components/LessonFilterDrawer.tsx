@@ -62,7 +62,7 @@ const LessonFilterDrawer = ({
             className={compact ? "schedule-filter-sheet-body" : undefined}
             form={filterForm}
             layout="vertical"
-            onFinish={(values) => onSearch(cleanFilterValues(values))}
+            onFinish={(values) => onSearch(cleanFilterValues({ ...value, ...values }))}
         >
                 <Form.Item name="calendar_source" label="Nguồn lịch">
                     <Select
