@@ -2001,7 +2001,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                     <Divider style={{ margin: '12px 0' }} />
 
                                     <Row gutter={16} align="top" style={{ marginBottom: 8 }}>
-                                        <Col span={8}>
+                                        <Col span={8} className="bulk-hmo-controls">
                                             <Form.Item name="enable_mapping" valuePropName="checked" style={{ marginBottom: 0 }}>
                                                 <Checkbox onChange={(event) => {
                                                     if (event.target.checked) setHmoDataReady(false);
@@ -2745,6 +2745,16 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 .schedule-bulk-edit-modal .bulk-operation-radio-group {
                     display: flex;
                     flex-wrap: wrap;
+                }
+
+                @media (min-width: 768px) {
+                    .schedule-bulk-edit-modal .bulk-hmo-controls {
+                        position: sticky;
+                        top: 8px;
+                        align-self: flex-start;
+                        z-index: 1;
+                        background: var(--ant-color-bg-container, #fff);
+                    }
                 }
 
                 @media (max-width: 767px) {
