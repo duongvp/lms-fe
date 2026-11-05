@@ -9,7 +9,7 @@ export interface ScheduleFilterValues {
     code?: string;
     teacher?: string[];
     system_type?: Array<"topclass" | "topuni">;
-    time_status?: Array<"upcoming" | "ongoing" | "completed">;
+    time_status?: Array<"upcoming" | "ongoing" | "completed" | "cancelled">;
     date_range?: [Dayjs, Dayjs];
     weekdays?: number[];
     from_learn_number?: number;

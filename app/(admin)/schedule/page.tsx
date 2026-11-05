@@ -1,4 +1,5 @@
 "use client";
+import { buildScheduleColumnFilterParams, normalizeScheduleAssistants, SCHEDULE_PROGRESS_FILTERS } from "@/helper/scheduleColumnFilters";
 import { calendarSourceFromCode } from "@/helper/lesson";
 import { cleanFilterValues, buildScheduleApiParams, buildCalendarRoomReportParams, buildScheduleUrl, type ScheduleFilterValues } from "@/helper/scheduleFilters";
 import { isYesterdayRegistrationRange } from "@/ultils/registrationAuditDate";
@@ -12,17 +13,20 @@ import { ConfigProvider as MobileConfigProvider, DatePicker as MobileDatePicker,
 import viVN from "antd-mobile/es/locales/vi-VN";
 import { DatePicker, TimePicker } from "./components/MobileSchedulePickers";
 import CustomTable from "@/components/ui/Table";
+import ScheduleSelectionNotice from "./components/ScheduleSelectionNotice";
+import ScheduleSelectionCheckbox, { useScheduleSelection, useSelectionKeys, type ScheduleSelectionStore } from "./components/ScheduleSelectionCheckbox";
 import type { ColumnsType } from "antd/es/table";
 import type { FilterDropdownProps } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
 import CustomSearchInput from "@/components/ui/Inputs/CustomSearchInput";
 import { Select as AntSelect, notification, Alert, Card, Collapse, Form, Input, InputNumber, List, Button, Checkbox, Space, Modal, Radio, Row, Col, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress, Spin } from "antd";
-import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, SearchOutlined, SortAscendingOutlined, SortDescendingOutlined, MoreOutlined, ApartmentOutlined, CloudUploadOutlined, SwapOutlined, LinkOutlined, ClockCircleOutlined, UserOutlined, EyeOutlined, PlusOutlined } from "@ant-design/icons";
+import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, SearchOutlined, SortAscendingOutlined, SortDescendingOutlined, MoreOutlined, ApartmentOutlined, CloudUploadOutlined, SwapOutlined, LinkOutlined, ClockCircleOutlined, UserOutlined, EyeOutlined, FileTextOutlined, PlusOutlined } from "@ant-design/icons";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import viLocale from "@fullcalendar/core/locales/vi";
+import DeletedCalendarsModal from "./components/Modal/DeletedCalendarsModal";
 import ScheduleModal from "./components/Modal/ScheduleModal";
 import AutoScheduleModal from "./components/Modal/AutoScheduleModal";
 import BulkEditModal from "./components/Modal/BulkEditModal";
@@ -61,7 +65,7 @@ import dayjs, { Dayjs } from "dayjs";
 import { mergeScheduleClock } from "@/helper/scheduleClock";
 import type { ModuleField, ResolvedFieldPermission } from "@/types/fieldPolicy";
 import { canEditAnyField, resolveModuleFieldPermissions, sanitizeEditablePayload } from "@/helper/fieldPolicy";
-import { useLmsCache, useModuleFieldsQuery, useSchedulesQuery, useScheduleTeacherFilterOptionsQuery, useSchedulingProgramsQuery, useTeachingStaffQuery } from "@/hooks/useLmsQueries";
+import { useLmsCache, useModuleFieldsQuery, useSchedulesQuery, useScheduleTeacherFilterOptionsQuery, useScheduleHeaderFilterOptionsQuery, useSchedulingProgramsQuery, useTeachingStaffQuery } from "@/hooks/useLmsQueries";
 import type { LivestreamListParams } from "@/services/livestreamService";
 import type { EvgProvisionMode } from "@/services/livestreamService";
 import type { ScanTeachingUser } from "@/services/livestreamService";
@@ -202,7 +206,7 @@ const ExcelColumnFilter = ({
                             onChange={(event) => toggleOption(option.value, event.target.checked)}
                             style={{ display: "flex", alignItems: "center", width: "100%", minHeight: 36, padding: "6px 4px" }}
                         >
-                            <span title={option.text} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            <span title={option.text} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", ...(option.value === "Nghỉ học" ? { color: "#cf1322" } : {}) }}>
                                 {option.text}
                             </span>
                         </Checkbox>
@@ -316,8 +320,10 @@ const ScanTeachingUsersOptions = ({ onChange }: { onChange: (users: ScanTeaching
 };
 
 type ImmediateSelectAllCheckboxProps = {
-    checked: boolean;
-    indeterminate: boolean;
+    store: ScheduleSelectionStore;
+    scope: Set<string>;
+    completeScope: boolean;
+    total: number;
     busy: boolean;
     disabled: boolean;
     onChange: (checked: boolean) => void;
@@ -325,13 +331,17 @@ type ImmediateSelectAllCheckboxProps = {
 };
 
 const ImmediateSelectAllCheckbox = React.memo(({
-    checked,
-    indeterminate,
+    store, scope, completeScope, total,
     busy,
     disabled,
     onChange,
     children,
 }: ImmediateSelectAllCheckboxProps) => {
+    const keys = useSelectionKeys(store);
+    const selected = new Set(keys.map(String));
+    const checked = scope.size > 0 && Array.from(scope).every(key => selected.has(key))
+        && (completeScope || selected.size === total);
+    const indeterminate = keys.length > 0 && !checked;
     return (
         <Checkbox
             aria-label="Chọn tất cả lịch học"
@@ -620,7 +630,7 @@ const CALENDAR_SOURCE_OPTIONS = [
     { value: "feed", label: "Feed" },
 ];
 // Các filter này được gửi lên API để total và phân trang tính trên toàn bộ dữ liệu.
-const SERVER_TABLE_FILTER_FIELDS = new Set(["teacher", "learn_number", "system_type", "live_weekday"]);
+const SERVER_TABLE_FILTER_FIELDS = new Set(["teacher", "learn_number", "system_type", "live_weekday", "live_date", "assistant_teacher", "lesson_status"]);
 const CALENDAR_PLUGINS = [dayGridPlugin, timeGridPlugin, interactionPlugin];
 const parseCalendarWallTime = (value: unknown) => dayjs(String(value || "").replace(/Z$/, ""));
 const isEndClockAfterStart = (startTime?: Dayjs | null, endTime?: Dayjs | null) => {
@@ -649,7 +659,7 @@ const mapScheduleRows = (rows: any[]): ScheduleDataType[] => rows.map((item: any
     learn_number: item.learn_number,
     lesson_link: item.lesson_link || item.link || "",
     teacher: item.teacher,
-    assistant_teacher: item.assistant_teacher,
+    assistant_teacher: normalizeScheduleAssistants(item.assistant_teacher).join(","),
     system_type: item.system_type,
     lesson_status: item.lesson_status ?? 0,
     can_modify: item.can_modify === true,
@@ -987,7 +997,7 @@ const ScheduleFilterSheet = ({
                     <Select mode="multiple" maxTagCount="responsive" allowClear placeholder="Tất cả hệ thống" options={[{ value: "topclass", label: "Topclass" }, { value: "topuni", label: "Topuni" }]} />
                 </Form.Item>
                 <Form.Item name="time_status" label="Trạng thái buổi học">
-                    <Select mode="multiple" maxTagCount="responsive" allowClear placeholder="Tất cả trạng thái" options={[{ value: "upcoming", label: "Chưa bắt đầu" }, { value: "ongoing", label: "Đang diễn ra" }, { value: "completed", label: "Đã kết thúc" }]} />
+                    <Select mode="multiple" maxTagCount="responsive" allowClear placeholder="Tất cả trạng thái" options={[{ value: "upcoming", label: "Chưa bắt đầu" }, { value: "ongoing", label: "Đang diễn ra" }, { value: "completed", label: "Đã kết thúc" }, { value: "cancelled", label: <span style={{ color: "#cf1322" }}>Nghỉ học</span> }]} />
                 </Form.Item>
                 <Form.Item name="weekdays" label="Thứ trong tuần">
                     <Select mode="multiple" maxTagCount="responsive" allowClear placeholder="Tất cả các thứ" options={WEEKDAY_OPTIONS} />
@@ -1129,6 +1139,7 @@ const ScheduleInlineFilters = ({
                                 { value: "upcoming", label: "Chưa bắt đầu" },
                                 { value: "ongoing", label: "Đang diễn ra" },
                                 { value: "completed", label: "Đã kết thúc" },
+                                { value: "cancelled", label: <span style={{ color: "#cf1322" }}>Nghỉ học</span> },
                             ]}
                         />
                     </Form.Item>
@@ -1277,6 +1288,7 @@ const Page = () => {
     const mobileUnfilteredSearchRef = useRef(false);
     const scheduleModalRef = useRef<ScheduleModalControllerRef>(null);
     const [openImportModal, setOpenImportModal] = useState(false);
+    const [deletedCalendarsOpen, setDeletedCalendarsOpen] = useState(false);
     const [sheetExportOpen, setSheetExportOpen] = useState(false);
     const [sheetExportLoading, setSheetExportLoading] = useState(false);
     const [sheetExportJobId, setSheetExportJobId] = useState<string | null>(null);
@@ -1287,8 +1299,7 @@ const Page = () => {
     const [importing, setImporting] = useState(false);
     const [importErrors, setImportErrors] = useState<ScheduleImportError[]>([]);
     const [importMode, setImportMode] = useState<"create" | "update">("create");
-    const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
-    const [allRowsSelected, setAllRowsSelected] = useState(false);
+    const { selectedRowKeys, setSelectedRowKeys, selectionStore } = useScheduleSelection();
     const [selectingAllRows, setSelectingAllRows] = useState(false);
     const [selectionLoadedCount, setSelectionLoadedCount] = useState(0);
     const selectAllRequestRef = useRef(0);
@@ -1495,8 +1506,8 @@ const Page = () => {
                 )),
             time_status: String(searchParams.get("status") || "")
                 .split(",")
-                .filter((status): status is "upcoming" | "ongoing" | "completed" => (
-                    ["upcoming", "ongoing", "completed"].includes(status)
+                .filter((status): status is "upcoming" | "ongoing" | "completed" | "cancelled" => (
+                    ["upcoming", "ongoing", "completed", "cancelled"].includes(status)
                 )),
             weekdays: String(searchParams.get("weekdays") || "")
                 .split(",")
@@ -1518,7 +1529,9 @@ const Page = () => {
             delete values.to_learn_number;
         }
         setFilterValues(values);
-        setSubmittedFilterValues(values);
+        setSubmittedFilterValues(current => (
+            buildScheduleUrl(current) === buildScheduleUrl(values) ? current : values
+        ));
         // URL xác nhận tìm kiếm trước đó không được ghi đè chữ vừa gõ tiếp.
         if (!isOwnUrlUpdate) {
             searchTextRef.current = String(values.keyword || "");
@@ -1559,6 +1572,7 @@ const Page = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(25);
     const [totalItems, setTotalItems] = useState(0);
+    const [loadedScheduleResultScope, setLoadedScheduleResultScope] = useState<string | null>(null);
     const [filterValues, setFilterValues] = useState<ScheduleFilterValues>({ calendar_source: "livestream" });
     const [submittedFilterValues, setSubmittedFilterValues] = useState<ScheduleFilterValues>({ calendar_source: "livestream" });
     const [tableColumnFilters, setTableColumnFilters] = useState<Record<string, React.Key[] | null>>({});
@@ -1603,12 +1617,16 @@ const Page = () => {
             .filter((value) => value >= 1 && value <= 7) ?? [];
 
         return {
+            ...buildScheduleColumnFilterParams(tableColumnFilters),
             ...(teachers.length ? { teacher: teachers } : {}),
             ...(learnNumbers.length ? { learn_numbers: learnNumbers } : {}),
             ...(systemTypes.length ? { system_type: systemTypes } : {}),
             ...(weekdays.length ? { weekdays } : {}),
         };
     }, [
+        tableColumnFilters.assistant_teacher,
+        tableColumnFilters.lesson_status,
+        tableColumnFilters.live_date,
         tableColumnFilters.learn_number,
         tableColumnFilters.live_weekday,
         tableColumnFilters.system_type,
@@ -1626,22 +1644,29 @@ const Page = () => {
         };
     }, [currentPage, pageSize, submittedFilterValues, serverTableFilterParams, hasSearched]);
 
+    // Pagination hydrates fresh filter objects from the URL. Compare the query
+    // scope rather than object identities so page changes preserve selection.
+    const selectionFilterScope = buildScheduleUrl(submittedFilterValues);
+    const selectionColumnScope = JSON.stringify(Object.entries(tableColumnFilters)
+        .filter(([, values]) => values?.length)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([field, values]) => [field, values!.map(String).sort()]));
+    const scheduleResultScope = `${selectionFilterScope}:${selectionColumnScope}`;
+
     useEffect(() => {
         selectAllRequestRef.current += 1;
         setSelectedRowKeys([]);
-        setAllRowsSelected(false);
         setSelectingAllRows(false);
         selectedRowsCacheRef.current.clear();
-    }, [submittedFilterValues]);
+    }, [selectionFilterScope, setSelectedRowKeys]);
 
     useEffect(() => {
         // Bộ lọc cột thay đổi phạm vi thao tác hàng loạt. Xóa selection cũ để
         // không trộn các dòng đã ẩn với kết quả người dùng đang nhìn thấy.
         selectAllRequestRef.current += 1;
         setSelectedRowKeys([]);
-        setAllRowsSelected(false);
         setSelectingAllRows(false);
-    }, [tableColumnFilters]);
+    }, [selectionColumnScope, setSelectedRowKeys]);
 
     useEffect(() => {
         data.forEach((record) => {
@@ -1670,6 +1695,14 @@ const Page = () => {
     const selectableRowKeys = useMemo(() => new Set(
         selectionScopeRows.filter(canSelectScheduleForSync).map((record) => String(record.id))
     ), [selectionScopeRows]);
+    const allRowsSelected = useMemo(() => {
+        if (!selectableRowKeys.size) return false;
+        const selected = new Set(selectedRowKeys.map(String));
+        if (!Array.from(selectableRowKeys).every(key => selected.has(key))) return false;
+        // A complete page/client-filter result supplies every selectable ID.
+        // Otherwise "all" also requires selections across the remaining pages.
+        return hasActiveTableColumnFilters || data.length >= totalItems || selected.size === totalItems;
+    }, [selectedRowKeys, selectableRowKeys, hasActiveTableColumnFilters, data.length, totalItems]);
     // Ưu tiên dữ liệu reactive trên trang hiện tại, chỉ dùng cache cho trang khác.
     // Không đợi useEffect ghi ref mới quyết định trạng thái của các thao tác.
     const schedulesOnPage = useMemo(() => new Map(data.map((record) => [String(record.id), record])), [data]);
@@ -1691,22 +1724,57 @@ const Page = () => {
         if (info?.type === "all") return;
         selectAllRequestRef.current += 1;
         setSelectingAllRows(false);
-        setAllRowsSelected(false);
         setSelectedRowKeys(newSelectedRowKeys);
-    }, []);
+    }, [setSelectedRowKeys]);
+    const scheduleFilterOptionsParams = useMemo<LivestreamListParams | null>(() => {
+        if (!hasSearched) return null;
+        return {
+            page: 1,
+            // Chỉ tải các trường lịch cần để tạo danh sách filter; API giới hạn 300 dòng/trang.
+            limit: 300,
+            ...buildScheduleApiParams(submittedFilterValues),
+        };
+    }, [hasSearched, submittedFilterValues]);
+
+    const scheduleFilterOptionsQuery = useSchedulesQuery(scheduleFilterOptionsParams);
+    const filterOptionData = useMemo(() => {
+        const response: any = scheduleFilterOptionsQuery.data;
+        return response?.data?.data ? mapScheduleRows(response.data.data) : data;
+    }, [data, scheduleFilterOptionsQuery.data]);
+
     const handleSelectAll = useCallback(async (selected: boolean) => {
         const requestId = ++selectAllRequestRef.current;
         if (!selected) {
             setSelectedRowKeys([]);
-            setAllRowsSelected(false);
+            setSelectingAllRows(false);
+            return;
+        }
+        // The filter menus already load up to 300 schedules. Reuse that result
+        // only when it covers the exact same query and contains every schedule.
+        const scopeKey = (params: LivestreamListParams | null) => JSON.stringify(
+            Object.entries(params || {})
+                .filter(([key, value]) => key !== "page" && key !== "limit" && value !== undefined)
+                .sort(([a], [b]) => a.localeCompare(b))
+        );
+        const completeOptions = !hasActiveTableColumnFilters
+            && !scheduleFilterOptionsQuery.error
+            && !scheduleFilterOptionsQuery.isValidating
+            && Number(scheduleFilterOptionsQuery.data?.data?.total) === totalItems
+            && filterOptionData.length === totalItems
+            && scopeKey(scheduleParams) === scopeKey(scheduleFilterOptionsParams);
+        if (completeOptions) {
+            const selectable = filterOptionData.filter(canSelectScheduleForSync);
+            selectable.forEach(record => selectedRowsCacheRef.current.set(String(record.id), record));
+            setSelectedRowKeys(selectable.map(record => String(record.id)));
             setSelectingAllRows(false);
             return;
         }
         // Phản hồi checkbox ngay trước khi bắt đầu tải các trang còn lại.
         // Nếu chờ fetch hoàn tất mới set, người dùng có cảm giác click không ăn.
-        setAllRowsSelected(true);
-        setSelectingAllRows(true);
-        setSelectionLoadedCount(0);
+        React.startTransition(() => {
+            setSelectingAllRows(true);
+            setSelectionLoadedCount(0);
+        });
         const selectableKeysOnPage = selectionScopeRows
             .filter(canSelectScheduleForSync)
             .map((record) => String(record.id));
@@ -1719,14 +1787,12 @@ const Page = () => {
         // Khi đang lọc trực tiếp ở header, "chọn tất cả" chỉ áp dụng cho đúng
         // các kết quả còn hiển thị, không tải và chọn lại toàn bộ tập API.
         if (hasActiveTableColumnFilters) {
-            setAllRowsSelected(selectableKeysOnPage.length > 0);
             setSelectingAllRows(false);
             return;
         }
 
         // Page hiện tại đã chứa toàn bộ kết quả, không gọi lại chính API đó.
         if (totalItems <= data.length) {
-            setAllRowsSelected(selectableKeysOnPage.length > 0);
             setSelectingAllRows(false);
             return;
         }
@@ -1757,11 +1823,9 @@ const Page = () => {
                 selectedRowsCacheRef.current.set(String(record.id), record);
             });
             setSelectedRowKeys(selectableRows.map((record) => String(record.id)));
-            setAllRowsSelected(selectableRows.length > 0);
         } catch (error: any) {
             if (requestId !== selectAllRequestRef.current) return;
             setSelectedRowKeys([]);
-            setAllRowsSelected(false);
             api.error({
                 message: "Không thể chọn tất cả lịch học",
                 description: error?.message || "Không thể tải toàn bộ danh sách lịch học.",
@@ -1769,19 +1833,30 @@ const Page = () => {
         } finally {
             if (requestId === selectAllRequestRef.current) setSelectingAllRows(false);
         }
-    }, [api, data.length, hasActiveTableColumnFilters, scheduleParams, selectionScopeRows, totalItems]);
+    }, [api, data.length, filterOptionData, hasActiveTableColumnFilters, scheduleFilterOptionsParams, scheduleFilterOptionsQuery.data, scheduleFilterOptionsQuery.error, scheduleFilterOptionsQuery.isValidating, scheduleParams, selectionScopeRows, setSelectedRowKeys, totalItems]);
     const displayedTotalItems = hasActiveTableColumnFilters ? tableDisplayData.length : totalItems;
     const rowSelection = useMemo(() => ({
         selectedRowKeys,
         preserveSelectedRowKeys: true,
+        renderCell: (_checked: boolean, record: ScheduleDataType) => (
+            <ScheduleSelectionCheckbox
+                store={selectionStore}
+                rowKey={String(record.id)}
+                order={selectableRowKeys}
+                disabled={!selectableRowKeys.has(String(record.id))}
+                onChange={handleRowSelectionChange}
+            />
+        ),
         onChange: (keys: React.Key[], _rows: ScheduleDataType[], info: { type?: string }) => (
             handleRowSelectionChange(keys, info)
         ),
         onSelectAll: (selected: boolean) => handleSelectAll(selected),
         columnTitle: () => (
             <ImmediateSelectAllCheckbox
-                checked={allRowsSelected}
-                indeterminate={!allRowsSelected && selectedRowKeys.length > 0}
+                store={selectionStore}
+                scope={selectableRowKeys}
+                completeScope={hasActiveTableColumnFilters || data.length >= totalItems}
+                total={totalItems}
                 busy={selectingAllRows}
                 disabled={displayedTotalItems <= 0 || (hasActiveTableColumnFilters || totalItems <= data.length) && selectableRowKeys.size === 0}
                 onChange={(checked) => void handleSelectAll(checked)}
@@ -1803,7 +1878,7 @@ const Page = () => {
             };
         },
         columnWidth: 32,
-    }), [allRowsSelected, displayedTotalItems, handleRowSelectionChange, handleSelectAll, selectableRowKeys, selectedRowKeys, selectingAllRows]);
+    }), [allRowsSelected, displayedTotalItems, handleRowSelectionChange, handleSelectAll, selectableRowKeys, selectedRowKeys, selectingAllRows, selectionStore]);
 
     const calendarParams = useMemo<LivestreamListParams | null>(() => {
         if (!hasSearched || !calendarMounted) return null;
@@ -1816,19 +1891,9 @@ const Page = () => {
         };
     }, [calendarMounted, hasSearched, submittedFilterValues]);
 
-    const scheduleFilterOptionsParams = useMemo<LivestreamListParams | null>(() => {
-        if (!hasSearched) return null;
-        return {
-            page: 1,
-            // Chỉ tải các trường lịch cần để tạo danh sách filter; API giới hạn 300 dòng/trang.
-            limit: 300,
-            ...buildScheduleApiParams(submittedFilterValues),
-        };
-    }, [hasSearched, submittedFilterValues]);
 
     // ✅ Chỉ fetch khi đã bấm Lọc
     const schedulesQuery = useSchedulesQuery(hasSearched ? scheduleParams : null);
-    const scheduleFilterOptionsQuery = useSchedulesQuery(scheduleFilterOptionsParams);
     const calendarSchedulesQuery = useSchedulesQuery(calendarParams);
     const scheduleLoadError = schedulesQuery.error
         || (viewMode === "calendar" ? calendarSchedulesQuery.error : undefined);
@@ -1842,15 +1907,14 @@ const Page = () => {
     }, [api, hasSearched, scheduleLoadError]);
     const moduleFieldsQuery = useModuleFieldsQuery(SCHEDULE_MODULE_CODE);
     const scheduleTeacherFilterOptionsQuery = useScheduleTeacherFilterOptionsQuery(submittedFilterValues.code);
+    const headerFilterOptionsQuery = useScheduleHeaderFilterOptionsQuery(
+        hasSearched ? buildScheduleApiParams(submittedFilterValues) : null
+    );
     const assistantsQuery = useTeachingStaffQuery(0);
     const programsQuery = useSchedulingProgramsQuery();
     const { refreshSchedules } = useLmsCache();
     const loading = schedulesQuery.isLoading || schedulesQuery.isValidating;
     const assistantOptions = useMemo(() => assistantsQuery.data ?? [], [assistantsQuery.data]);
-    const filterOptionData = useMemo(() => {
-        const response: any = scheduleFilterOptionsQuery.data;
-        return response?.data?.data ? mapScheduleRows(response.data.data) : data;
-    }, [data, scheduleFilterOptionsQuery.data]);
     const assistantLabelByUsername = useMemo(() => new Map(
         assistantOptions.map((option) => [String(option.value), String(option.label)])
     ), [assistantOptions]);
@@ -1873,6 +1937,7 @@ const Page = () => {
             setData([]);
             setFilteredData([]);
             setTotalItems(0);
+            setLoadedScheduleResultScope(null);
             return;
         }
 
@@ -1882,7 +1947,8 @@ const Page = () => {
         setData(mappedData);
         setFilteredData(mappedData);
         setTotalItems(response.data.total || 0);
-    }, [schedulesQuery.data, hasSearched]);
+        setLoadedScheduleResultScope(scheduleResultScope);
+    }, [schedulesQuery.data, hasSearched, scheduleResultScope]);
 
     useEffect(() => {
         if (!hasSearched) {
@@ -3122,7 +3188,6 @@ const Page = () => {
                     }
 
                     setSelectedRowKeys(failedIds.map(String));
-                    setAllRowsSelected(false);
                     deletedIds.forEach((id) => selectedRowsCacheRef.current.delete(String(id)));
 
                     if (deletedIds.length) {
@@ -3432,6 +3497,25 @@ const Page = () => {
         const result = new Map<string, Array<{ text: string; value: string }>>();
         const fieldCodes = [...filterableFieldCodes, "live_weekday", "live_date"];
         fieldCodes.forEach((fieldCode) => {
+            if (fieldCode === "lesson_status") {
+                result.set(fieldCode, SCHEDULE_PROGRESS_FILTERS
+                    .filter(option => (headerFilterOptionsQuery.data?.progress_statuses ?? []).includes(option.status))
+                    .map(({ text, value }) => ({ text, value })));
+                return;
+            }
+            if (fieldCode === "live_date") {
+                result.set(fieldCode, (headerFilterOptionsQuery.data?.live_dates ?? []).map(date => ({
+                    value: date === "-" ? "-" : dayjs(date).format("DD/MM/YYYY"),
+                    text: date === "-" ? "-" : dayjs(date).format("DD/MM/YYYY"),
+                })));
+                return;
+            }
+            if (fieldCode === "assistant_teacher") {
+                const assistants = Array.from(new Set((headerFilterOptionsQuery.data?.assistant_teachers ?? [])
+                    .flatMap(value => { const names = normalizeScheduleAssistants(value); return names.length ? names : ["-"]; })));
+                result.set(fieldCode, assistants.map(value => ({ value, text: assistantLabelByUsername.get(value) || value })));
+                return;
+            }
             if (fieldCode === "teacher") {
                 const options = scheduleTeacherFilterOptionsQuery.data ?? [];
                 result.set(fieldCode, options.map((option) => ({
@@ -3448,7 +3532,7 @@ const Page = () => {
                 .map((value) => ({ text: value, value })));
         });
         return result;
-    }, [filterOptionData, filterableFieldCodes, getTableFilterValue, scheduleTeacherFilterOptionsQuery.data]);
+    }, [filterOptionData, filterableFieldCodes, getTableFilterValue, scheduleTeacherFilterOptionsQuery.data, headerFilterOptionsQuery.data, assistantLabelByUsername]);
     const getTableFilters = useCallback(
         (fieldCode: string) => tableFiltersByField.get(fieldCode) ?? [],
         [tableFiltersByField]
@@ -3601,8 +3685,7 @@ const Page = () => {
                 }
 
                 if (fieldCode === "assistant_teacher") {
-                    const labels = String(text || '')
-                        .split(',')
+                    const labels = normalizeScheduleAssistants(text)
                         .map((username) => assistantLabelByUsername.get(username.trim()) || username.trim())
                         .filter(Boolean);
                     return <span>{labels.join(', ') || '-'}</span>;
@@ -3658,9 +3741,7 @@ const Page = () => {
                 tableColumnFilters.live_date?.length ?? 0
             ),
             filteredValue: tableColumnFilters.live_date ?? null,
-            onFilter: (value: React.Key | boolean, record: ScheduleDataType) => (
-                getTableFilterValue("live_date", record) === String(value)
-            ),
+
             shouldCellUpdate: shouldUpdateScheduleCell,
             render: (value: unknown, record: ScheduleDataType) => {
                 if (isEditing(record) && editableFieldCodeSet.has("start_time")) {
@@ -4258,6 +4339,29 @@ const Page = () => {
         },
     };
     const exportMenuKeys = new Set(exportMenu.items.flatMap((item: any) => item?.key ? [String(item.key)] : []));
+    const desktopOtherActionsMenu = {
+        items: [
+            { key: "desktop-room-report", icon: <FileTextOutlined />, label: "Báo cáo lớp học", disabled: !hasSearched },
+            ...((canImportSchedule || canEditSchedule || canExportSchedule) ? [{ type: "divider" as const }] : []),
+            ...((canImportSchedule || canEditSchedule) ? [{ key: "desktop-import", icon: <UploadOutlined />, label: "Import lịch" }] : []),
+            ...(canExportSchedule ? [{
+                key: "desktop-export", icon: <DownloadOutlined />,
+                label: `Export lịch${selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}`,
+                disabled: selectingAllRows,
+                children: exportMenu.items.slice(2),
+            }] : []),
+            ...(canDeleteSchedule ? [
+                { type: "divider" as const },
+                { key: "desktop-trash", icon: <DeleteOutlined />, label: "Thùng rác (Lịch sử xóa)", danger: true, disabled: !activeProgramCode && !isAdmin },
+            ] : []),
+        ],
+        onClick: ({ key }: { key: string }) => {
+            if (key === "desktop-room-report") setRoomReportOpen(true);
+            else if (key === "desktop-import") handleOpenScheduleImport();
+            else if (key === "desktop-trash") setDeletedCalendarsOpen(true);
+            else if (exportMenuKeys.has(key)) exportMenu.onClick({ key });
+        },
+    };
     const syncMenuKeys = new Set(syncMenu.items.flatMap((item: any) => item?.key ? [String(item.key)] : []));
     const mobileToolbarMenu = {
         items: [
@@ -4268,7 +4372,7 @@ const Page = () => {
             { type: "divider" as const },
             ...(canCreateSchedule ? [{ key: "mobile-auto", icon: <CalendarOutlined />, label: "Tạo lịch tự động", disabled: !submittedFilterValues.code }] : []),
             ...(canEditSchedule && viewMode === "calendar" ? [{ key: "mobile-bulk-edit", icon: <EditOutlined />, label: "Sửa hàng loạt" }] : []),
-            ...(canDeleteSchedule && viewMode === "calendar" ? [{ key: "mobile-bulk-delete", icon: <DeleteOutlined />, danger: true, label: "Xóa" + (selectedRowKeys.length ? " (" + selectedRowKeys.length + ")" : ""), disabled: selectingAllRows || !selectedRowKeys.length || !selectedRowsAllModifiable || deletingSelectedSchedules }] : []),
+            ...(canDeleteSchedule && viewMode === "calendar" ? [{ key: "mobile-bulk-delete", icon: <DeleteOutlined />, danger: true, label: "Xóa", disabled: selectingAllRows || !selectedRowKeys.length || !selectedRowsAllModifiable || deletingSelectedSchedules }] : []),
             { type: "divider" as const },
             { key: "mobile-refresh", icon: <ReloadOutlined />, label: "Làm mới", disabled: !hasSearched || refreshingScheduleList },
         ],
@@ -4307,6 +4411,15 @@ const Page = () => {
     const batchClassroomPercent = batchClassroomItems.length
         ? Math.round((completedClassroomAssignments / batchClassroomItems.length) * 100)
         : 0;
+    const scheduleSelectionNotice = <ScheduleSelectionNotice
+        store={selectionStore}
+        desktop={isDesktop}
+        busy={selectingAllRows}
+        loaded={selectionLoadedCount}
+        total={totalItems}
+        filteredTotal={hasActiveTableColumnFilters ? tableDisplayData.length : undefined}
+        onClear={() => void handleSelectAll(false)}
+    />;
 
     return (
         <div ref={pageScrollRef} className="page--flush-bottom" style={{
@@ -4323,6 +4436,11 @@ const Page = () => {
             WebkitOverflowScrolling: "touch",
         }}>
             {contextHolder}
+            {canDeleteSchedule && <DeletedCalendarsModal
+                open={deletedCalendarsOpen} programCode={String(activeProgramCode || "")}
+                source={submittedFilterValues.calendar_source ?? "livestream"} onClose={() => setDeletedCalendarsOpen(false)}
+                onRestored={() => { if (hasSearched) void refreshSchedules(); }}
+            />}
             <Modal
                 className="attendance-reset-modal"
                 open={attendanceResetOpen}
@@ -4722,28 +4840,14 @@ const Page = () => {
                                         disabled={selectingAllRows || !selectedRowKeys.length || !selectedRowsAllModifiable}
                                         onClick={handleDeleteSelected}
                                     >
-                                        Xóa{selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}
+                                        Xóa
                                     </Button>
                                 )}
                             </div>
                             <div className="schedule-utility-actions">
-                                <Button icon={<EyeOutlined />} disabled={!hasSearched} onClick={() => setRoomReportOpen(true)}>Báo cáo lớp học</Button>
-                                {(canImportSchedule || canEditSchedule || canExportSchedule) && (
-                                    <Space.Compact className="schedule-file-actions">
-                                        {(canImportSchedule || canEditSchedule) && (
-                                            <Button icon={<UploadOutlined />} onClick={handleOpenScheduleImport}>
-                                                Import
-                                            </Button>
-                                        )}
-                                        {canExportSchedule && (
-                                            <Dropdown trigger={["click"]} menu={exportMenu} disabled={selectingAllRows}>
-                                                <Button icon={<DownloadOutlined />} disabled={selectingAllRows}>
-                                                    Export{selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}
-                                                </Button>
-                                            </Dropdown>
-                                        )}
-                                    </Space.Compact>
-                                )}
+                                <Dropdown trigger={["click"]} menu={desktopOtherActionsMenu}>
+                                    <Button icon={<MoreOutlined />}>Thao tác khác <DownOutlined /></Button>
+                                </Dropdown>
                                 <Dropdown trigger={["click"]} menu={syncMenu} disabled={selectingAllRows}>
                                     <Button icon={<DatabaseOutlined />} loading={selectingAllRows || syncingTeachingUsers || syncingStudents || batchClassroomAssigning || resendingToHocmai || provisioningEvgBulk}>
                                         Đồng bộ <DownOutlined />
@@ -4759,6 +4863,7 @@ const Page = () => {
                                 />
                             </div>
                         </> : <div className="schedule-mobile-actions">
+                            {canDeleteSchedule && <Button icon={<DeleteOutlined />} disabled={!activeProgramCode && !isAdmin} onClick={() => setDeletedCalendarsOpen(true)}>Lịch đã xóa</Button>}
                             <Button icon={<EyeOutlined />} disabled={!hasSearched} onClick={() => setRoomReportOpen(true)}>Báo cáo lớp học</Button>
                             {(canImportSchedule || canEditSchedule) && (
                                 <Button icon={<UploadOutlined />} onClick={handleOpenScheduleImport}>Import</Button>
@@ -4781,7 +4886,7 @@ const Page = () => {
                                                 key: "bulk-delete",
                                                 icon: <DeleteOutlined />,
                                                 danger: true,
-                                                label: `Xóa${selectedRowKeys.length ? ` (${selectedRowKeys.length})` : ""}`,
+                                                label: "Xóa",
                                                 disabled: selectingAllRows || !selectedRowKeys.length || !selectedRowsAllModifiable || deletingSelectedSchedules,
                                             }] : []),
                                         ],
@@ -4813,22 +4918,7 @@ const Page = () => {
                     }
                 />
                 )}
-                {!isMobile && (selectingAllRows || allRowsSelected) && (
-                    <Alert
-                        style={{ marginTop: 8, marginBottom: 12 }}
-                        type="info"
-                        showIcon
-                        icon={selectingAllRows ? <Spin size="small" /> : undefined}
-                        message={selectingAllRows
-                            ? `Đang chọn tất cả lịch học · Đã tải ${Math.min(selectionLoadedCount, totalItems)}/${totalItems} lịch`
-                            : hasActiveTableColumnFilters
-                                ? `Đã chọn ${selectedRowKeys.length}/${tableDisplayData.length} lịch học đang hiển thị sau khi lọc`
-                                : `Đã chọn ${selectedRowKeys.length} lịch học có thể thao tác trong tất cả các trang`}
-                        description={selectingAllRows ? "Các thao tác hàng loạt sẽ sẵn sàng khi chọn xong." : undefined}
-                        action={<Button size="small" onClick={() => void handleSelectAll(false)}>Hủy chọn</Button>}
-                        role="status"
-                    />
-                )}
+                {!isMobile && !isDesktop && scheduleSelectionNotice}
                 {isDesktop && (
                     <ScheduleInlineFilters
                         value={filterValues}
@@ -4859,6 +4949,7 @@ const Page = () => {
                 className="responsive-schedule-view-toolbar schedule-view-controls-enter"
                 style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: viewMode === "calendar" ? "space-between" : "flex-end", alignItems: "center", marginBottom: 12 }}
             >
+                {isDesktop && scheduleSelectionNotice}
                 {viewMode === "calendar" && (
                     <div className="responsive-calendar-legend" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -4876,6 +4967,7 @@ const Page = () => {
                     </div>
                 )}
                 <Segmented
+                    style={{ flexShrink: 0 }}
                     size={isMobile ? "small" : "middle"}
                     value={viewMode}
                     options={[
@@ -4894,8 +4986,10 @@ const Page = () => {
                 <div className="schedule-mobile-selection-bar">
                     <div className="schedule-mobile-selection-heading">
                         <ImmediateSelectAllCheckbox
-                            checked={allRowsSelected}
-                            indeterminate={!allRowsSelected && selectedRowKeys.length > 0}
+                            store={selectionStore}
+                            scope={selectableRowKeys}
+                            completeScope={hasActiveTableColumnFilters || data.length >= totalItems}
+                            total={totalItems}
                             busy={selectingAllRows}
                             disabled={loading || deletingSelectedSchedules || (hasActiveTableColumnFilters || totalItems <= data.length) && selectableRowKeys.size === 0}
                             onChange={checked => void handleSelectAll(checked)}
@@ -4985,6 +5079,53 @@ const Page = () => {
                             /* globals.css áp overflow-y: auto cho mọi Ant Table.
                                Lịch học dùng thanh cuộn của AdminLayout nên không được
                                tạo thêm scrollbar trong phần body của bảng. */
+                            .schedule-selection-checkbox {
+                                display: inline-flex;
+                                position: relative;
+                                width: 16px;
+                                height: 16px;
+                                vertical-align: middle;
+                            }
+                            .schedule-row-checkbox {
+                                appearance: none;
+                                box-sizing: border-box;
+                                width: 16px;
+                                height: 16px;
+                                margin: 0;
+                                border: 1px solid #d9d9d9;
+                                border-radius: 4px;
+                                background: #fff;
+                                cursor: pointer;
+                            }
+                            .schedule-row-checkbox:hover { border-color: #1677ff; }
+                            .schedule-row-checkbox:checked { background: #1677ff; border-color: #1677ff; }
+                            .schedule-row-checkbox:focus-visible { outline: 2px solid #91caff; outline-offset: 2px; }
+                            .schedule-row-checkbox:disabled { cursor: not-allowed; background: #f5f5f5; border-color: #d9d9d9; }
+                            .schedule-row-checkmark {
+                                position: absolute;
+                                top: 3px;
+                                left: 6px;
+                                width: 4px;
+                                height: 8px;
+                                border: solid #fff;
+                                border-width: 0 2px 2px 0;
+                                transform: rotate(45deg);
+                                pointer-events: none;
+                                visibility: hidden;
+                            }
+                            .schedule-row-checkbox:checked + .schedule-row-checkmark { visibility: visible; }
+                            .schedule-row-checkbox:disabled + .schedule-row-checkmark { border-color: #bfbfbf; }
+                            @media (forced-colors: active) {
+                                .schedule-row-checkbox { appearance: auto; }
+                                .schedule-row-checkmark { display: none; }
+                            }
+                            /* Selection controls update before the deferred table render. */
+                            .schedule-data-table .ant-table-tbody > tr.ant-table-row:has(.schedule-selection-checkbox input:checked) > td {
+                                background: #e6f4ff;
+                            }
+                            .schedule-data-table .ant-table-tbody > tr.ant-table-row-selected:has(.schedule-selection-checkbox input:not(:checked)) > td {
+                                background: transparent;
+                            }
                             .schedule-data-table .ant-table-body,
                             .schedule-data-table .ant-table-content {
                                 max-height: none !important;
@@ -5173,9 +5314,15 @@ const Page = () => {
                                         columns={isDesktop ? desktopColumns : columns}
                                         tableLayout="fixed"
                                         dataSource={tableDisplayData}
+                                        immediatePagination
+                                        paginationDataCached={schedulesQuery.data !== undefined}
+                                        paginationVisible={!loading
+                                            && schedulesQuery.data !== undefined
+                                            && loadedScheduleResultScope === scheduleResultScope
+                                            && tableDisplayData.length > 0}
                                         loading={loading}
                                         rowSelection={{ ...rowSelection, columnWidth: 32 }}
-                                        pagination={{
+                                        pagination={loadedScheduleResultScope === scheduleResultScope ? {
                                             current: hasActiveTableColumnFilters ? 1 : currentPage,
                                             pageSize: pageSize,
                                             total: displayedTotalItems,
@@ -5189,7 +5336,7 @@ const Page = () => {
                                                 setPageSize(size);
                                                 replaceScheduleUrl(submittedFilterValues, size !== pageSize ? 1 : page);
                                             }
-                                        }}
+                                        } : false}
                                         size="middle"
                                         onChange={(_, filters, _sorter, extra) => {
                                             if (extra.action === "filter") {

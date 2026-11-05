@@ -3,7 +3,7 @@
 import useSWR, { useSWRConfig } from "swr";
 import { useAuthStore } from "@/stores/authStore";
 import { getLessons, type LessonListParams } from "@/services/lessonService";
-import { getCalendarTeacherFilterOptions, getLivestreams, getSchedulingPrograms, type LivestreamListParams } from "@/services/livestreamService";
+import { getCalendarHeaderFilterOptions, getCalendarTeacherFilterOptions, getLivestreams, getSchedulingPrograms, type LivestreamListParams } from "@/services/livestreamService";
 import { getModuleFields } from "@/services/roleService";
 import { getTeachingStaffOptions, type CanViewStreamKey } from "@/services/teacherProfileService";
 import { getPackageCourses } from "@/services/packageCourseService";
@@ -52,6 +52,12 @@ export const useScheduleTeacherFilterOptionsQuery = (programCode?: string) => {
         () => getCalendarTeacherFilterOptions(code),
         { dedupingInterval: 2 * 60_000 }
     );
+};
+
+export const useScheduleHeaderFilterOptionsQuery = (params: LivestreamListParams | null) => {
+    const userId = useAuthCacheScope();
+    return useSWR(params ? [SWR_NAMESPACES.schedules, "header-filter-options-v2", userId, params] : null,
+        () => getCalendarHeaderFilterOptions(params!), { dedupingInterval: 30_000 });
 };
 export const useModuleFieldsQuery = (moduleCode: string) => {
     const userId = useAuthCacheScope();

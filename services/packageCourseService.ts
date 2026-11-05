@@ -9,9 +9,10 @@ export interface PackageCourseOption {
     course_name?: string;
 }
 
-export const getPackageCourses = () =>
-    fetchInstance(API_BASE_URL, {
+export const getPackageCourses = (forceRefresh = false) =>
+    fetchInstance(forceRefresh ? `${API_BASE_URL}?refresh=true` : API_BASE_URL, {
         method: "GET",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
     });

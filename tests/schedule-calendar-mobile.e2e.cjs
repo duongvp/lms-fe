@@ -20,6 +20,7 @@ const mocks = {
     export const useModuleFieldsQuery=()=>moduleFields;
     export const useTeachingStaffQuery=()=>empty;
     export const useScheduleTeacherFilterOptionsQuery=()=>empty;
+    export const useScheduleHeaderFilterOptionsQuery=()=>({data:undefined,isLoading:false,isValidating:false});
     export const usePackageCoursesQuery=()=>empty;
     export const useLessonsQuery=()=>empty;
     export const useLmsCache=()=>cache;

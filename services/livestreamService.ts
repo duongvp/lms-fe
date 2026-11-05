@@ -123,6 +123,18 @@ export const getSchedulingPrograms = () =>
 
 export type CalendarTeacherFilterOption = { value: string; label: string };
 
+export type CalendarHeaderFilterOptions = { live_dates: string[]; assistant_teachers: string[]; progress_statuses: string[] };
+export const getCalendarHeaderFilterOptions = async (params: LivestreamListParams) => {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== "") query.set(key, String(value));
+    });
+    const response: any = await fetchInstance(`${API_BASE_URL}/filter-options/headers?${query}`, {
+        method: "GET", credentials: "include",
+    });
+    return response?.data as CalendarHeaderFilterOptions;
+};
+
 export const getCalendarTeacherFilterOptions = async (programCode?: string) => {
     const query = new URLSearchParams();
     if (programCode) query.set("code", programCode);
@@ -344,6 +356,7 @@ export const importLivestreamMappings = (payload: any) =>
 
 // Hàm mới: lấy danh sách lịch
 export interface LivestreamListParams {
+    deleted?: boolean;
     calendar_source?: CalendarSource;
     page?: number;
     limit?: number;
@@ -357,9 +370,12 @@ export interface LivestreamListParams {
     classroom?: string;
     system_type?: "topclass" | "topuni" | Array<"topclass" | "topuni">;
     lesson_status?: string | number;
-    time_status?: "upcoming" | "ongoing" | "completed" | Array<"upcoming" | "ongoing" | "completed">;
+    time_status?: "upcoming" | "ongoing" | "completed" | "cancelled" | Array<"upcoming" | "ongoing" | "completed" | "cancelled">;
     weekdays?: number[];
     learn_numbers?: number[];
+    live_dates?: string[];
+    assistant_teachers?: string[];
+    progress_statuses?: Array<"upcoming" | "ongoing" | "completed" | "cancelled" | "unknown">;
     from_learn_number?: number;
     to_learn_number?: number;
     start_time?: string;
@@ -740,6 +756,11 @@ export const deleteLivestream = (id: string) =>
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
+    });
+
+export const restoreLivestream = (id: string) =>
+    fetchInstance(`${API_BASE_URL}/${id}/restore`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
     });
 
 const getDates = (start: Dayjs, end: Dayjs, days: number[]) => {

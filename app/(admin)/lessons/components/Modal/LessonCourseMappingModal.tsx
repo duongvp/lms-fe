@@ -2,7 +2,7 @@
 
 import Select from "@/components/ui/MobileSelect";
 import Table from "@/components/ui/ModalTable";
-import { ClearOutlined } from "@ant-design/icons";
+import { ClearOutlined, ReloadOutlined } from "@ant-design/icons";
 import { Alert, Button, Col, Form, message, Modal, Radio, Row, Space, Typography } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -11,7 +11,7 @@ import {
     type LessonCourseMapping,
 } from "@/services/lessonService";
 import { usePackageCoursesQuery } from "@/hooks/useLmsQueries";
-import type { PackageCourseOption } from "@/services/packageCourseService";
+import { getPackageCourses, type PackageCourseOption } from "@/services/packageCourseService";
 
 type Props = {
     open: boolean;
@@ -24,9 +24,10 @@ const LessonCourseMappingModal = ({ open, programCode, selectedLessonIds, onClos
     const [form] = Form.useForm();
     const [rows, setRows] = useState<LessonCourseMapping[]>([]);
     const [loading, setLoading] = useState(false);
+    const [refreshingPackageCourses, setRefreshingPackageCourses] = useState(false);
     const packageCoursesQuery = usePackageCoursesQuery(open);
     const packageCourses: PackageCourseOption[] = packageCoursesQuery.data?.data ?? [];
-    const loadingPackageCourses = packageCoursesQuery.isLoading || packageCoursesQuery.isValidating;
+    const loadingPackageCourses = refreshingPackageCourses || packageCoursesQuery.isLoading || packageCoursesQuery.isValidating;
     const scope = Form.useWatch("scope", form);
     const visibleRows = useMemo(() => {
         const activeScope = scope ?? (selectedLessonIds.length ? "selected" : "all");
@@ -99,6 +100,19 @@ const LessonCourseMappingModal = ({ open, programCode, selectedLessonIds, onClos
         form.resetFields(["package_id", "course_id"]);
     };
 
+    const refreshPackageCourses = async () => {
+        if (loadingPackageCourses) return;
+        setRefreshingPackageCourses(true);
+        try {
+            await packageCoursesQuery.mutate(() => getPackageCourses(true), { revalidate: false });
+            message.success("Đã tải lại Package ID và Course ID từ Google Sheet");
+        } catch (error: any) {
+            message.error(error?.message || "Không thể tải lại dữ liệu từ Google Sheet");
+        } finally {
+            setRefreshingPackageCourses(false);
+        }
+    };
+
     const submit = async () => {
         const values = await form.validateFields();
         setLoading(true);
@@ -125,6 +139,16 @@ const LessonCourseMappingModal = ({ open, programCode, selectedLessonIds, onClos
             <Alert
                 showIcon
                 type="info"
+                action={
+                    <Button
+                        icon={<ReloadOutlined />}
+                        loading={refreshingPackageCourses}
+                        disabled={loadingPackageCourses || loading}
+                        onClick={() => void refreshPackageCourses()}
+                    >
+                        Tải lại
+                    </Button>
+                }
                 message={
                     <>
                         Package ID và Course ID được tải từ <Typography.Link href={packageCourseSheetUrl} target="_blank" rel="noreferrer">Google Sheet</Typography.Link>.
