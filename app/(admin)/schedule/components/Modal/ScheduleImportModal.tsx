@@ -1,7 +1,7 @@
 "use client";
 
 import Table from "@/components/ui/ModalTable";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
     Alert,
     Button,
@@ -18,20 +18,11 @@ import {
     LinkOutlined,
     UploadOutlined,
 } from "@ant-design/icons";
+import { presentScheduleImportError, type ScheduleImportError } from "@/helper/scheduleImportErrors";
+export type { ScheduleImportError } from "@/helper/scheduleImportErrors";
 import ImportFileDragger from "@/components/shared/ImportFileDragger";
 
-const SCHEDULE_IMPORT_SAMPLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1R2awLXyXD41_mKEi2zz8M7kunL2pqEAEw8dl-QmEx9A/edit?usp=sharing";
-
-export interface ScheduleImportError {
-    row: number;
-    field: string;
-    errorCode?: string;
-    message: string;
-    packageId?: string;
-    courseId?: string;
-    lessonId?: string;
-    duplicateWithRow?: number;
-}
+const SCHEDULE_IMPORT_SAMPLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1R2awLXyXD41_mKEi2zz8M7kunL2pqEAEw8dl-QmEx9A/edit?usp=sharing#gid=20261109";
 
 interface ScheduleImportModalProps {
     open: boolean;
@@ -41,6 +32,7 @@ interface ScheduleImportModalProps {
     allowCreateImport: boolean;
     allowUpdateImport: boolean;
     onClose: () => void;
+    onClearErrors: () => void;
     onSubmit: (
         file: File | undefined,
         sheetUrl?: string,
@@ -58,6 +50,7 @@ const ScheduleImportModal = ({
     allowCreateImport,
     allowUpdateImport,
     onClose,
+    onClearErrors,
     onSubmit,
     onModeChange,
     onDownloadTemplate,
@@ -66,6 +59,13 @@ const ScheduleImportModal = ({
     const [sheetUrl, setSheetUrl] = useState("");
     const [importSource, setImportSource] = useState<"file" | "sheet">("file");
     const [existingDataMode, setExistingDataMode] = useState<"skip" | "overwrite">("skip");
+
+    const errorSectionRef = useRef<HTMLElement>(null);
+    useEffect(() => {
+        if (!open || !errors.length) return;
+        const frame = requestAnimationFrame(() => errorSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+        return () => cancelAnimationFrame(frame);
+    }, [open, errors]);
 
     useEffect(() => {
         if (open) {
@@ -128,20 +128,16 @@ const ScheduleImportModal = ({
                 </Flex>
             }
         >
-            <Flex
-                align="center"
-                justify="space-between"
-                wrap
-                gap={8}
-                style={{
-                    marginBottom: 12,
-                    padding: "8px 12px",
-                    border: "1px solid #d9d9d9",
-                    borderRadius: 8,
-                    background: "#fafafa",
-                }}
-            >
-                <Typography.Text>Tham khảo cấu trúc dữ liệu trên Google Sheet mẫu</Typography.Text>
+            <Flex justify="space-between" align="center" wrap gap={8} style={{ marginBottom: 12 }}>
+                <Radio.Group
+                    value={mode}
+                    onChange={(event) => onModeChange(event.target.value)}
+                    optionType="button"
+                    buttonStyle="solid"
+                >
+                    {allowUpdateImport && <Radio.Button value="update">Cập nhật lịch</Radio.Button>}
+                    {allowCreateImport && <Radio.Button value="create">Tạo lịch mới</Radio.Button>}
+                </Radio.Group>
                 <Button
                     type="link"
                     icon={<LinkOutlined />}
@@ -150,176 +146,140 @@ const ScheduleImportModal = ({
                     rel="noopener noreferrer"
                     style={{ paddingInline: 0 }}
                 >
-                    Mở Google Sheet mẫu
+                    Google Sheet mẫu
                 </Button>
             </Flex>
-            <Alert
-                type="info"
-                showIcon
-                message={mode === 'update' ? "Cập nhật lịch học hàng loạt" : "Tạo lịch học hàng loạt"}
-                description={
-                    mode === 'update' ? (
-                    <div>
-                        <Typography.Paragraph style={{ marginBottom: 8 }}>
-                            Dùng cùng file mẫu với tạo mới. Hệ thống tự lấy <Typography.Text code>code</Typography.Text>,{" "}
-                            <Typography.Text code>subject</Typography.Text> và <Typography.Text code>system_type</Typography.Text> từ Chương trình đang chọn.
-                        </Typography.Paragraph>
-                        <Typography.Paragraph style={{ marginBottom: 8 }}>
-                            Có thể dùng menu <Typography.Text strong>Export → Excel để bổ sung trợ giảng</Typography.Text>,
-                            nhập tên hiển thị vào cột <Typography.Text code>assistant_teacher</Typography.Text> rồi import lại.
-                        </Typography.Paragraph>
-                        <Typography.Paragraph style={{ marginBottom: 8 }}>
-                            Lịch cần cập nhật được xác định bằng <Typography.Text code>learn_number</Typography.Text> và{" "}
-                            <Typography.Text code>lesson_count</Typography.Text> trong Chương trình đã chọn. Không được thay đổi hai giá trị này;
-                            lịch đã diễn ra hoặc đã nghỉ sẽ không được cập nhật.
-                        </Typography.Paragraph>
-                        <Typography.Paragraph style={{ marginBottom: 0 }}>
-                            Hệ thống kiểm tra toàn bộ dữ liệu trước khi cập nhật. Nếu có một dòng không hợp lệ,
-                            không lịch nào trong file bị thay đổi.
-                        </Typography.Paragraph>
-                    </div>
-                    ) : (
-                    <div>
-                        <Typography.Paragraph style={{ marginBottom: 8 }}>
-                            File CSV, Excel và Google Sheets dùng cùng một cấu trúc; mỗi dòng tương ứng một lịch học.
-                        </Typography.Paragraph>
-                        <Typography.Paragraph style={{ marginBottom: 8 }}>
-                            Cột <Typography.Text code>assistant_teacher</Typography.Text> nhập theo tên hiển thị trong mục
-                            Giáo viên &amp; Trợ giảng; nhiều người cách nhau bằng dấu phẩy hoặc dấu chấm phẩy.
-                        </Typography.Paragraph>
-                        <Typography.Paragraph style={{ marginBottom: 8 }}>
-                            Hệ thống tự lấy mã, môn học và hệ thống từ Chương trình đang chọn, sau đó tìm bài học bằng{" "}
-                            <Typography.Text code>learn_number</Typography.Text>. Package ID và Course ID đã được thiết lập
-                            trong phần quản lý đề cương nên không cần nhập lại trong file lịch.
-                        </Typography.Paragraph>
-                        <Typography.Paragraph style={{ marginBottom: 8 }}>
-                            Lesson ID HMO chưa được gán khi import. Sau khi tạo lịch, hãy dùng chức năng{" "}
-                            <Typography.Text strong>Đồng bộ Lesson ID HMO</Typography.Text> và chọn đối chiếu theo
-                            tên lịch hoặc tên bài học.
-                        </Typography.Paragraph>
-                        <Typography.Paragraph style={{ marginBottom: 0 }}>
-                            Hệ thống kiểm tra toàn bộ dữ liệu trước khi tạo. Nếu có một dòng không hợp lệ,
-                            không lịch nào trong file được thêm vào.
-                        </Typography.Paragraph>
-                    </div>
-                    )
-                }
-                style={{ marginBottom: 16 }}
-            />
+            <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
+                {mode === "update"
+                    ? "Dùng file đã export, sửa thông tin cần cập nhật rồi tải lên."
+                    : "Dùng file mẫu hoặc Google Sheet mẫu, mỗi dòng tương ứng một lịch học."}
+            </Typography.Paragraph>
+
             <Radio.Group
-                value={mode}
-                onChange={(event) => onModeChange(event.target.value)}
-                style={{ marginBottom: 16 }}
-                optionType="button"
-                buttonStyle="solid"
+                value={importSource}
+                onChange={(event) => { setImportSource(event.target.value); onClearErrors(); }}
+                style={{ marginBottom: 12 }}
             >
-                {allowCreateImport && <Radio.Button value="create">Import tạo lịch</Radio.Button>}
-                {allowUpdateImport && <Radio.Button value="update">Cập nhật lịch</Radio.Button>}
+                <Space wrap size={20}>
+                    <Radio value="file">File CSV/Excel</Radio>
+                    <Radio value="sheet">Link Google Sheets</Radio>
+                </Space>
             </Radio.Group>
 
+            {importSource === "file" ? (
+                <ImportFileDragger
+                    file={selectedFile}
+                    onFileChange={(file) => { setSelectedFile(file || undefined); onClearErrors(); }}
+                    maxSizeMb={10}
+                    maxRows={300}
+                    requiredHeaders={[
+                        ["Ngày live", "start_time"],
+                        ["Khung giờ", "end_time"],
+                        ["Bài", "Số thứ tự bài", "learn_number"],
+                        ["lesson_name", "Tên bài giảng"],
+                        ...(mode === "update" ? [["Mã định danh lịch", "c_key", "key"], ["Lần học", "lesson_count"]] : []),
+                    ]}
+                    hint="CSV hoặc Excel · Tối đa 10 MB / 300 lịch"
+                />
+            ) : (
+                <div>
+                    <Input
+                        value={sheetUrl}
+                        onChange={(event) => { setSheetUrl(event.target.value); onClearErrors(); }}
+                        placeholder="Dán link Google Sheets"
+                        aria-label="Link Google Sheets"
+                    />
+                    <Typography.Text type="secondary" style={{ display: "block", marginTop: 6 }}>
+                        Bật quyền xem bằng link · Tối đa 300 lịch
+                    </Typography.Text>
+                </div>
+            )}
+
             {mode === "update" && (
-                <div style={{ marginBottom: 16 }}>
+                <div style={{ marginTop: 16 }}>
                     <Typography.Text strong style={{ display: "block", marginBottom: 8 }}>
-                        Cách xử lý dữ liệu đã tồn tại
+                        Dữ liệu đã có
                     </Typography.Text>
                     <Radio.Group
                         value={existingDataMode}
                         onChange={(event) => setExistingDataMode(event.target.value)}
                     >
-                        <Space direction="vertical" size={6}>
-                            <Radio value="skip">Bỏ qua dữ liệu đã có — chỉ bổ sung các trường đang trống</Radio>
-                            <Radio value="overwrite">Ghi đè dữ liệu đã có bằng giá trị trong file/Google Sheet</Radio>
+                        <Space wrap size={16}>
+                            <Radio value="skip">Chỉ bổ sung ô trống</Radio>
+                            <Radio value="overwrite">Ghi đè theo file</Radio>
                         </Space>
                     </Radio.Group>
                     <Typography.Text type="secondary" style={{ display: "block", marginTop: 6 }}>
-                        Áp dụng cho giáo viên, trợ giảng, tên bài học, thời gian, tài liệu và các trường được phép cập nhật.
-                        Ô trống luôn giữ nguyên dữ liệu hiện tại và không dùng để xóa.
+                        Chọn ghi đè để đổi thời gian. Ô trống trong file giữ nguyên dữ liệu cũ.
                     </Typography.Text>
                 </div>
             )}
 
-            <div style={{ margin: "6px 0 12px" }}>
-                <Radio.Group value={importSource} onChange={(event) => setImportSource(event.target.value)}>
-                    <Space wrap size={20}>
-                        <Radio value="file">Dùng file CSV/Excel</Radio>
-                        <Radio value="sheet">Dùng link Google Sheets</Radio>
-                    </Space>
-                </Radio.Group>
-            </div>
-
-            <ImportFileDragger
-                file={selectedFile}
-                onFileChange={(file) => setSelectedFile(file || undefined)}
-                maxSizeMb={10}
-                maxRows={300}
-                requiredHeaders={[
-                    "start_time",
-                    "end_time",
-                    "learn_number",
-                    ["lesson_name", "Tên bài giảng"],
-                    ...(mode === "update" ? ["lesson_count"] : []),
-                ]}
-                hint="Hỗ trợ .xlsx và .csv, cùng format với Google Sheets, tối đa 10 MB/300 lịch"
-                disabled={importSource !== "file"}
+            <Alert
+                type="info"
+                showIcon
+                message={mode === "update" ? "Lưu ý khi cập nhật lịch" : "Lưu ý khi tạo lịch mới"}
+                description={
+                    <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 13, lineHeight: 1.6 }}>
+                        {mode === "update" ? (
+                            <li>Giữ nguyên mã định danh lịch, mã chương trình, môn, hệ thống, bài và lần học.</li>
+                        ) : (
+                            <li>Nhập Bài theo chương trình để tạo lịch mới; để trống mã định danh lịch.</li>
+                        )}
+                        <li>
+                            Nhập tiền tố/hậu tố ở hai cột riêng. Giáo viên và trợ giảng phải đang hoạt động trên hệ thống.
+                        </li>
+                        <li>
+                            ID khóa học, bài giảng và gói học được đối chiếu trước khi lưu; để trống cả ba để giữ nguyên mapping.
+                        </li>
+                        <li>
+                            Nếu có lỗi, hệ thống báo theo dòng và chưa lưu bất kỳ lịch nào.
+                        </li>
+                    </ul>
+                }
+                style={{ marginTop: 16 }}
             />
-            <div style={{ margin: "16px 0", textAlign: "center", color: "#8c8c8c" }}>hoặc</div>
-            <div style={{ opacity: importSource === "sheet" ? 1 : 0.55 }}>
-                <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
-                    Dán link Google Sheets đã bật quyền xem bằng link và có cùng cấu trúc file mẫu.
-                </Typography.Text>
-                <Input
-                    value={sheetUrl}
-                    onChange={(event) => setSheetUrl(event.target.value)}
-                    placeholder="Dán link Google Sheets công khai"
-                    disabled={importSource !== "sheet"}
-                />
-                <Typography.Text type="secondary" style={{ display: "block", marginTop: 8 }}>
-                    Sheet cần bật quyền xem bằng link và có cùng các cột như file mẫu. Hỗ trợ tối đa 300 lịch/lần.
-                </Typography.Text>
-            </div>
 
             {errors.length > 0 && (
-                <section style={{ marginTop: 16 }}>
+                <section ref={errorSectionRef} style={{ marginTop: 16 }} aria-label="Lỗi import lịch học" aria-live="polite">
                     <Alert
                         type="error"
                         showIcon
-                        message={`Có ${errors.length} lỗi cần xử lý`}
+                        message={`Chưa lưu dữ liệu · ${errors.length} lỗi${errors.some(error => error.row > 1) ? ` tại ${new Set(errors.filter(error => error.row > 1).map(error => error.row)).size} dòng` : ""}`}
+                        description="Chưa có lịch nào được tạo hoặc cập nhật. Sửa theo hướng dẫn bên dưới rồi thử lại."
                         style={{ marginBottom: 12 }}
                     />
                     <Table<ScheduleImportError>
                         size="small"
+                        tableLayout="fixed"
                         rowKey={(record, index) => `${record.row}-${record.field}-${index}`}
                         pagination={false}
                         dataSource={errors}
-                        scroll={{ x: "max-content", y: 240 }}
+                        scroll={{ y: 320 }}
                         columns={[
-                            { title: "Dòng", dataIndex: "row", width: 80 },
                             {
-                                title: "Mã lỗi",
-                                dataIndex: "errorCode",
-                                width: 220,
-                                render: (value: string) => value
-                                    ? <Typography.Text code>{value}</Typography.Text>
-                                    : "-",
+                                title: "Dòng", width: 72,
+                                render: (_, record) => presentScheduleImportError(record).rowLabel,
+                                onCell: () => ({ style: { verticalAlign: "top" } }),
                             },
                             {
-                                title: "Trường / dữ liệu liên quan",
-                                key: "context",
-                                width: 250,
-                                render: (_, record) => [
-                                    record.packageId && `P: ${record.packageId}`,
-                                    record.courseId && `C: ${record.courseId}`,
-                                    record.lessonId && `L: ${record.lessonId}`,
-                                ].filter(Boolean).join(" / ") || record.field || "-",
-                            },
-                            {
-                                title: "Nội dung lỗi",
-                                dataIndex: "message",
-                                render: (value: string) => (
-                                    <Typography.Text style={{ overflowWrap: "anywhere" }}>
-                                        {value}
-                                    </Typography.Text>
-                                ),
+                                title: "Nguyên nhân và cách sửa",
+                                onCell: () => ({ style: { whiteSpace: "normal", overflowWrap: "anywhere", verticalAlign: "top" } }),
+                                render: (_, record) => {
+                                    const error = presentScheduleImportError(record);
+                                    return (
+                                        <div style={{ whiteSpace: "normal", overflowWrap: "anywhere" }}>
+                                            <Typography.Text strong>{error.field}</Typography.Text>
+                                            <div>{error.message}</div>
+                                            {error.context && <Typography.Text type="secondary" style={{ display: "block", fontSize: 12 }}>{error.context}</Typography.Text>}
+                                            {error.originalTime && <Typography.Text type="secondary" style={{ display: "block", fontSize: 12 }}>Lịch gốc bắt đầu: {error.originalTime}</Typography.Text>}
+                                            {record.currentValue !== undefined && <div style={{ fontSize: 12 }}>Giá trị gốc: <Typography.Text strong>{record.currentValue || "(ô trống)"}</Typography.Text></div>}
+                                            {record.importedValue !== undefined && <div style={{ fontSize: 12 }}>Trong file: <Typography.Text>{record.importedValue || "(ô trống)"}</Typography.Text></div>}
+                                            {error.ids && <Typography.Text type="secondary" style={{ display: "block", fontSize: 12 }}>{error.ids}</Typography.Text>}
+                                            <div style={{ marginTop: 4 }}><Typography.Text strong>Cách sửa: </Typography.Text>{error.suggestion}</div>
+                                        </div>
+                                    );
+                                },
                             },
                         ]}
                     />
