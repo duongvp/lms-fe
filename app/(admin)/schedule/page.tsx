@@ -1298,7 +1298,7 @@ const Page = () => {
     const [topuniSheetExportUrl, setTopuniSheetExportUrl] = useState("https://docs.google.com/spreadsheets/d/1DejptU8MU5Zvey_6Z5jtFHlwjGIgKpe3Woqq01IjJrw/edit");
     const [importing, setImporting] = useState(false);
     const [importErrors, setImportErrors] = useState<ScheduleImportError[]>([]);
-    const [importMode, setImportMode] = useState<"create" | "update">("create");
+    const [importMode, setImportMode] = useState<"create" | "update">("update");
     const { selectedRowKeys, setSelectedRowKeys, selectionStore } = useScheduleSelection();
     const [selectingAllRows, setSelectingAllRows] = useState(false);
     const [selectionLoadedCount, setSelectionLoadedCount] = useState(0);
@@ -2330,7 +2330,7 @@ const Page = () => {
             if (purpose === "update" && !selectedIds?.length && !programCode) {
                 api.warning({
                     message: "Vui lòng chọn Chương trình",
-                    description: "Hãy lọc một chương trình hoặc chọn các lịch cần xuất trước khi tạo file bổ sung trợ giảng.",
+                    description: "Hãy lọc một chương trình hoặc chọn các lịch cần xuất trước khi tạo file chỉnh sửa lịch.",
                 });
                 return;
             }
@@ -3056,10 +3056,13 @@ const Page = () => {
             }
         } catch (error: any) {
             const errors = error?.detail?.errors;
-            if (Array.isArray(errors)) setImportErrors(errors);
+            const importFailures: ScheduleImportError[] = Array.isArray(errors) && errors.length
+                ? errors
+                : [{ row: 0, field: "file", message: error.message || "Không thể đọc hoặc kiểm tra dữ liệu import." }];
+            setImportErrors(importFailures);
             api.error({
-                message: importMode === "update" ? "Cập nhật thất bại" : "Import thất bại",
-                description: error.message || "File có dữ liệu không hợp lệ.",
+                message: importMode === "update" ? "Chưa cập nhật lịch" : "Chưa tạo lịch",
+                description: `Có ${importFailures.length} lỗi. Xem nguyên nhân và cách sửa trong hộp import.`,
             });
         } finally {
             setImporting(false);
@@ -4137,7 +4140,7 @@ const Page = () => {
             return;
         }
         setImportErrors([]);
-        setImportMode(canImportSchedule ? "create" : "update");
+        setImportMode(canEditSchedule ? "update" : "create");
         setOpenImportModal(true);
     };
 
@@ -4199,7 +4202,7 @@ const Page = () => {
             { key: "xlsx", label: "Xuất Excel (.xlsx)" },
             { key: "csv", label: "Xuất CSV (.csv)" },
             { type: "divider" as const },
-            { key: "update-assistants", label: "Excel để bổ sung trợ giảng" },
+            { key: "update-assistants", label: "Excel để chỉnh sửa lịch" },
         ],
         onClick: ({ key }: { key: string }) => {
             if (selectingAllRows) return;
@@ -5505,6 +5508,7 @@ const Page = () => {
                     open={openImportModal}
                     loading={importing}
                     errors={importErrors}
+                    onClearErrors={() => setImportErrors([])}
                     mode={importMode}
                     allowCreateImport={canImportSchedule}
                     allowUpdateImport={canEditSchedule}
