@@ -20,6 +20,11 @@ import {
 import {
   applyHocmaiScormNames,
   getHocmaiScormNameSyncStatus,
+  getManualHocmaiScormLessons,
+  getHocmaiScormTeachers,
+  type HocmaiScormTeacher,
+  type HocmaiScormOptions,
+  type HocmaiScormManualLessons,
   previewHocmaiScormNames,
   resolveManualHocmaiScormLesson,
   resolveManualHocmaiScormLessonsBulk,
@@ -51,6 +56,13 @@ export default function HocmaiScormNameSyncModal({
   onSuccess,
   onError,
 }: Props) {
+  const [matchingMode, setMatchingMode] = useState<HocmaiScormOptions["matchingMode"]>("name_teacher");
+  const [teachers, setTeachers] = useState<HocmaiScormTeacher[]>([]);
+  const [teacherPrefixes, setTeacherPrefixes] = useState<Record<string, string>>({});
+  const [teachersLoading, setTeachersLoading] = useState(false);
+  const [teachersError, setTeachersError] = useState("");
+  const [teachersReload, setTeachersReload] = useState(0);
+  const syncOptions: HocmaiScormOptions = { matchingMode, teacherPrefixes };
   const [preview, setPreview] = useState<HocmaiScormPreviewResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [packageFilter, setPackageFilter] = useState<string>();
@@ -70,7 +82,11 @@ export default function HocmaiScormNameSyncModal({
   const [manualEditorRow, setManualEditorRow] =
     useState<HocmaiScormPreviewRow>();
   const [manualEditorLessonId, setManualEditorLessonId] = useState("");
-  const [manualEditorSessionKey, setManualEditorSessionKey] = useState<string>();
+  const [manualLessons, setManualLessons] = useState<HocmaiScormManualLessons["lessons"]>([]);
+  const [manualLessonsLoading, setManualLessonsLoading] = useState(false);
+  const [manualLessonsError, setManualLessonsError] = useState("");
+  const [manualLessonsReload, setManualLessonsReload] = useState(0);
+  const manualEditorVersion = useRef(0);
   const [manualEditorResolution, setManualEditorResolution] = useState<
     HocmaiScormManualResolution & { expectedName: string }
   >();
@@ -80,8 +96,13 @@ export default function HocmaiScormNameSyncModal({
   } | null>(null);
   const requestVersion = useRef(0);
   useEffect(() => {
+    requestVersion.current += 1;
+    manualEditorVersion.current += 1;
     if (open) {
-      requestVersion.current += 1;
+      setMatchingMode("name_teacher");
+      setTeacherPrefixes({});
+      setTeachers([]);
+      setTeachersError("");
       setPreview(null);
       setProgress(null);
       setLoading(false);
@@ -93,10 +114,40 @@ export default function HocmaiScormNameSyncModal({
       setBulkResolving(false);
       setManualEditorRow(undefined);
       setManualEditorLessonId("");
-      setManualEditorSessionKey(undefined);
+      setManualLessons([]);
+      setManualLessonsError("");
       setManualEditorResolution(undefined);
     }
   }, [open, programCode]);
+  useEffect(() => {
+    if (!open || !programCode) return;
+    let disposed = false;
+    setTeachersLoading(true);
+    setTeachersError("");
+    void getHocmaiScormTeachers(programCode).then((response: any) => {
+      if (disposed) return;
+      const list = response.data as HocmaiScormTeacher[];
+      if (!Array.isArray(list)) throw new Error("Danh sách giáo viên không hợp lệ");
+      setTeachers(list);
+      setTeacherPrefixes(Object.fromEntries(list.filter((teacher) => teacher.prefix).map((teacher) => [teacher.key, teacher.prefix])));
+    }).catch((error: any) => {
+      if (!disposed) setTeachersError(error.message || "Không thể tải giáo viên của chương trình");
+    }).finally(() => { if (!disposed) setTeachersLoading(false); });
+    return () => { disposed = true; };
+  }, [open, programCode, teachersReload]);
+  const invalidatePreview = () => {
+    requestVersion.current += 1;
+    manualEditorVersion.current += 1;
+    setPreview(null);
+    setManualOverrides({});
+    setManualEditorRow(undefined);
+    setManualEditorResolution(undefined);
+    setResolvingKey(undefined);
+    setProgress(null);
+    setPackageFilter(undefined);
+    setCourseFilter(undefined);
+    setLessonFilter(undefined);
+  };
   const packageOptions = useMemo(
     () =>
       Array.from(
@@ -133,11 +184,11 @@ export default function HocmaiScormNameSyncModal({
               (row) =>
                 (!packageFilter || row.packageId === packageFilter) &&
                 (!courseFilter || row.courseId === courseFilter) &&
-                (row.hocmaiLessonId || manualOverrides[row.key]?.lessonId),
+                (manualOverrides[row.key]?.lessonId || row.hocmaiLessonId),
             )
             .map((row) => {
               const resolvedLessonId =
-                row.hocmaiLessonId || manualOverrides[row.key]!.lessonId;
+                manualOverrides[row.key]?.lessonId || row.hocmaiLessonId!;
               return [
                 resolvedLessonId,
                 {
@@ -157,7 +208,7 @@ export default function HocmaiScormNameSyncModal({
           (!packageFilter || row.packageId === packageFilter) &&
           (!courseFilter || row.courseId === courseFilter) &&
           (!lessonFilter ||
-            (row.hocmaiLessonId || manualOverrides[row.key]?.lessonId) ===
+            (manualOverrides[row.key]?.lessonId || row.hocmaiLessonId) ===
               lessonFilter),
       ),
     [preview, packageFilter, courseFilter, lessonFilter, manualOverrides],
@@ -189,25 +240,49 @@ export default function HocmaiScormNameSyncModal({
     ),
     [filteredRows, manualOverrides],
   );
-  const manualCandidateSessions = manualEditorRow?.candidateSessions || [];
-  const manualSelectedSession = manualCandidateSessions.find(
-    (session) => session.key === manualEditorSessionKey,
-  );
+  useEffect(() => {
+    if (!open || !manualEditorRow) return;
+    let disposed = false;
+    setManualLessons([]);
+    setManualLessonsError("");
+    setManualLessonsLoading(true);
+    void getManualHocmaiScormLessons(programCode, manualEditorRow.key)
+      .then((response: any) => {
+        if (disposed) return;
+        const data = response.data as HocmaiScormManualLessons;
+        if (data?.rowKey !== manualEditorRow.key || data.packageId !== manualEditorRow.packageId
+          || data.courseId !== manualEditorRow.courseId || !Array.isArray(data.lessons)) {
+          throw new Error("Danh sách Lesson không thuộc Package/Course đang chọn");
+        }
+        setManualLessons(data.lessons);
+        if (!data.lessons.some((lesson) => lesson.lessonId === manualEditorLessonId)) {
+          setManualEditorLessonId("");
+          setManualEditorResolution(undefined);
+        }
+      })
+      .catch((error: any) => {
+        if (!disposed) setManualLessonsError(error.message || "Không thể tải danh sách Lesson HOCMAI");
+      })
+      .finally(() => { if (!disposed) setManualLessonsLoading(false); });
+    return () => { disposed = true; };
+    // Selection is captured when the list is requested; it does not refetch on selection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, programCode, manualEditorRow, manualLessonsReload]);
+  const closeManualEditor = () => {
+    manualEditorVersion.current += 1;
+    setManualEditorRow(undefined);
+    setManualEditorResolution(undefined);
+    setResolvingKey(undefined);
+  };
   const openManualEditor = (row: HocmaiScormPreviewRow) => {
+    manualEditorVersion.current += 1;
     const current = manualOverrides[row.key];
-    const sessions = row.candidateSessions || [];
-    const currentSession = current
-      ? sessions.find((session) =>
-          session.lessons.some((lesson) => lesson.lessonId === current.lessonId),
-        )
-      : undefined;
-    const defaultSession =
-      currentSession || (sessions.length === 1 ? sessions[0] : undefined);
+    setManualLessons([]);
+    setManualLessonsError("");
+    setManualLessonsLoading(true);
+    setResolvingKey(undefined);
     setManualEditorRow(row);
-    setManualEditorLessonId(
-      current?.lessonId || pickQuickApprovalLesson(row)?.lessonId || "",
-    );
-    setManualEditorSessionKey(defaultSession?.key);
+    setManualEditorLessonId(current?.lessonId || row.hocmaiLessonId || pickQuickApprovalLesson(row)?.lessonId || "");
     setManualEditorResolution(current);
   };
   const quickApproveAll = async () => {
@@ -224,13 +299,16 @@ export default function HocmaiScormNameSyncModal({
         const response: any = await resolveManualHocmaiScormLessonsBulk(
           programCode,
           selections.slice(index, index + 200),
+          syncOptions,
         );
         resolvedItems.push(...(response.data as HocmaiScormManualResolution[]));
       }
       if (version !== requestVersion.current) return;
+      if (resolvedItems.some((resolved) => !resolved.suggestedName))
+        onError("Một số Lesson thiếu chức danh Cô/Thầy; vui lòng chọn trong xử lý thủ công");
       setManualOverrides((current) => {
         const next = { ...current };
-        resolvedItems.forEach((resolved) => {
+        resolvedItems.filter((resolved) => resolved.suggestedName).forEach((resolved) => {
           next[resolved.rowKey] = {
             ...resolved,
             expectedName: resolved.suggestedName,
@@ -258,14 +336,21 @@ export default function HocmaiScormNameSyncModal({
       openManualEditor(row);
       return;
     }
+    const version = requestVersion.current;
     setResolvingKey(row.key);
     try {
       const response: any = await resolveManualHocmaiScormLesson(
         programCode,
         row.key,
         candidate.lessonId,
+        syncOptions,
       );
+      if (version !== requestVersion.current) return;
       const resolved = response.data as HocmaiScormManualResolution;
+      if (!resolved.suggestedName) {
+        openManualEditor(row);
+        return;
+      }
       setManualOverrides((current) => ({
         ...current,
         [row.key]: {
@@ -275,9 +360,9 @@ export default function HocmaiScormNameSyncModal({
         },
       }));
     } catch (error: any) {
-      onError(error.message || "Không thể duyệt nhanh Lesson ID");
+      if (version === requestVersion.current) onError(error.message || "Không thể duyệt nhanh Lesson ID");
     } finally {
-      setResolvingKey(undefined);
+      if (version === requestVersion.current) setResolvingKey(undefined);
     }
   };
   const removeManualOverride = (rowKey: string) => {
@@ -288,30 +373,35 @@ export default function HocmaiScormNameSyncModal({
     });
   };
   const resolveManual = async () => {
-    if (!manualEditorRow || !/^\d+$/.test(manualEditorLessonId))
-      return onError("Lesson ID phải là số nguyên dương");
+    if (!manualEditorRow || manualLessonsLoading || manualLessonsError
+      || !manualLessons.some((lesson) => lesson.lessonId === manualEditorLessonId))
+      return onError("Vui lòng chọn Lesson thuộc Package/Course này");
+    const version = manualEditorVersion.current;
+    const parentVersion = requestVersion.current;
     setResolvingKey(manualEditorRow.key);
     try {
       const response: any = await resolveManualHocmaiScormLesson(
         programCode,
         manualEditorRow.key,
         manualEditorLessonId,
+        syncOptions,
       );
+      if (version !== manualEditorVersion.current || parentVersion !== requestVersion.current) return;
       const resolved = response.data as HocmaiScormManualResolution;
-      setManualEditorResolution({
-        ...resolved,
-        expectedName: resolved.suggestedName,
-      });
+      setManualEditorResolution({ ...resolved, expectedName: resolved.suggestedName });
     } catch (error: any) {
-      onError(error.message || "Lesson ID không hợp lệ");
+      if (version !== manualEditorVersion.current || parentVersion !== requestVersion.current) return;
+      onError(error.message || "Lesson đã chọn không hợp lệ");
       setManualEditorResolution(undefined);
     } finally {
-      setResolvingKey(undefined);
+      if (version === manualEditorVersion.current && parentVersion === requestVersion.current)
+        setResolvingKey(undefined);
     }
   };
   const saveManualOverride = () => {
-    if (!manualEditorRow || !manualEditorResolution?.expectedName.trim())
-      return onError("Vui lòng nhập tên dự kiến");
+    if (!manualEditorRow || !manualEditorResolution?.expectedName.trim()
+      || (manualEditorResolution.requiresHonorific && !manualEditorResolution.honorific))
+      return onError("Vui lòng chọn Cô/Thầy và nhập tên dự kiến đầy đủ");
     setManualOverrides((current) => ({
       ...current,
       [manualEditorRow.key]: {
@@ -323,7 +413,7 @@ export default function HocmaiScormNameSyncModal({
     setManualEditorRow(undefined);
     setManualEditorResolution(undefined);
     setManualEditorLessonId("");
-    setManualEditorSessionKey(undefined);
+    manualEditorVersion.current += 1;
   };
   const updateManualExpectedName = (rowKey: string, expectedName: string) =>
     setManualOverrides((current) =>
@@ -332,6 +422,7 @@ export default function HocmaiScormNameSyncModal({
         : current,
     );
   const close = () => {
+    closeManualEditor();
     requestVersion.current += 1;
     setLoading(false);
     setProgress(null);
@@ -343,7 +434,7 @@ export default function HocmaiScormNameSyncModal({
     const version = requestVersion.current;
     setLoading(true);
     try {
-      const response: any = await previewHocmaiScormNames(programCode);
+      const response: any = await previewHocmaiScormNames(programCode, syncOptions);
       if (version === requestVersion.current) setPreview(response.data);
     } catch (error: any) {
       if (version === requestVersion.current)
@@ -361,6 +452,7 @@ export default function HocmaiScormNameSyncModal({
       const started: any = await applyHocmaiScormNames(
         programCode,
         manualOverrideList,
+        syncOptions,
       );
       const jobId = String(started?.data?.id || "");
       if (!jobId) throw new Error("Backend không trả tiến trình đồng bộ");
@@ -406,7 +498,7 @@ export default function HocmaiScormNameSyncModal({
         confirmLoading={loading || bulkResolving}
         okButtonProps={{
           disabled:
-            bulkResolving || !programCode || Boolean(preview && !totalUpdates),
+            bulkResolving || teachersLoading || Boolean(teachersError) || !programCode || Boolean(preview && !totalUpdates),
         }}
         onOk={() => void (preview ? apply() : createPreview())}
       >
@@ -418,9 +510,57 @@ export default function HocmaiScormNameSyncModal({
               Chương trình: <b>{programCode || "Chưa chọn"}</b>
             </>
           }
-          description="Hệ thống đối chiếu đề cương, lịch dạy, giáo viên và Package/Course với outline HOCMAI. Lesson ID chỉ được xác định từ outline API theo tên bài và giáo viên; Lesson ID mapping cũ và Google Sheets không được sử dụng trong nghiệp vụ này."
+          description="Chọn riêng một luồng ghép Lesson và nhập tiền tố cho từng giáo viên. Chỉ dùng outline HOCMAI; không tự chuyển sang luồng khác và không lấy Lesson ID mapping cũ. Tiền tố chỉ dùng cho lần đồng bộ này, không lưu vào hồ sơ giáo viên."
           style={{ marginBottom: 16 }}
         />
+        <Space direction="vertical" style={{ width: "100%", marginBottom: 16 }}>
+          <Typography.Text strong>Luồng ghép Lesson HOCMAI</Typography.Text>
+          <Select
+            value={matchingMode}
+            disabled={loading || bulkResolving}
+            options={[
+              { value: "name_teacher", label: "Theo tên bài + giáo viên (luồng SCORM cũ)" },
+              { value: "lesson_id", label: "Theo thuật toán đồng bộ Lesson ID" },
+            ]}
+            onChange={(mode: HocmaiScormOptions["matchingMode"]) => {
+              invalidatePreview();
+              setMatchingMode(mode);
+            }}
+            style={{ width: "100%" }}
+          />
+          <Typography.Text type="secondary">
+            {matchingMode === "name_teacher"
+              ? "Chỉ nhận diện khi tên bài, giáo viên và Session đáp ứng điều kiện của luồng SCORM cũ."
+              : "Phân bổ Lesson theo thuật toán đồng bộ Lesson ID trên các lịch của cùng bài và Package/Course; có thể xét lesson chưa có hậu tố giáo viên."}
+            {" "}Hãy kiểm tra Lesson ID và tên dự kiến trong preview trước khi xác nhận. Đổi luồng hoặc tiền tố sẽ xóa preview và các lựa chọn thủ công để kiểm tra lại.
+          </Typography.Text>
+          <Typography.Text strong>Tiền tố giáo viên của chương trình</Typography.Text>
+          {teachersLoading && <Typography.Text type="secondary">Đang tải danh sách giáo viên…</Typography.Text>}
+          {teachersError && <Alert type="error" message={teachersError}
+            action={<Button onClick={() => setTeachersReload((value) => value + 1)}>Tải lại</Button>} />}
+          {!teachersLoading && !teachersError && !teachers.length && <Typography.Text type="secondary">Chương trình chưa có giáo viên theo lịch.</Typography.Text>}
+          {teachers.map((teacher) => (
+            <div key={teacher.key} style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ minWidth: 220 }}>{teacher.name}</span>
+              <Input
+                aria-label={`Tiền tố ${teacher.name}`}
+                value={teacherPrefixes[teacher.key] || ""}
+                placeholder="Cô, Thầy, TS.…"
+                maxLength={50}
+                disabled={loading || bulkResolving || teachersLoading}
+                onChange={(event) => {
+                  invalidatePreview();
+                  setTeacherPrefixes((current) => ({ ...current, [teacher.key]: event.target.value }));
+                }}
+                style={{ width: 200 }}
+              />
+              <Typography.Text type="secondary">
+                {teacherPrefixes[teacher.key]?.trim() ? `${teacherPrefixes[teacher.key].trim()} ${teacher.name}` : "Chưa nhập tiền tố"}
+              </Typography.Text>
+            </div>
+          ))}
+          <Typography.Text type="secondary">Tiền tố nhập ở đây được ưu tiên. Nếu để trống, chỉ dùng chức danh có căn cứ từ dữ liệu hiện có; thiếu thông tin sẽ cần chọn thủ công.</Typography.Text>
+        </Space>
         {!preview && (
           <Typography.Text type="secondary">
             Bấm “Tạo bản xem trước” để kiểm tra toàn bộ thay đổi. Chưa có dữ
@@ -668,7 +808,7 @@ export default function HocmaiScormNameSyncModal({
                           <Tag color={approved.approvalMode === "quick" ? "cyan" : "purple"}>
                             {approved.approvalMode === "quick"
                               ? "Đã duyệt nhanh"
-                              : "Nhập tay"}
+                              : "Đã chọn thủ công"}
                           </Tag>
                         ) : (
                           statusTag(row.status)
@@ -706,9 +846,7 @@ export default function HocmaiScormNameSyncModal({
                             >
                               {approved
                                 ? "Sửa"
-                                : row.candidateSessions?.length
-                                  ? "Chọn / sửa"
-                                  : "Nhập Lesson ID"}
+                                : "Chọn Lesson HOCMAI"}
                             </Button>
                           </Space>
                         )}
@@ -753,17 +891,16 @@ export default function HocmaiScormNameSyncModal({
         )}
       </Modal>
       <Modal
-        open={Boolean(manualEditorRow)}
+        open={open && Boolean(manualEditorRow)}
         title="Xử lý thủ công Lesson HOCMAI"
-        onCancel={() => {
-          setManualEditorRow(undefined);
-          setManualEditorSessionKey(undefined);
-          setManualEditorResolution(undefined);
-        }}
+        onCancel={closeManualEditor}
         okText={
-          manualEditorResolution ? "Áp dụng vào preview" : "Kiểm tra Lesson ID"
+          manualEditorResolution ? "Áp dụng vào preview" : "Kiểm tra Lesson đã chọn"
         }
         confirmLoading={Boolean(resolvingKey)}
+        okButtonProps={{ disabled: manualLessonsLoading || Boolean(manualLessonsError)
+          || !manualLessons.some((lesson) => lesson.lessonId === manualEditorLessonId)
+          || Boolean(manualEditorResolution?.requiresHonorific && !manualEditorResolution.honorific) }}
         onOk={() =>
           void (manualEditorResolution ? saveManualOverride() : resolveManual())
         }
@@ -783,78 +920,37 @@ export default function HocmaiScormNameSyncModal({
           }
           style={{ marginBottom: 16 }}
         />
-        {!!manualCandidateSessions.length && (
-          <Space direction="vertical" style={{ width: "100%", marginBottom: 16 }}>
-            <div>
-              <Typography.Text strong>Session HOCMAI</Typography.Text>
-              <Select
-                showSearch
-                optionFilterProp="label"
-                value={manualEditorSessionKey}
-                placeholder="Chọn session chứa bài học"
-                options={manualCandidateSessions.map((session) => ({
-                  value: session.key,
-                  label: `${session.name} (${session.lessons.length} Lesson)`,
-                }))}
-                onChange={(sessionKey) => {
-                  const session = manualCandidateSessions.find(
-                    (item) => item.key === sessionKey,
-                  );
-                  setManualEditorSessionKey(sessionKey);
-                  setManualEditorLessonId(
-                    session?.lessons.length === 1
-                      ? session.lessons[0].lessonId
-                      : "",
-                  );
-                  setManualEditorResolution(undefined);
-                }}
-                style={{ width: "100%", marginTop: 6 }}
-              />
-            </div>
-            {manualSelectedSession && (
-              <div>
-                <Typography.Text strong>Lesson trong session</Typography.Text>
-                <Select
-                  showSearch
-                  optionFilterProp="label"
-                  value={
-                    manualSelectedSession.lessons.some(
-                      (lesson) => lesson.lessonId === manualEditorLessonId,
-                    )
-                      ? manualEditorLessonId
-                      : undefined
-                  }
-                  placeholder="Chọn đúng Lesson"
-                  options={manualSelectedSession.lessons.map((lesson) => ({
-                    value: lesson.lessonId,
-                    label: lesson.lessonId + " — " + lesson.name,
-                  }))}
-                  onChange={(lessonId) => {
-                    setManualEditorLessonId(lessonId);
-                    setManualEditorResolution(undefined);
-                  }}
-                  style={{ width: "100%", marginTop: 6 }}
-                />
-              </div>
-            )}
-            <Typography.Text type="secondary">
-              Hệ thống gợi ý các session và Lesson cùng khớp. Hãy chọn đúng
-              session theo lịch; nếu cần vẫn có thể nhập Lesson ID trực tiếp bên
-              dưới.
-            </Typography.Text>
-          </Space>
+        {manualLessonsError && (
+          <Alert type="error" showIcon message={manualLessonsError}
+            action={<Button size="small" onClick={() => setManualLessonsReload((value) => value + 1)}>Tải lại</Button>}
+            style={{ marginBottom: 12 }} />
         )}
-        <Typography.Text strong>Lesson ID HOCMAI</Typography.Text>
-        <Input
-          value={manualEditorLessonId}
-          placeholder="Nhập Lesson ID"
-          onChange={(event) => {
-            setManualEditorLessonId(event.target.value.replace(/\D/g, ""));
+        <Typography.Text strong>Lesson HOCMAI trong Package/Course</Typography.Text>
+        <Select
+          showSearch
+          allowClear
+          optionFilterProp="label"
+          loading={manualLessonsLoading}
+          disabled={manualLessonsLoading || Boolean(manualLessonsError)}
+          value={manualEditorLessonId || undefined}
+          placeholder={manualLessonsLoading ? "Đang tải toàn bộ Lesson…" : "Tìm theo tên hoặc ID rồi chọn Lesson"}
+          options={manualLessons.map((lesson) => ({
+            value: lesson.lessonId,
+            label: `${lesson.sectionName ? lesson.sectionName + " · " : ""}${lesson.lessonId} — ${lesson.name || "Chưa có tên"}`,
+          }))}
+          notFoundContent={manualLessonsLoading ? "Đang tải…" : "Không tìm thấy Lesson"}
+          onChange={(lessonId) => {
+            manualEditorVersion.current += 1;
+            setManualEditorLessonId(lessonId || "");
             setManualEditorResolution(undefined);
+            setResolvingKey(undefined);
           }}
-          onPressEnter={() => void resolveManual()}
-          style={{ marginTop: 6, marginBottom: 16 }}
+          style={{ width: "100%", marginTop: 6, marginBottom: 8 }}
         />
+        <Typography.Paragraph type="secondary">
+          {manualLessonsLoading ? "Đang tải danh sách từ HOCMAI."
+            : `Có ${manualLessons.length} Lesson thuộc Package/Course này. Tìm theo tên, Session hoặc ID để chọn; không cần nhập Lesson ID thủ công.`}
+        </Typography.Paragraph>
         {manualEditorResolution && (
           <Space direction="vertical" style={{ width: "100%" }} size={12}>
             <div>
@@ -863,6 +959,25 @@ export default function HocmaiScormNameSyncModal({
               </Typography.Text>
               <div>{manualEditorResolution.currentName}</div>
             </div>
+            {manualEditorResolution.requiresHonorific && (
+              <div>
+                <Typography.Text strong>Chức danh giáo viên</Typography.Text>
+                <Select
+                  value={manualEditorResolution.honorific}
+                  placeholder="Chọn Cô hoặc Thầy"
+                  options={[{ value: "Cô", label: "Cô" }, { value: "Thầy", label: "Thầy" }]}
+                  onChange={(honorific: string) => setManualEditorResolution((current) => current ? {
+                    ...current,
+                    honorific,
+                    expectedName: `${current.baseName}_${honorific} ${current.teacherName}`,
+                  } : current)}
+                  style={{ width: "100%", marginTop: 6 }}
+                />
+                <Typography.Text type="warning">
+                  HOCMAI và lịch chưa đủ thông tin xác định chức danh. Hãy chọn Cô/Thầy để tạo tên đầy đủ.
+                </Typography.Text>
+              </div>
+            )}
             <div>
               <Typography.Text strong>Tên dự kiến</Typography.Text>
               <Input

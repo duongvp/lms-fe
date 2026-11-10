@@ -456,12 +456,22 @@ export type HocmaiScormPreviewResult = {
   rows: HocmaiScormPreviewRow[];
   warnings: string[];
 };
-export const previewHocmaiScormNames = (program_code: string) =>
+export type HocmaiScormOptions = {
+  matchingMode: "name_teacher" | "lesson_id";
+  teacherPrefixes: Record<string, string>;
+};
+export type HocmaiScormTeacher = { key: string; name: string; prefix: string };
+export const getHocmaiScormTeachers = (program_code: string) =>
+  fetchInstance(`${API_BASE_URL}/hocmai-scorm-name-sync/teachers`, {
+    method: "POST", body: JSON.stringify({ program_code }),
+    headers: lessonHeaders(), credentials: "include",
+  }, "json");
+export const previewHocmaiScormNames = (program_code: string, options?: HocmaiScormOptions) =>
   fetchInstance(
     `${API_BASE_URL}/hocmai-scorm-name-sync/preview`,
     {
       method: "POST",
-      body: JSON.stringify({ program_code }),
+      body: JSON.stringify({ program_code, options }),
       headers: lessonHeaders(),
       credentials: "include",
     },
@@ -478,20 +488,48 @@ export type HocmaiScormManualResolution = {
   lessonId: string;
   currentName: string;
   suggestedName: string;
+  baseName: string;
+  teacherName: string;
+  honorific?: string;
+  requiresHonorific: boolean;
   sessionName?: string;
   packageId: string;
   courseId: string;
 };
+export type HocmaiScormManualLessons = {
+  rowKey: string;
+  packageId: string;
+  courseId: string;
+  lessons: Array<{
+    lessonId: string;
+    name?: string;
+    sectionId?: string;
+    sectionName?: string;
+  }>;
+};
+export const getManualHocmaiScormLessons = (program_code: string, row_key: string) =>
+  fetchInstance(
+    `${API_BASE_URL}/hocmai-scorm-name-sync/manual-lessons`,
+    {
+      method: "POST",
+      body: JSON.stringify({ program_code, row_key }),
+      headers: lessonHeaders(),
+      credentials: "include",
+    },
+    "json",
+    120_000,
+  );
 export const resolveManualHocmaiScormLesson = (
   program_code: string,
   row_key: string,
   lesson_id: string,
+  options?: HocmaiScormOptions,
 ) =>
   fetchInstance(
     `${API_BASE_URL}/hocmai-scorm-name-sync/resolve-manual`,
     {
       method: "POST",
-      body: JSON.stringify({ program_code, row_key, lesson_id }),
+      body: JSON.stringify({ program_code, row_key, lesson_id, options }),
       headers: lessonHeaders(),
       credentials: "include",
     },
@@ -505,12 +543,13 @@ export type HocmaiScormManualSelection = {
 export const resolveManualHocmaiScormLessonsBulk = (
   program_code: string,
   selections: HocmaiScormManualSelection[],
+  options?: HocmaiScormOptions,
 ) =>
   fetchInstance(
     `${API_BASE_URL}/hocmai-scorm-name-sync/resolve-manual-bulk`,
     {
       method: "POST",
-      body: JSON.stringify({ program_code, selections }),
+      body: JSON.stringify({ program_code, selections, options }),
       headers: lessonHeaders(),
       credentials: "include",
     },
@@ -520,12 +559,13 @@ export const resolveManualHocmaiScormLessonsBulk = (
 export const applyHocmaiScormNames = (
   program_code: string,
   manual_overrides: HocmaiScormManualOverride[] = [],
+  options?: HocmaiScormOptions,
 ) =>
   fetchInstance(
     `${API_BASE_URL}/hocmai-scorm-name-sync/apply`,
     {
       method: "POST",
-      body: JSON.stringify({ program_code, manual_overrides }),
+      body: JSON.stringify({ program_code, manual_overrides, options }),
       headers: lessonHeaders(),
       credentials: "include",
     },
