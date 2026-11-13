@@ -2634,7 +2634,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                                     description={<Space direction="vertical" size={8} style={{ width: '100%' }}>
                                                         <div>
                                                             {displayedSubmitError.conflicts.length
-                                                                ? `Có ${displayedSubmitError.conflicts.length} lịch bị trùng. Vui lòng kiểm tra và điều chỉnh thời gian hoặc nhân sự.`
+                                                                ? `Thay đổi đang lưu bị trùng với ${displayedSubmitError.conflicts.length} lịch. Danh sách bên dưới là lịch đối chiếu, có thể nằm ngoài các lịch bạn chọn cập nhật. Vui lòng kiểm tra thời gian hoặc nhân sự.`
                                                                 : displayedSubmitError.message}
                                                         </div>
                                                         {displayedSubmitError.conflicts.map((conflict) => {
