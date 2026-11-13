@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
     hmoCalendarOccurrence,
     matchHmoLessonsByCourse,
+    mergeHmoMappingKeys,
     normalizeLessonTitle,
 } from '../helper/hmoLessonMatching';
 
@@ -187,7 +188,7 @@ test('bài 67 và 81 cùng tên vẫn ghép theo đúng tháng của session', (
     assert.equal(result.matchesByRow.get('81-chi')?.get('1768')?.lessonId, '168559');
 });
 
-test('session Livestream không có dạng Tháng M/YYYY không được modal tự gán', () => {
+test('session Livestream không chia tháng duy nhất được tự gán khi đúng tên và giáo viên', () => {
     const result = matchHmoLessonsByCourse([{
         package_id: '9149',
         course_id: '1768',
@@ -201,11 +202,7 @@ test('session Livestream không có dạng Tháng M/YYYY không được modal t
         startTime: '2027-03-10T20:00:00.000Z',
     }]);
 
-    assert.equal(result.matchesByRow.get('uncertain')?.has('1768'), false);
-    assert.equal(
-        result.unmatchedReasonsByRow.get('uncertain')?.get('1768'),
-        'SESSION_UNCERTAIN',
-    );
+    assert.equal(result.matchesByRow.get('uncertain')?.get('1768')?.lessonId, '900001');
 });
 
 test('Feed ghép bài giảng trong chuyên đề không chia tháng cho từng Course', () => {
@@ -236,14 +233,14 @@ test('Feed không tự chọn giữa hai session chuyên đề cùng tên bài v
     assert.equal(result.unmatchedReasonsByRow.get('feed')?.get('3124'), 'SESSION_UNCERTAIN');
 });
 
-test('Feed có session theo tháng vẫn ưu tiên đúng tháng và không lấy nhầm tháng khác', () => {
+test('ưu tiên session đúng tháng, fallback khi mỗi Course chỉ có một ứng viên', () => {
     const options = [
         { package_id: '1', course_id: '3124', lesson_id: 'oct', lesson_name: 'Bài giảng', section_name: 'Tháng 10/2026' },
         { package_id: '1', course_id: '3124', lesson_id: 'topic', lesson_name: 'Bài giảng', section_name: 'Chuyên đề' },
     ];
     const row = { key: 'feed', title: 'Bài giảng', programCode: 'feed-topic', startTime: '2026-10-14' };
     assert.equal(matchHmoLessonsByCourse(options, [row]).matchesByRow.get('feed')?.get('3124')?.lessonId, 'oct');
-    assert.equal(matchHmoLessonsByCourse(options.slice(0, 1), [{ ...row, startTime: '2026-11-14' }]).matchesByRow.get('feed')?.has('3124'), false);
+    assert.equal(matchHmoLessonsByCourse(options.slice(0, 1), [{ ...row, startTime: '2026-11-14' }]).matchesByRow.get('feed')?.get('3124')?.lessonId, 'oct');
 });
 
 
@@ -258,4 +255,130 @@ test('cùng một bài bắc qua đầu tháng vẫn dùng session duy nhất đ
 
     assert.equal(result.matchesByRow.get('55-linh')?.get('3353')?.lessonId, '173858');
     assert.equal(result.matchesByRow.get('55-chi')?.get('3353')?.lessonId, '173883');
+});
+
+
+test('loại ID section bỏ và tự map sang section Chặng 1 hợp lệ', () => {
+    const title = 'Lí thuyết đọc hiểu truyện ngắn hiện đại';
+    for (const marker of ['(BỎ)', '(bỏ)', '(Bỏ)', '(bỎ)']) {
+        const result = matchHmoLessonsByCourse([
+            { package_id: '9408', course_id: '3562', lesson_id: '179133', lesson_name: title,
+                section_id: 'old', section_name: `Chặng 1 ${marker}` },
+            { package_id: '9408', course_id: '3562', lesson_id: '179163', lesson_name: title,
+                section_id: 'active', section_name: 'Chặng 1: Các chủ đề trọng tâm - Học kì I' },
+        ], [{ key: '1', title, startTime: '2026-11-11T14:00:00Z' }]);
+        assert.equal(result.matchesByRow.get('1')?.get('3562')?.lessonId, '179163');
+    }
+});
+
+
+test('Livestream vẫn cần chọn thủ công khi nhiều section Chặng cùng khớp', () => {
+    const title = 'Lí thuyết đọc hiểu truyện ngắn hiện đại';
+    const result = matchHmoLessonsByCourse(['1', '2'].map((id) => ({
+        package_id: '9408', course_id: '3562', lesson_id: id, lesson_name: title,
+        section_id: id, section_name: `Chặng ${id}`,
+    })), [{ key: '1', title, startTime: '2026-11-11T14:00:00Z', programCode: 'LIVE' }]);
+    assert.equal(result.matchesByRow.get('1')?.has('3562'), false);
+    assert.equal(result.unmatchedReasonsByRow.get('1')?.get('3562'), 'SESSION_UNCERTAIN');
+});
+
+test('TSA P1/P2 tự gán đủ hai Course trong section TOÁN_Tháng 12/2026', () => {
+    const title = 'Luyện đề TSA-OD-Phần Tư duy Toán';
+    for (const prefix of ['TOÁN_', 'TOÁN - ', 'toán_', 'TOÁN: ']) {
+        const options = [
+            { package_id: '9056', course_id: '3297', lesson_id: '179221', lesson_name: `${title}-P1` },
+            { package_id: '9131', course_id: '3342', lesson_id: '179490', lesson_name: `${title}-P1` },
+            { package_id: '9056', course_id: '3297', lesson_id: '179222', lesson_name: `${title}-P2` },
+            { package_id: '9131', course_id: '3342', lesson_id: '179491', lesson_name: `${title}-P2` },
+        ].map((option) => ({ ...option, section_name: `${prefix}Tháng 12/2026` }));
+        const rows = [
+            { key: 'p1', title: `${title}-P1`, startTime: '2026-12-02T12:00:00Z' },
+            { key: 'p2', title: `${title}-P2`, startTime: '2026-12-04T11:00:00Z' },
+        ];
+        const result = matchHmoLessonsByCourse(options, rows);
+        assert.deepEqual([...result.matchesByRow.get('p1')!.values()].map((match) => match.lessonId), ['179221', '179490']);
+        assert.deepEqual([...result.matchesByRow.get('p2')!.values()].map((match) => match.lessonId), ['179222', '179491']);
+        const wrongMonth = matchHmoLessonsByCourse(options, rows.map((row) => ({ ...row, startTime: '2026-11-02T12:00:00Z' })));
+        assert.equal(wrongMonth.matchesByRow.get('p2')!.size, 0);
+        const wrongYear = matchHmoLessonsByCourse(options, rows.map((row) => ({ ...row, startTime: '2027-12-02T12:00:00Z' })));
+        assert.equal(wrongYear.matchesByRow.get('p2')!.size, 0);
+    }
+});
+
+test('Course thiếu ứng viên một lịch không chặn kết quả của lịch khác', () => {
+    const title = 'Luyện đề TSA-OD-Phần Tư duy Toán-P2';
+    const result = matchHmoLessonsByCourse([
+        { package_id: '9056', course_id: '3297', lesson_id: '179222', lesson_name: `${title}_Cô Mai`, section_name: 'TOÁN_Tháng 12/2026' },
+        { package_id: '9131', course_id: '3342', lesson_id: '179491', lesson_name: `${title}_Cô Mai`, section_name: 'TOÁN_Tháng 12/2026' },
+        { package_id: '9056', course_id: '3297', lesson_id: 'other', lesson_name: `${title}_Cô Lan`, section_name: 'TOÁN_Tháng 12/2026' },
+    ], [
+        { key: 'mai', title, teacher: 'Mai', startTime: '2026-12-04T11:00:00Z' },
+        { key: 'lan', title, teacher: 'Lan', startTime: '2026-12-05T11:00:00Z' },
+    ]);
+    assert.equal(result.matchesByRow.get('mai')!.size, 2);
+    assert.equal(result.matchesByRow.get('lan')!.size, 1);
+});
+
+test('một lịch tự map đủ các Course dù tháng/năm section khác ngày lịch', () => {
+    const title = 'Luyện đề TSA-OD-Phần Tư duy Toán-P2';
+    const options = [
+        { package_id: '9056', course_id: '3297', lesson_id: '179222', lesson_name: title, section_name: 'TOÁN_Tháng 12/2026' },
+        { package_id: '9131', course_id: '3342', lesson_id: '179491', lesson_name: title, section_name: 'TOÁN_Tháng 9/2025' },
+    ];
+    const rows = [{ key: 'p2', title, startTime: '2026-11-04T11:00:00Z' }];
+    const result = matchHmoLessonsByCourse(options, rows);
+    assert.equal(result.matchesByRow.get('p2')?.get('3297')?.lessonId, '179222');
+    assert.equal(result.matchesByRow.get('p2')?.get('3342')?.lessonId, '179491');
+    assert.equal(result.unmatchedReasonsByRow.get('p2')!.size, 0);
+
+    // Nhiều ứng viên trong cùng Course mới cần đối chiếu session.
+    const ambiguous = matchHmoLessonsByCourse([
+        ...options,
+        { ...options[0], lesson_id: 'other', section_name: 'TOÁN_Tháng 8/2026' },
+    ], rows);
+    assert.equal(ambiguous.matchesByRow.get('p2')?.has('3297'), false);
+    assert.equal(ambiguous.matchesByRow.get('p2')?.get('3342')?.lessonId, '179491');
+});
+
+
+test('một Course có hai Lesson cùng tên trong cùng section phải chọn tay, Course khác vẫn map', () => {
+    const title = 'Luyện đề TSA-OD-Phần Tư duy Toán-P2';
+    const base = { package_id: '9056', course_id: '3297', lesson_name: title, section_name: 'TOÁN_Tháng 12/2026' };
+    const result = matchHmoLessonsByCourse([
+        { ...base, lesson_id: '179222' },
+        { ...base, lesson_id: 'duplicate' },
+        { ...base, package_id: '9131', course_id: '3342', lesson_id: '179491' },
+    ], [{ key: 'p2', title, startTime: '2026-12-04T11:00:00Z' }]);
+    assert.equal(result.matchesByRow.get('p2')?.has('3297'), false);
+    assert.equal(result.unmatchedReasonsByRow.get('p2')?.get('3297'), 'MULTIPLE_MATCHES');
+    assert.equal(result.matchesByRow.get('p2')?.get('3342')?.lessonId, '179491');
+});
+
+test('một lịch ưu tiên đúng tháng trong mỗi Course trước khi xét Lesson trùng tên', () => {
+    const title = 'Luyện đề TSA-OD-Phần Tư duy Toán-P2';
+    const options = ['3297', '3342'].flatMap((course_id) => [
+        { package_id: course_id, course_id, lesson_id: `${course_id}-nov`, lesson_name: title, section_name: 'TOÁN_Tháng 11/2026' },
+        { package_id: course_id, course_id, lesson_id: `${course_id}-dec`, lesson_name: title, section_name: 'TOÁN_Tháng 12/2026' },
+    ]);
+    const rows = [{ key: 'p2', title, startTime: '2026-12-04T11:00:00Z' }];
+    const result = matchHmoLessonsByCourse(options, rows);
+    assert.equal(result.matchesByRow.get('p2')?.get('3297')?.lessonId, '3297-dec');
+    assert.equal(result.matchesByRow.get('p2')?.get('3342')?.lessonId, '3342-dec');
+    const duplicate = matchHmoLessonsByCourse([...options, { ...options[1], lesson_id: 'duplicate-dec' }], rows);
+    assert.equal(duplicate.unmatchedReasonsByRow.get('p2')?.get('3297'), 'MULTIPLE_MATCHES');
+    assert.equal(duplicate.matchesByRow.get('p2')?.get('3342')?.lessonId, '3342-dec');
+});
+
+
+test('không tìm được Lesson thì giữ nguyên mapping cũ kể cả ID không có trong outline', () => {
+    const currentKeys = ['9056::3297::old-missing', '9131::3342::179491'];
+    assert.deepEqual(mergeHmoMappingKeys(currentKeys, []), currentKeys);
+    assert.deepEqual(mergeHmoMappingKeys([], []), []);
+});
+
+test('chỉ cập nhật Course đã khớp, giữ mapping cũ của Course thiếu kết quả', () => {
+    const currentKeys = ['9056::3297::old-a', '9131::3342::old-b'];
+    const options = [{ package_id: '9056', course_id: '3297', lesson_id: '179222' }];
+    assert.deepEqual(mergeHmoMappingKeys(currentKeys, options), ['9131::3342::old-b', '9056::3297::179222']);
+    assert.deepEqual(mergeHmoMappingKeys([], options), ['9056::3297::179222']);
 });

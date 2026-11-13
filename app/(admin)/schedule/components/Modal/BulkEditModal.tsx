@@ -47,6 +47,7 @@ import {
     hmoCalendarOccurrence,
     hmoCourseMatchSummary,
     matchHmoLessonsByCourse,
+    mergeHmoMappingKeys,
     normalizeLessonTitle,
 } from '@/helper/hmoLessonMatching';
 
@@ -1039,11 +1040,6 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             ));
             const missingContexts: typeof contexts = [];
             contexts.forEach((context) => {
-                const cachedOptions = hmoOptionsByLesson[context.lessonId];
-                if (cachedOptions) {
-                    optionsByLesson.set(context.lessonId, cachedOptions);
-                    return;
-                }
                 missingContexts.push(context);
             });
             const missingByProgram = new Map<string, typeof missingContexts>();
@@ -1074,6 +1070,10 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 });
             }));
 
+            setHmoOptionsByLesson((current) => ({
+                ...current,
+                ...Object.fromEntries(optionsByLesson),
+            }));
             const nextMappings: Record<string, string[]> = {};
             const notes: Record<string, { type: 'success' | 'warning'; message: string }> = {};
             let syncedCount = 0;
@@ -1112,71 +1112,40 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 const matching = matchHmoLessonsByCourse(availableOptions, matchingRows);
                 const courseIds = matching.courseIds;
 
-                if (syncNameSource === 'calendar') {
-                    orderedRows.forEach((row) => {
-                        const rowMatches = matching.matchesByRow.get(String(row.id));
-                        const matchedCourseIds = courseIds.filter((courseId) => rowMatches?.has(courseId));
-                        if (!matchedCourseIds.length) {
-                            const uncertainSessionCourseIds = courseIds.filter(
-                                (courseId) => matching.unmatchedReasonsByRow
-                                    .get(String(row.id))?.get(courseId) === 'SESSION_UNCERTAIN'
-                            );
-                            notes[String(row.id)] = {
-                                type: 'warning',
-                                message: uncertainSessionCourseIds.length
-                                    ? `Không xác định được session phù hợp ở Course ${uncertainSessionCourseIds.join(', ')}; vui lòng chọn Session/Lesson ID thủ công.`
-                                    : `Không thể tự gán Lesson ID HMO cho “${row.lesson_name}”: ${hmoCourseMatchSummary(matching)}. Tên cần đạt ít nhất 92%, đúng P1/P2 và đúng giáo viên nếu HMO có hậu tố Cô/Thầy.`,
-                            };
-                            return;
-                        }
-
-                        const selectedOptions = matchedCourseIds.flatMap((courseId) => (
-                            rowMatches!.get(courseId)!.options
-                        ));
-                        nextMappings[String(row.id)] = selectedOptions.map(hmoOptionKey);
-                        syncedCount += 1;
-                        notes[String(row.id)] = {
-                            type: matchedCourseIds.length === courseIds.length ? 'success' : 'warning',
-                            message: matchedCourseIds.length === courseIds.length
-                                ? `Đã gán tạm Lesson ID HMO theo tên lịch trong ${courseIds.length} Course; cần Xem trước và Xác nhận để lưu.`
-                                : `Đã gán Lesson ID HMO trong ${matchedCourseIds.length}/${courseIds.length} Course. Chưa gán: ${hmoCourseMatchSummary(matching, courseIds.filter((courseId) => !matchedCourseIds.includes(courseId)))}.`,
-                        };
-                    });
-                    return;
-                }
-
-                const matchedCourseIds = courseIds.filter(
-                    (courseId) => matching.matchedRowCountByCourse.get(courseId) === orderedRows.length
-                );
-                if (matchedCourseIds.length > 0 && orderedRows.length > 0) {
-                    orderedRows.forEach((row) => {
-                        const rowMatches = matching.matchesByRow.get(String(row.id))!;
-                        nextMappings[String(row.id)] = matchedCourseIds.flatMap(
-                            (courseId) => rowMatches.get(courseId)!.options.map(hmoOptionKey)
-                        );
-                    });
-                    syncedCount += orderedRows.length;
-                    orderedRows.forEach((row) => {
-                        notes[String(row.id)] = {
-                            type: matchedCourseIds.length === courseIds.length ? 'success' : 'warning',
-                            message: matchedCourseIds.length === courseIds.length
-                                ? `Đã gán tạm ${summarizeSelectedHmoMappings(nextMappings[String(row.id)])} theo tên bài và giáo viên; cần Xem trước và Xác nhận để lưu.`
-                                : `Đã gán Lesson ID cho ${matchedCourseIds.length}/${courseIds.length} Course. Chưa gán: ${hmoCourseMatchSummary(matching, courseIds.filter((courseId) => !matchedCourseIds.includes(courseId)))}.`,
-                        };
-                    });
-                    return;
-                }
-
                 orderedRows.forEach((row) => {
+                    const calendarId = String(row.id);
+                    const currentKeys: string[] = configMode === 'separate'
+                        ? form.getFieldValue(['separate_config', calendarId, 'hmo_mapping_keys'])
+                            ?? normalizedMappingKeys(row.package_lesson_mappings || [])
+                        : form.getFieldValue(['common_hmo_mapping_keys_by_calendar', calendarId])
+                            ?? normalizedMappingKeys(row.package_lesson_mappings || []);
                     const rowMatches = matching.matchesByRow.get(String(row.id));
                     const unmatchedCourseIds = courseIds.filter((courseId) => !rowMatches?.has(courseId));
                     const matchedCourseIdsForRow = courseIds.filter((courseId) => rowMatches?.has(courseId));
+                    // Mỗi Course được gán độc lập cho từng lịch đã khớp.
+                    if (matchedCourseIdsForRow.length) {
+                        nextMappings[calendarId] = mergeHmoMappingKeys(currentKeys, matchedCourseIdsForRow.flatMap(
+                            (courseId) => rowMatches!.get(courseId)!.options
+                        ));
+                        syncedCount += 1;
+                    }
+                    if (courseIds.length && !unmatchedCourseIds.length) {
+                        notes[String(row.id)] = {
+                            type: 'success',
+                            message: `Đã gán tạm ${summarizeSelectedHmoMappings(nextMappings[String(row.id)])} trong ${courseIds.length} Course; cần Xem trước và Xác nhận để lưu.`,
+                        };
+                        return;
+                    }
                     const rowTeacher = teacherValue(row.teacher) || 'chưa xác định';
-                    const normalizedSourceTitle = normalizeLessonTitle(sourceLessonName);
+                    const rowTitle = syncNameSource === 'calendar' ? row.lesson_name : sourceLessonName;
+                    const normalizedSourceTitle = normalizeLessonTitle(rowTitle);
                     const details = unmatchedCourseIds.map((courseId) => {
                         if (matching.unmatchedReasonsByRow
                             .get(String(row.id))?.get(courseId) === 'SESSION_UNCERTAIN') {
                             return `Course ${courseId}: chưa xác định được session phù hợp theo ngày lịch hoặc tên bài và giáo viên; cần chọn Session/Lesson ID thủ công`;
+                        }
+                        if (matching.unmatchedReasonsByRow.get(String(row.id))?.get(courseId) === 'MULTIPLE_MATCHES') {
+                            return `Course ${courseId}: có nhiều Lesson ID cùng khớp; cần chọn Lesson ID thủ công`;
                         }
                         const sameTitleOptions = availableOptions.filter((option) => (
                             String(option.course_id) === courseId
@@ -1188,17 +1157,17 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         if (availableTeachers.length) {
                             return `Course ${courseId}: không có Lesson ID cho giáo viên “${rowTeacher}”; HMO chỉ có ${availableTeachers.join(', ')}`;
                         }
-                        return `Course ${courseId}: không có Lesson ID cùng tên “${sourceLessonName}”`;
+                        return `Course ${courseId}: không có Lesson ID cùng tên “${rowTitle}”`;
                     });
                     const matchedPrefix = matchedCourseIdsForRow.length
-                        ? `Đã tìm thấy ở Course ${matchedCourseIdsForRow.join(', ')} nhưng chưa gán vì các lịch của bài chưa khớp đủ. `
+                        ? `Đã gán tạm ở Course ${matchedCourseIdsForRow.join(', ')}; cần Xem trước và Xác nhận để lưu. `
                         : '';
                     const warningDetails = details.length
                         ? details.join('; ')
                         : hmoCourseMatchSummary(matching);
                     notes[String(row.id)] = {
                         type: 'warning',
-                        message: `${matchedPrefix}${warningDetails}.`,
+                        message: `${matchedPrefix}${warningDetails}.${currentKeys.some((key) => !matchedCourseIdsForRow.includes(key.split('::')[1])) ? ' Giữ nguyên mapping đã có ở các Course chưa tìm được kết quả phù hợp.' : ''}`,
                     };
                 });
             });

@@ -1,5 +1,4 @@
 import type { HocmaiSectionOption } from '@/services/livestreamService';
-import { calendarSourceFromCode } from '@/helper/lesson';
 
 export type HmoLessonMatchRow = {
     key: string;
@@ -22,7 +21,7 @@ export type HmoLessonMatchingResult = {
     courseIds: string[];
     matchesByRow: Map<string, Map<string, HmoLessonMatch>>;
     matchedRowCountByCourse: Map<string, number>;
-    unmatchedReasonsByRow: Map<string, Map<string, 'SESSION_UNCERTAIN'>>;
+    unmatchedReasonsByRow: Map<string, Map<string, 'SESSION_UNCERTAIN' | 'MULTIPLE_MATCHES'>>;
 };
 
 const canonicalText = (value: unknown) => String(value || '')
@@ -40,7 +39,7 @@ const scheduleMonthYear = (value: unknown) => {
 
 const sectionMonthYear = (value: unknown) => {
     const normalized = canonicalText(value);
-    const match = /(?:^|\b)thang\s*(\d{1,2})(?:\s*[\/-]\s*(\d{4}))?/.exec(normalized);
+    const match = /(?:^|[^a-z0-9])thang\s*(\d{1,2})(?:\s*[\/-]\s*(\d{4}))?/.exec(normalized);
     if (!match) return undefined;
     const month = Number(match[1]);
     const year = match[2] ? Number(match[2]) : undefined;
@@ -171,6 +170,18 @@ const uniqueOptions = (options: HocmaiSectionOption[]) => Array.from(new Map(
     ])
 ).values());
 
+// Đồng bộ chỉ thay Course đã tìm được kết quả; giữ mapping cũ của Course còn lại.
+export const mergeHmoMappingKeys = (
+    currentKeys: string[],
+    matchedOptions: HocmaiSectionOption[],
+): string[] => {
+    const matchedCourseIds = new Set(matchedOptions.map((option) => String(option.course_id)));
+    return Array.from(new Set([
+        ...currentKeys.filter((key) => !matchedCourseIds.has(key.split('::')[1])),
+        ...matchedOptions.map((option) => `${option.package_id}::${option.course_id}::${option.lesson_id}`),
+    ]));
+};
+
 type Candidate = {
     courseId: string;
     lessonId: string;
@@ -233,12 +244,14 @@ export const matchHmoLessonsByCourse = (
     options: HocmaiSectionOption[],
     rows: HmoLessonMatchRow[],
 ): HmoLessonMatchingResult => {
-    const deduplicatedOptions = uniqueOptions(options);
+    const deduplicatedOptions = uniqueOptions(options.filter((option) =>
+        !String(option.section_name ?? '').normalize('NFC').toLowerCase().includes('(bỏ)')
+    ));
     const courseIds = Array.from(new Set(deduplicatedOptions.map((option) => String(option.course_id))));
     const matchesByRow = new Map(rows.map((row) => [row.key, new Map<string, HmoLessonMatch>()]));
     const matchedRowCountByCourse = new Map<string, number>();
     const unmatchedReasonsByRow = new Map(
-        rows.map((row) => [row.key, new Map<string, 'SESSION_UNCERTAIN'>()])
+        rows.map((row) => [row.key, new Map<string, 'SESSION_UNCERTAIN' | 'MULTIPLE_MATCHES'>()])
     );
     const normalizedRows = rows.map((row, index) => ({
         ...row,
@@ -292,8 +305,13 @@ export const matchHmoLessonsByCourse = (
                 : row.startTime && inferredSessionKey
                     ? allEvaluated.filter((item) => item.sessionKey === inferredSessionKey)
                     : [];
-            if (!sessionEvaluated.length && calendarSourceFromCode(row.programCode) === 'feed') {
-                // Feed có các chuyên đề không chia theo tháng. Chỉ ghép tên
+            // Một lịch, một ứng viên trong Course: tháng không phải điều kiện chặn.
+            // Các Course được xét riêng nên đều có thể nhận Lesson ID của mình.
+            if (normalizedRows.length === 1 && allEvaluated.length === 1) {
+                sessionEvaluated = allEvaluated;
+            }
+            if (!sessionEvaluated.length) {
+                // Section không chia theo tháng: chỉ ghép tên
                 // chính xác, đúng giáo viên và xác định được một session duy nhất.
                 let fallback = allEvaluated.filter((item) => item.nonMonthlySession && item.exactTitle);
                 const bestQuality = fallback[0]?.teacherMatchQuality;
@@ -307,6 +325,15 @@ export const matchHmoLessonsByCourse = (
             let evaluated = bestTeacherQuality === undefined
                 ? sessionEvaluated
                 : sessionEvaluated.filter((item) => item.teacherMatchQuality === bestTeacherQuality);
+
+            // Chỉ xét trùng Lesson sau khi đã ưu tiên session đúng tháng.
+            const equivalentMatches = evaluated.filter((item) =>
+                item.normalizedHmoTitle === evaluated[0]?.normalizedHmoTitle
+            );
+            if (normalizedRows.length === 1 && Number(row.occurrence || 1) <= 1 && equivalentMatches.length > 1) {
+                unmatchedReasonsByRow.get(row.key)!.set(courseId, 'MULTIPLE_MATCHES');
+                return { row, evaluated: [] };
+            }
 
             // Hai tên lõi fuzzy khác nhau có điểm sát nhau là trường hợp mơ hồ.
             // Nhiều Lesson ID có cùng một tên lõi vẫn hợp lệ và sẽ được chia theo thứ tự.
