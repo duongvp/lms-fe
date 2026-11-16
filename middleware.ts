@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 
 export function middleware(req: NextRequest) {
     const { pathname } = req.nextUrl;
+    if (pathname === '/callback') return NextResponse.next();
     const refreshToken = req.cookies.get('refreshToken')?.value;
     if (!refreshToken) {
         const loginUrl = new URL('/auth/login', req.url);

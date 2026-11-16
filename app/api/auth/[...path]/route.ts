@@ -39,6 +39,11 @@ const proxyAuthRequest = async (
             redirect: 'manual',
         });
         const responseHeaders = new Headers(upstreamResponse.headers);
+        // OAuth callback clears its context cookie and sets the session cookie.
+        // Preserve separate Set-Cookie headers (Expires contains a comma).
+        const cookies = upstreamResponse.headers.getSetCookie();
+        responseHeaders.delete('set-cookie');
+        cookies.forEach(cookie => responseHeaders.append('set-cookie', cookie));
 
         // fetch may decode the body before it is returned to the browser.
         responseHeaders.delete('content-encoding');
