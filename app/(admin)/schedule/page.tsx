@@ -1,5 +1,6 @@
 "use client";
 import { buildScheduleColumnFilterParams, normalizeScheduleAssistants, SCHEDULE_PROGRESS_FILTERS } from "@/helper/scheduleColumnFilters";
+import { runClassroomAssignmentItems, type BatchClassroomAssignmentItem } from "@/helper/batchClassroomAssignment";
 import { calendarSourceFromCode } from "@/helper/lesson";
 import { cleanFilterValues, buildScheduleApiParams, buildCalendarRoomReportParams, buildScheduleUrl, type ScheduleFilterValues } from "@/helper/scheduleFilters";
 import { isYesterdayRegistrationRange } from "@/ultils/registrationAuditDate";
@@ -501,18 +502,6 @@ interface ScheduleDataType {
     evg_provisioning_status?: 'not_created' | 'incomplete' | 'ready';
     [key: string]: any;
 }
-
-type BatchClassroomAssignmentItem = {
-    calendarId: string;
-    code: string;
-    learnNumber?: number;
-    lessonName?: string;
-    startTime?: string;
-    systemType?: string;
-    status: "pending" | "running" | "success" | "skipped" | "error";
-    movedCount?: number;
-    message?: string;
-};
 
 type ScheduleModalControllerRef = {
     openCreate: (initialData: ScheduleDataType | null) => void;
@@ -1401,6 +1390,8 @@ const Page = () => {
     const [batchClassroomAssignmentOpen, setBatchClassroomAssignmentOpen] = useState(false);
     const [batchClassroomAssigning, setBatchClassroomAssigning] = useState(false);
     const [batchClassroomItems, setBatchClassroomItems] = useState<BatchClassroomAssignmentItem[]>([]);
+    const batchClassroomRunRef = useRef(false);
+    const [batchClassroomUpdateMode, setBatchClassroomUpdateMode] = useState<ClassroomAssignmentUpdateMode>("unlearned_only");
     const [classroomWorkflowOpen, setClassroomWorkflowOpen] = useState(false);
     const [resumeClassroomWorkflow, setResumeClassroomWorkflow] = useState(false);
     const [workflowStudentSyncSelection, setWorkflowStudentSyncSelection] = useState("");
@@ -2835,89 +2826,43 @@ const Page = () => {
 
     const runBatchClassroomAssignment = async (
         items: BatchClassroomAssignmentItem[],
-        updateMode: ClassroomAssignmentUpdateMode
+        updateMode: ClassroomAssignmentUpdateMode,
+        retry = false
     ) => {
-        const workflowTargetSelection = items.map((item) => Number(item.calendarId)).filter(Number.isFinite).sort((left, right) => left - right).join(",");
-        setBatchClassroomItems(items);
+        // The ref also blocks duplicate clicks before React updates the button.
+        if (!items.length || batchClassroomRunRef.current) return;
+        batchClassroomRunRef.current = true;
         setBatchClassroomAssignmentOpen(true);
         setBatchClassroomAssigning(true);
-        let successCount = 0;
-        let skippedCount = 0;
-        let failedCount = 0;
-
-        for (const item of items) {
-            setBatchClassroomItems((current) => current.map((row) => (
-                row.calendarId === item.calendarId
-                    ? { ...row, status: "running", message: "Đang tính toán và chia lớp..." }
-                    : row
-            )));
-            try {
-                // Endpoint apply tự dựng lại phương án ngay trong transaction,
-                // vì vậy thuật toán giống hệt thao tác xác nhận ở modal đơn lẻ.
-                const response: any = await applyStudentClassroomAssignment(
-                    item.calendarId,
-                    undefined,
-                    updateMode
-                );
-                const result = response?.data ?? response;
-                const totalStudents = Number(result?.total_students || 0);
-                const eligibleStudents = Number(result?.eligible_students || 0);
-                const movedCount = Number(result?.moved_count || 0);
-                if (totalStudents === 0 || (updateMode === "unlearned_only" && eligibleStudents === 0)) {
-                    skippedCount += 1;
-                    setBatchClassroomItems((current) => current.map((row) => (
-                        row.calendarId === item.calendarId
-                            ? {
-                                ...row,
-                                status: "skipped",
-                                movedCount: 0,
-                                message: totalStudents === 0
-                                    ? "Chưa có danh sách học sinh nên chưa thể chia lớp."
-                                    : "Toàn bộ học sinh đã học (islearn = 1), giữ nguyên phân lớp.",
-                            }
-                            : row
-                    )));
-                    continue;
-                }
-                successCount += 1;
-                setBatchClassroomItems((current) => current.map((row) => (
-                    row.calendarId === item.calendarId
-                        ? {
-                            ...row,
-                            status: "success",
-                            movedCount,
-                            message: movedCount
-                                ? `Đã cập nhật phân lớp cho ${movedCount.toLocaleString("vi-VN")} học sinh.`
-                                : "Phân lớp hiện tại đã phù hợp, không cần thay đổi.",
-                        }
-                        : row
-                )));
-            } catch (requestError: any) {
-                failedCount += 1;
-                setBatchClassroomItems((current) => current.map((row) => (
-                    row.calendarId === item.calendarId
-                        ? {
-                            ...row,
-                            status: "error",
-                            message: requestError?.message || "Không thể chia lớp cho lịch này.",
-                        }
-                        : row
-                )));
-            }
-        }
-
-        setBatchClassroomAssigning(false);
-        if (!failedCount) setWorkflowClassroomSelection(workflowTargetSelection);
+        setBatchClassroomUpdateMode(updateMode);
+        if (!retry) setWorkflowClassroomSelection("");
         try {
-            await refreshSchedules();
-        } catch {
-            // Kết quả từng lịch vẫn được giữ trong modal nếu tải lại bảng lỗi.
+            const result = await runClassroomAssignmentItems(items, updateMode, {
+                previousItems: retry ? batchClassroomItems : undefined,
+                apply: applyStudentClassroomAssignment,
+                onChange: setBatchClassroomItems,
+            });
+            const { successCount, skippedCount, failedCount } = result;
+            // A successful retry only completes the workflow once every row
+            // from the original selection has completed without errors.
+            if (result.items.every((item) => ["success", "skipped"].includes(item.status))) {
+                setWorkflowClassroomSelection(result.items.map((item) => Number(item.calendarId))
+                    .filter(Number.isFinite).sort((left, right) => left - right).join(","));
+            }
+            try {
+                await refreshSchedules();
+            } catch {
+                // Preserve per-calendar results even when list refresh fails.
+            }
+            api[failedCount || skippedCount ? "warning" : "success"]({
+                message: retry ? "Đã hoàn tất thử lại chia lớp" : "Đã hoàn tất tự động chia lớp",
+                description: `Thành công ${successCount}/${items.length} lịch${skippedCount ? `, bỏ qua ${skippedCount} lịch không có học sinh cần cập nhật` : ""}${failedCount ? `, lỗi ${failedCount} lịch` : ""}.`,
+                duration: 6,
+            });
+        } finally {
+            batchClassroomRunRef.current = false;
+            setBatchClassroomAssigning(false);
         }
-        api[failedCount || skippedCount ? "warning" : "success"]({
-            message: "Đã hoàn tất tự động chia lớp",
-            description: `Thành công ${successCount}/${items.length} lịch${skippedCount ? `, bỏ qua ${skippedCount} lịch không có học sinh cần cập nhật` : ""}${failedCount ? `, lỗi ${failedCount} lịch` : ""}.`,
-            duration: 6,
-        });
     };
 
     const handleOpenBatchClassroomAssignment = () => {
@@ -5583,13 +5528,28 @@ const Page = () => {
                         }
                     }}
                     footer={(
-                        <Button
-                            type="primary"
-                            disabled={batchClassroomAssigning}
-                            onClick={() => { setBatchClassroomAssignmentOpen(false); resumeWorkflowAfterAction(); }}
-                        >
-                            Đóng
-                        </Button>
+                        <Space wrap>
+                            {batchClassroomItems.some((item) => item.status === "error") && (
+                                <Button
+                                    icon={<ReloadOutlined />}
+                                    disabled={batchClassroomAssigning}
+                                    onClick={() => void runBatchClassroomAssignment(
+                                        batchClassroomItems.filter((item) => item.status === "error"),
+                                        batchClassroomUpdateMode,
+                                        true
+                                    )}
+                                >
+                                    Thử lại tất cả lịch lỗi
+                                </Button>
+                            )}
+                            <Button
+                                type="primary"
+                                disabled={batchClassroomAssigning}
+                                onClick={() => { setBatchClassroomAssignmentOpen(false); resumeWorkflowAfterAction(); }}
+                            >
+                                Đóng
+                            </Button>
+                        </Space>
                     )}
                 >
                     <Space direction="vertical" size={16} style={{ width: "100%" }}>
@@ -5675,11 +5635,33 @@ const Page = () => {
                                             {item.status === "running" && <Tag color="processing">Đang chia lớp</Tag>}
                                             {item.status === "success" && <Tag color="success">Thành công</Tag>}
                                             {item.status === "skipped" && <Tag color="warning">Bỏ qua</Tag>}
-                                            {item.status === "error" && <Tag color="error">Lỗi</Tag>}
+                                            {item.status === "error" && (
+                                                <Space size={8}>
+                                                    <Tag color="error">Lỗi</Tag>
+                                                    <Tooltip title={batchClassroomAssigning ? "Chờ lượt chia lớp hiện tại hoàn tất để thử lại" : "Chỉ chạy lại lịch này, giữ nguyên chế độ cập nhật đã chọn"}>
+                                                        <span>
+                                                            <Button
+                                                                size="small"
+                                                                icon={<ReloadOutlined />}
+                                                                disabled={batchClassroomAssigning}
+                                                                onClick={() => void runBatchClassroomAssignment([item], batchClassroomUpdateMode, true)}
+                                                            >Thử lại</Button>
+                                                        </span>
+                                                    </Tooltip>
+                                                </Space>
+                                            )}
                                             {item.message && (
-                                                <Typography.Text type={item.status === "error" ? "danger" : "secondary"}>
+                                                <Typography.Text type={item.status === "error" ? "danger" : "secondary"} style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                                                     {item.message}
                                                 </Typography.Text>
+                                            )}
+                                            {item.status === "error" && item.errorDetails && (
+                                                <details style={{ maxWidth: "100%", fontSize: 12 }}>
+                                                    <summary style={{ cursor: "pointer", color: "#595959" }}>Chi tiết lỗi</summary>
+                                                    <Typography.Paragraph copyable style={{ margin: "6px 0 0", whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: 12 }}>
+                                                        {item.errorDetails}
+                                                    </Typography.Paragraph>
+                                                </details>
                                             )}
                                         </Space>
                                     ),
