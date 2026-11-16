@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 import AppSWRProvider from "@/providers/AppSWRProvider";
+import { AntdRegistry } from '@ant-design/nextjs-registry';
 
 export const metadata: Metadata = {
     title: "Học trực tuyến - livestream",
@@ -26,7 +27,9 @@ export default function RootLayout({
         <html lang="en">
             <head />
             <body>
-                <AppSWRProvider>{children}</AppSWRProvider>
+                <AntdRegistry>
+                    <AppSWRProvider>{children}</AppSWRProvider>
+                </AntdRegistry>
             </body>
         </html>
     );
