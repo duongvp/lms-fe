@@ -1,0 +1,97 @@
+.preview {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  max-width: 1120px;
+}
+
+.form {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.form :global(.ant-form-item) {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.form :global(.ant-form-item-label) {
+  white-space: normal;
+}
+
+.form :global(.ant-input-number-group-wrapper),
+.form :global(.ant-input-number) {
+  width: 100%;
+}
+
+.situationFields {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(220px, 1.4fr) minmax(140px, 0.8fr);
+  align-items: end;
+  gap: 16px;
+}
+
+.scoreSections {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.scoreFields,
+.safetyFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 14px 16px;
+}
+
+.counterFields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 16px;
+}
+
+.help {
+  margin: 0 0 16px;
+  color: #595959;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+
+.result {
+  border-color: #91caff;
+}
+
+.resultDetails {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin-bottom: 0;
+}
+
+@media (max-width: 900px) {
+  .scoreSections {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .situationFields,
+  .counterFields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .scoreFields,
+  .safetyFields {
+    gap: 14px 12px;
+  }
+}

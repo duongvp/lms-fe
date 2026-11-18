@@ -93,6 +93,13 @@ export const menuConfig: IMenuItem[] = [
         ],
     },
     {
+        key: "jev",
+        icon: <SettingOutlined />,
+        label: "Kiểm duyệt JEV",
+        path: "/jev",
+        permission: PermissionKey.JEV_VIEW,
+    },
+    {
         key: "room_config",
         icon: <SettingOutlined />,
         label: "Cấu hình phòng học",

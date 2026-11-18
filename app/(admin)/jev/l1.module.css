@@ -1,0 +1,90 @@
+.modeBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.matchHelp {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 6px;
+  background: #fafafa;
+  color: #595959;
+  font-size: 14px;
+  line-height: 1.6;
+  font-weight: 400;
+}
+
+.modeSelect {
+  width: 220px;
+  max-width: 100%;
+}
+
+.revision {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.tabLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.tabCount {
+  min-width: 28px;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: #f0f0f0;
+  color: #595959;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 20px;
+  text-align: center;
+}
+
+:global(.ant-tabs-tab-active) .tabCount {
+  background: #e6f4ff;
+  color: #0958d9;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.search {
+  width: 300px;
+  max-width: 100%;
+}
+
+.statusFilter {
+  width: 160px;
+}
+
+.addButton {
+  margin-left: auto;
+}
+
+@media (max-width: 640px) {
+  .search {
+    width: 100%;
+  }
+
+  .statusFilter {
+    flex: 1;
+    min-width: 150px;
+  }
+
+  .addButton {
+    width: 100%;
+    margin-left: 0;
+  }
+}

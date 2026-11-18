@@ -1,0 +1,142 @@
+.fullWidth {
+  width: 100%;
+  min-width: 0;
+}
+
+.fullWidth > :global(.ant-space-item) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.templateTable :global(.ant-table-cell) {
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.templateContent {
+  white-space: pre-wrap;
+}
+
+.policyDrawer :global(.ant-drawer-header-title) {
+  min-width: 0;
+}
+
+.policyDrawer :global(.ant-drawer-title) {
+  overflow-wrap: anywhere;
+}
+
+.shortcuts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.shortcuts :global(.ant-typography) {
+  margin: 8px 0 0;
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summaryItem {
+  padding: 16px;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.summaryNumber {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.categoryFilter {
+  width: 300px;
+  max-width: 100%;
+}
+
+.levelFilter {
+  width: 200px;
+  max-width: 100%;
+}
+
+.levelTags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.levelTags :global(.ant-tag) {
+  margin-inline-end: 0;
+}
+
+.gateFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+}
+
+@media (max-width: 640px) {
+  .templateTable :global(.ant-table-cell) {
+    padding: 10px 8px;
+  }
+
+  .policyDrawer :global(.ant-drawer-header) {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .policyDrawer :global(.ant-drawer-header-title) {
+    flex-basis: 100%;
+  }
+
+  .policyDrawer :global(.ant-drawer-extra) {
+    width: 100%;
+    margin-inline-start: 0;
+  }
+
+  .policyDrawer :global(.ant-drawer-extra > .ant-space) {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .workflow :global(.ant-steps-item-title) {
+    font-size: 12px;
+    line-height: 20px;
+  }
+
+  .shortcuts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .summaryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .categoryFilter,
+  .levelFilter {
+    width: 100%;
+  }
+
+  .levelTags {
+    display: none;
+  }
+
+  .gateFields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

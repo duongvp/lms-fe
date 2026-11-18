@@ -1,0 +1,103 @@
+.meta {
+  font-size: 12px;
+}
+
+.runtimeForm {
+  width: 100%;
+}
+
+.runtimeForm :global(.ant-form-item) {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.runtimeForm :global(.ant-form-item-label) {
+  padding-bottom: 6px;
+}
+
+.primaryFields {
+  display: grid;
+  grid-template-columns: 240px 200px 280px;
+  gap: 16px;
+  padding: 8px 0 16px;
+}
+
+.section {
+  padding: 16px 0;
+  border-top: 1px solid #f0f0f0;
+}
+
+.sectionTitle {
+  display: block;
+  margin-bottom: 12px;
+}
+
+.limitFields {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 16px;
+  max-width: 1480px;
+}
+
+.breakerFields {
+  display: grid;
+  grid-template-columns: 200px 160px 200px;
+  gap: 16px;
+}
+
+.switchControl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding-top: 8px;
+}
+
+.note {
+  font-size: 12px;
+}
+
+@media (max-width: 1400px) {
+  .limitFields {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    max-width: 960px;
+  }
+}
+
+@media (max-width: 900px) {
+  .primaryFields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .breakerFields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .primaryFields,
+  .limitFields,
+  .breakerFields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 12px;
+  }
+
+  .budgetField {
+    grid-column: 1 / -1;
+  }
+
+  .breakerFields > :first-child {
+    grid-column: 1 / -1;
+  }
+
+  .runtimeForm :global(.ant-form-item-label) {
+    white-space: normal;
+  }
+}

@@ -1,4 +1,12 @@
 export enum PermissionKey {
+    L1_VIEW = 'l1.view',
+    L1_EDIT = 'l1.edit',
+    L1_RUNTIME = 'l1.runtime',
+    JEV_VIEW = 'jev.view',
+    JEV_EDIT = 'jev.edit',
+    JEV_PUBLISH = 'jev.publish',
+    JEV_BIND = 'jev.bind',
+    JEV_RUNTIME = 'jev.runtime',
     USER_VIEW = 'users.view',
     USER_CREATE = 'users.create',
     USER_EDIT = 'users.update',
