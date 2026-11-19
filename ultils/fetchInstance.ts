@@ -1,4 +1,5 @@
 import { useAuthStore } from "@/stores/authStore";
+import { readJsonResponse } from './apiResponse';
 
 let isHandlingAuthFailure = false;
 let refreshPromise: Promise<string> | null = null;
@@ -48,7 +49,7 @@ const refreshAccessToken = (setAccessToken: (token: string | null) => void) => {
                     (error as any).status = res.status;
                     throw error;
                 }
-                const { data } = await res.json();
+                const { data } = await readJsonResponse(res);
                 const { accessToken: newAccessToken } = data;
                 if (!newAccessToken) throw new Error('Unable to refresh access token');
                 setAccessToken(newAccessToken);
@@ -125,7 +126,7 @@ export const fetchInstance = async (
             return await res.blob();
         }
 
-        return await res.json();
+        return await readJsonResponse(res);
     } catch (error) {
         requestFailed = true;
         logSlowRequest(url, method, startedAt, error);
@@ -213,11 +214,7 @@ const makeRequest = async (
 
 // Xử lý lỗi từ response
 const handleErrorResponse = async (res: Response) => {
-    const responseData = await res.json();
-    const error = new Error(responseData?.message || `API Error: ${res.status}`);
-    (error as any).status = res.status;
-    (error as any).detail = responseData;
-    throw error;
+    await readJsonResponse(res);
 };
 
 // Xử lý lỗi fetch

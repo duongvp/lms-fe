@@ -2128,3 +2128,60 @@ body {
     margin-bottom: 16px;
   }
 }
+
+/* Shared recovery actions in schedule progress dialogs. */
+.schedule-recovery-action.ant-btn {
+  height: 32px;
+  padding: 0 12px;
+  gap: 7px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+}
+
+.schedule-recovery-action.ant-btn:not(:disabled) {
+  color: #475569;
+  background: #fff;
+  border-color: #e2e8f0;
+}
+
+.schedule-recovery-action.ant-btn:not(:disabled):hover {
+  color: #1e293b;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.schedule-recovery-action-retry.ant-btn:not(:disabled) {
+  color: #595959;
+  background: #fff;
+  border-color: #d9d9d9;
+}
+
+.schedule-recovery-action-retry.ant-btn:not(:disabled):hover {
+  color: #1677ff;
+  background: #fafcff;
+  border-color: #91caff;
+}
+
+.schedule-recovery-action.ant-btn:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+@media (max-width: 575px) {
+  .schedule-recovery-action.ant-btn {
+    min-height: 36px;
+  }
+}
+
+.schedule-progress-footer .ant-btn {
+  height: 32px;
+  border-radius: 8px;
+}
+
+@media (max-width: 575px) {
+  .schedule-progress-footer .ant-btn {
+    min-height: 36px;
+  }
+}
