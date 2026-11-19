@@ -1,4 +1,5 @@
 'use client';
+import responsive from './responsive.module.css';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Form, Input, InputNumber, Modal, Select, Space, Typography } from 'antd';
 import type { InputNumberProps } from 'antd';
@@ -61,7 +62,7 @@ export default function PolicyCreateModal({ open, initialSource, initialRows, in
       if (!e.errorFields) setError(e.status === 409 ? 'Mã và phiên bản này đã tồn tại. Chọn phiên bản khác rồi thử lại.' : e.message || 'Không tạo được bản nháp.');
     } finally { lock.current = false; setSaving(false); }
   };
-  return <Modal open={open} title={initialSource ? 'Nhân bản bộ cấu hình' : 'Tạo bộ cấu hình'} width={640}
+  return <Modal className={`admin-responsive-modal ${responsive.modal}`} open={open} title={initialSource ? 'Nhân bản bộ cấu hình' : 'Tạo bộ cấu hình'} width={640}
     okText="Tạo và mở cấu hình" cancelText="Hủy" confirmLoading={saving} okButtonProps={{ disabled: loading }}
     onOk={() => void submit()} onCancel={() => { if (!saving) onCancel(); }} maskClosable={false}>
     <Space direction="vertical" size={16} style={{ width: '100%', marginBottom: 16 }}>
@@ -71,7 +72,7 @@ export default function PolicyCreateModal({ open, initialSource, initialRows, in
     </Space>
     <Form form={form} layout="vertical" disabled={saving}>
       <Form.Item name="source" label="Dựa trên bộ cấu hình" rules={[{ required: true, message: 'Chọn một bộ cấu hình làm mẫu.' }]}>
-        <Select aria-label="Bộ cấu hình làm mẫu" loading={loading} showSearch optionFilterProp="label" options={[
+        <Select popupClassName={responsive.dropdown} aria-label="Bộ cấu hình làm mẫu" loading={loading} showSearch optionFilterProp="label" options={[
           { value: 'LIVE', label: 'Mẫu chuẩn từ Live' },
           ...sources.map(item => ({ value: item.id, label: sourceName(item) })),
         ]} onChange={value => {
@@ -89,7 +90,7 @@ export default function PolicyCreateModal({ open, initialSource, initialRows, in
         rules={[{ required: true, message: 'Nhập số phiên bản.' }]}>
         <InputNumber aria-label="Phiên bản bộ cấu hình mới" min={1} max={4294967295} precision={0} {...integerProps} style={{ width: 160 }} onChange={() => { revisionEdited.current = true; }} />
       </Form.Item>
-      <Typography.Text type="secondary">Sau khi chỉnh sửa: Lưu nháp → Kiểm tra → Phát hành. Việc áp dụng được thực hiện riêng trong Phạm vi áp dụng.</Typography.Text>
+      <Typography.Text type="secondary">Sau khi chỉnh sửa: Lưu nháp → Kiểm tra → Phát hành. Việc áp dụng được thực hiện riêng trong mục Thiết lập từng lớp.</Typography.Text>
     </Form>
   </Modal>;
 }

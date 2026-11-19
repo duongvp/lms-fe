@@ -1,0 +1,224 @@
+/* Follow the shared admin card/table and modal layouts used by room-config. */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+}
+
+.page > *,
+.page :global(.ant-tabs-content-holder),
+.page :global(.ant-tabs-tabpane),
+.page :global(.ant-space-item),
+.panel,
+.panel :global(.ant-card-body) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.page :global(.ant-space-vertical),
+.drawer :global(.ant-space-vertical),
+.modal :global(.ant-space-vertical) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.page :global(.ant-table-cell),
+.drawer :global(.ant-table-cell),
+.descriptions :global(.ant-descriptions-item-content),
+.descriptions :global(.ant-descriptions-item-label) {
+  overflow-wrap: anywhere;
+}
+
+.drawer :global(.ant-drawer-title),
+.modal :global(.ant-modal-title) {
+  overflow-wrap: anywhere;
+}
+
+.modal :global(.ant-modal-body) {
+  max-height: 72dvh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.modal :global(.ant-form-item-label),
+.modal :global(.ant-form-item-label > label) {
+  height: auto;
+  white-space: normal;
+}
+
+.modal :global(.ant-select),
+.modal :global(.ant-input-number) {
+  max-width: 100%;
+}
+
+.dropdown {
+  max-width: calc(100vw - 24px);
+}
+
+.dropdown :global(.ant-select-item-option-content) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 991px) {
+  .panel :global(.ant-card-head-wrapper) {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 12px;
+    padding-block: 12px;
+  }
+
+  .panel :global(.ant-card-head-title) {
+    min-width: 120px;
+    padding: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .panel :global(.ant-card-extra) {
+    max-width: 100%;
+    margin-inline-start: 0;
+    padding: 0;
+  }
+
+  .page :global(.responsive-table-card .ant-card-body),
+  .drawer :global(.responsive-table-card .ant-card-body) {
+    min-width: 0;
+  }
+
+  .drawer :global(.ant-drawer-header) {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .drawer :global(.ant-drawer-header-title) {
+    min-width: 0;
+    flex-basis: 100%;
+  }
+
+  .drawer :global(.ant-drawer-extra) {
+    width: 100%;
+    margin-inline-start: 0;
+  }
+
+  .drawer :global(.ant-drawer-extra > .ant-space) {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 767px) {
+  .page { gap: 12px; }
+
+  .page > :global(.ant-typography) {
+    margin: 0;
+    font-size: 20px;
+  }
+
+  .panel :global(.ant-card-body),
+  .drawer :global(.ant-card-body) {
+    padding: 14px;
+  }
+
+  .panel :global(.ant-card-head) { padding-inline: 14px; }
+  .drawer :global(.ant-drawer-body) { padding: 16px 12px; }
+  .drawer :global(.ant-drawer-header) { padding: 14px 12px; }
+  .drawer :global(.ant-drawer-extra .ant-btn) { min-height: 40px; }
+
+  .page :global(.ant-btn),
+  .drawer :global(.ant-btn),
+  .modal :global(.ant-btn) {
+    min-height: 40px;
+  }
+
+  .page :global(.ant-input-number),
+  .page :global(.ant-select-single .ant-select-selector),
+  .modal :global(.ant-input-number),
+  .modal :global(.ant-select-single .ant-select-selector) {
+    min-height: 40px;
+  }
+
+  .modal {
+    top: 12px;
+    max-width: calc(100vw - 24px);
+    margin: 0 auto;
+    padding-bottom: 12px;
+  }
+
+  .modal :global(.ant-modal-content) { padding: 16px; }
+  .modal :global(.ant-modal-body) { max-height: calc(100dvh - 180px); }
+  .modal :global(.ant-modal-title) { padding-inline-end: 24px; }
+  .modal :global(.ant-modal-footer) { display: flex; gap: 8px; }
+  .modal :global(.ant-modal-footer .ant-btn) {
+    flex: 1;
+    min-width: 0;
+    margin-inline-start: 0;
+    height: auto;
+    white-space: normal;
+  }
+
+  .descriptions :global(.ant-descriptions-item-label),
+  .descriptions :global(.ant-descriptions-item-content) {
+    padding: 10px 12px;
+  }
+}
+
+/* Smaller supporting text on touch layouts; editable fields stay readable. */
+@media (max-width: 991px) {
+  .page :global(p.ant-typography),
+  .page :global(span.ant-typography),
+  .drawer :global(p.ant-typography),
+  .drawer :global(span.ant-typography),
+  .modal :global(p.ant-typography),
+  .modal :global(span.ant-typography),
+  .page :global(.ant-alert-description),
+  .drawer :global(.ant-alert-description),
+  .modal :global(.ant-alert-description) {
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .page :global(.ant-card-head-title),
+  .page :global(.ant-alert-message),
+  .drawer :global(.ant-alert-message),
+  .modal :global(.ant-alert-message) {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .page :global(.ant-form-item-label > label),
+  .drawer :global(.ant-form-item-label > label),
+  .modal :global(.ant-form-item-label > label) {
+    font-size: 13px !important;
+    line-height: 1.5;
+  }
+
+  .page :global(.ant-btn),
+  .drawer :global(.ant-btn),
+  .modal :global(.ant-btn),
+  .page :global(.ant-tabs-tab),
+  .drawer :global(.ant-tabs-tab),
+  .page :global(.ant-descriptions-item-label),
+  .page :global(.ant-descriptions-item-content) {
+    font-size: 13px;
+  }
+
+  .page :global(.ant-input),
+  .page :global(.ant-input-number-input),
+  .page :global(.ant-select-selection-item),
+  .page :global(.ant-select-selection-placeholder),
+  .page :global(.ant-select-selection-search-input),
+  .drawer :global(.ant-input),
+  .drawer :global(.ant-input-number-input),
+  .drawer :global(.ant-select-selection-item),
+  .drawer :global(.ant-select-selection-search-input),
+  .modal :global(.ant-input),
+  .modal :global(.ant-input-number-input),
+  .modal :global(.ant-select-selection-item),
+  .modal :global(.ant-select-selection-search-input) {
+    font-size: 16px !important;
+  }
+}

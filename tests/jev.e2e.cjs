@@ -8,15 +8,20 @@ const mocks={
 '@/stores/authStore': `export const useAuthStore=selector=>selector({hasPermission:()=>true});`,
 '@/services/jevService': `
 let policy={id:3,policy_key:'classroom-en-c2',revision:2,edit_revision:1,status:'DRAFT',config_json:${JSON.stringify(seed)}};
-const settings={mode:'off',modelVersion:'jev-1.14.0',maxSpendMicroUsd:10000000,limits:{maxInFlight:30,maxQueue:500,maxPerRoom:50,deadlineMs:10000,httpTimeoutMs:1500,requestsPerSecond:30,maxDailyAttempts:50000,reservedInputTokens:64000},circuitBreaker:{enabled:true,failureThreshold:3,cooldownMs:180000}};
+const settings={mode:'off',modelVersion:'jev-1.14.0',maxSpendMicroUsd:${Number(process.env.QA_USD_MICRO_BUDGET || 10000000)},limits:{maxInFlight:30,maxQueue:500,maxPerRoom:50,deadlineMs:10000,httpTimeoutMs:1500,requestsPerSecond:30,maxDailyAttempts:50000,reservedInputTokens:64000},circuitBreaker:{enabled:true,failureThreshold:3,cooldownMs:180000}};
 window.jevCalls=[];let createdPolicy=null;window.jevOriginalSource=JSON.parse(JSON.stringify(policy));
+const publishedPolicy={id:5,policy_key:'kiem-duyet-lop-hoc',revision:1,status:'PUBLISHED'};
 let savedBindings=[{id:1,scope_type:'GLOBAL',scope_key:'*',mode:'off',policy_version_id:null,revision:1}];
 const calendars=[101,102].map((id,index)=>({id,code:'qa-program',learn_number:2,lesson_name:'Same lesson',start_time:'2026-11-'+(17+index)+'T18:00:00Z',end_time:'2026-11-'+(17+index)+'T19:00:00Z'}));
 export async function jevRequest(path,method='GET',body){
  window.jevCalls.push({path,method,body});
+ if(window.jevResponsive)policy.policy_key='kiem-duyet-lop-hoc-chuong-trinh-noi-dung-dai-kiem-tra-responsive';
  if(window.jevLoadError)throw Error('Không thể xử lý cấu hình JEV; kiểm tra DB và migration Chat');
- if(path.startsWith('/policies?')){const rows=[...(createdPolicy?[createdPolicy]:[]),...(window.jevEmptyPolicies?[]:[policy])];return {data:{rows,total:rows.length}};}
- if(path.startsWith('/bindings?'))return {data:{rows:savedBindings,total:savedBindings.length}};
+ if(path==='/l1/settings')return {data:{revision:1,mode:'off',counts:[{list_type:'BLACKLIST',is_active:1,_count:{_all:25}},{list_type:'WHITELIST',is_active:1,_count:{_all:2}}]}};
+ if(path.startsWith('/l1/lexicon?')){const q=new URLSearchParams(path.split('?')[1]);const all=Array.from({length:25},(_,i)=>({id:i+1,list_type:q.get('listType'),match_mode:q.get('listType')==='WHITELIST'?'EXACT_PHRASE':'BOUNDED',pattern:q.get('listType')==='WHITELIST'?'em hiểu rồi':'từ khóa '+(i+1),is_active:1,category:'PROFANITY',note:'Ghi chú kiểm tra cách hiển thị nội dung dài trên điện thoại và máy tính bảng.'}));const page=Number(q.get('page'));return {data:{rows:all.slice((page-1)*20,page*20),total:all.length}};}
+ if(path==='/l1/status')return {data:{policy:{source:'database',revision:1,mode:'off',loadedAt:'2026-11-19T02:00:00Z'}}};
+ if(path.startsWith('/policies?')){const rows=[...(createdPolicy?[createdPolicy]:[]),...(window.jevEmptyPolicies?[]:[policy,publishedPolicy])];return {data:{rows,total:rows.length}};}
+ if(path.startsWith('/bindings?'))return {data:{rows:savedBindings.map(row=>({...row,configured:row.mode==='inherit'?{scope_type:'GLOBAL',scope_key:'*',mode:'off',policy:null}:{scope_type:row.scope_type,scope_key:row.scope_key,mode:row.mode,policy:row.mode==='off'?null:publishedPolicy}})),total:savedBindings.length}};
  if(path.startsWith('/scope/programs?'))return {data:[{code:'qa-program'},{code:'qa-next'}]};
  if(path.startsWith('/scope/calendars?')){const q=new URLSearchParams(path.split('?')[1]);return {data:{rows:q.get('code')==='qa-program'?calendars:[],page:1,hasMore:false}};}
  if(path.startsWith('/scope/calendars/'))return {data:calendars.find(row=>row.id===Number(path.split('/').at(-1)))};
@@ -25,13 +30,19 @@ export async function jevRequest(path,method='GET',body){
   const row={id:2,scope_type:body.scopeType,scope_key:body.scopeKey,mode:body.mode,policy_version_id:body.policyVersionId,revision:1,calendar};
   savedBindings=[savedBindings[0],row];return {data:row,sync:{confirmed:true,message:'Đã đồng bộ'}};
  }
- if(path==='/runtime')return {data:{revision:1,settings}};
- if(path==='/status')return {data:{policy:{source:'database',snapshotHash:'test-hash',loadedAt:'2026-11-17'},runtimeStatus:{mode:'off',reason:'OFF'}}};
+ if(path==='/runtime'){if(method==='PUT')Object.assign(settings,body.settings);return {data:{revision:1,settings:JSON.parse(JSON.stringify(settings))}};}
+ if(path==='/status'){
+  if(window.jevStatusCase==='missing-url')throw Error('Chưa cấu hình JEV_CHAT_API_URL hợp lệ trên backend Admin');
+  if(window.jevStatusCase==='timeout')throw Error('Không kết nối được dịch vụ Chat JEV');
+  const mode=['shadow','enforce'].includes(window.jevStatusCase)?window.jevStatusCase:'off';
+  return {data:{policy:{source:window.jevStatusCase==='unloaded'?'unloaded':'database',snapshotHash:window.jevStatusCase==='unloaded'?null:'test-hash',loadedAt:window.jevStatusCase==='unloaded'?null:'2026-11-17T10:00:00Z'},runtimeStatus:{mode,reason:window.jevStatusCase==='invalid'?'INVALID_CONFIG':mode==='off'?'OFF':null}}};
+ }
  if(path==='/policies/from-template'&&method==='POST'){
   createdPolicy={id:4,policy_key:body.policyKey,revision:body.revision,edit_revision:1,status:'DRAFT',config_json:JSON.parse(JSON.stringify(policy.config_json))};
   createdPolicy.config_json.policy.version=body.policyKey+':r'+body.revision;
   window.jevSourceAfterCreate=JSON.parse(JSON.stringify(policy));return {data:JSON.parse(JSON.stringify(createdPolicy))};
  }
+ if(path==='/policies/5'&&method==='GET')return {data:publishedPolicy};
  if(path==='/policies/4'&&method==='GET')return {data:JSON.parse(JSON.stringify(createdPolicy))};
  if(path==='/policies/3'&&method==='GET')return {data:JSON.parse(JSON.stringify(policy))};
  if(path==='/policies/3'&&method==='PUT'){policy={...policy,edit_revision:policy.edit_revision+1,config_json:body.config};return {data:JSON.parse(JSON.stringify(policy))}};
@@ -42,14 +53,16 @@ export async function jevRequest(path,method='GET',body){
  throw Error('Unhandled '+method+' '+path);
 }`};
 const fixture=`
-import '@ant-design/v5-patch-for-react-19';import React from 'react';import {createRoot} from 'react-dom/client';import Page from './app/(admin)/jev/page';
+import './app/globals.css';import '@ant-design/v5-patch-for-react-19';import React from 'react';import {createRoot} from 'react-dom/client';import Page from './app/(admin)/jev/page';
+window.jevResponsive=${process.env.QA_RESPONSIVE === '1' ? 'true' : 'false'};
+window.jevSyncMatrix=${process.env.QA_SYNC_MATRIX === '1' ? 'true' : 'false'};
 window.jevLoadError=${process.env.QA_JEV_LOAD_ERROR === '1' ? 'true' : 'false'};
 window.jevEmptyPolicies=${process.env.QA_CREATE_POLICY === 'empty' ? 'true' : 'false'};
 createRoot(document.getElementById('root')).render(<Page/>);
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 const until=async fn=>{for(let i=0;i<160;i++){if(fn())return;await pause(30)}throw Error('Condition timed out: '+fn)};
 const visible=el=>el&&el.getBoundingClientRect().width>0;
-const button=(root,text)=>[...(root?.querySelectorAll('button')||[])].find(el=>el.textContent.trim()===text);
+const button=(root,text)=>[...(root?.querySelectorAll('button')||[])].find(el=>visible(el)&&el.textContent.trim()===text);
 const tab=(root,text)=>[...(root?.querySelectorAll('[role=tab]')||[])].find(el=>el.textContent.trim()===text);
 const drawer=()=>[...document.querySelectorAll('.ant-drawer-body')].find(visible);
 (async()=>{
@@ -61,6 +74,122 @@ const drawer=()=>[...document.querySelectorAll('.ant-drawer-body')].find(visible
    if(!errors[0].textContent.includes('Không thể xử lý cấu hình JEV'))throw Error('Missing error message');
    document.getElementById('qa-result').textContent=JSON.stringify({ok:true,checks:['concurrent JEV load failures show one error notification']});
    return;
+ }
+ if(window.jevResponsive) {
+   const fits=(el,label)=>{
+     if(!el)throw Error('Missing '+label);
+     const rect=el.getBoundingClientRect();
+     if(rect.left<-1||rect.right>window.innerWidth+1||el.scrollWidth>el.clientWidth+1)throw Error(label+' overflows: '+JSON.stringify({left:rect.left,right:rect.right,scroll:el.scrollWidth,width:el.clientWidth}));
+   };
+   const modal=()=>[...document.querySelectorAll('.ant-modal-body')].find(visible);
+   const checkModal=async()=>{
+     await pause(350);
+     fits(modal(),'modal body');
+     const content=modal().closest('.ant-modal-content');fits(content,'modal content');
+     if(content.getBoundingClientRect().bottom>window.innerHeight+1)throw Error('Modal footer is outside viewport');
+     for(const control of content.querySelectorAll('.ant-modal-footer button'))fits(control,'modal footer button');
+   };
+   const checkDrawer=async()=>{await pause(350);fits(drawer(),'policy drawer');};
+   const page=()=>document.querySelector('.admin-responsive-page');
+   await until(()=>button(document,'Mở'));await pause(200);
+   fits(page(),'policy list');
+   if(window.innerWidth<992&&!document.querySelector('.responsive-table-card'))throw Error('Small screens must use shared record cards');
+   button(document,'Tạo bản nháp').click();await until(()=>modal()?.textContent.includes('Dựa trên bộ cấu hình'));await checkModal();
+   button(document,'Hủy').click();await until(()=>!modal());
+   button(document,'Mở').click();await until(()=>drawer()?.textContent.includes('Bạn muốn làm gì?'));await checkDrawer();
+   const header=drawer().closest('.ant-drawer-content').querySelector('.ant-drawer-header');
+   fits(header,'policy header');
+   const title=header.querySelector('.ant-drawer-header-title').getBoundingClientRect(),actions=header.querySelector('.ant-drawer-extra').getBoundingClientRect();
+   if(Math.min(title.right,actions.right)>Math.max(title.left,actions.left)+1&&Math.min(title.bottom,actions.bottom)>Math.max(title.top,actions.top)+1)throw Error('Policy title overlaps actions');
+   tab(drawer(),'Quy tắc xử lý').click();await until(()=>button(drawer(),'Chi tiết'));await checkDrawer();
+   button(drawer(),'Chi tiết').click();await until(()=>[...document.querySelectorAll('.ant-drawer-body')].filter(visible).length===2);
+   const actionDrawer=[...document.querySelectorAll('.ant-drawer-body')].find(el=>el.textContent.includes('Xác suất nhóm tối thiểu'));await pause(350);fits(actionDrawer,'action editor');
+   [...document.querySelectorAll('.ant-drawer-close')].at(-1).click();await pause(350);
+   tab(drawer(),'Thông báo cho người dùng').click();await until(()=>button(drawer(),'Chỉnh sửa'));await checkDrawer();
+   if(window.innerWidth<992){
+     const templateCards=[...drawer().querySelectorAll('.responsive-table-card')].filter(visible);
+     if(templateCards.length!==10)throw Error('Template cards must preserve 10 items per page');
+     const firstTemplate=templateCards[0].textContent;
+     [...drawer().querySelectorAll('.ant-pagination-item[title="2"]')].find(visible).click();
+     await until(()=>[...drawer().querySelectorAll('.responsive-table-card')].filter(visible)[0]?.textContent!==firstTemplate);
+     if([...drawer().querySelectorAll('.responsive-table-card')].filter(visible).length!==10)throw Error('Template page 2 must preserve page size');
+   }
+   button(drawer(),'Chỉnh sửa').click();await until(()=>modal()?.textContent.includes('Nội dung thông báo'));await checkModal();
+   button(document,'Xong').click();await until(()=>!modal());
+   tab(drawer(),'Thử tình huống').click();await until(()=>drawer()?.querySelector('[data-testid="jev-policy-preview"]'));await checkDrawer();
+   fits(drawer().querySelector('[data-testid="jev-policy-preview"]'),'scenario form');
+   [...document.querySelectorAll('.ant-drawer-close')].find(visible).click();await until(()=>!drawer());
+   tab(document,'Chế độ chung').click();await until(()=>document.querySelector('[data-testid="jev-runtime-form"]'));fits(page(),'runtime page');
+   fits(document.querySelector('[data-testid="jev-runtime-form"]'),'runtime form');
+   const runtimeForm=document.querySelector('[data-testid="jev-runtime-form"]');
+   if(window.innerWidth<992){
+     for(const input of runtimeForm.querySelectorAll('input'))if(getComputedStyle(input).fontSize!=='16px')throw Error('Touch runtime input must be 16px: '+input.getAttribute('aria-label'));
+     for(const label of runtimeForm.querySelectorAll('.ant-form-item-label label'))if(parseFloat(getComputedStyle(label).fontSize)>=16)throw Error('Runtime labels must be smaller than input values');
+   }
+   if(${process.env.QA_TOUCH_CAPTURE === 'runtime' ? 'true' : 'false'}){document.getElementById('qa-result').textContent=JSON.stringify({ok:true,viewport:window.innerWidth,checks:['runtime input values are 16px','supporting labels are smaller','runtime form fits viewport']});return;}
+
+   tab(document,'Bộ lọc L1').click();await until(()=>button(document,'Thêm từ khóa'));await pause(200);fits(page(),'L1 page');
+   const toolbar=document.querySelector('[data-testid="jev-l1-toolbar"]');
+   const searchField=toolbar.querySelector('.ant-input-affix-wrapper').getBoundingClientRect();
+   const searchButton=toolbar.querySelector('.ant-input-search-button').getBoundingClientRect();
+   if(Math.abs(searchField.top-searchButton.top)>1||Math.abs(searchField.height-searchButton.height)>1)throw Error('L1 search input and search button must align');
+   if(window.innerWidth<992){
+     const record=document.querySelector('[data-testid="jev-l1-record"]');
+     if(!record)throw Error('Compact L1 record missing');
+     const edit=button(record,'Sửa');
+     if(edit.getBoundingClientRect().top>record.getBoundingClientRect().top+2)throw Error('L1 Edit must be at the top of its card');
+     const fields=record.querySelectorAll('dl > div');
+     if(fields.length!==2||Math.abs(fields[0].getBoundingClientRect().top-fields[1].getBoundingClientRect().top)>1)throw Error('L1 metadata must use two columns');
+     edit.click();await until(()=>modal()?.textContent.includes('Cách khớp'));await checkModal();
+     if(!modal().querySelector('input[aria-label="Nội dung bộ lọc"]').value)throw Error('Edit must open the selected filter');
+     button(document,'Hủy').click();await until(()=>!modal());await pause(350);
+   }
+   if(${['l1','l1-cards'].includes(process.env.QA_TOUCH_CAPTURE) ? 'true' : 'false'}){if(${process.env.QA_TOUCH_CAPTURE === 'l1-cards' ? 'true' : 'false'})document.querySelector('[data-testid="jev-l1-record"]').scrollIntoView({block:'start'});document.getElementById('qa-result').textContent=JSON.stringify({ok:true,viewport:window.innerWidth,checks:['L1 search input and icon button align','edit action at top of compact card','metadata in two columns','existing filter still opens for editing']});return;}
+
+   button(document,'Thêm từ khóa').click();await until(()=>modal()?.textContent.includes('Cách khớp'));await checkModal();
+   button(document,'Hủy').click();await until(()=>!modal());
+   [...document.querySelectorAll('[role=tab]')].find(el=>el.textContent.startsWith('Whitelist (Câu an toàn)')).click();
+   await until(()=>button(document,'Thêm câu an toàn'));button(document,'Thêm câu an toàn').click();await until(()=>modal()?.textContent.includes('Khớp toàn câu'));await checkModal();
+   button(document,'Hủy').click();await until(()=>!modal());
+   const secondPage=document.querySelector('[title="2"]');if(!secondPage)throw Error('Missing record card pagination');secondPage.click();
+   await until(()=>window.jevCalls.some(c=>c.path.startsWith('/l1/lexicon?')&&c.path.includes('page=2')));await pause(450);fits(page(),'L1 paginated page');
+   tab(document,'Thiết lập từng lớp').click();await until(()=>button(document,'Thiết lập cho chương trình / buổi học'));fits(page(),'bindings page');
+   button(document,'Thiết lập cho chương trình / buổi học').click();await until(()=>modal()?.textContent.includes('Mã chương trình'));await checkModal();
+   button(document,'Hủy').click();await until(()=>!modal());
+   tab(document,'Trạng thái đồng bộ').click();await until(()=>button(document,'Chi tiết kỹ thuật'));fits(page(),'sync status page');
+   button(document,'Chi tiết kỹ thuật').click();await until(()=>modal()?.textContent.includes('test-hash'));await checkModal();
+   button(document,'Đóng').click();await until(()=>!modal());
+   if(window.jevCalls.some(c=>['PUT','POST'].includes(c.method)))throw Error('Responsive inspection must not change configuration');
+   await pause(350);
+   document.getElementById('qa-result').textContent=JSON.stringify({ok:true,viewport:window.innerWidth,checks:['shared responsive cards below 992px','all five tabs fit viewport','drawer actions do not overlap title','rule and notification actions available in cards','scenario editor fits','L1 filters and pagination work','create/edit/details modals fit with visible footer','no configuration mutations']});return;
+ }
+ if(window.jevSyncMatrix) {
+   await until(()=>tab(document,'Trạng thái đồng bộ'));
+   tab(document,'Trạng thái đồng bộ').click();
+   const panel=()=>document.querySelector('[data-testid="jev-sync-status"]');
+   await until(()=>panel()?.textContent.includes('Đã nhận phản hồi'));
+   if(!panel().textContent.includes('Đang tắt kiểm duyệt JEV')||!panel().textContent.includes('Đã nạp một bản cấu hình đã lưu'))throw Error('Initial response must explain configured state without claiming fleet-wide sync');
+   for(const [scenario,expected] of [['shadow','Chỉ theo dõi, chưa xử lý vi phạm'],['enforce','Cho phép xử lý vi phạm theo cấu hình'],['unloaded','Chưa xác nhận đã nạp cấu hình'],['invalid','Cấu hình vận hành chưa hợp lệ'],['missing-url','Chưa thiết lập đầy đủ kết nối'],['timeout','Chưa lấy được phản hồi mới']]) {
+     window.jevStatusCase=scenario;
+     button(panel(),'Kiểm tra lại').click();
+     await until(()=>panel().textContent.includes(expected)&&!panel().textContent.includes('Đang kiểm tra kết nối'));
+     if(['missing-url','timeout'].includes(scenario)&&panel().textContent.includes('Đã nhận phản hồi'))throw Error('Failed refresh must not show a stale successful connection');
+     if(panel().textContent.includes('JEV_CHAT_API_URL')||panel().textContent.includes('Snapshot hash'))throw Error('Technical errors must stay in details');
+   }
+   window.jevStatusCase='missing-url';button(panel(),'Kiểm tra lại').click();
+   await until(()=>panel().textContent.includes('Chưa thiết lập đầy đủ kết nối'));
+   button(panel(),'Chi tiết kỹ thuật').click();
+   const details=()=>[...document.querySelectorAll('.ant-modal-body')].find(visible);
+   await until(()=>details()?.textContent.includes('JEV_CHAT_API_URL'));
+   button(document,'Đóng').click();await until(()=>!details());
+   window.jevStatusCase='enforce';button(panel(),'Kiểm tra lại').click();
+   await until(()=>panel().textContent.includes('Cho phép xử lý vi phạm theo cấu hình'));
+   button(panel(),'Thử đồng bộ lại').click();
+   await until(()=>panel().textContent.includes('Chưa xác nhận yêu cầu đồng bộ'));
+   if(window.jevCalls.some(call=>['PUT','POST'].includes(call.method)&&call.path!=='/reload'))throw Error('Status actions must not mutate configuration');
+   button(panel(),'Chi tiết kỹ thuật').click();await until(()=>details()?.textContent.includes('test-hash'));
+   button(document,'Đóng').click();await until(()=>!details());
+   document.getElementById('qa-result').textContent=JSON.stringify({ok:true,viewport:window.innerWidth,checks:['plain language off/shadow/enforce states','unloaded configuration and invalid settings explained','missing connection setup gives next step','failed refresh does not present stale success','raw errors and hash accessible in technical modal','retry acknowledgement does not claim complete synchronization','status actions do not rewrite configuration']});return;
  }
  if(${process.env.QA_CREATE_POLICY ? 'true' : 'false'}) {
    await until(()=>button(document,'Tạo bản nháp'));
@@ -182,28 +311,35 @@ const drawer=()=>[...document.querySelectorAll('.ant-drawer-body')].find(visible
  await until(()=>drawer().textContent.includes('JSON chưa hợp lệ'));
  if(!button(document,'Lưu nháp').disabled)throw Error('Invalid JSON must prevent save');
  document.querySelector('.ant-drawer-close').click();await until(()=>document.querySelector('.ant-modal-confirm .ant-btn-primary'));document.querySelector('.ant-modal-confirm .ant-btn-primary').click();await pause(400);
- tab(document,'Vận hành toàn hệ thống').click();await until(()=>document.body.textContent.includes('Revision GLOBAL'));
- if(!document.body.textContent.includes('Policy mặc định'))throw Error('Shared GLOBAL revision must be explained');
+ tab(document,'Chế độ chung').click();await until(()=>document.querySelector('[data-testid=jev-runtime-form]'));
  if(${process.env.QA_NUMBER_FORMAT === '1' ? 'true' : 'false'}) {
    const form=document.querySelector('[data-testid=jev-runtime-form]');
    const budget=form.querySelector('input[aria-label="Ngân sách ước tính"]');
-   if(budget.value!=='10.000.000')throw Error('Budget must show Vietnamese thousands separators: '+budget.value);
-   if(form.querySelector('input[aria-label="HTTP timeout (ms)"]').value!=='1.500')throw Error('Timeout must show thousands separators');
-   if(form.querySelector('input[aria-label="Thời gian nghỉ"]').value!=='180.000')throw Error('Cooldown must show thousands separators');
+   const initialMicroUsd=${Number(process.env.QA_USD_MICRO_BUDGET || 10000000)};
+   const initialUsd=String(initialMicroUsd/1000000).replace('.',',');
+   if(budget.value!==initialUsd)throw Error('Stored microUSD must display as USD: '+budget.value+' expected '+initialUsd);
+   if(!form.textContent.includes('Ngân sách (USD/ngày)'))throw Error('Budget label must identify the USD daily limit');
+   if(form.querySelector('input[aria-label="Chờ tối đa (ms)"]').value!=='1.500')throw Error('Timeout formatting must be preserved');
+   if(form.querySelector('input[aria-label="Thời gian nghỉ"]').value!=='180.000')throw Error('Cooldown formatting must be preserved');
+   button(form,'Lưu vận hành').click();await until(()=>button(document,'Lưu'));button(document,'Lưu').click();
+   await until(()=>window.jevCalls.filter(c=>c.path==='/runtime'&&c.method==='PUT').length===1);
+   if(window.jevCalls.find(c=>c.path==='/runtime'&&c.method==='PUT').body.settings.maxSpendMicroUsd!==initialMicroUsd)throw Error('Saving unchanged budget must preserve stored microUSD exactly');
+   await until(()=>!budget.disabled&&!button(form,'Lưu vận hành').classList.contains('ant-btn-loading')&&![...document.querySelectorAll('.ant-modal-confirm')].some(visible));
    budget.focus();
    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(budget,'');budget.dispatchEvent(new Event('input',{bubbles:true}));
    await pause(50);budget.blur();await pause(50);
    if(budget.value!=='')throw Error('Clearing must keep the field empty');
+   if(!button(form,'Lưu vận hành').disabled)throw Error('Empty budget must not be saved');
    budget.focus();
-   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(budget,'1.234.567');budget.dispatchEvent(new Event('input',{bubbles:true}));
-   await pause(50);budget.blur();await until(()=>budget.value==='1.234.567');
+   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(budget,'12,345678');budget.dispatchEvent(new Event('input',{bubbles:true}));
+   await pause(50);budget.blur();await until(()=>budget.value==='12,345678');
    button(form,'Lưu vận hành').click();await until(()=>button(document,'Lưu'));button(document,'Lưu').click();
-   await until(()=>window.jevCalls.some(c=>c.path==='/runtime'&&c.method==='PUT'));
-   const saved=window.jevCalls.find(c=>c.path==='/runtime'&&c.method==='PUT');
-   if(saved.body.settings.maxSpendMicroUsd!==1234567)throw Error('Formatted budget must save as a number');
-   if(saved.body.settings.limits.httpTimeoutMs!==1500)throw Error('Formatting changed timeout data');
-   document.getElementById('qa-result').textContent=JSON.stringify({ok:true,checks:['grouped budget and time inputs','clearing preserves empty input','pasted grouped number parsed correctly','API receives numeric values without separators']});
-   return;
+   await until(()=>window.jevCalls.filter(c=>c.path==='/runtime'&&c.method==='PUT').length===2);
+   const saved=window.jevCalls.filter(c=>c.path==='/runtime'&&c.method==='PUT').at(-1);
+   if(saved.body.settings.maxSpendMicroUsd!==12345678||!Number.isInteger(saved.body.settings.maxSpendMicroUsd))throw Error('Decimal USD must be converted to integer microUSD');
+   if(saved.body.settings.limits.httpTimeoutMs!==1500)throw Error('Budget conversion changed unrelated settings');
+   await until(()=>!button(form,'Lưu vận hành').disabled&&budget.value==='12,345678');
+   document.getElementById('qa-result').textContent=JSON.stringify({ok:true,initialMicroUsd,viewport:window.innerWidth,checks:['stored microUSD displayed as USD','saving untouched budget preserves original value','clearing stays empty and prevents save','six-decimal USD converts to integer microUSD','reloaded budget remains in USD','other runtime settings unchanged']});return;
  }
 
  if(${process.env.QA_RUNTIME_LAYOUT === '1' ? 'true' : 'false'}) {
@@ -214,10 +350,16 @@ const drawer=()=>[...document.querySelectorAll('.ant-drawer-body')].find(visible
    if(Math.abs(mode.top-model.top)>2||mode.width>300||model.width>260)throw Error('Mode and model must be compact and aligned');
    if(form.scrollWidth>form.clientWidth+1)throw Error('Runtime form overflows horizontally');
    if(!button(form,'Lưu vận hành'))throw Error('Save action missing');
-   document.getElementById('qa-result').textContent=JSON.stringify({ok:true,viewport:window.innerWidth,formHeight:form.getBoundingClientRect().height,checks:['compact aligned mode and model','responsive runtime layout without overflow','save action visible']});
+   if(window.innerWidth>640){
+     if(mode.width>181||model.width>141)throw Error('Primary inputs must use compact widths');
+     const numericInputs=[...form.querySelectorAll('input')].filter(input=>['Xử lý đồng thời','Chờ xử lý','Chờ / phòng','Lượt / giây','Lượt / ngày','Hạn xử lý (ms)','Chờ tối đa (ms)'].includes(input.getAttribute('aria-label')));
+     if(numericInputs.length!==7||numericInputs.some(input=>input.closest('.ant-input-number').getBoundingClientRect().width>133))throw Error('Evaluation limit inputs must be compact');
+   }
+   if(form.textContent.includes('64.000 input token')||form.textContent.includes('Bấm Lưu vận hành sau khi thay đổi.'))throw Error('Redundant runtime instructions must be removed');
+   document.getElementById('qa-result').textContent=JSON.stringify({ok:true,viewport:window.innerWidth,formHeight:form.getBoundingClientRect().height,checks:['compact primary and limit inputs','short labels with detailed tooltips','responsive runtime layout without overflow','save action visible']});
    return;
  }
- tab(document,'Phạm vi áp dụng').click();await until(()=>button(document,'Thêm phạm vi'));button(document,'Thêm phạm vi').click();
+ tab(document,'Thiết lập từng lớp').click();await until(()=>button(document,'Thiết lập cho chương trình / buổi học'));button(document,'Thiết lập cho chương trình / buổi học').click();
  await until(()=>document.querySelector('.ant-modal-body')?.textContent.includes('Mã chương trình'));
  const modal=()=>[...document.querySelectorAll('.ant-modal-body')].find(visible);
  if(modal().textContent.includes('calendar.id'))throw Error('Calendar IDs must not be entered manually');
@@ -250,15 +392,63 @@ const drawer=()=>[...document.querySelectorAll('.ant-drawer-body')].find(visible
  if('programCode' in bound)throw Error('Picker-only fields must not leak into binding payload');
  await until(()=>document.body.textContent.includes('18/11/2026'));
  await until(()=>!modal());
- const bindingRow=[...document.querySelectorAll('tr.ant-table-row')].find(row=>row.textContent.includes('qa-program'));
+ const bindingRow=[...document.querySelectorAll('tr.ant-table-row, .responsive-table-card')].find(row=>row.textContent.includes('qa-program'));
  if(!bindingRow)throw Error('Binding list must show the program and schedule');
- button(bindingRow,'Cấu hình').click();
+ if(!bindingRow.textContent.includes('Dùng thiết lập chung')||!bindingRow.textContent.includes('Theo mặc định hệ thống')||!bindingRow.textContent.includes('Không áp dụng (đã tắt)'))throw Error('Inherited configuration must show its source and configured result');
+ if([...document.querySelectorAll('th')].some(el=>['Mode','Policy ID','Revision'].includes(el.textContent.trim())))throw Error('Technical binding columns must be hidden');
+ const changeRect=button(bindingRow,'Thay đổi').getBoundingClientRect();
+ const detailRect=button(bindingRow,'Chi tiết').getBoundingClientRect();
+ if(Math.abs(changeRect.top-detailRect.top)>2||detailRect.left<changeRect.right)throw Error('Binding actions must share one row');
+ button(bindingRow,'Chi tiết').click();
+ await until(()=>modal()?.textContent.includes('Nguồn thiết lập'));
+ if(!modal().textContent.includes('Mặc định hệ thống')||!modal().textContent.includes('18/11/2026')||!modal().textContent.includes('Không áp dụng (đã tắt)'))throw Error('Details must visibly explain the selected schedule, inherited source and disabled policy');
+ button(document,'Đóng').click();await until(()=>!modal());
+ button(bindingRow,'Thay đổi').click();
  await until(()=>window.jevCalls.some(call=>call.path==='/scope/calendars/102'));
  await until(()=>modal()?.textContent.includes('18/11/2026'));
  button(document,'Hủy').click();await pause(300);
- tab(document,'Trạng thái đồng bộ').click();await until(()=>document.body.textContent.includes('test-hash'));
- button(document,'Thử đồng bộ lại').click();await until(()=>document.body.textContent.includes('Đã lưu, chưa xác nhận đồng bộ'));
- document.getElementById('qa-result').textContent=JSON.stringify({ok:true,viewport:window.innerWidth,checks:['readable policy overview','structured group edit preserves identities and syncs framework','filtered rule edit preserves source index','unrelated templates unchanged','template form preserves guidance','preview converts percentages and numeric counters to Live contract','preview clears stale result and resets inputs','publish requires validation','matrix edit and CAS save','invalid JSON blocks save','GLOBAL revision notice','program and schedule picker resolves actual calendar ID','changing program clears stale calendar','existing schedule label restored','reload retry and pending sync']});
+ // Switching from inherited settings to a published configuration uses a named selector.
+ button(bindingRow,'Thay đổi').click();
+ await until(()=>modal()?.querySelector('[aria-label="Cách kiểm duyệt"]'));
+ const modeInput=modal().querySelector('[aria-label="Cách kiểm duyệt"]');
+ modeInput.closest('.ant-select').querySelector('.ant-select-selector').dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
+ await until(()=>[...document.querySelectorAll('.ant-select-item-option')].filter(visible).length===4);
+ const modeOptions=[...document.querySelectorAll('.ant-select-item-option')].filter(visible);
+ for(const explanation of ['không đánh giá','ghi nhận kết quả','như nhắc nhở','Buổi học dùng thiết lập']) {
+   if(!modeOptions.some(option=>option.textContent.includes(explanation)))throw Error('Each moderation option must explain its effect before selection: '+explanation);
+ }
+ modeOptions.find(option=>option.textContent.includes('Tắt kiểm duyệt JEV')).click();await pause(50);
+ if(!modal().querySelector('[data-testid="jev-mode-help"]').textContent.includes('không tự cho phép học sinh đó chat lại'))throw Error('Off mode must explain existing restrictions');
+ await choose('Cách kiểm duyệt','Áp dụng quy tắc xử lý vi phạm');
+ if(!modal().querySelector('[data-testid="jev-mode-help"]').textContent.includes('Biện pháp cụ thể phụ thuộc quy tắc'))throw Error('Enforce example must explain conditional configured actions');
+ await choose('Cách kiểm duyệt','Dùng thiết lập chung');
+ if(!modal().querySelector('[data-testid="jev-mode-help"]').textContent.includes('Khi thiết lập chung thay đổi'))throw Error('Inheritance must explain future changes');
+ await choose('Cách kiểm duyệt','Chỉ theo dõi, chưa xử lý vi phạm');
+ if(!modal().querySelector('[data-testid="jev-mode-help"]').textContent.includes('JEV chưa áp dụng biện pháp xử lý'))throw Error('Observation example must explain no JEV enforcement');
+ await until(()=>modal()?.querySelector('[aria-label="Bộ cấu hình kiểm duyệt"]'));
+ await choose('Bộ cấu hình kiểm duyệt','kiem-duyet-lop-hoc · Phiên bản 1');
+ button(document,'Lưu và đồng bộ').click();
+ await until(()=>window.jevCalls.filter(call=>call.path==='/bindings'&&call.method==='PUT').length===2);
+ const savedByName=window.jevCalls.filter(call=>call.path==='/bindings'&&call.method==='PUT').at(-1).body;
+ if(savedByName.mode!=='shadow'||savedByName.policyVersionId!==5||savedByName.scopeKey!=='102')throw Error('Named policy selection must preserve numeric API identity and the chosen schedule');
+ await until(()=>!modal());
+ const configuredRow=[...document.querySelectorAll('tr.ant-table-row, .responsive-table-card')].find(row=>row.textContent.includes('qa-program'));
+ if(!configuredRow?.textContent.includes('kiem-duyet-lop-hoc')||!configuredRow.textContent.includes('Phiên bản 1'))throw Error('Binding list must show the applied policy name and version');
+ button(configuredRow,'Chi tiết').click();
+ await until(()=>modal()?.textContent.includes('Lần cập nhật thiết lập'));
+ if(!modal().textContent.includes('kiem-duyet-lop-hoc · Phiên bản 1')||!modal().textContent.includes('Thiết lập riêng của buổi học'))throw Error('Details must show the applied policy and source');
+ button(document,'Đóng').click();await until(()=>!modal());
+ const bindingHeader=document.querySelector('[data-testid="jev-bindings-header"]');
+ if(bindingHeader.scrollWidth>bindingHeader.clientWidth+1)throw Error('Binding header must fit the viewport');
+ if(bindingHeader.querySelector('h4').getBoundingClientRect().width<100)throw Error('Binding title must remain visible');
+ if(${process.env.QA_BINDING_LAYOUT === '1' ? 'true' : 'false'}) {
+   document.getElementById('qa-result').textContent=JSON.stringify({ok:true,viewport:window.innerWidth,checks:['Vietnamese scope labels','inherited source and configured result','published policy selected by name','numeric binding contract preserved','applied policy name and version visible','responsive title and actions','actions share one row','details modal shows inherited and explicit configuration','each moderation choice explains its effect','selected choice shows a concrete example']});return;
+ }
+ tab(document,'Trạng thái đồng bộ').click();await until(()=>document.body.textContent.includes('Dịch vụ kiểm duyệt đã phản hồi'));
+ button(document,'Chi tiết kỹ thuật').click();await until(()=>document.body.textContent.includes('test-hash'));
+ button(document,'Đóng').click();await until(()=>!modal());
+ button(document,'Thử đồng bộ lại').click();await until(()=>document.body.textContent.includes('Chưa xác nhận yêu cầu đồng bộ'));
+ document.getElementById('qa-result').textContent=JSON.stringify({ok:true,viewport:window.innerWidth,checks:['readable policy overview','structured group edit preserves identities and syncs framework','filtered rule edit preserves source index','unrelated templates unchanged','template form preserves guidance','preview converts percentages and numeric counters to Live contract','preview clears stale result and resets inputs','publish requires validation','matrix edit and CAS save','invalid JSON blocks save','plain language runtime guidance','program and schedule picker resolves actual calendar ID','changing program clears stale calendar','existing schedule label restored','reload retry and pending sync']});
 })().catch(e=>document.getElementById('qa-result').textContent=JSON.stringify({ok:false,error:e.message,body:document.body.innerText.slice(-3500),closes:[...document.querySelectorAll('.ant-drawer-close')].map(el=>({visible:visible(el),parent:el.closest('.ant-drawer')?.className}))}));
 `;
 (async()=>{
@@ -266,7 +456,7 @@ const result=await esbuild.build({stdin:{contents:fixture,resolveDir:root,loader
 build.onResolve({filter:/^@\//},args=>mocks[args.path]?{path:args.path,namespace:'qa'}:{path:root+'/'+args.path.slice(2)+(fs.existsSync(root+'/'+args.path.slice(2)+'.tsx')?'.tsx':'.ts')});
 build.onLoad({filter:/.*/,namespace:'qa'},args=>({contents:mocks[args.path],loader:'js'}));
 }}]});
-fs.writeFileSync(path.join(taskDir,'qa.html'),'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>'+result.outputFiles.filter(file=>file.path.endsWith('.css')).map(file=>file.text).join('\n')+'</style><div id="root"></div><pre id="qa-result">RUNNING</pre><script>'+result.outputFiles.find(file=>file.path.endsWith('.js')).text.replaceAll('</script','<\\/script')+'</script>');
+fs.writeFileSync(path.join(taskDir,'qa.html'),'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>'+result.outputFiles.filter(file=>file.path.endsWith('.css')).map(file=>file.text).join('\n')+'</style><style>body{background:#f5f6f8;color:#1f1f1f}#root{padding:16px;min-width:0;background:#fff;min-height:100vh}#qa-result{display:none}</style><div id="root"></div><pre id="qa-result">RUNNING</pre><script>'+result.outputFiles.find(file=>file.path.endsWith('.js')).text.replaceAll('</script','<\\/script')+'</script>');
 const child=spawn(process.env.CHROME || '/usr/bin/google-chrome',['--headless','--no-sandbox','--disable-gpu','--disable-dev-shm-usage','--allow-file-access-from-files','--disable-background-timer-throttling','--disable-renderer-backgrounding','--remote-debugging-pipe','about:blank'],{stdio:['ignore','ignore','pipe','pipe','pipe']});
 child.on('error', error => { process.stderr.write(String(error)+'\n'); process.exitCode=1; });
 child.on('exit', () => { for (const entry of pending.values()) entry.reject(Error('Chrome exited')); pending.clear(); });

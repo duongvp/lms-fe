@@ -84,7 +84,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .situationFields,
   .counterFields {
     grid-template-columns: minmax(0, 1fr);
@@ -94,4 +94,9 @@
   .safetyFields {
     gap: 14px 12px;
   }
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  .situationFields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .counterFields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

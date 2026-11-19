@@ -1,10 +1,13 @@
 'use client';
+import Table from '@/components/ui/Table';
+import responsive from './responsive.module.css';
 import React, { useState } from 'react';
-import { Alert, Button, Form, Input, Modal, Select, Space, Table, Typography } from 'antd';
+import { Alert, Button, Form, Grid, Input, Modal, Select, Space, Typography } from 'antd';
 import { templateKindName } from './policyLabels';
 import styles from './policy.module.css';
 
 export default function PolicyTemplatesEditor({ templates, editable, onChange }: { templates: any[]; editable: boolean; onChange: (value: any[]) => void }) {
+  const screens = Grid.useBreakpoint();
   const [query, setQuery] = useState(''), [audience, setAudience] = useState<string>();
   const [currentKey, setCurrentKey] = useState<string>(), [page, setPage] = useState(1);
   const current = templates.find(item => item.key === currentKey);
@@ -17,13 +20,13 @@ export default function PolicyTemplatesEditor({ templates, editable, onChange }:
       <Input.Search aria-label="Tìm mẫu thông báo" placeholder="Tìm theo nội dung thông báo" className={styles.categoryFilter} allowClear onSearch={value => { setQuery(value.trim()); setPage(1); }} />
       <Select aria-label="Lọc người nhận" allowClear placeholder="Tất cả người nhận" className={styles.levelFilter} value={audience} onChange={value => { setAudience(value); setPage(1); }} options={[{ value: 'student', label: 'Học sinh' }, { value: 'teacher', label: 'Giáo viên' }]} />
     </div>
-    <Table className={styles.templateTable} tableLayout="fixed" rowKey="key" dataSource={rows} pagination={{ current: page, onChange: setPage, pageSize: 10, showSizeChanger: false, showTotal: total => `${total} thông báo` }} columns={[
+    <Table className={styles.templateTable} tableLayout="fixed" rowKey="key" dataSource={screens.lg ? rows : rows.slice((page - 1) * 10, page * 10)} pagination={{ total: rows.length, current: page, onChange: setPage, pageSize: 10, showSizeChanger: false, showTotal: total => `${total} thông báo` }} columns={[
       { title: 'Người nhận', dataIndex: 'audience', width: '14%', render: value => value === 'student' ? 'Học sinh' : 'Giáo viên' },
       { title: 'Loại thông báo', dataIndex: 'kind', width: '18%', render: templateKindName },
       { title: 'Nội dung', dataIndex: 'body', className: styles.templateContent },
-      { title: '', width: 112, render: (_, row) => <Button size="small" onClick={() => setCurrentKey(row.key)}>{editable ? 'Chỉnh sửa' : 'Xem'}</Button> },
+      { title: 'Thao tác', width: 112, render: (_, row) => <Button size="small" onClick={() => setCurrentKey(row.key)}>{editable ? 'Chỉnh sửa' : 'Xem'}</Button> },
     ]} />
-    <Modal open={!!current} title={editable ? 'Chỉnh sửa thông báo' : 'Xem thông báo'} onCancel={() => setCurrentKey(undefined)} footer={<Button type="primary" onClick={() => setCurrentKey(undefined)}>Xong</Button>} width={640}>
+    <Modal className={`admin-responsive-modal ${responsive.modal}`} open={!!current} title={editable ? 'Chỉnh sửa thông báo' : 'Xem thông báo'} onCancel={() => setCurrentKey(undefined)} footer={<Button type="primary" onClick={() => setCurrentKey(undefined)}>Xong</Button>} width={640}>
       {current && <Form layout="vertical" disabled={!editable}>
         <Typography.Paragraph>{current.audience === 'student' ? 'Gửi học sinh' : 'Gửi giáo viên'} · {templateKindName(current.kind)}</Typography.Paragraph>
         <Form.Item label="Nội dung thông báo"><Input.TextArea aria-label={`Nội dung ${current.key}`} autoSize={{ minRows: 3, maxRows: 8 }} value={current.body} onChange={e => patch('body', e.target.value)} /></Form.Item>

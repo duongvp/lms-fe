@@ -1,6 +1,8 @@
 'use client';
+import Table from '@/components/ui/Table';
+import responsive from './responsive.module.css';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Button, Card, Descriptions, Form, Input, Modal, Select, Space, Switch, Table, Tabs, Tag, Tooltip, Typography, message } from 'antd';
+import { Alert, Button, Card, Descriptions, Form, Input, Modal, Select, Space, Switch, Tabs, Tag, Tooltip, Typography, message } from 'antd';
 import { useAuthStore } from '@/stores/authStore';
 import { jevRequest } from '@/services/jevService';
 import styles from './l1.module.css';
@@ -118,7 +120,7 @@ export default function L1Panel() {
     <Alert type="info" showIcon message="Bộ lọc dùng chung toàn hệ thống" description="Whitelist khớp toàn câu, không bỏ qua quyền học, mute/ban hoặc chống flood/lặp. Blacklist không tự cộng cảnh cáo hay cấm chat. Thay đổi áp dụng qua bộ xử lý hiện có của Live." />
     {error && <Alert type="error" showIcon message={error} action={<Button onClick={() => void task(async () => { await Promise.all([refreshSettings(), refreshRows()]); })}>Tải lại</Button>} />}
     {sync && <Alert type={sync.confirmed ? 'success' : 'warning'} showIcon message={sync.message} />}
-    <Card size="small">
+    <Card className={responsive.panel} size="small">
       <div className={styles.modeBar}>
         <Typography.Text strong>Chế độ L1</Typography.Text>
         <Select aria-label="Chế độ L1" className={styles.modeSelect} value={mode} options={modeOptions} disabled={!settings || busy || !has('l1.runtime')} onChange={setMode} />
@@ -129,15 +131,28 @@ export default function L1Panel() {
         <Typography.Text type="secondary" className={styles.revision}>Revision {settings ? number(settings.revision) : '—'}</Typography.Text>
       </div>
     </Card>
-    <Card title="Danh sách bộ lọc" size="small">
+    <Card className={responsive.panel} title="Danh sách bộ lọc" size="small">
       <Tabs activeKey={listType} onChange={key => { setListType(key as typeof listType); setPage(1); }} items={[{ key: 'BLACKLIST', label: tabLabel('BLACKLIST', 'Blacklist (Danh sách chặn)') }, { key: 'WHITELIST', label: tabLabel('WHITELIST', 'Whitelist (Câu an toàn)') }]} />
-      <div className={styles.toolbar}>
+      <div className={styles.toolbar} data-testid="jev-l1-toolbar">
         <Input.Search aria-label="Tìm bộ lọc" placeholder={listType === 'BLACKLIST' ? 'Tìm từ khóa chặn…' : 'Tìm câu an toàn…'} allowClear className={styles.search} onSearch={value => { setQ(value.trim()); setPage(1); }} />
         <Select aria-label="Trạng thái bộ lọc" className={styles.statusFilter} value={active} onChange={value => { setActive(value); setPage(1); }} options={[{ value: 'all', label: 'Tất cả trạng thái' }, { value: '1', label: 'Đang bật' }, { value: '0', label: 'Đã tắt' }]} />
         <Button disabled={busy} onClick={() => void task(async () => { await Promise.all([refreshSettings(), refreshRows()]); })}>Tải lại</Button>
         <Button type="primary" className={styles.addButton} disabled={!settings || busy || !has('l1.edit')} onClick={() => open('new')}>Thêm {listType === 'BLACKLIST' ? 'từ khóa' : 'câu an toàn'}</Button>
       </div>
-      <Table<Entry> rowKey="id" loading={loading || busy} dataSource={rows} scroll={{ x: 760 }} pagination={{ current: page, total, pageSize: 20, showSizeChanger: false, onChange: setPage, showTotal: value => `${number(value)} kết quả` }} columns={[
+      <Table<Entry> responsiveCardContent={entry => <article className={styles.record} data-testid="jev-l1-record">
+        <div className={styles.recordHeader}>
+          <div className={styles.recordHeading}>
+            <div className={styles.recordCaption}><span>{entry.list_type === 'BLACKLIST' ? 'Từ khóa' : 'Câu an toàn'}</span><Tag color={entry.is_active === 1 ? 'green' : 'default'}>{entry.is_active === 1 ? 'Đang bật' : 'Đã tắt'}</Tag></div>
+            <strong className={styles.recordPattern}>{entry.pattern}</strong>
+          </div>
+          <Button disabled={!settings || busy || !has('l1.edit')} onClick={() => open(entry)}>Sửa</Button>
+        </div>
+        <dl className={styles.recordInfo}>
+          <div><dt>Cách khớp</dt><dd>{entry.match_mode === 'EXACT_PHRASE' ? 'Toàn câu' : matchOptions.find(option => option.value === (entry.match_mode === 'EXACT' ? 'LITERAL' : entry.match_mode))?.label ?? entry.match_mode}</dd></div>
+          <div><dt>Nhóm</dt><dd>{categoryLabel(entry.category)}</dd></div>
+        </dl>
+        {entry.note && <p className={styles.recordNote}><span>Ghi chú: </span>{noteLabel(entry.note)}</p>}
+      </article>} rowKey="id" loading={loading || busy} dataSource={rows} scroll={{ x: 760 }} pagination={{ current: page, total, pageSize: 20, showSizeChanger: false, onChange: setPage, showTotal: value => `${number(value)} kết quả` }} columns={[
         { title: listType === 'BLACKLIST' ? 'Từ khóa' : 'Câu an toàn', dataIndex: 'pattern', width: 260 },
         { title: 'Cách khớp', dataIndex: 'match_mode', render: value => value === 'EXACT_PHRASE' ? 'Toàn câu' : matchOptions.find(option => option.value === (value === 'EXACT' ? 'LITERAL' : value))?.label ?? value },
         { title: 'Nhóm', dataIndex: 'category', render: categoryLabel },
@@ -146,7 +161,7 @@ export default function L1Panel() {
         { title: 'Thao tác', width: 90, render: (_, entry) => <Button disabled={!settings || busy || !has('l1.edit')} onClick={() => open(entry)}>Sửa</Button> },
       ]} />
     </Card>
-    <Card title="Thử bộ lọc đã lưu">
+    <Card className={responsive.panel} title="Thử bộ lọc đã lưu">
       <Form form={previewForm} layout="vertical" initialValues={{ mode: 'enforce' }} onFinish={values => void task(async () => { const result = await jevRequest('/l1/preview', 'POST', values); setPreview(result.data); })}>
         <Form.Item name="text" label="Câu mẫu" rules={[{ required: true, whitespace: true, message: 'Nhập câu mẫu.' }]}><Input.TextArea aria-label="Câu mẫu L1" maxLength={500} showCount rows={3} /></Form.Item>
         <Space wrap align="start"><Form.Item name="mode" label="Chế độ giả lập"><Select aria-label="Chế độ giả lập L1" style={{ width: 220 }} options={modeOptions} /></Form.Item><Form.Item label=" "><Button htmlType="submit" loading={busy} disabled={!settings}>Kiểm tra câu mẫu</Button></Form.Item></Space>
@@ -157,7 +172,7 @@ export default function L1Panel() {
         <details><summary>Chi tiết giả lập</summary><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(preview, null, 2)}</pre></details>
       </Space>}
     </Card>
-    <Card title="Đồng bộ bộ lọc với Live" extra={<Space wrap>
+    <Card className={responsive.panel} title="Đồng bộ bộ lọc với Live" extra={<Space wrap>
       <Button loading={busy} onClick={() => void task(async () => { try { const result = await jevRequest('/l1/status'); setStatus(result.data.policy); setStatusError(''); } catch (e: any) { setStatusError(e.message); } })}>Kiểm tra L1</Button>
       <Button loading={busy} disabled={!has('l1.runtime') || !settings} onClick={() => void task(async () => { const result = await jevRequest('/l1/reload', 'POST', {}); showSync(result.data); if (result.data.status?.policy) setStatus(result.data.status.policy); })}>Thử đồng bộ L1</Button>
     </Space>}>
@@ -170,7 +185,7 @@ export default function L1Panel() {
       ]} />
       <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>Thông tin phản ánh worker trả lời; chưa xác nhận tất cả worker đã đồng bộ. Mode hiệu lực bị giới hạn bởi ENV trên Live.</Typography.Paragraph>
     </Card>
-    <Modal title={editing === 'new' ? 'Thêm bộ lọc L1' : 'Chỉnh sửa bộ lọc L1'} open={editing !== null} confirmLoading={busy} okText="Lưu và đồng bộ" cancelText="Hủy" onOk={save} onCancel={() => { if (!busy) setEditing(null); }} maskClosable={false}>
+    <Modal className={`admin-responsive-modal ${responsive.modal}`} title={editing === 'new' ? 'Thêm bộ lọc L1' : 'Chỉnh sửa bộ lọc L1'} open={editing !== null} confirmLoading={busy} okText="Lưu và đồng bộ" cancelText="Hủy" onOk={save} onCancel={() => { if (!busy) setEditing(null); }} maskClosable={false}>
       <Form form={form} layout="vertical">
         <Form.Item name="listType" hidden><Input /></Form.Item>
         <Form.Item name="pattern" label={listType === 'BLACKLIST' ? 'Từ khóa' : 'Câu an toàn'} rules={[{ required: true, whitespace: true, message: 'Nhập nội dung bộ lọc.' }]}><Input aria-label="Nội dung bộ lọc" maxLength={150} /></Form.Item>

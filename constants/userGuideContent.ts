@@ -58,6 +58,12 @@ export const userGuideContent: GuideData = {
             "name": "Banner lịch học",
             "description": "Quản lý hình ảnh theo cặp chương trình và giáo viên, dùng đường dẫn ảnh đã chuẩn bị.",
             "order": 9
+        },
+        {
+            "id": "jev",
+            "name": "Kiểm duyệt JEV",
+            "description": "Quản lý danh sách chặn và câu an toàn, chuẩn bị bộ cấu hình, áp dụng cho lớp học và kiểm tra trạng thái.",
+            "order": 10
         }
     ],
     "articles": [
@@ -110,6 +116,10 @@ export const userGuideContent: GuideData = {
                                 "Quản lý ảnh theo chương trình và giáo viên."
                             ],
                             [
+                                "Kiểm duyệt JEV",
+                                "Quản lý nội dung chat, thiết lập cách xử lý cho lớp học và kiểm tra trạng thái đồng bộ."
+                            ],
+                            [
                                 "Cấu hình phòng học",
                                 "Thiết lập tính năng phòng theo chương trình và bài."
                             ],
@@ -148,7 +158,7 @@ export const userGuideContent: GuideData = {
             "status": "published",
             "featured": true,
             "order": 1,
-            "updatedAt": "2026-10-28T02:00:00Z"
+            "updatedAt": "2026-11-19T02:00:00Z"
         },
         {
             "id": "guide-dang-nhap-va-ket-thuc-phien",
@@ -2260,6 +2270,888 @@ export const userGuideContent: GuideData = {
                     ]
                 }
             ]
+        },
+        {
+            "id": "guide-bat-dau-kiem-duyet-jev",
+            "slug": "bat-dau-kiem-duyet-jev",
+            "categoryId": "jev",
+            "title": "Bắt đầu sử dụng kiểm duyệt JEV",
+            "description": "Mở màn hình kiểm duyệt, hiểu các khu vực và thực hiện đúng thứ tự trước khi áp dụng cho lớp học.",
+            "audience": "Người quản trị và nhân viên được giao cấu hình kiểm duyệt chat.",
+            "prerequisites": [
+                "Đã đăng nhập LMS và được cấp quyền xem Kiểm duyệt JEV trên toàn bộ chương trình.",
+                "Có quyền phù hợp với thao tác cần thực hiện; quyền xem không đồng nghĩa với quyền sửa hoặc áp dụng."
+            ],
+            "sections": [
+                {
+                    "id": "purpose",
+                    "title": "Kiểm duyệt JEV dùng để làm gì?",
+                    "text": "Kiểm duyệt JEV giúp thiết lập cách nhận diện và xử lý nội dung chat trong lớp học, như lời xúc phạm, nội dung ngoài bài học, tin nhắn lặp hoặc tình huống cần hỗ trợ an toàn. Bạn có thể chuẩn bị bộ cấu hình, thử cách xử lý rồi chọn chương trình hoặc buổi học cần áp dụng.",
+                    "steps": []
+                },
+                {
+                    "id": "access",
+                    "title": "Truy cập màn hình kiểm duyệt",
+                    "text": "",
+                    "steps": [
+                        "Đăng nhập LMS bằng tài khoản được cấp.",
+                        "Trên thanh menu, chọn Kiểm duyệt JEV. Nếu thanh menu không hiện hết, mở mục dấu ba chấm; trên điện thoại, mở menu đầu trang.",
+                        "Kiểm tra tiêu đề Cấu hình kiểm duyệt JEV và chọn khu vực muốn sử dụng.",
+                        "Nếu không thấy menu, thông báo chưa có quyền hoặc nút bị khóa, nhờ người quản trị tài khoản kiểm tra quyền. Không cần thay đổi cấu hình lớp để xử lý việc này."
+                    ]
+                },
+                {
+                    "id": "areas",
+                    "title": "Chọn đúng khu vực",
+                    "text": "",
+                    "steps": [],
+                    "table": {
+                        "columns": [
+                            "Khu vực",
+                            "Dùng khi nào"
+                        ],
+                        "rows": [
+                            [
+                                "Bộ lọc L1",
+                                "Quản lý Blacklist (Danh sách chặn), Whitelist (Câu an toàn) và thử câu mẫu. Danh sách này dùng chung toàn hệ thống."
+                            ],
+                            [
+                                "Bộ cấu hình",
+                                "Tạo hoặc nhân bản bộ cấu hình; chỉnh nhóm nội dung, quy tắc, thông báo; thử tình huống và phát hành."
+                            ],
+                            [
+                                "Chế độ chung",
+                                "Chọn chế độ chung: tắt, chỉ theo dõi hoặc cho phép xử lý vi phạm."
+                            ],
+                            [
+                                "Thiết lập từng lớp",
+                                "Chọn bộ cấu hình và cách kiểm duyệt cho toàn bộ chương trình hoặc một buổi học cụ thể."
+                            ],
+                            [
+                                "Trạng thái đồng bộ",
+                                "Kiểm tra phản hồi của dịch vụ kiểm duyệt, xem chế độ báo về và hướng dẫn bước tiếp theo."
+                            ]
+                        ]
+                    },
+                    "notice": "Khu vực Bộ lọc L1 và các nút thao tác chỉ hiện hoặc cho phép sử dụng khi tài khoản có quyền tương ứng."
+                },
+                {
+                    "id": "workflow",
+                    "title": "Thứ tự cấu hình khuyến nghị",
+                    "text": "",
+                    "steps": [
+                        "Trong Bộ cấu hình, tạo bản nháp từ mẫu chuẩn hoặc nhân bản một bộ cấu hình đang có.",
+                        "Điều chỉnh các nhóm nội dung, quy tắc xử lý và thông báo cần dùng; bấm Lưu nháp.",
+                        "Dùng Thử tình huống để kiểm tra cách xử lý; sửa và lưu lại nếu kết quả chưa phù hợp.",
+                        "Bấm Kiểm tra, sau đó Phát hành khi bộ cấu hình hợp lệ.",
+                        "Trong Thiết lập từng lớp, chọn đúng chương trình hoặc buổi học và bộ cấu hình đã phát hành; bấm Lưu và đồng bộ.",
+                        "Kiểm tra Chế độ chung và chế độ Bộ lọc L1. Muốn JEV đánh giá tin nhắn, Bộ lọc L1 cần ở Thực thi (enforce). Khi cần theo dõi thử bằng JEV, dùng chế độ Quan sát của JEV trước khi bật xử lý vi phạm.",
+                        "Mở Trạng thái đồng bộ, bấm Kiểm tra lại và đọc cả chế độ báo về lẫn hướng dẫn Việc cần làm tiếp theo."
+                    ],
+                    "notice": "Phát hành chỉ làm bộ cấu hình sẵn sàng để chọn. Phát hành chưa tự bật kiểm duyệt và chưa tự áp dụng bộ cấu hình cho một lớp học."
+                },
+                {
+                    "id": "example",
+                    "title": "Ví dụ: theo dõi thử một buổi học",
+                    "text": "Bạn muốn thử bộ cấu hình “kiem-duyet-lop-hoc”, phiên bản 1, cho Buổi 2 của chương trình đang phụ trách. Sau khi phát hành, chọn Một buổi học cụ thể, chọn đúng ngày giờ của Buổi 2 và dùng Chỉ theo dõi, chưa xử lý vi phạm. Kiểm tra chế độ chung và trạng thái đồng bộ. Chế độ theo dõi chưa nhắc nhở hay hạn chế chat theo kết quả JEV; các bộ lọc và hạn chế khác vẫn giữ hiệu lực.",
+                    "steps": []
+                },
+                {
+                    "id": "result",
+                    "title": "Kết quả và lưu ý",
+                    "text": "Bạn xác định được khu vực cần thao tác và thứ tự chuẩn bị, thử, phát hành, áp dụng rồi kiểm tra. Các trạng thái mô phỏng hoặc phản hồi kết nối không phải bằng chứng rằng mọi lớp đã được kiểm duyệt theo cấu hình mới.",
+                    "steps": [],
+                    "notice": "Tắt JEV không tự gỡ hạn chế chat đã áp dụng cho học sinh. Việc thay đổi danh sách dùng chung hoặc chế độ toàn hệ thống có thể ảnh hưởng nhiều lớp."
+                }
+            ],
+            "status": "published",
+            "featured": true,
+            "order": 1,
+            "updatedAt": "2026-11-19T02:00:00Z",
+            "requiredPermission": "jev.view"
+        },
+        {
+            "id": "guide-quan-ly-danh-sach-bo-loc-jev",
+            "slug": "quan-ly-danh-sach-bo-loc-jev",
+            "categoryId": "jev",
+            "title": "Quản lý danh sách chặn và câu an toàn",
+            "description": "Thêm, sửa, bật/tắt từ khóa chặn và câu an toàn; thử câu mẫu trước khi sử dụng.",
+            "audience": "Người được cấp quyền quản lý Bộ lọc L1 trong màn hình Kiểm duyệt JEV.",
+            "prerequisites": [
+                "Có quyền xem Bộ lọc L1; cần quyền sửa để thêm hoặc sửa mục và quyền vận hành bộ lọc để đổi chế độ.",
+                "Đã chuẩn bị từ khóa hoặc câu an toàn và biết danh sách này dùng chung cho toàn hệ thống."
+            ],
+            "sections": [
+                {
+                    "id": "open",
+                    "title": "Mở và tìm nội dung bộ lọc",
+                    "text": "",
+                    "steps": [
+                        "Vào Kiểm duyệt JEV → Bộ lọc L1.",
+                        "Chọn Blacklist (Danh sách chặn) để xem từ khóa cần kiểm soát, hoặc Whitelist (Câu an toàn) để xem câu xác nhận ngắn được coi là an toàn.",
+                        "Nhập từ khóa vào ô tìm kiếm và thực hiện tìm. Dùng Trạng thái bộ lọc để chọn Tất cả trạng thái, Đang bật hoặc Đã tắt.",
+                        "Xem số lượng trên từng danh sách; chuyển trang khi cần. Bấm Tải lại để lấy danh sách mới."
+                    ]
+                },
+                {
+                    "id": "blacklist",
+                    "title": "Thêm một từ khóa vào danh sách chặn",
+                    "text": "",
+                    "steps": [
+                        "Trong Blacklist (Danh sách chặn), bấm Thêm từ khóa.",
+                        "Nhập Từ khóa gốc, viết liền và giữ dấu tiếng Việt. Không nhập sẵn dạng chèn dấu hoặc khoảng trắng giữa các chữ.",
+                        "Chọn Cách khớp phù hợp theo bảng bên dưới; đọc phần hướng dẫn ngay dưới lựa chọn.",
+                        "Nhập Ghi chú nếu cần, ví dụ lý do thêm từ khóa. Giữ Bật bộ lọc nếu muốn sử dụng mục này.",
+                        "Bấm Lưu và đồng bộ, đọc thông báo và kiểm tra lại dòng vừa thêm.",
+                        "Dùng Thử bộ lọc đã lưu để thử cả câu cần phát hiện lẫn câu bình thường có nội dung gần giống."
+                    ],
+                    "table": {
+                        "columns": [
+                            "Cách khớp trên màn hình",
+                            "Ý nghĩa và cách nhập"
+                        ],
+                        "rows": [
+                            [
+                                "Từ ngắn (2–5 ký tự) — Chèn dấu và lặp chữ",
+                                "Dùng cho từ gốc gồm 2–5 chữ cái. Có thể nhận diện khi người gửi chèn dấu, khoảng trắng hoặc kéo dài từng chữ."
+                            ],
+                            [
+                                "Từ dài (2–32 ký tự) — Chèn dấu",
+                                "Dùng cho từ gốc dài 2–32 ký tự, có ít nhất một chữ cái. Nhận diện từ viết liền hoặc có chèn dấu/khoảng trắng; không dành cho kiểu kéo dài từng chữ."
+                            ],
+                            [
+                                "Từ ngắn hoặc dài (2–32 ký tự) — Khớp nguyên từ",
+                                "Nhận diện nguyên từ theo dạng đã lưu. Không tự bỏ dấu tiếng Việt."
+                            ]
+                        ]
+                    },
+                    "notice": "Việc nhận diện còn xét từ khóa có nằm trong từ khác và ngữ cảnh sử dụng. Không phải cứ có từ khóa là tin nhắn chắc chắn bị chặn. Danh sách chặn không tự cộng lượt vi phạm hay tự cấm chat."
+                },
+                {
+                    "id": "whitelist",
+                    "title": "Thêm một câu an toàn",
+                    "text": "",
+                    "steps": [
+                        "Chuyển sang Whitelist (Câu an toàn), bấm Thêm câu an toàn.",
+                        "Nhập toàn bộ câu ngắn, ví dụ “em hiểu rồi”. Câu dài tối đa 64 ký tự và không có dấu chấm hoặc chấm than ở cuối.",
+                        "Giữ Cách khớp là Khớp toàn câu. Không dùng một từ rời để bỏ qua mọi câu chứa từ đó.",
+                        "Nhập Ghi chú khi cần, chọn Bật bộ lọc rồi bấm Lưu và đồng bộ.",
+                        "Thử câu đúng như đã nhập và một câu dài hơn có thêm nội dung để kiểm tra sự khác biệt."
+                    ],
+                    "notice": "Câu an toàn giúp bỏ qua một phần đánh giá nội dung khi khớp toàn câu. Câu này không cấp lại quyền chat, không gỡ cấm chat và không bỏ qua việc kiểm soát gửi quá nhiều tin hoặc tin lặp."
+                },
+                {
+                    "id": "edit",
+                    "title": "Sửa hoặc ngừng sử dụng một mục",
+                    "text": "",
+                    "steps": [
+                        "Tìm đúng dòng và bấm Sửa.",
+                        "Sửa nội dung, cách khớp hoặc ghi chú nếu cần. Muốn ngừng dùng mục này, tắt Bật bộ lọc.",
+                        "Bấm Lưu và đồng bộ. Kiểm tra trạng thái Đang bật hoặc Đã tắt trong danh sách.",
+                        "Muốn sử dụng lại mục đã tắt, lọc Đã tắt, mở Sửa, bật lại và lưu."
+                    ],
+                    "notice": "Thao tác được hướng dẫn là bật/tắt mục đang có; không cần tạo mục trùng để sử dụng lại."
+                },
+                {
+                    "id": "test",
+                    "title": "Thử bộ lọc đã lưu",
+                    "text": "",
+                    "steps": [
+                        "Tại Thử bộ lọc đã lưu, nhập Câu mẫu.",
+                        "Chọn Chế độ giả lập: Tắt, Quan sát hoặc Thực thi. Đây là chế độ dùng cho lần thử, không tự đổi chế độ bộ lọc đang sử dụng.",
+                        "Bấm Kiểm tra câu mẫu.",
+                        "Đọc kết quả theo bảng dưới đây. Sửa từ khóa hoặc cách khớp nếu chưa phù hợp, lưu lại rồi thử lại."
+                    ],
+                    "table": {
+                        "columns": [
+                            "Kết quả",
+                            "Cách hiểu"
+                        ],
+                        "rows": [
+                            [
+                                "Câu an toàn — bỏ đánh giá AI nội dung",
+                                "Câu mẫu được nhận diện là câu an toàn. Kết quả không bỏ qua các hạn chế chat khác."
+                            ],
+                            [
+                                "Đề xuất chặn tại L1",
+                                "Bộ lọc đề xuất chặn câu mẫu trong tình huống đang thử. Lần thử không thực sự chặn tin nhắn của học sinh."
+                            ],
+                            [
+                                "Chuyển bước đánh giá JEV",
+                                "Câu mẫu cần được đánh giá tiếp; chưa có kết luận cuối cùng về cách xử lý."
+                            ],
+                            [
+                                "L1 đang tắt trong giả lập",
+                                "Lần thử đang chọn chế độ Tắt."
+                            ],
+                            [
+                                "Đầu vào không hợp lệ",
+                                "Kiểm tra và nhập lại câu mẫu theo thông báo trên màn hình."
+                            ]
+                        ]
+                    },
+                    "notice": "Thử câu mẫu không gửi tin nhắn vào lớp, không đánh giá nội dung bằng dịch vụ tự động và không áp dụng hạn chế cho học sinh."
+                },
+                {
+                    "id": "mode",
+                    "title": "Đổi chế độ chung của bộ lọc",
+                    "text": "",
+                    "steps": [
+                        "Tại Chế độ L1, chọn Tắt, Quan sát (shadow) hoặc Thực thi (enforce). Tắt là ngừng dùng bộ lọc; Quan sát là theo dõi kết quả; Thực thi cho phép bộ lọc xử lý theo điều kiện đang có.",
+                        "Bấm Lưu chế độ, đọc xác nhận về việc áp dụng toàn hệ thống rồi bấm Áp dụng nếu phù hợp.",
+                        "Tại Đồng bộ bộ lọc với Live, bấm Kiểm tra L1 để xem phản hồi. Dùng Thử đồng bộ L1 khi cần yêu cầu nạp lại bộ lọc đã lưu."
+                    ],
+                    "notice": "Chế độ bạn chọn còn chịu giới hạn vận hành của hệ thống. Phản hồi đồng bộ chưa xác nhận tất cả lớp đã cập nhật; các hạn chế học sinh đang có vẫn giữ hiệu lực."
+                },
+                {
+                    "id": "issues",
+                    "title": "Khi chưa lưu hoặc chưa đồng bộ được",
+                    "text": "",
+                    "steps": [],
+                    "table": {
+                        "columns": [
+                            "Tình huống",
+                            "Cách xử lý"
+                        ],
+                        "rows": [
+                            [
+                                "Nội dung hoặc cách khớp không hợp lệ",
+                                "Đọc hướng dẫn dưới Cách khớp; nhập lại từ gốc, kiểm tra độ dài và dấu cuối câu."
+                            ],
+                            [
+                                "Nội dung trùng hoặc có cảnh báo khi lưu",
+                                "Tìm lại trong cả mục Đang bật và Đã tắt. Kiểm tra dòng đang có trước khi thử thêm lại."
+                            ],
+                            [
+                                "Thông báo cấu hình đã thay đổi",
+                                "Ghi lại nội dung đang sửa; đóng cửa sổ, bấm Tải lại và mở đúng mục để đối chiếu trước khi lưu."
+                            ],
+                            [
+                                "Đã lưu nhưng chưa xác nhận đồng bộ",
+                                "Không tạo lại mục. Dùng Thử đồng bộ L1 rồi Kiểm tra L1 để kiểm tra tiếp."
+                            ]
+                        ]
+                    }
+                }
+            ],
+            "status": "published",
+            "featured": false,
+            "order": 2,
+            "updatedAt": "2026-11-19T02:00:00Z",
+            "requiredPermission": "jev.view"
+        },
+        {
+            "id": "guide-tao-phat-hanh-bo-cau-hinh-jev",
+            "slug": "tao-phat-hanh-bo-cau-hinh-jev",
+            "categoryId": "jev",
+            "title": "Tạo, chỉnh sửa và phát hành bộ cấu hình JEV",
+            "description": "Chuẩn bị quy tắc nhận diện, cách xử lý và thông báo; kiểm tra trước khi phát hành để sử dụng cho lớp học.",
+            "audience": "Người được giao soạn hoặc duyệt cấu hình kiểm duyệt JEV.",
+            "prerequisites": [
+                "Có quyền xem JEV; cần quyền chỉnh sửa để tạo, sửa hoặc nhân bản và quyền phát hành để sử dụng nút Phát hành.",
+                "Đã thống nhất nội dung cần kiểm soát và cách xử lý phù hợp với lớp học."
+            ],
+            "sections": [
+                {
+                    "id": "create",
+                    "title": "Tạo bản nháp từ một mẫu có sẵn",
+                    "text": "",
+                    "steps": [
+                        "Vào Kiểm duyệt JEV → Bộ cấu hình, bấm Tạo bản nháp.",
+                        "Tại Dựa trên bộ cấu hình, chọn Mẫu chuẩn từ Live hoặc một bộ cấu hình đang có. Dùng Tải thêm bộ cấu hình nếu chưa thấy mẫu cần tìm.",
+                        "Kiểm tra Mã bộ cấu hình và Phiên bản được gợi ý. Ví dụ dùng “kiem-duyet-lop-hoc”, phiên bản 1. Mã dùng chữ không dấu, số, dấu gạch ngang hoặc gạch dưới; tối đa 64 ký tự.",
+                        "Giữ mã cũ và dùng phiên bản tiếp theo khi muốn cập nhật cùng một bộ; đổi mã khi muốn tạo bộ riêng.",
+                        "Bấm Tạo và mở cấu hình. Đọc phần Tổng quan và chọn nội dung cần sửa."
+                    ],
+                    "notice": "Tạo bản nháp hoặc nhân bản không thay đổi bộ gốc và chưa áp dụng bản mới vào lớp. Nếu mã và phiên bản đã tồn tại, chọn số phiên bản khác."
+                },
+                {
+                    "id": "content",
+                    "title": "Điều chỉnh nhóm nội dung và mức độ",
+                    "text": "",
+                    "steps": [
+                        "Trong bộ cấu hình đang mở, chọn Nhóm nội dung và mức độ.",
+                        "Ở Nhóm nội dung, mở nhóm cần sửa, ví dụ Xúc phạm, bắt nạt hoặc Nói chuyện ngoài bài học.",
+                        "Kiểm tra Tên hiển thị, Mô tả nhóm nội dung và Tiêu chí cho từng mức độ. Chỉ điều chỉnh phần cần thay đổi.",
+                        "Muốn sửa cách giải thích mức nhẹ, trung bình hoặc nặng, mở Mức độ và chọn mức tương ứng.",
+                        "Chỉ chỉnh Hướng dẫn đánh giá AI khi có yêu cầu thay đổi cách đánh giá đã được thống nhất. Đây không phải nội dung thông báo gửi học sinh.",
+                        "Bấm Lưu nháp trong bộ cấu hình để ghi thay đổi."
+                    ],
+                    "notice": "Một số hướng dẫn gốc có thể bằng tiếng Anh và không tự được dịch. Nếu chỉ muốn đổi lời nhắc gửi học sinh, dùng Thông báo cho người dùng thay vì sửa tiêu chí đánh giá."
+                },
+                {
+                    "id": "rules",
+                    "title": "Điều chỉnh cách xử lý vi phạm",
+                    "text": "",
+                    "steps": [
+                        "Chọn Quy tắc xử lý. Lọc Nhóm nội dung và Mức độ để tìm tình huống cần thay đổi.",
+                        "Đọc Bối cảnh lớp, Lần xảy ra và Cách xử lý của dòng. Bấm Chi tiết để mở Cấu hình cách xử lý.",
+                        "Bật hoặc tắt những hành động đang có trong quy tắc, ví dụ Nhắc riêng học sinh, Báo giáo viên, Giãn cách chat hoặc Tạm cấm chat.",
+                        "Kiểm tra các ngưỡng đánh giá tối thiểu theo phần trăm. Mỗi hành động chỉ đủ điều kiện khi các yêu cầu của hành động đó đều được đáp ứng.",
+                        "Nếu có Mẫu thông báo, chọn đúng nội dung và người nhận. Kiểm tra Thời hạn (giây), Khoảng cách tin (giây) hoặc Khoảng nghỉ thông báo (giây) khi có.",
+                        "Đóng phần chi tiết và bấm Lưu nháp trong bộ cấu hình."
+                    ],
+                    "notice": "Ô ngưỡng trống khác với 0%. Lần xảy ra và bối cảnh giúp phân biệt quy tắc cho lần đầu với những lần tiếp theo; không chỉ nhìn tên nhóm vi phạm."
+                },
+                {
+                    "id": "messages",
+                    "title": "Sửa thông báo gửi học sinh hoặc giáo viên",
+                    "text": "",
+                    "steps": [
+                        "Chọn Thông báo cho người dùng.",
+                        "Tìm theo nội dung thông báo hoặc lọc người nhận Học sinh, Giáo viên.",
+                        "Bấm Chỉnh sửa tại mẫu cần thay đổi.",
+                        "Sửa Nội dung thông báo và Hướng dẫn hỗ trợ nếu có. Dùng lời nhắc rõ ràng, phù hợp với độ tuổi và giúp người nhận biết cần làm gì tiếp theo.",
+                        "Bấm Xong để quay lại. Bấm Lưu nháp trong bộ cấu hình để ghi thay đổi.",
+                        "Quay lại Quy tắc xử lý để kiểm tra hành động đang chọn đúng Mẫu thông báo."
+                    ],
+                    "notice": "Bấm Xong chỉ đóng cửa sổ sửa thông báo. Bạn vẫn cần Lưu nháp để lưu thay đổi của bộ cấu hình."
+                },
+                {
+                    "id": "publish",
+                    "title": "Kiểm tra và phát hành",
+                    "text": "",
+                    "steps": [
+                        "Bấm Lưu nháp sau khi hoàn tất chỉnh sửa.",
+                        "Dùng Thử tình huống để rà cách xử lý. Nếu sửa thêm nội dung, lưu lại trước khi thử tiếp.",
+                        "Bấm Kiểm tra trên thanh thao tác của bộ cấu hình.",
+                        "Nếu có lỗi, đọc thông báo, sửa phần được nêu rồi Lưu nháp và Kiểm tra lại.",
+                        "Khi có thông báo bộ cấu hình hợp lệ và nút Phát hành được mở, bấm Phát hành rồi xác nhận.",
+                        "Kiểm tra trạng thái Đã phát hành trong danh sách. Sang Thiết lập từng lớp để chọn nơi sử dụng bộ cấu hình này."
+                    ],
+                    "table": {
+                        "columns": [
+                            "Trạng thái",
+                            "Ý nghĩa"
+                        ],
+                        "rows": [
+                            [
+                                "Bản nháp",
+                                "Có thể chỉnh sửa nếu được cấp quyền; chưa thể chọn để áp dụng cho lớp học."
+                            ],
+                            [
+                                "Có thay đổi chưa lưu",
+                                "Phải Lưu nháp trước khi kiểm tra, thử tình huống hoặc phát hành."
+                            ],
+                            [
+                                "Bộ cấu hình hợp lệ",
+                                "Đã vượt qua kiểm tra các điều kiện cấu hình; chưa có nghĩa nội dung đã phù hợp với mọi lớp học."
+                            ],
+                            [
+                                "Đã phát hành",
+                                "Có thể chọn để áp dụng; bản này chỉ xem, không sửa trực tiếp."
+                            ]
+                        ]
+                    }
+                },
+                {
+                    "id": "new-version",
+                    "title": "Cập nhật một bộ cấu hình đã phát hành",
+                    "text": "",
+                    "steps": [
+                        "Trong Bộ cấu hình, tìm bản đang dùng và bấm Nhân bản.",
+                        "Kiểm tra mẫu nguồn, giữ mã hoặc đổi mã theo nhu cầu, chọn số phiên bản chưa có.",
+                        "Bấm Tạo và mở cấu hình, chỉnh sửa và thực hiện lại Lưu nháp → Kiểm tra → Phát hành.",
+                        "Vào Thiết lập từng lớp, bấm Thay đổi ở đúng dòng và chọn phiên bản mới, sau đó Lưu và đồng bộ."
+                    ],
+                    "notice": "Phát hành phiên bản mới không tự thay phiên bản đã được chọn cho lớp. Khi có thông báo bản đã thay đổi, giữ lại nội dung cần sửa, tải lại để đối chiếu trước khi tiếp tục."
+                }
+            ],
+            "status": "published",
+            "featured": false,
+            "order": 3,
+            "updatedAt": "2026-11-19T02:00:00Z",
+            "requiredPermission": "jev.view"
+        },
+        {
+            "id": "guide-thu-tinh-huong-kiem-duyet-jev",
+            "slug": "thu-tinh-huong-kiem-duyet-jev",
+            "categoryId": "jev",
+            "title": "Thử tình huống trước khi áp dụng JEV",
+            "description": "Nhập tình huống và điểm giả định để kiểm tra hành động đủ điều kiện mà không ảnh hưởng học sinh.",
+            "audience": "Người xem hoặc soạn bộ cấu hình kiểm duyệt JEV.",
+            "prerequisites": [
+                "Có quyền xem JEV và một bộ cấu hình đã lưu.",
+                "Nếu đang sửa bản nháp, đã bấm Lưu nháp trước khi thử."
+            ],
+            "sections": [
+                {
+                    "id": "open",
+                    "title": "Mở phần thử tình huống",
+                    "text": "",
+                    "steps": [
+                        "Vào Kiểm duyệt JEV → Bộ cấu hình.",
+                        "Bấm Mở ở bộ cấu hình cần kiểm tra.",
+                        "Chọn Thử tình huống. Đây là phép thử cách xử lý dựa trên các giá trị bạn nhập, không phải nơi gửi một câu chat để tự nhận diện nội dung."
+                    ]
+                },
+                {
+                    "id": "input",
+                    "title": "Nhập một tình huống mẫu",
+                    "text": "",
+                    "steps": [
+                        "Tại Chọn tình huống, chọn Bối cảnh lớp học: Đang học, Chờ bắt đầu hoặc Chưa xác định.",
+                        "Chọn Nhóm nội dung và Mức độ cần thử, ví dụ Xúc phạm, bắt nạt và Nhẹ.",
+                        "Tại Điểm nhận diện nội dung, nhập các điểm giả định từ 0–100% cho khả năng đúng nhóm, đúng mức và độ tin cậy tương ứng. Điểm được so với từng ngưỡng trong quy tắc.",
+                        "Tại Tín hiệu an toàn, nhập điểm giả định nếu muốn thử tình huống Đe dọa an toàn hoặc Học sinh cần trợ giúp; để 0% khi tình huống không có dấu hiệu đó.",
+                        "Tại Số lần đã ghi nhận trước đó, nhập số lần đã xảy ra trước tin đang thử. Nếu đây là lần đầu, nhập 0.",
+                        "Bấm Chạy giả lập."
+                    ],
+                    "notice": "Giá trị 95% được gợi ý trên màn hình là điểm mẫu, không phải kết quả đánh giá thực tế của một học sinh."
+                },
+                {
+                    "id": "results",
+                    "title": "Đọc kết quả thử",
+                    "text": "",
+                    "steps": [],
+                    "table": {
+                        "columns": [
+                            "Kết quả",
+                            "Cách hiểu và việc cần làm"
+                        ],
+                        "rows": [
+                            [
+                                "Hành động đủ điều kiện",
+                                "Các hành động phù hợp với quy tắc và giá trị giả định đã nhập. Đối chiếu lại cách xử lý mong muốn trước khi phát hành."
+                            ],
+                            [
+                                "Chưa có hành động đủ điều kiện",
+                                "Tình huống chưa đáp ứng điều kiện để hành động được đưa ra. Kiểm tra nhóm, mức độ, bối cảnh, điểm giả định, số lần trước đó và các hành động đang bật."
+                            ],
+                            [
+                                "Kết quả biến mất khi sửa một giá trị",
+                                "Form đã bỏ kết quả cũ để tránh hiểu nhầm. Bấm Chạy giả lập để tính lại theo giá trị mới."
+                            ]
+                        ]
+                    },
+                    "notice": "Không có tin nhắn thật được gửi và không có học sinh nào bị nhắc nhở hay hạn chế chat trong lần thử. Kết quả không chứng minh việc kiểm duyệt đang hoạt động trong lớp."
+                },
+                {
+                    "id": "example",
+                    "title": "Ví dụ: so sánh lần đầu và lần lặp lại",
+                    "text": "",
+                    "steps": [
+                        "Chọn một nhóm, mức độ và bối cảnh mà bộ cấu hình có quy tắc xử lý.",
+                        "Để số lần đã ghi nhận là 0, giữ các điểm giả định và bấm Chạy giả lập. Ghi nhận hành động đủ điều kiện.",
+                        "Đổi số lần trước đó sang 1 rồi chạy lại. So sánh hai kết quả để hiểu quy tắc dành cho lần đầu và lần tiếp theo.",
+                        "Nếu hai kết quả giống nhau, kiểm tra lại quy tắc; bộ cấu hình có thể chủ ý dùng cùng một cách xử lý cho cả hai trường hợp.",
+                        "Bấm Đặt lại nếu muốn đưa các trường về giá trị ban đầu và thử tình huống khác."
+                    ]
+                },
+                {
+                    "id": "issues",
+                    "title": "Khi không chạy được hoặc kết quả chưa đúng",
+                    "text": "Nếu nút Chạy giả lập bị khóa, lưu các thay đổi còn dở rồi thử lại. Nếu báo thiếu thông tin, điền các ô được đánh dấu. Nếu kết quả chưa phù hợp, mở Quy tắc xử lý để đối chiếu, sửa bản nháp, lưu rồi chạy lại; không cần áp dụng cấu hình vào lớp thật để thử.",
+                    "steps": []
+                }
+            ],
+            "status": "published",
+            "featured": false,
+            "order": 4,
+            "updatedAt": "2026-11-19T02:00:00Z",
+            "requiredPermission": "jev.view"
+        },
+        {
+            "id": "guide-thiet-lap-van-hanh-jev",
+            "slug": "thiet-lap-van-hanh-jev",
+            "categoryId": "jev",
+            "title": "Chọn chế độ vận hành JEV toàn hệ thống",
+            "description": "Hiểu chế độ tắt, quan sát và thực thi; lưu thiết lập chung và kiểm tra kết quả.",
+            "audience": "Người được cấp quyền thay đổi chế độ vận hành kiểm duyệt toàn hệ thống.",
+            "prerequisites": [
+                "Có quyền vận hành JEV, không chỉ quyền xem hoặc chỉnh sửa bộ cấu hình.",
+                "Đã biết việc đổi chế độ chung có thể ảnh hưởng nhiều chương trình và buổi học."
+            ],
+            "sections": [
+                {
+                    "id": "open",
+                    "title": "Mở cấu hình vận hành",
+                    "text": "",
+                    "steps": [
+                        "Vào Kiểm duyệt JEV → Chế độ chung.",
+                        "Đọc Chế độ đang hiển thị và kiểm tra thiết lập dự định sử dụng.",
+                        "Nếu đã sửa nhưng muốn xem lại cấu hình đang lưu, bấm Tải lại và đọc xác nhận trước khi tiếp tục. Thay đổi chưa lưu trên form sẽ được thay bằng dữ liệu hiện tại."
+                    ]
+                },
+                {
+                    "id": "modes",
+                    "title": "Chọn chế độ phù hợp",
+                    "text": "",
+                    "steps": [],
+                    "table": {
+                        "columns": [
+                            "Chế độ trên màn hình",
+                            "Tác dụng"
+                        ],
+                        "rows": [
+                            [
+                                "Tắt",
+                                "JEV ngừng đánh giá và không áp dụng thêm biện pháp xử lý. Các hạn chế chat đã áp dụng trước đó không tự được gỡ."
+                            ],
+                            [
+                                "Quan sát (shadow)",
+                                "Cho phép theo dõi kết quả đánh giá, chưa xử lý vi phạm theo kết quả đó. Phù hợp khi cần kiểm tra cấu hình trước khi dùng xử lý thật."
+                            ],
+                            [
+                                "Thực thi (enforce)",
+                                "Cho phép áp dụng cách xử lý theo bộ cấu hình, khi thiết lập lớp học và các điều kiện vận hành cho phép. Không có nghĩa mọi lớp đều tự bật xử lý."
+                            ]
+                        ]
+                    },
+                    "notice": "Thiết lập riêng của lớp không vượt chế độ chung. Ví dụ chế độ chung đang Tắt thì chọn xử lý vi phạm cho một buổi học cũng chưa làm JEV xử lý trong buổi đó. Muốn JEV đánh giá tin nhắn, Bộ lọc L1 cần ở Thực thi (enforce). Chế độ Quan sát của Bộ lọc L1 không thay cho chế độ quan sát của JEV. Bộ lọc L1 vẫn có thể chặn theo danh sách ngay cả khi JEV chỉ theo dõi."
+                },
+                {
+                    "id": "limits",
+                    "title": "Đọc các giới hạn vận hành",
+                    "text": "Ngoài Chế độ, màn hình có Ngân sách ước tính, Giới hạn đánh giá và Tạm ngừng khi lỗi liên tiếp. Đây là các giới hạn sử dụng chung, không phải mức xử lý dành cho từng học sinh.",
+                    "steps": [],
+                    "table": {
+                        "columns": [
+                            "Nhóm thông tin",
+                            "Cách hiểu"
+                        ],
+                        "rows": [
+                            [
+                                "Ngân sách (USD/ngày)",
+                                "Mức chi phí ước tính tối đa mỗi ngày cho toàn hệ thống, nhập bằng USD. Ví dụ nhập 10 là 10 USD/ngày; nhập 10,5 là 10,5 USD/ngày. Hạn mức ngày mới bắt đầu lúc 7 giờ sáng theo giờ Việt Nam. Đây không phải số dư, số tiền đã dùng hoặc hóa đơn."
+                            ],
+                            [
+                                "Giới hạn đánh giá",
+                                "Giới hạn số lượt và thời gian hệ thống dành cho việc đánh giá. Giữ các giá trị đang dùng nếu chỉ cần đổi chế độ."
+                            ],
+                            [
+                                "Tạm ngừng khi lỗi liên tiếp",
+                                "Cho phép tạm dừng khi nhiều lượt gặp lỗi liên tiếp, với số lỗi và thời gian nghỉ được đặt trên form."
+                            ],
+                            [
+                                "Model",
+                                "Thông tin phiên bản công cụ đánh giá, chỉ để xem trên màn hình này."
+                            ]
+                        ]
+                    },
+                    "notice": "Không đổi ngân sách hoặc giới hạn dùng chung để xử lý một vi phạm riêng lẻ. Quy tắc nhắc nhở, thời hạn hạn chế chat và thông báo được sửa trong Bộ cấu hình."
+                },
+                {
+                    "id": "save",
+                    "title": "Lưu và kiểm tra chế độ",
+                    "text": "",
+                    "steps": [
+                        "Chọn Chế độ cần sử dụng. Nếu chỉ đổi chế độ, giữ các giới hạn còn lại.",
+                        "Bấm Lưu vận hành, đọc nội dung xác nhận rồi bấm Lưu.",
+                        "Đọc kết quả lưu và đồng bộ. Nếu đã lưu nhưng chưa xác nhận đồng bộ, không lặp lại việc lưu chỉ để gửi yêu cầu lần nữa.",
+                        "Mở Trạng thái đồng bộ, bấm Kiểm tra lại. Đối chiếu Chế độ dịch vụ báo về và Việc cần làm tiếp theo.",
+                        "Kiểm tra Thiết lập từng lớp để chắc chắn chương trình hoặc buổi học đang dùng cách kiểm duyệt và bộ cấu hình mong muốn."
+                    ]
+                },
+                {
+                    "id": "issues",
+                    "title": "Khi kết quả khác chế độ vừa chọn",
+                    "text": "",
+                    "steps": [],
+                    "table": {
+                        "columns": [
+                            "Tình huống",
+                            "Cách xử lý"
+                        ],
+                        "rows": [
+                            [
+                                "Dịch vụ vẫn báo Tắt",
+                                "Kiểm tra kết quả lưu, trạng thái đồng bộ và giải thích trên màn hình. Nếu chỉ thiếu đồng bộ, dùng Thử đồng bộ lại."
+                            ],
+                            [
+                                "Dịch vụ báo chỉ theo dõi dù đã chọn Thực thi",
+                                "Kiểm tra chế độ chung, việc lưu và đồng bộ. Bộ lọc L1 cũng cần ở Thực thi (enforce) để JEV đánh giá tin nhắn. Đọc giải thích và các giới hạn vận hành, không kết luận việc xử lý đã được bật chỉ từ giá trị đã chọn."
+                            ],
+                            [
+                                "Thông báo cấu hình đã thay đổi",
+                                "Ghi lại lựa chọn muốn lưu, tải lại cấu hình hiện tại và đối chiếu trước khi sửa tiếp."
+                            ],
+                            [
+                                "Không có cấu hình hoặc không có nút Lưu vận hành",
+                                "Kiểm tra quyền sử dụng. Nếu màn hình báo chưa sẵn sàng, gửi thông báo cho người phụ trách vận hành để được xử lý."
+                            ]
+                        ]
+                    }
+                }
+            ],
+            "status": "published",
+            "featured": false,
+            "order": 5,
+            "updatedAt": "2026-11-19T02:00:00Z",
+            "requiredPermission": "jev.view"
+        },
+        {
+            "id": "guide-ap-dung-jev-cho-lop-hoc",
+            "slug": "ap-dung-jev-cho-lop-hoc",
+            "categoryId": "jev",
+            "title": "Áp dụng JEV cho chương trình hoặc buổi học",
+            "description": "Chọn đúng nơi áp dụng, hiểu thiết lập chung và kiểm tra bộ cấu hình được sử dụng.",
+            "audience": "Người được cấp quyền thiết lập kiểm duyệt cho lớp học.",
+            "prerequisites": [
+                "Có quyền áp dụng cấu hình JEV.",
+                "Đã có chương trình hoặc lịch buổi học cần chọn. Nếu chọn theo dõi hoặc xử lý vi phạm, cần một bộ cấu hình đã phát hành."
+            ],
+            "sections": [
+                {
+                    "id": "scope",
+                    "title": "Hiểu thứ tự áp dụng",
+                    "text": "",
+                    "steps": [],
+                    "table": {
+                        "columns": [
+                            "Nơi áp dụng",
+                            "Tác dụng"
+                        ],
+                        "rows": [
+                            [
+                                "Một buổi học cụ thể",
+                                "Thiết lập riêng cho đúng lịch đã chọn, gồm chương trình, số buổi, ngày và giờ."
+                            ],
+                            [
+                                "Toàn bộ chương trình",
+                                "Thiết lập chung cho các buổi trong chương trình chưa dùng thiết lập riêng."
+                            ],
+                            [
+                                "Mặc định cho các lớp chưa có thiết lập riêng",
+                                "Được dùng khi chương trình và buổi học đều không có thiết lập riêng hoặc đang chọn dùng thiết lập chung."
+                            ]
+                        ]
+                    },
+                    "notice": "Thiết lập riêng của buổi học được ưu tiên trước thiết lập chương trình, sau đó mới đến mặc định. Chọn Tắt cho một buổi là một thiết lập riêng; buổi đó không tự chuyển sang cấu hình đang bật của chương trình."
+                },
+                {
+                    "id": "create",
+                    "title": "Thiết lập cho chương trình hoặc một buổi học",
+                    "text": "",
+                    "steps": [
+                        "Vào Kiểm duyệt JEV → Thiết lập từng lớp.",
+                        "Bấm Thiết lập cho chương trình / buổi học.",
+                        "Tại Áp dụng cho, chọn Toàn bộ chương trình hoặc Một buổi học cụ thể theo nhu cầu.",
+                        "Tìm và chọn Mã chương trình. Nếu chọn một buổi học, chọn tiếp Lịch học theo số buổi hoặc tên bài; kiểm tra cả ngày, giờ để tránh nhầm lịch có cùng tên.",
+                        "Chọn Cách kiểm duyệt. Đọc mô tả dưới từng lựa chọn và ví dụ trong phần Lựa chọn này có tác dụng gì?.",
+                        "Nếu chọn chỉ theo dõi hoặc áp dụng quy tắc, chọn Bộ cấu hình kiểm duyệt theo tên và phiên bản đã phát hành. Dùng Tải thêm bộ cấu hình nếu cần.",
+                        "Bấm Lưu và đồng bộ, đọc thông báo rồi kiểm tra lại dòng tương ứng trong bảng.",
+                        "Mở Trạng thái đồng bộ và bấm Kiểm tra lại nếu cần kiểm tra phản hồi mới."
+                    ],
+                    "notice": "Khi đổi chương trình trong form tạo mới, phải chọn lại lịch học. Bản nháp không xuất hiện trong danh sách bộ cấu hình được phép áp dụng."
+                },
+                {
+                    "id": "choices",
+                    "title": "Chọn cách kiểm duyệt",
+                    "text": "",
+                    "steps": [],
+                    "table": {
+                        "columns": [
+                            "Lựa chọn",
+                            "Kết quả mong đợi"
+                        ],
+                        "rows": [
+                            [
+                                "Tắt kiểm duyệt JEV",
+                                "JEV không đánh giá hoặc áp dụng thêm biện pháp xử lý cho lựa chọn này. Hạn chế chat cũ và các bộ lọc khác vẫn giữ hiệu lực."
+                            ],
+                            [
+                                "Chỉ theo dõi, chưa xử lý vi phạm",
+                                "JEV đánh giá, ghi nhận kết quả nhưng chưa nhắc nhở hoặc hạn chế chat theo kết quả đó. Cần chọn bộ cấu hình đã phát hành."
+                            ],
+                            [
+                                "Áp dụng quy tắc xử lý vi phạm",
+                                "Cho phép JEV xử lý theo bộ cấu hình được chọn, ví dụ nhắc riêng hoặc báo giáo viên, khi chế độ vận hành chung cho phép."
+                            ],
+                            [
+                                "Dùng thiết lập chung",
+                                "Không đặt cách xử lý riêng. Buổi học dùng thiết lập chương trình, hoặc mặc định nếu chương trình không có thiết lập riêng; chương trình dùng mặc định của hệ thống."
+                            ]
+                        ]
+                    },
+                    "notice": "Dùng thiết lập chung thay đổi theo thiết lập được kế thừa. Không có lựa chọn này khi sửa dòng mặc định toàn hệ thống."
+                },
+                {
+                    "id": "read",
+                    "title": "Đọc bảng và xem chi tiết",
+                    "text": "",
+                    "steps": [
+                        "Ở Áp dụng cho, kiểm tra chương trình và thông tin buổi học hoặc dòng mặc định.",
+                        "Đọc Cách kiểm duyệt đã thiết lập. Nếu là Dùng thiết lập chung, đọc dòng bên dưới để biết đang theo chương trình hay mặc định hệ thống và cách xử lý được lấy theo.",
+                        "Đọc Bộ cấu hình được áp dụng để biết tên và phiên bản. Không áp dụng (đã tắt) nghĩa thiết lập đang tắt; Chưa xác định không có nghĩa kiểm duyệt đã được bật.",
+                        "Bấm Chi tiết để xem lựa chọn đã lưu, nguồn thiết lập, cách kiểm duyệt và bộ cấu hình trong cửa sổ chi tiết. Bấm Đóng khi xem xong."
+                    ]
+                },
+                {
+                    "id": "change",
+                    "title": "Đổi bộ cấu hình, tắt hoặc trở về thiết lập chung",
+                    "text": "",
+                    "steps": [
+                        "Tìm đúng dòng và bấm Thay đổi.",
+                        "Kiểm tra chương trình và lịch học được giữ cố định trong cửa sổ, tránh thay đổi nhầm dòng.",
+                        "Muốn dùng phiên bản mới, chọn cách kiểm duyệt cần dùng và tên, phiên bản bộ cấu hình đã phát hành.",
+                        "Muốn ngừng JEV cho riêng dòng này, chọn Tắt kiểm duyệt JEV. Muốn bỏ cách thiết lập riêng và dùng lại cấp chung, chọn Dùng thiết lập chung.",
+                        "Bấm Lưu và đồng bộ, kiểm tra bảng và trạng thái đồng bộ. Nếu báo dòng đã tồn tại khi tạo mới, quay lại sửa dòng đang có thay vì tạo lại."
+                    ]
+                },
+                {
+                    "id": "example",
+                    "title": "Ví dụ: buổi học dùng chung và buổi học có thiết lập riêng",
+                    "text": "Chương trình “toan-12” đang chỉ theo dõi. Buổi 2 chọn Dùng thiết lập chung sẽ chỉ theo dõi theo chương trình. Nếu Buổi 3 được đặt riêng là Tắt kiểm duyệt JEV thì JEV vẫn tắt ở Buổi 3. Sau này chương trình đổi sang xử lý vi phạm, Buổi 2 lấy theo thiết lập mới, còn Buổi 3 vẫn tắt cho đến khi bạn thay đổi dòng của Buổi 3.",
+                    "steps": [],
+                    "notice": "Ví dụ mô tả thiết lập được chọn. Khả năng xử lý thật còn phụ thuộc chế độ toàn hệ thống, trạng thái đồng bộ và điều kiện của từng quy tắc."
+                }
+            ],
+            "status": "published",
+            "featured": false,
+            "order": 6,
+            "updatedAt": "2026-11-19T02:00:00Z",
+            "requiredPermission": "jev.view"
+        },
+        {
+            "id": "guide-kiem-tra-trang-thai-dong-bo-jev",
+            "slug": "kiem-tra-trang-thai-dong-bo-jev",
+            "categoryId": "jev",
+            "title": "Kiểm tra trạng thái và đồng bộ cấu hình JEV",
+            "description": "Đọc trạng thái dễ hiểu, biết khi nào cần kiểm tra lại hoặc gửi yêu cầu đồng bộ mà không lưu cấu hình lần nữa.",
+            "audience": "Người xem trạng thái JEV; người có quyền vận hành khi cần gửi lại yêu cầu đồng bộ.",
+            "prerequisites": [
+                "Có quyền xem Kiểm duyệt JEV.",
+                "Cần quyền vận hành JEV để dùng Thử đồng bộ lại."
+            ],
+            "sections": [
+                {
+                    "id": "check",
+                    "title": "Kiểm tra trạng thái hiện tại",
+                    "text": "",
+                    "steps": [
+                        "Vào Kiểm duyệt JEV → Trạng thái đồng bộ.",
+                        "Bấm Kiểm tra lại và chờ phần Đang kiểm tra kết nối kết thúc.",
+                        "Đọc thông báo đầu trang, Kết nối với dịch vụ và Chế độ dịch vụ báo về.",
+                        "Xem Cấu hình tại dịch vụ, Lần dịch vụ nạp cấu hình và Lần kiểm tra gần nhất. Thời gian được hiển thị theo giờ Việt Nam.",
+                        "Đọc Việc cần làm tiếp theo và thực hiện hướng dẫn phù hợp."
+                    ]
+                },
+                {
+                    "id": "buttons",
+                    "title": "Phân biệt hai nút thao tác",
+                    "text": "",
+                    "steps": [],
+                    "table": {
+                        "columns": [
+                            "Nút",
+                            "Khi nào sử dụng"
+                        ],
+                        "rows": [
+                            [
+                                "Kiểm tra lại",
+                                "Lấy phản hồi trạng thái mới để xem kết nối, chế độ và tình trạng nạp cấu hình. Không sửa hoặc lưu lại cấu hình."
+                            ],
+                            [
+                                "Thử đồng bộ lại",
+                                "Yêu cầu dịch vụ nạp cấu hình đã lưu. Dùng khi cấu hình đã lưu nhưng chưa xác nhận đồng bộ; không tạo lại bản nháp hay lưu lặp cùng thay đổi."
+                            ],
+                            [
+                                "Chi tiết kỹ thuật",
+                                "Mở thông tin đối chiếu để gửi bộ phận hỗ trợ khi chưa tự xử lý được; không cần hiểu hoặc chỉnh sửa nội dung trong cửa sổ này."
+                            ]
+                        ]
+                    }
+                },
+                {
+                    "id": "states",
+                    "title": "Hiểu các trạng thái và kết quả",
+                    "text": "",
+                    "steps": [],
+                    "table": {
+                        "columns": [
+                            "Thông báo hoặc trạng thái",
+                            "Ý nghĩa và việc cần làm"
+                        ],
+                        "rows": [
+                            [
+                                "Dịch vụ kiểm duyệt đã phản hồi / Đã nhận phản hồi",
+                                "Đã lấy được thông tin từ dịch vụ đang trả lời. Đọc tiếp chế độ và tình trạng nạp cấu hình; chưa thể kết luận toàn bộ hệ thống đã cập nhật."
+                            ],
+                            [
+                                "Đang tắt kiểm duyệt JEV",
+                                "JEV đang tắt theo thiết lập hoặc giới hạn vận hành. Nếu muốn dùng, kiểm tra Chế độ chung và Thiết lập từng lớp."
+                            ],
+                            [
+                                "Chỉ theo dõi, chưa xử lý vi phạm",
+                                "JEV đang ghi nhận kết quả, chưa thực hiện biện pháp xử lý theo kết quả đó."
+                            ],
+                            [
+                                "Cho phép xử lý vi phạm theo cấu hình",
+                                "Chế độ chung cho phép xử lý. Lớp nào thực sự dùng cách xử lý nào còn phụ thuộc thiết lập của lớp và quy tắc đã chọn."
+                            ],
+                            [
+                                "Đã nạp một bản cấu hình đã lưu",
+                                "Dịch vụ đã nạp một bản cấu hình. Trạng thái này chưa xác nhận đó là bản mới nhất trên toàn bộ hệ thống."
+                            ],
+                            [
+                                "Chưa xác nhận đã nạp cấu hình / Chưa xác nhận được bản cấu hình mới nhất",
+                                "Dùng Thử đồng bộ lại rồi kiểm tra kết quả; nếu vẫn chưa được, mở Chi tiết kỹ thuật để gửi hỗ trợ."
+                            ],
+                            [
+                                "Chưa xác nhận được trạng thái hiện tại",
+                                "Lần kiểm tra mới chưa lấy được phản hồi. Không dùng kết quả cũ để kết luận trạng thái hiện tại."
+                            ],
+                            [
+                                "Đã gửi yêu cầu đồng bộ",
+                                "Yêu cầu đã được ghi nhận, chưa đồng nghĩa toàn bộ hệ thống đã dùng cấu hình mới. Đọc phản hồi kiểm tra bên dưới."
+                            ],
+                            [
+                                "Chưa xác nhận yêu cầu đồng bộ / Chưa gửi được yêu cầu đồng bộ",
+                                "Đọc hướng dẫn, kiểm tra lại kết nối và thử lại khi phù hợp. Không lưu lặp cấu hình chỉ để gửi lại yêu cầu."
+                            ]
+                        ]
+                    }
+                },
+                {
+                    "id": "retry",
+                    "title": "Yêu cầu đồng bộ sau khi đã lưu",
+                    "text": "",
+                    "steps": [
+                        "Kiểm tra thông báo trước đó để biết cấu hình đã được lưu hay chưa. Nếu đã lưu, giữ nguyên cấu hình và mở Trạng thái đồng bộ.",
+                        "Bấm Thử đồng bộ lại một lần, chờ xử lý xong.",
+                        "Đọc cả thông báo yêu cầu đồng bộ và phản hồi kiểm tra trạng thái sau đó.",
+                        "Nếu cần, bấm Kiểm tra lại để lấy phản hồi mới. Đối chiếu chế độ và tình trạng nạp cấu hình với việc bạn vừa thực hiện.",
+                        "Nếu vẫn chưa xác nhận được, bấm Chi tiết kỹ thuật, gửi thông tin cùng tên chương trình hoặc buổi học, thời điểm thao tác và thông báo đã gặp cho người hỗ trợ."
+                    ],
+                    "notice": "Việc kết nối thành công không chứng minh mọi nơi đã đồng bộ hoặc mọi tình huống đánh giá đều hoạt động. Không bật/tắt liên tục hoặc tạo lại cấu hình chỉ vì một lần chưa nhận được phản hồi."
+                },
+                {
+                    "id": "issues",
+                    "title": "Xử lý thông báo chưa sẵn sàng",
+                    "text": "",
+                    "steps": [],
+                    "table": {
+                        "columns": [
+                            "Tình huống",
+                            "Cách xử lý"
+                        ],
+                        "rows": [
+                            [
+                                "Chưa thiết lập đầy đủ kết nối tới dịch vụ kiểm duyệt",
+                                "Gửi thông báo cho người quản trị vận hành hoặc bộ phận hỗ trợ để hoàn tất kết nối. Sau khi được thông báo đã xử lý, bấm Kiểm tra lại. Người dùng không phải nhập thông tin kết nối trong tài liệu này."
+                            ],
+                            [
+                                "Chưa lấy được phản hồi mới",
+                                "Bấm Kiểm tra lại. Nếu vẫn lỗi, mở Chi tiết kỹ thuật và gửi thông tin hỗ trợ; không coi phản hồi thành công trước đó là trạng thái mới."
+                            ],
+                            [
+                                "Cấu hình vận hành chưa hợp lệ hoặc thiếu thông tin sử dụng dịch vụ",
+                                "Đọc Giải thích và gửi Chi tiết kỹ thuật cho người phụ trách. Không sửa thử các giới hạn chung để bỏ qua cảnh báo."
+                            ],
+                            [
+                                "Không dùng được Thử đồng bộ lại",
+                                "Chờ thao tác đang chạy kết thúc hoặc kiểm tra quyền vận hành của tài khoản. Người chỉ có quyền xem vẫn có thể đọc trạng thái được phép."
+                            ]
+                        ]
+                    }
+                }
+            ],
+            "status": "published",
+            "featured": false,
+            "order": 7,
+            "updatedAt": "2026-11-19T02:00:00Z",
+            "requiredPermission": "jev.view"
         }
     ]
 };

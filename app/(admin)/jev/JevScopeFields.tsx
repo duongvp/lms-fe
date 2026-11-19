@@ -1,4 +1,5 @@
 'use client';
+import responsive from './responsive.module.css';
 import React, { useEffect, useState } from 'react';
 import { Alert, Button, Form, Select, Space, Typography, type FormInstance } from 'antd';
 import { jevRequest, type JevCalendar } from '@/services/jevService';
@@ -80,20 +81,20 @@ export default function JevScopeFields({ form, locked, initialCalendarId }: {
     form.setFieldValue('scopeKey', undefined); setCalendars([]); setCurrentCalendar(null); setCalendarSearch(''); setPage(1); setHasMore(false); setCalendarError('');
   };
   return <>
-    <Form.Item name="scopeType" label="Loại phạm vi" rules={[{ required: true }]}>
-      <Select aria-label="Loại phạm vi" disabled={locked} onChange={value => {
+    <Form.Item name="scopeType" label="Áp dụng cho" rules={[{ required: true }]}>
+      <Select popupClassName={responsive.dropdown} aria-label="Áp dụng cho" disabled={locked} onChange={value => {
         resetCalendar(); form.setFieldValue('programCode', undefined); setProgramSearch(''); setProgramError('');
         if (value === 'GLOBAL') { form.setFieldValue('scopeKey', '*'); if (form.getFieldValue('mode') === 'inherit') form.setFieldValue('mode', 'off'); }
-      }} options={[{ value: 'GLOBAL', label: 'Policy mặc định' }, { value: 'CODE', label: 'Theo chương trình' }, { value: 'CALENDAR', label: 'Theo lịch học' }]} />
+      }} options={[{ value: 'GLOBAL', label: 'Mặc định cho các lớp chưa có thiết lập riêng' }, { value: 'CODE', label: 'Toàn bộ chương trình' }, { value: 'CALENDAR', label: 'Một buổi học cụ thể' }]} />
     </Form.Item>
     {scopeType && scopeType !== 'GLOBAL' && <Form.Item name={scopeType === 'CODE' ? 'scopeKey' : 'programCode'} label="Mã chương trình" rules={[{ required: true, message: 'Chọn mã chương trình' }]}>
-      <Select aria-label="Mã chương trình" showSearch disabled={locked} placeholder="Nhập mã để tìm chương trình" filterOption={false} loading={programLoading} onSearch={setProgramSearch}
+      <Select popupClassName={responsive.dropdown} aria-label="Mã chương trình" showSearch disabled={locked} placeholder="Nhập mã để tìm chương trình" filterOption={false} loading={programLoading} onSearch={setProgramSearch}
         onChange={() => { if (scopeType === 'CALENDAR') resetCalendar(); }} options={programOptions}
         notFoundContent={programLoading ? 'Đang tìm…' : programError ? 'Không tải được chương trình' : 'Không tìm thấy chương trình'} />
     </Form.Item>}
     {programError && scopeType !== 'GLOBAL' && <Alert style={{ marginBottom: 16 }} type="error" message={programError} action={<Button size="small" onClick={() => setRetry(value => value + 1)}>Thử lại</Button>} />}
     {scopeType === 'CALENDAR' && <Form.Item name="scopeKey" label="Lịch học" rules={[{ required: true, message: 'Chọn lịch học cần áp dụng' }]}>
-      <Select aria-label="Lịch học" showSearch disabled={locked || !programCode} placeholder={programCode ? 'Tìm theo số buổi hoặc tên bài học' : 'Chọn chương trình trước'}
+      <Select popupClassName={responsive.dropdown} aria-label="Lịch học" showSearch disabled={locked || !programCode} placeholder={programCode ? 'Tìm theo số buổi hoặc tên bài học' : 'Chọn chương trình trước'}
         filterOption={false} loading={calendarLoading} options={calendarOptions} onSearch={value => { if (value === calendarSearch) return; setCalendarSearch(value); setCalendars([]); setPage(1); setHasMore(false); }}
         onChange={value => setCurrentCalendar(calendars.find(row => String(row.id) === value) ?? null)}
         optionLabelProp="label" popupMatchSelectWidth={false} dropdownStyle={{ maxWidth: 'calc(100vw - 32px)' }}
@@ -103,7 +104,7 @@ export default function JevScopeFields({ form, locked, initialCalendarId }: {
     </Form.Item>}
     {calendarError && scopeType === 'CALENDAR' && <Alert style={{ marginBottom: 16 }} type="error" message={calendarError} action={<Button size="small" onClick={() => setRetry(value => value + 1)}>Thử lại</Button>} />}
     {scopeType === 'CALENDAR' && <Space direction="vertical" size={4} style={{ marginBottom: 20 }}>
-      <Typography.Text type="secondary">Mỗi lựa chọn là một lịch học cụ thể. Hệ thống tự xác định lịch, bạn không cần nhập ID.</Typography.Text>
+      <Typography.Text type="secondary">Thiết lập chỉ áp dụng cho buổi học đã chọn. Kiểm tra tên bài và ngày giờ để tránh chọn nhầm buổi.</Typography.Text>
       {selectedCalendar && <Typography.Text>{selectedCalendar.code} · {jevCalendarLabel(selectedCalendar)}</Typography.Text>}
     </Space>}
   </>;

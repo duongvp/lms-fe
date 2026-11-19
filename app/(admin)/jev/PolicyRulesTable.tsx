@@ -1,6 +1,8 @@
 'use client';
+import Table from '@/components/ui/Table';
+import responsive from './responsive.module.css';
 import React, { useState } from 'react';
-import { Alert, Button, Checkbox, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Checkbox, Select, Space, Tag, Typography } from 'antd';
 import { categoryName, contextNames, incidentLabel, levelName } from './policyLabels';
 import styles from './policy.module.css';
 
@@ -23,7 +25,7 @@ export default function PolicyRulesTable({ policy, actionNames, onEdit }: { poli
       { title: 'Bối cảnh lớp', render: (_, row: any) => row.conditions?.modes?.map((mode: string) => contextNames[mode] ?? mode).join(', ') },
       { title: 'Lần xảy ra', render: (_, row: any) => row.conditions ? incidentLabel(row.conditions.minPriorCount, row.conditions.maxPriorCount) : '—' },
       { title: 'Cách xử lý', render: (_, row: any) => <Space size={[0, 4]} wrap>{row.actions.map((action: string) => <Tag key={action} color={row.gates[action]?.enabled ? 'blue' : undefined}>{actionNames[action] ?? action}{!row.gates[action]?.enabled && ' (tắt)'}</Tag>)}</Space> },
-      { title: '', width: 90, render: (_, row: any) => <Button onClick={() => onEdit(row.sourceIndex)}>Chi tiết</Button> },
+      { title: 'Thao tác', width: 90, render: (_, row: any) => <Button onClick={() => onEdit(row.sourceIndex)}>Chi tiết</Button> },
     ]} />
     <Checkbox checked={showResolution} onChange={e => setShowResolution(e.target.checked)}>Hiện cả quy tắc khi AI trả nhóm và mức không phù hợp với nhau</Checkbox>
   </Space>;
