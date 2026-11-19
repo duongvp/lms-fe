@@ -85,43 +85,12 @@ import type {
 import { cleanFilterValues, downloadBlob } from "./lesson.utils";
 import { fetchAllPages } from "@/lib/fetchAllPages";
 
-// ✅ Hàm debounce helper
-function useDebounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const fnRef = useRef(fn);
-  fnRef.current = fn;
-
-  useEffect(() => {
-    const cancel = () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = null;
-    };
-    window.addEventListener("lms:route-navigation-start", cancel);
-    return () => {
-      window.removeEventListener("lms:route-navigation-start", cancel);
-      cancel();
-    };
-  }, []);
-
-  return useCallback(
-    (...args: Parameters<T>) => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
-      timerRef.current = setTimeout(() => {
-        fnRef.current(...args);
-      }, delay);
-    },
-    [delay],
-  );
-}
-
 const buildLessonUrl = (values: LessonFilterValues, page = 1) => {
   const cleaned = cleanFilterValues(values);
   const params = new URLSearchParams();
   const program = String(cleaned.subject_code || "").trim();
   if (program) params.set("program", program);
-  if (cleaned.calendar_source) params.set("calendar_source", cleaned.calendar_source);
+  if (cleaned.calendar_source === "feed") params.set("calendar_source", "feed");
   if (cleaned.grade !== undefined) params.set("grade", String(cleaned.grade));
   if (cleaned.subject) params.set("subject", String(cleaned.subject).trim());
   if (cleaned.from_learn_number !== undefined) {
@@ -145,7 +114,12 @@ const Page = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [totalItems, setTotalItems] = useState(0);
-  const [searchText, setSearchText] = useState("");
+  // Giữ bản nháp ngoài state của trang để không render lại bảng mỗi ký tự.
+  const searchTextRef = useRef("");
+  const [searchResetKey, setSearchResetKey] = useState(0);
+  const handleSearchValueChange = useCallback((value: string) => {
+    searchTextRef.current = value;
+  }, []);
   const [filterValues, setFilterValues] = useState<LessonFilterValues>({});
   const [submittedFilterValues, setSubmittedFilterValues] =
     useState<LessonFilterValues>({});
@@ -265,6 +239,7 @@ const Page = () => {
       pendingLessonUrlRef.current !== currentUrl
     )
       return;
+    const isOwnUrlUpdate = pendingLessonUrlRef.current === currentUrl;
     pendingLessonUrlRef.current = null;
     const urlProgram = String(searchParams.get("program") || "").trim();
     const sharedProgram = String(
@@ -320,7 +295,11 @@ const Page = () => {
     }
     setFilterValues(values);
     setSubmittedFilterValues(values);
-    setSearchText(keyword);
+    // URL xác nhận tìm kiếm trước đó không được ghi đè chữ vừa gõ tiếp.
+    if (!isOwnUrlUpdate) {
+      searchTextRef.current = keyword;
+      setSearchResetKey((key) => key + 1);
+    }
     setCurrentPage(page);
     setHasSearched(true);
     const canonicalUrl = buildLessonUrl(values, page);
@@ -362,24 +341,6 @@ const Page = () => {
     .filter((item) => item.editable)
     .map((item) => item.field.fieldCode);
   const canEditTitle = editableFormFieldCodes.includes("lesson_name");
-
-  // ✅ Hàm thực sự submit filter (được debounce)
-  const doSearch = useCallback(
-    (keyword: string) => {
-      if (!hasSearched) return;
-      const nextValues = cleanFilterValues({
-        ...submittedFilterValues,
-        keyword,
-      });
-      setSubmittedFilterValues(nextValues);
-      setCurrentPage(1);
-      replaceLessonUrl(nextValues);
-    },
-    [hasSearched, submittedFilterValues, replaceLessonUrl],
-  );
-
-  // ✅ Debounce hàm doSearch với 500ms
-  const debouncedDoSearch = useDebounce(doSearch, 500);
 
   const lessonParams = useMemo<LessonListParams>(() => {
     if (!hasSearched) return {} as LessonListParams;
@@ -616,16 +577,17 @@ const Page = () => {
     }
   }, [moduleFieldsQuery.data]);
 
-  // ✅ Sửa thành async để khớp với type yêu cầu
+  // CustomSearchInput đã debounce 300 ms; chỉ cập nhật bảng sau khi ngừng gõ.
   const handleSearch = useCallback(
-    async (value: string) => {
-      setSearchText(value);
-      setFilterValues((prev) => cleanFilterValues({ ...prev, keyword: value }));
+    async (keyword: string) => {
+      if (!hasSearched || keyword !== searchTextRef.current) return;
+      const nextValues = cleanFilterValues({ ...submittedFilterValues, keyword });
+      setFilterValues((prev) => cleanFilterValues({ ...prev, keyword }));
+      setSubmittedFilterValues(nextValues);
       setCurrentPage(1);
-
-      debouncedDoSearch(value);
+      replaceLessonUrl(nextValues);
     },
-    [debouncedDoSearch],
+    [hasSearched, submittedFilterValues, replaceLessonUrl],
   );
 
   const handleFilter = (values: LessonFilterValues) => {
@@ -644,7 +606,8 @@ const Page = () => {
       });
       return;
     }
-    const cleaned = cleanFilterValues({ ...values, keyword: searchText });
+    const cleaned = cleanFilterValues({ ...values, keyword: searchTextRef.current });
+    setSearchResetKey((key) => key + 1);
     setFilterValues(cleaned);
     setSubmittedFilterValues(cleaned);
     setHasSearched(true);
@@ -664,7 +627,8 @@ const Page = () => {
       subject_code: program || undefined,
       keyword: "",
     });
-    setSearchText("");
+    searchTextRef.current = "";
+    setSearchResetKey((key) => key + 1);
     setFilterValues(cleaned);
     setSubmittedFilterValues(cleaned);
     setHasSearched(Boolean(program));
@@ -845,7 +809,8 @@ const Page = () => {
         subject: program?.subject_name ?? payload.subject_name,
         keyword: "",
       });
-      setSearchText("");
+      searchTextRef.current = "";
+      setSearchResetKey((key) => key + 1);
       setFilterValues(nextFilters);
       setSubmittedFilterValues(nextFilters);
       setHasSearched(true);
@@ -1162,7 +1127,7 @@ const Page = () => {
       const params: LessonExportParams = { format };
       if (scope === "filter") {
         Object.assign(params, filterValues, {
-          keyword: searchText || filterValues.keyword,
+          keyword: searchTextRef.current,
           sort_by: sortState.sort_by,
           sort_order: sortState.sort_by
             ? sortState.sort_order === "descend"
@@ -1408,7 +1373,9 @@ const Page = () => {
       ) : secondaryUnlocked ? (
         <>
           <LessonActions
-            searchValue={searchText}
+            searchValue={searchTextRef.current}
+            onSearchValueChange={handleSearchValueChange}
+            searchResetKey={searchResetKey}
             canCreate={canCreate}
             canEdit={canEdit}
             selectedCount={selectedRowKeys.length}

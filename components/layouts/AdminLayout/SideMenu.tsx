@@ -152,6 +152,8 @@ export const rememberProgramContextUrl = (url: string) => {
     const program = String(parsed.searchParams.get("program") || "").trim();
     // Chỉ Lịch học hỗ trợ ngữ cảnh liên Chương trình.
     if (!program && parsed.pathname !== "/schedule") return;
+    // Chỉ ghi nhớ bộ lọc; từ khóa tìm kiếm được bỏ khi quay lại các trang này.
+    parsed.searchParams.delete("q");
     window.sessionStorage.setItem(
         programContextStorageKey(parsed.pathname, program),
         `${parsed.pathname}${parsed.search}`
@@ -182,12 +184,20 @@ export const withProgramContext = (path: string, programCode?: string | null) =>
         ? rememberedUrl.slice(pathname.length + 1)
         : "";
     const params = new URLSearchParams(rememberedQuery || query);
+    // Bỏ cả từ khóa trong lịch sử phiên cũ, nhưng vẫn hỗ trợ link có q tường minh.
+    if (rememberedQuery) {
+        params.delete("q");
+    }
 
     if (isProgramContextPath(path)) {
         if (program) params.set("program", program);
         else params.delete("program");
-        if (pathname === "/schedule" && program) {
-            params.set("calendar_source", calendarSourceFromCode(program));
+        if (pathname === "/schedule" || pathname === "/lessons") {
+            // Dùng cùng quy ước với trang Lịch học và Đề cương: Livestream là
+            // mặc định, chỉ ghi Feed để không phải sửa URL ngay sau khi mở.
+            const source = program ? calendarSourceFromCode(program) : params.get("calendar_source");
+            if (source === "feed") params.set("calendar_source", "feed");
+            else params.delete("calendar_source");
         }
     } else {
         params.delete("program");

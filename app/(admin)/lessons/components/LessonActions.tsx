@@ -39,6 +39,8 @@ interface LessonActionsProps {
   renumberEnabled: boolean;
   onSearch: (value: string) => Promise<void>;
   searchValue: string;
+  onSearchValueChange: (value: string) => void;
+  searchResetKey: number;
   onCreate: () => void;
   onCreateProgram: () => void;
   onImportProgram: () => void;
@@ -67,6 +69,8 @@ const LessonActions = ({
   renumberEnabled,
   onSearch,
   searchValue,
+  onSearchValueChange,
+  searchResetKey,
   onCreate,
   onCreateProgram,
   onImportProgram,
@@ -276,6 +280,8 @@ const LessonActions = ({
                 <CustomSearchInput
                   placeholder="Tìm theo tên bài học..."
                   value={searchValue}
+                  onValueChange={onSearchValueChange}
+                  resetKey={searchResetKey}
                   fetchApi={onSearch}
                 />
               </div>
@@ -329,6 +335,8 @@ const LessonActions = ({
         <SearchAndActionsBar
           onSearch={onSearch}
           searchValue={searchValue}
+          onSearchValueChange={onSearchValueChange}
+          searchResetKey={searchResetKey}
           placeholder="Tìm theo tên bài học..."
           titleBtnAdd="Bài học"
           handleAddBtn={canCreate && !reorderMode ? onCreate : undefined}
