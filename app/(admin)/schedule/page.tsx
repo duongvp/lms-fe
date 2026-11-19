@@ -1,6 +1,8 @@
 "use client";
 import { buildScheduleColumnFilterParams, normalizeScheduleAssistants, SCHEDULE_PROGRESS_FILTERS } from "@/helper/scheduleColumnFilters";
 import { runClassroomAssignmentItems, type BatchClassroomAssignmentItem } from "@/helper/batchClassroomAssignment";
+import { runEvgProvisionItems, summarizeEvgProvision, type EvgProvisionItem } from "@/helper/batchEvgProvision";
+import QuickEvgBannerModal from "./components/Modal/QuickEvgBannerModal";
 import { calendarSourceFromCode } from "@/helper/lesson";
 import { cleanFilterValues, buildScheduleApiParams, buildCalendarRoomReportParams, buildScheduleUrl, type ScheduleFilterValues } from "@/helper/scheduleFilters";
 import { isYesterdayRegistrationRange } from "@/ultils/registrationAuditDate";
@@ -21,7 +23,7 @@ import type { FilterDropdownProps } from "antd/es/table/interface";
 import SearchAndActionsBar from "@/components/shared/SearchAndActionBar";
 import CustomSearchInput from "@/components/ui/Inputs/CustomSearchInput";
 import { Select as AntSelect, notification, Alert, Card, Collapse, Form, Input, InputNumber, List, Button, Checkbox, Space, Modal, Radio, Row, Col, Empty, FloatButton, Grid, Tooltip, Dropdown, Typography, Calendar as AntCalendar, Badge, Segmented, Tag, Progress, Spin } from "antd";
-import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, SearchOutlined, SortAscendingOutlined, SortDescendingOutlined, MoreOutlined, ApartmentOutlined, CloudUploadOutlined, SwapOutlined, LinkOutlined, ClockCircleOutlined, UserOutlined, EyeOutlined, FileTextOutlined, PlusOutlined } from "@ant-design/icons";
+import { EditOutlined, SaveOutlined, CloseOutlined, CopyOutlined, DeleteOutlined, CalendarOutlined, ReloadOutlined, DatabaseOutlined, DownOutlined, InfoCircleOutlined, UpOutlined, DownloadOutlined, UploadOutlined, FilterOutlined, SearchOutlined, SortAscendingOutlined, SortDescendingOutlined, MoreOutlined, ApartmentOutlined, CloudUploadOutlined, SwapOutlined, LinkOutlined, ClockCircleOutlined, UserOutlined, EyeOutlined, FileTextOutlined, PictureOutlined, PlusOutlined } from "@ant-design/icons";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -1367,22 +1369,11 @@ const Page = () => {
     const [deletingSelectedSchedules, setDeletingSelectedSchedules] = useState(false);
     const [resendingToHocmai, setResendingToHocmai] = useState(false);
     const [provisioningEvgBulk, setProvisioningEvgBulk] = useState(false);
-    const [evgProgress, setEvgProgress] = useState<null | {
-        current: number;
-        total: number;
-        created: number;
-        skipped: number;
-        failed: number;
-        errors: Array<{
-            calendar_id: number;
-            code?: string;
-            learn_number?: number;
-            lesson_name?: string;
-            teacher?: string;
-            start_time?: string;
-            message: string;
-        }>;
-    }>(null);
+    const [evgProgress, setEvgProgress] = useState<ReturnType<typeof summarizeEvgProvision> | null>(null);
+    const evgItemsRef = useRef<EvgProvisionItem[]>([]);
+    const evgRunRef = useRef(false);
+    const evgSettingsRef = useRef<{ mode: EvgProvisionMode; bannerUrl?: string }>({ mode: "overwrite" });
+    const [quickBannerTarget, setQuickBannerTarget] = useState<EvgProvisionItem | null>(null);
     const [evgProgressOpen, setEvgProgressOpen] = useState(false);
     const [refreshingScheduleList, setRefreshingScheduleList] = useState(false);
     const [classroomAssignmentCalendarId, setClassroomAssignmentCalendarId] = useState<string | number | null>(null);
@@ -3159,7 +3150,41 @@ const Page = () => {
         });
     };
 
+    const runEvgBatch = async (targets: EvgProvisionItem[], retry = false) => {
+        if (!targets.length || evgRunRef.current) return;
+        evgRunRef.current = true;
+        setProvisioningEvgBulk(true);
+        setEvgProgressOpen(true);
+        if (!retry) setWorkflowEvgSelection("");
+        try {
+            const items = await runEvgProvisionItems(targets, evgSettingsRef.current.mode, evgSettingsRef.current.bannerUrl, {
+                previousItems: retry ? evgItemsRef.current : undefined,
+                apply: provisionLivestreamEvg,
+                onChange: next => {
+                    evgItemsRef.current = next;
+                    setEvgProgress(summarizeEvgProvision(next));
+                },
+            });
+            if (items.every(item => item.status === "created" || item.status === "skipped")) {
+                setWorkflowEvgSelection(items.map(item => item.calendar_id).sort((left, right) => left - right).join(","));
+            }
+            // Giữ lựa chọn và kết quả gốc để có thể thử lại mà không tạo lại lịch thành công.
+            if (hasSearched) {
+                try { await refreshSchedules(); }
+                catch { api.warning({ message: "Đã lưu kết quả EVG; chưa tải lại được danh sách lịch" }); }
+            }
+        } finally {
+            evgRunRef.current = false;
+            setProvisioningEvgBulk(false);
+        }
+    };
+    const retryEvg = (calendarId?: number) => {
+        const targets = evgItemsRef.current.filter(item => item.status === "error" && (calendarId === undefined || item.calendar_id === calendarId));
+        void runEvgBatch(targets, true);
+    };
+
     const handleProvisionEvgBulk = () => {
+        if (evgRunRef.current) return;
         const ids = selectedRowKeys.map(Number).filter((id) => Number.isInteger(id) && id > 0);
         if (!ids.length) return;
         if (blockedEvgRows.length) {
@@ -3173,7 +3198,6 @@ const Page = () => {
         let selectedMode: EvgProvisionMode = "overwrite";
         let bannerUrlOverride = "";
         let isBannerUrlOverrideValid = true;
-        const workflowTargetSelection = [...ids].sort((left, right) => left - right).join(",");
         Modal.confirm({
             title: `Xử lý EVG cho ${ids.length} lịch`,
             width: 620,
@@ -3202,55 +3226,21 @@ const Page = () => {
             cancelText: "Hủy",
             onCancel: resumeWorkflowAfterAction,
             onOk: () => {
+                if (evgRunRef.current) return;
                 if (!isBannerUrlOverrideValid) {
                     api.warning({ message: "URL background EVG không hợp lệ" });
                     return Promise.reject(new Error("URL background EVG không hợp lệ"));
                 }
-                setEvgProgress({ current: 0, total: ids.length, created: 0, skipped: 0, failed: 0, errors: [] });
-                setEvgProgressOpen(true);
-                setProvisioningEvgBulk(true);
-                void (async () => {
-                    let progress = { current: 0, total: ids.length, created: 0, skipped: 0, failed: 0, errors: [] as NonNullable<typeof evgProgress>["errors"] };
-                    try {
-                        // EVG trả 429 khi tạo dồn nhiều stream. Xử lý tuần tự
-                        // để tiến trình ổn định và không vượt rate limit.
-                        for (let index = 0; index < ids.length; index += 1) {
-                            const batch = ids.slice(index, index + 1);
-                            const results = await Promise.all(batch.map(async (calendarId) => {
-                                try {
-                                    const response: any = await provisionLivestreamEvg(calendarId, selectedMode, bannerUrlOverride || undefined);
-                                    return { calendarId, result: response?.data || {}, error: null };
-                                } catch (error: any) {
-                                    return { calendarId, result: null, error: String(error?.message || error) };
-                                }
-                            }));
-                            results.forEach(({ calendarId, result, error }) => {
-                                progress.current += 1;
-                                if (error) {
-                                    progress.failed += 1;
-                                    const metadata = selectedMetadata.get(calendarId);
-                                    progress.errors.push({
-                                        calendar_id: calendarId,
-                                        code: metadata?.code,
-                                        learn_number: metadata?.learn_number,
-                                        lesson_name: metadata?.lesson_name,
-                                        teacher: metadata?.teacher,
-                                        start_time: metadata?.start_time,
-                                        message: error,
-                                    });
-                                } else if (result?.skipped) progress.skipped += 1;
-                                else progress.created += 1;
-                            });
-                            progress = { ...progress, errors: [...progress.errors] };
-                            setEvgProgress(progress);
-                        }
-                        if (!progress.failed) setWorkflowEvgSelection(workflowTargetSelection);
-                        setSelectedRowKeys([]);
-                        if (hasSearched) await refreshSchedules();
-                    } finally {
-                        setProvisioningEvgBulk(false);
-                    }
-                })();
+                evgSettingsRef.current = { mode: selectedMode, bannerUrl: bannerUrlOverride || undefined };
+                const items: EvgProvisionItem[] = ids.map(calendar_id => {
+                    const record = selectedMetadata.get(calendar_id);
+                    return {
+                        calendar_id, code: record?.code, learn_number: record?.learn_number,
+                        lesson_name: record?.lesson_name, teacher: record?.teacher,
+                        start_time: record?.start_time, status: "pending",
+                    };
+                });
+                void runEvgBatch(items);
             },
         });
     };
@@ -5528,9 +5518,10 @@ const Page = () => {
                         }
                     }}
                     footer={(
-                        <Space wrap>
+                        <Space className="schedule-progress-footer" size={8} wrap>
                             {batchClassroomItems.some((item) => item.status === "error") && (
                                 <Button
+                                    className="schedule-recovery-action schedule-recovery-action-retry"
                                     icon={<ReloadOutlined />}
                                     disabled={batchClassroomAssigning}
                                     onClick={() => void runBatchClassroomAssignment(
@@ -5630,18 +5621,18 @@ const Page = () => {
                                     key: "result",
                                     width: 300,
                                     render: (_, item) => (
-                                        <Space direction="vertical" size={2}>
+                                        <Space direction="vertical" size={6}>
                                             {item.status === "pending" && <Tag>Chờ xử lý</Tag>}
                                             {item.status === "running" && <Tag color="processing">Đang chia lớp</Tag>}
                                             {item.status === "success" && <Tag color="success">Thành công</Tag>}
                                             {item.status === "skipped" && <Tag color="warning">Bỏ qua</Tag>}
                                             {item.status === "error" && (
                                                 <Space size={8}>
-                                                    <Tag color="error">Lỗi</Tag>
+                                                    <Tag color="error" style={{ marginInlineEnd: 0 }}>Lỗi</Tag>
                                                     <Tooltip title={batchClassroomAssigning ? "Chờ lượt chia lớp hiện tại hoàn tất để thử lại" : "Chỉ chạy lại lịch này, giữ nguyên chế độ cập nhật đã chọn"}>
                                                         <span>
                                                             <Button
-                                                                size="small"
+                                                                className="schedule-recovery-action schedule-recovery-action-retry"
                                                                 icon={<ReloadOutlined />}
                                                                 disabled={batchClassroomAssigning}
                                                                 onClick={() => void runBatchClassroomAssignment([item], batchClassroomUpdateMode, true)}
@@ -5918,7 +5909,11 @@ const Page = () => {
                 <Modal
                     title="Tiến trình tạo/đồng bộ EVG"
                     open={evgProgressOpen}
-                    footer={<Button type="primary" disabled={provisioningEvgBulk} onClick={() => { setEvgProgressOpen(false); resumeWorkflowAfterAction(); }}>Đóng</Button>}
+                    width={520}
+                    footer={<Space className="schedule-progress-footer" size={8} wrap>
+                        {Boolean(evgProgress?.failed) && <Button className="schedule-recovery-action schedule-recovery-action-retry" icon={<ReloadOutlined />} disabled={provisioningEvgBulk || Boolean(quickBannerTarget)} onClick={() => retryEvg()}>Thử lại tất cả lịch lỗi</Button>}
+                        <Button type="primary" disabled={provisioningEvgBulk} onClick={() => { setEvgProgressOpen(false); resumeWorkflowAfterAction(); }}>Đóng</Button>
+                    </Space>}
                     closable={!provisioningEvgBulk}
                     maskClosable={!provisioningEvgBulk}
                     onCancel={() => { if (!provisioningEvgBulk) { setEvgProgressOpen(false); resumeWorkflowAfterAction(); } }}
@@ -5945,19 +5940,26 @@ const Page = () => {
                             <List
                                 size="small"
                                 dataSource={evgProgress.errors}
-                                renderItem={(item) => <List.Item>
-                                    <Space direction="vertical" size={2} style={{ width: "100%" }}>
+                                renderItem={(item) => <List.Item style={{ padding: "12px 0", alignItems: "flex-start" }}>
+                                    <Space direction="vertical" size={6} style={{ width: "100%", minWidth: 0 }}>
                                         <Space size={6} wrap>
                                             <Tag color="blue">{item.code || "Chưa rõ chương trình"}</Tag>
                                             <Typography.Text strong>
                                                 {item.learn_number ? `Bài ${item.learn_number}` : "Chưa rõ bài"} · {item.lesson_name || "Chưa có tên bài"}
                                             </Typography.Text>
                                         </Space>
-                                        <Typography.Text type="secondary">
+                                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                                             ID lịch {item.calendar_id} · GV: {item.teacher || "-"}
                                             {item.start_time ? ` · ${dayjs(item.start_time).format("DD/MM/YYYY HH:mm")}` : ""}
                                         </Typography.Text>
-                                        <Typography.Text type="danger">{item.message}</Typography.Text>
+                                        <Typography.Text type="danger" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: 13, lineHeight: 1.6 }}>{item.message}</Typography.Text>
+                                        <Space size={8} wrap style={{ marginTop: 6 }}>
+                                            <Button className="schedule-recovery-action schedule-recovery-action-retry" icon={<ReloadOutlined />} disabled={provisioningEvgBulk || Boolean(quickBannerTarget)} onClick={() => retryEvg(item.calendar_id)}>Thử lại</Button>
+                                            {item.code && item.teacher && /banner|background/i.test(item.message || "")
+                                                && hasPermission(PermissionKey.PROGRAM_TEACHER_BANNER_VIEW)
+                                                && (hasPermission(PermissionKey.PROGRAM_TEACHER_BANNER_CREATE) || hasPermission(PermissionKey.PROGRAM_TEACHER_BANNER_EDIT))
+                                                && <Button className="schedule-recovery-action" icon={<PictureOutlined />} disabled={provisioningEvgBulk} onClick={() => setQuickBannerTarget(item)}>Tạo banner nhanh</Button>}
+                                        </Space>
                                     </Space>
                                 </List.Item>}
                             />
@@ -5965,6 +5967,7 @@ const Page = () => {
                     </Space>}
                 </Modal>
             </Form>
+            <QuickEvgBannerModal target={quickBannerTarget} onClose={() => setQuickBannerTarget(null)} onSaved={() => setQuickBannerTarget(null)} />
         </div>
     );
 };
