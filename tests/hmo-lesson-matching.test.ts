@@ -382,3 +382,26 @@ test('chỉ cập nhật Course đã khớp, giữ mapping cũ của Course thi�
     assert.deepEqual(mergeHmoMappingKeys(currentKeys, options), ['9131::3342::old-b', '9056::3297::179222']);
     assert.deepEqual(mergeHmoMappingKeys([], options), ['9056::3297::179222']);
 });
+
+test('chọn xóa: chỉ giữ các Course đã khớp, kể cả khi mapping cũ không còn trong options', () => {
+    const currentKeys = ['11::101::171316', '22::202::171350', '33::303::171399'];
+    const options = [{ package_id: '11', course_id: '101', lesson_id: '171388' }];
+    assert.deepEqual(mergeHmoMappingKeys(currentKeys, options, 'remove'), ['11::101::171388']);
+    assert.deepEqual(mergeHmoMappingKeys(currentKeys, options, 'keep'), [
+        '22::202::171350', '33::303::171399', '11::101::171388',
+    ]);
+});
+
+test('chọn xóa: không Course nào khớp thì danh sách mới rỗng, không sửa snapshot cũ', () => {
+    const currentKeys = ['11::101::171316', '22::202::171350'];
+    assert.deepEqual(mergeHmoMappingKeys(currentKeys, [], 'remove'), []);
+    assert.deepEqual(currentKeys, ['11::101::171316', '22::202::171350']);
+    assert.deepEqual(mergeHmoMappingKeys([], [], 'remove'), []);
+});
+
+test('chọn xóa vẫn giữ đầy đủ các Package của Lesson đã khớp và bỏ mapping thiếu Course', () => {
+    assert.deepEqual(mergeHmoMappingKeys(['11::::171316'], [
+        { package_id: '11', course_id: '101', lesson_id: '171388' },
+        { package_id: '12', course_id: '101', lesson_id: '171388' },
+    ], 'remove'), ['11::101::171388', '12::101::171388']);
+});

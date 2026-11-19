@@ -52,6 +52,20 @@ import {
 } from '@/helper/hmoLessonMatching';
 
 const { Text, Title } = Typography;
+
+const UnmatchedHmoMappingPolicy = ({ disabled }: { disabled: boolean }) => (
+    <Form.Item name="hmo_unmatched_mapping_policy" label="Khi không tìm được Lesson ID phù hợp"
+        style={{ marginTop: 12, marginBottom: 0 }}
+        extra="Áp dụng khi bấm Đồng bộ. Thay đổi chỉ được lưu sau Xem trước → Xác nhận.">
+        <Radio.Group disabled={disabled}>
+            <Space direction="vertical" size={4}>
+                <Radio value="keep">Giữ mapping cũ khi không tìm thấy kết quả (mặc định)</Radio>
+                <Radio value="remove">Xóa mapping cũ khi không tìm thấy kết quả</Radio>
+            </Space>
+        </Radio.Group>
+    </Form.Item>
+);
+
 const SEPARATE_RENDER_BATCH_SIZE = 25;
 const isScheduleTimeLocked = (record: any) => Number(record?.lesson_status) === 1
     || !record?.start_time || !dayjs(record.start_time).isAfter(dayjs());
@@ -787,6 +801,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 enable_time: false,
                 enable_lesson_name_pattern: false,
                 hmo_sync_name_source: 'lesson',
+                hmo_unmatched_mapping_policy: 'keep',
                 canceled_lesson_name_prefix: DEFAULT_CANCELED_LESSON_PREFIX,
                 canceled_lesson_name_suffix: '',
                 new_lesson_name_prefix: DEFAULT_MAKEUP_LESSON_PREFIX,
@@ -1023,6 +1038,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         const syncNameSource = form.getFieldValue('hmo_sync_name_source') === 'calendar'
             ? 'calendar'
             : 'lesson';
+        const unmatchedPolicy = form.getFieldValue('hmo_unmatched_mapping_policy') === 'remove' ? 'remove' : 'keep';
         if (!rows.length) {
             message.warning('Chưa chọn lịch học để đồng bộ Lesson ID HMO');
             return;
@@ -1035,6 +1051,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
         setSyncingHmoLessonIds(true);
         try {
             const optionsByLesson = new Map<string, HocmaiSectionOption[]>();
+            const hmoLoadErrors = new Map<string, string>();
             const contexts = lessonContexts.filter((context) => rows.some(
                 (row) => String(row.session_id || '') === context.lessonId
             ));
@@ -1061,6 +1078,12 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 const errorsByLessonId = response?.data?.errors_by_lesson_id || {};
                 programContexts.forEach((context) => {
                     const options = byLessonId[context.lessonId];
+                    if (errorsByLessonId[context.lessonId]) {
+                        const errors = errorsByLessonId[context.lessonId];
+                        hmoLoadErrors.set(context.lessonId, Array.isArray(errors) ? errors.join('; ') : String(errors));
+                    } else if (!Array.isArray(options)) {
+                        hmoLoadErrors.set(context.lessonId, 'Không nhận được danh sách Lesson ID HMO hợp lệ');
+                    }
                     optionsByLesson.set(
                         context.lessonId,
                         errorsByLessonId[context.lessonId]
@@ -1077,6 +1100,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             const nextMappings: Record<string, string[]> = {};
             const notes: Record<string, { type: 'success' | 'warning'; message: string }> = {};
             let syncedCount = 0;
+            let removedMappingCount = 0;
             const rowsByLesson = new Map<string, any[]>();
             rows.forEach((row) => {
                 const lessonId = String(row.session_id || '');
@@ -1084,6 +1108,15 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             });
 
             rowsByLesson.forEach((lessonRows, lessonId) => {
+                if (!lessonId || !optionsByLesson.has(lessonId) || hmoLoadErrors.has(lessonId)) {
+                    lessonRows.forEach((row) => {
+                        notes[String(row.id)] = {
+                            type: 'warning',
+                            message: `Không thể tải Lesson ID HMO${hmoLoadErrors.get(lessonId) ? `: ${hmoLoadErrors.get(lessonId)}` : ''}. Giữ nguyên mapping cũ; không áp dụng xóa khi dữ liệu chưa tải được.`,
+                        };
+                    });
+                    return;
+                }
                 const availableOptions = uniqueHmoOptions(optionsByLesson.get(lessonId) || [])
                     .sort((left, right) => String(left.lesson_id).localeCompare(String(right.lesson_id), 'vi', { numeric: true }));
                 const orderedRows = [...lessonRows].sort((left, right) => dayjs(left.start_time).valueOf() - dayjs(right.start_time).valueOf());
@@ -1122,17 +1155,23 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     const rowMatches = matching.matchesByRow.get(String(row.id));
                     const unmatchedCourseIds = courseIds.filter((courseId) => !rowMatches?.has(courseId));
                     const matchedCourseIdsForRow = courseIds.filter((courseId) => rowMatches?.has(courseId));
-                    // Mỗi Course được gán độc lập cho từng lịch đã khớp.
-                    if (matchedCourseIdsForRow.length) {
+                    const unmatchedOldKeys = currentKeys.filter((key) => !matchedCourseIdsForRow.includes(key.split('::')[1]));
+                    const removedCount = unmatchedPolicy === 'remove' ? unmatchedOldKeys.length : 0;
+                    const removalNote = removedCount
+                        ? ` Đã gỡ tạm ${removedCount} mapping cũ ở các Course không khớp; cần Xem trước và Xác nhận để lưu.`
+                        : '';
+                    // Ghi cả mảng rỗng để việc xóa được đưa vào preview/payload.
+                    if (matchedCourseIdsForRow.length || removedCount) {
                         nextMappings[calendarId] = mergeHmoMappingKeys(currentKeys, matchedCourseIdsForRow.flatMap(
                             (courseId) => rowMatches!.get(courseId)!.options
-                        ));
-                        syncedCount += 1;
+                        ), unmatchedPolicy);
+                        if (matchedCourseIdsForRow.length) syncedCount += 1;
+                        removedMappingCount += removedCount;
                     }
                     if (courseIds.length && !unmatchedCourseIds.length) {
                         notes[String(row.id)] = {
                             type: 'success',
-                            message: `Đã gán tạm ${summarizeSelectedHmoMappings(nextMappings[String(row.id)])} trong ${courseIds.length} Course; cần Xem trước và Xác nhận để lưu.`,
+                            message: `Đã gán tạm ${summarizeSelectedHmoMappings(nextMappings[String(row.id)])} trong ${courseIds.length} Course; cần Xem trước và Xác nhận để lưu.${removalNote}`,
                         };
                         return;
                     }
@@ -1167,7 +1206,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         : hmoCourseMatchSummary(matching);
                     notes[String(row.id)] = {
                         type: 'warning',
-                        message: `${matchedPrefix}${warningDetails}.${currentKeys.some((key) => !matchedCourseIdsForRow.includes(key.split('::')[1])) ? ' Giữ nguyên mapping đã có ở các Course chưa tìm được kết quả phù hợp.' : ''}`,
+                        message: `${matchedPrefix}${warningDetails}.${removalNote}${unmatchedPolicy === 'keep' && unmatchedOldKeys.length ? ' Giữ nguyên mapping đã có ở các Course chưa tìm được kết quả phù hợp.' : ''}`,
                     };
                 });
             });
@@ -1197,9 +1236,9 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             }
             setHmoSyncNotes(notes);
             setPreviewRows([]);
-            syncedCount
-                ? message.success(`Đã gán tạm Lesson ID HMO cho ${syncedCount} lịch. Bấm Xem trước rồi Xác nhận cập nhật để lưu.`)
-                : message.warning('Không có lịch nào đủ điều kiện tự đồng bộ; vui lòng chọn thủ công.');
+            if (syncedCount || removedMappingCount) {
+                message[removedMappingCount ? 'warning' : 'success'](`${syncedCount ? `Đã gán tạm Lesson ID HMO cho ${syncedCount} lịch. ` : ''}${removedMappingCount ? `Đã gỡ tạm ${removedMappingCount} mapping cũ không khớp. ` : ''}Bấm Xem trước rồi Xác nhận cập nhật để lưu.`);
+            } else message.warning('Không có lịch nào đủ điều kiện tự đồng bộ; vui lòng chọn thủ công.');
         } catch (error: any) {
             message.error(error?.message || 'Không thể đồng bộ Lesson ID HMO');
         } finally {
@@ -1990,6 +2029,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                             <Text type="secondary" style={{ display: 'block', fontSize: 12 }}>
                                                 Theo tên lịch sẽ so khớp từng lịch với Lesson ID HMO cùng tên, không gán lần lượt theo thứ tự tăng dần.
                                             </Text>
+                                            <UnmatchedHmoMappingPolicy disabled={syncingHmoLessonIds} />
                                             <Button
                                                 type="primary"
                                                 ghost
@@ -2099,7 +2139,8 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                                     {Array.isArray(selectedLessons) && selectedLessons.length > 0 ? (
                                         <>
                                             <div style={{ marginBottom: 16 }}>
-                                                <Space wrap size={16} align="end">
+                                                <UnmatchedHmoMappingPolicy disabled={syncingHmoLessonIds} />
+                                                <Space wrap size={16} align="end" style={{ marginTop: 12 }}>
                                                     <Form.Item name="hmo_sync_name_source" label="Đồng bộ theo" style={{ marginBottom: 0 }}>
                                                         <Select
                                                             style={{ width: 220 }}

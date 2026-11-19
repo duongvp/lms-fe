@@ -170,14 +170,15 @@ const uniqueOptions = (options: HocmaiSectionOption[]) => Array.from(new Map(
     ])
 ).values());
 
-// Đồng bộ chỉ thay Course đã tìm được kết quả; giữ mapping cũ của Course còn lại.
+// Mặc định giữ mapping của Course chưa khớp; chỉ bỏ chúng khi chủ động chọn remove.
 export const mergeHmoMappingKeys = (
     currentKeys: string[],
     matchedOptions: HocmaiSectionOption[],
+    unmatchedPolicy: 'keep' | 'remove' = 'keep',
 ): string[] => {
     const matchedCourseIds = new Set(matchedOptions.map((option) => String(option.course_id)));
     return Array.from(new Set([
-        ...currentKeys.filter((key) => !matchedCourseIds.has(key.split('::')[1])),
+        ...(unmatchedPolicy === 'keep' ? currentKeys.filter((key) => !matchedCourseIds.has(key.split('::')[1])) : []),
         ...matchedOptions.map((option) => `${option.package_id}::${option.course_id}::${option.lesson_id}`),
     ]));
 };
