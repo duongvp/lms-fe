@@ -31,18 +31,21 @@ const CustomSearchInput: React.FC<CustomSearchInputProps> = ({
     const lastResetKeyRef = useRef(resetKey);
     const fetchApiRef = useRef(fetchApi);
     fetchApiRef.current = fetchApi;
-    const composingRef = useRef(false);
     const requestRef = useRef(0);
 
     const debouncedFetchApi = useMemo(() => {
         return debounce(async (value: string) => {
             const fetch = fetchApiRef.current;
-            if (!fetch) return;
+            // compositionend có thể đến sau khi bản nháp đã được tìm lúc ngừng gõ.
+            if (!fetch || value === lastNotifiedValueRef.current) return;
             lastNotifiedValueRef.current = value;
             const request = ++requestRef.current;
             try {
                 setLoading(true);
                 await fetch(value);
+            } catch (error) {
+                if (request === requestRef.current) lastNotifiedValueRef.current = undefined;
+                throw error;
             } finally {
                 if (request === requestRef.current) setLoading(false);
             }
@@ -57,6 +60,7 @@ const CustomSearchInput: React.FC<CustomSearchInputProps> = ({
         if (!forceReset && (nextValue === inputValueRef.current || nextValue === lastNotifiedValueRef.current)) return;
         debouncedFetchApi.cancel();
         requestRef.current += 1;
+        lastNotifiedValueRef.current = undefined;
         setLoading(false);
         inputValueRef.current = nextValue;
         setInputValue(nextValue);
@@ -78,19 +82,17 @@ const CustomSearchInput: React.FC<CustomSearchInputProps> = ({
         inputValueRef.current = e.target.value;
         setInputValue(e.target.value);
         onValueChange?.(e.target.value);
-        if (!composingRef.current) {
-            debouncedFetchApi(e.target.value);
-        }
+        // Một số bộ gõ tiếng Việt chỉ kết thúc composition khi nhấn dấu cách.
+        // Vẫn tìm sau khi ngừng nhập để không phải chờ compositionend.
+        debouncedFetchApi(e.target.value);
     };
 
     const compositionProps: Pick<InputProps, 'onCompositionStart' | 'onCompositionEnd'> = {
         onCompositionStart: (event) => {
-            composingRef.current = true;
             debouncedFetchApi.cancel();
             onCompositionStart?.(event);
         },
         onCompositionEnd: (event) => {
-            composingRef.current = false;
             const text = event.currentTarget.value;
             inputValueRef.current = text;
             setInputValue(text);

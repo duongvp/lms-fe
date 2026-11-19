@@ -59,34 +59,6 @@ import styles from "./quiz.module.css";
 
 type QuizReorderStrategy = "insert" | "swap";
 
-// ✅ Hook debounce
-function useDebounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
-    const timerRef = useRef<NodeJS.Timeout | null>(null);
-    const fnRef = useRef(fn);
-    fnRef.current = fn;
-
-    useEffect(() => {
-        const cancel = () => {
-            if (timerRef.current) clearTimeout(timerRef.current);
-            timerRef.current = null;
-        };
-        window.addEventListener("lms:route-navigation-start", cancel);
-        return () => {
-            window.removeEventListener("lms:route-navigation-start", cancel);
-            cancel();
-        };
-    }, []);
-
-    return useCallback((...args: Parameters<T>) => {
-        if (timerRef.current) {
-            clearTimeout(timerRef.current);
-        }
-        timerRef.current = setTimeout(() => {
-            fnRef.current(...args);
-        }, delay);
-    }, [delay]);
-}
-
 const buildQuizUrl = (nextFilters: QuizFilterValues, nextKeyword = "", nextPage = 1) => {
     const params = new URLSearchParams();
     const program = String(nextFilters.code || "").trim();
@@ -107,6 +79,7 @@ const buildQuizUrl = (nextFilters: QuizFilterValues, nextKeyword = "", nextPage 
 
 const QuizManagementPage = () => {
     const searchParams = useSearchParams();
+    const pendingQuizUrlRef = useRef<string | null>(null);
     const screens = Grid.useBreakpoint();
     const compact = !screens.md;
     const [form] = Form.useForm<QuizFormValues>();
@@ -119,7 +92,12 @@ const QuizManagementPage = () => {
         sort_order: "asc" | "desc";
     }>({ sort_by: "learn_number", sort_order: "asc" });
     const [displaySortState, setDisplaySortState] = useState(sortState);
-    const [keyword, setKeyword] = useState("");
+    // Bản nháp ở ô nhập, không render lại bảng theo từng ký tự.
+    const keywordRef = useRef("");
+    const [searchResetKey, setSearchResetKey] = useState(0);
+    const handleSearchValueChange = useCallback((value: string) => {
+        keywordRef.current = value;
+    }, []);
     const [filters, setFilters] = useState<QuizFilterValues>({});
     const [submittedFilters, setSubmittedFilters] = useState<QuizFilterValues>({});
     const submittedFiltersRef = useRef<QuizFilterValues>({});
@@ -183,6 +161,7 @@ const QuizManagementPage = () => {
         const program = String(nextFilters.code || "").trim();
         if (program) useAuthStore.getState().setCurrentProgram(program);
         const nextUrl = buildQuizUrl(nextFilters, nextKeyword, nextPage);
+        pendingQuizUrlRef.current = nextUrl;
         // Chỉ đồng bộ URL, không điều hướng lại trang đang có state bộ lọc.
         // Điều này cũng tránh Next ghi đè query bằng state route cũ.
         window.history.replaceState(window.history.state, "", nextUrl);
@@ -191,6 +170,8 @@ const QuizManagementPage = () => {
 
     useEffect(() => {
         const currentUrl = searchParams.size ? `/quizzes?${searchParams.toString()}` : "/quizzes";
+        const isOwnUrlUpdate = pendingQuizUrlRef.current === currentUrl;
+        pendingQuizUrlRef.current = null;
         const urlProgram = String(searchParams.get("program") || "").trim();
         const sharedProgram = String(useAuthStore.getState().currentProgram || "").trim();
         const program = urlProgram || sharedProgram;
@@ -199,7 +180,8 @@ const QuizManagementPage = () => {
             setFilters({});
             setSubmittedFilters({});
             submittedFiltersRef.current = {};
-            setKeyword("");
+            keywordRef.current = "";
+            setSearchResetKey((key) => key + 1);
             setSubmittedKeyword("");
             setHasSearched(false);
             setPage(1);
@@ -234,7 +216,11 @@ const QuizManagementPage = () => {
         setFilters(nextFilters);
         setSubmittedFilters(nextFilters);
         submittedFiltersRef.current = nextFilters;
-        setKeyword(nextKeyword);
+        // URL xác nhận tìm kiếm trước đó không được ghi đè chữ vừa gõ tiếp.
+        if (!isOwnUrlUpdate) {
+            keywordRef.current = nextKeyword;
+            setSearchResetKey((key) => key + 1);
+        }
         setSubmittedKeyword(nextKeyword);
         setPage(nextPage);
         setHasSearched(true);
@@ -448,22 +434,14 @@ const QuizManagementPage = () => {
         setPreview(INITIAL_QUIZ_FORM_VALUES);
     };
 
-    // ✅ Hàm thực sự submit search (được debounce)
-    const doSearch = useCallback((keywordValue: string) => {
-        if (!hasSearched) return;
-        setSubmittedKeyword(keywordValue);
-        setPage(1);
-        replaceQuizUrl(submittedFiltersRef.current, keywordValue);
-    }, [hasSearched, replaceQuizUrl]);
-
-    // ✅ Debounce hàm doSearch với 500ms
-    const debouncedDoSearch = useDebounce(doSearch, 500);
-
+    // CustomSearchInput đã debounce 300 ms, không cần thêm lớp chờ ở trang.
     const handleSearch = useCallback(async (value: string) => {
+        if (!hasSearched || value !== keywordRef.current) return;
         const trimmed = value.trim();
-        setKeyword(trimmed);
-        debouncedDoSearch(trimmed);
-    }, [debouncedDoSearch]);
+        setSubmittedKeyword(trimmed);
+        setPage(1);
+        replaceQuizUrl(submittedFiltersRef.current, trimmed);
+    }, [hasSearched, replaceQuizUrl]);
 
     const handleFilterSubmit = () => {
         if (!filters.code) {
@@ -472,10 +450,11 @@ const QuizManagementPage = () => {
         }
         setSubmittedFilters(filters);
         submittedFiltersRef.current = filters;
-        setSubmittedKeyword(keyword);
+        setSubmittedKeyword(keywordRef.current.trim());
         setHasSearched(true);
         setPage(1);
-        replaceQuizUrl(filters, keyword);
+        setSearchResetKey((key) => key + 1);
+        replaceQuizUrl(filters, keywordRef.current);
     };
 
     const handleResetFilter = () => {
@@ -488,7 +467,8 @@ const QuizManagementPage = () => {
         const livestreamProgram = calendarSourceFromCode(program) === "livestream" ? program : "";
         const resetFilters: QuizFilterValues = livestreamProgram ? { code: livestreamProgram } : {};
         setFilters(resetFilters);
-        setKeyword("");
+        keywordRef.current = "";
+        setSearchResetKey((key) => key + 1);
         setSubmittedFilters(resetFilters);
         submittedFiltersRef.current = resetFilters;
         setSubmittedKeyword("");
@@ -768,7 +748,7 @@ const QuizManagementPage = () => {
 
         if (!hasSearched) {
             setSubmittedFilters(filters);
-            setSubmittedKeyword(keyword);
+            setSubmittedKeyword(keywordRef.current.trim());
             setHasSearched(true);
         }
 
@@ -1048,7 +1028,9 @@ const QuizManagementPage = () => {
                     <div className="schedule-mobile-search">
                         <CustomSearchInput
                             placeholder="Tìm kiếm câu hỏi..."
-                            value={keyword}
+                            value={keywordRef.current}
+                            onValueChange={handleSearchValueChange}
+                            resetKey={searchResetKey}
                             fetchApi={handleSearch}
                         />
                     </div>
@@ -1078,7 +1060,9 @@ const QuizManagementPage = () => {
         ) : (
         <SearchAndActionsBar
             onSearch={handleSearch}
-            searchValue={keyword}
+            searchValue={keywordRef.current}
+            onSearchValueChange={handleSearchValueChange}
+            searchResetKey={searchResetKey}
             placeholder="Tìm kiếm câu hỏi..."
             titleBtnAdd="Câu hỏi"
             handleAddBtn={canCreate && !reorderMode ? handleOpenCreate : undefined}
