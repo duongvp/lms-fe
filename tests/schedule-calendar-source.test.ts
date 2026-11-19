@@ -5,7 +5,7 @@ import { cleanFilterValues, buildScheduleApiParams, buildScheduleUrl } from '../
 import { withProgramContext } from '../components/layouts/AdminLayout/SideMenu';
 
 test('link chuyển từ đề cương sang lịch học mang đúng nguồn của chương trình', () => {
-    for (const [program, source] of [['feed-tramtiepsuctrithuc', 'feed'], ['toan-12-2027', 'livestream']]) {
+    for (const [program, source] of [['feed-tramtiepsuctrithuc', 'feed'], ['toan-12-2027', null]]) {
         const url = new URL(withProgramContext('/schedule', program), 'https://example.test');
         assert.equal(url.searchParams.get('program'), program);
         assert.equal(url.searchParams.get('calendar_source'), source);
@@ -29,7 +29,7 @@ test('chuyển về chương trình Livestream không giữ nhầm nguồn Feed'
     const url = new URL(buildScheduleUrl(values), 'https://example.test');
     assert.equal(url.searchParams.get('calendar_source'), null);
     const link = new URL(withProgramContext('/schedule?calendar_source=feed', values.code), 'https://example.test');
-    assert.equal(link.searchParams.get('calendar_source'), 'livestream');
+    assert.equal(link.searchParams.get('calendar_source'), null);
 });
 
 test('xem liên chương trình vẫn giữ nguồn được chọn và giữ nguyên các bộ lọc khác', () => {
@@ -60,7 +60,7 @@ test('nguồn lịch lưu trong session cũ không ghi đè nguồn của chươ
     try {
         const url = new URL(withProgramContext('/schedule', 'feed-tramtiepsuctrithuc'), 'https://example.test');
         assert.equal(url.searchParams.get('calendar_source'), 'feed');
-        assert.equal(url.searchParams.get('q'), 'test');
+        assert.equal(url.searchParams.has('q'), false);
         assert.equal(url.searchParams.get('page'), '2');
     } finally {
         if (descriptor) Object.defineProperty(globalThis, 'window', descriptor);

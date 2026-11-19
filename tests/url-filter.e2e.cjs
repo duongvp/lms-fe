@@ -348,7 +348,8 @@ const run = async () => {
         await check('Quay lại Schedule bằng menu khôi phục filter riêng', async () => {
             assert(await cdp.evaluate(clickHeaderRoute('/schedule')), 'Không tìm thấy link Schedule');
             await cdp.waitFor(`location.pathname === '/schedule' && location.search.includes('weekdays=1')`);
-            assert(await cdp.evaluate(inputValue('Tìm kiếm theo chương trình, bài học, giáo viên, phòng học...')) === 'Truyện', 'Schedule không khôi phục keyword đã lưu');
+            assert(await cdp.evaluate(inputValue('Tìm kiếm theo chương trình, bài học, giáo viên, phòng học...')) === '', 'Schedule phải xóa keyword khi quay lại');
+            assert(await cdp.evaluate(`!new URLSearchParams(location.search).has('q')`), 'Schedule còn giữ q trong URL khi quay lại');
         });
 
         await check('Debounce page cũ không ghi đè sau chuyển trang nhanh', async () => {
@@ -360,6 +361,8 @@ const run = async () => {
             const current = await cdp.evaluate('location.pathname + location.search');
             assert(current.startsWith('/lessons'), `Callback Schedule đã ghi đè route mới: ${current}`);
             assert(!current.includes('delayed-old-page'), `Keyword page cũ bị rò sang Lessons: ${current}`);
+            assert(await cdp.evaluate(inputValue('Tìm theo tên bài học...')) === '', 'Lessons phải xóa keyword khi quay lại');
+            assert(await cdp.evaluate(`!new URLSearchParams(location.search).has('q')`), 'Lessons còn giữ q trong URL khi quay lại');
         });
 
         await check('Refresh giữ UI và URL Lessons đồng bộ', async () => {

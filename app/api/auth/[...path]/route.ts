@@ -2,6 +2,21 @@ import { NextRequest } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
+// These describe a single connection and must not cross a proxy boundary.
+// In particular, Nginx may send Connection: upgrade, which Node fetch rejects.
+const stripConnectionHeaders = (headers: Headers) => {
+    const connectionTokens = headers.get('connection')?.split(',') || [];
+    for (const token of connectionTokens) {
+        const name = token.trim();
+        if (name) headers.delete(name);
+    }
+    for (const name of [
+        'connection', 'keep-alive', 'proxy-connection',
+        'proxy-authenticate', 'proxy-authorization',
+        'te', 'trailer', 'transfer-encoding', 'upgrade',
+    ]) headers.delete(name);
+};
+
 const getBackendBaseUrl = () => {
     const configuredUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL;
     if (!configuredUrl) {
@@ -22,12 +37,14 @@ const proxyAuthRequest = async (
             getBackendBaseUrl()
         );
         const headers = new Headers(request.headers);
+        stripConnectionHeaders(headers);
 
         // Let the API generate its own host/CORS response. Cookies from the
         // incoming same-origin request are still forwarded through this proxy.
         headers.delete('host');
         headers.delete('origin');
         headers.delete('content-length');
+        headers.delete('expect');
 
         const upstreamResponse = await fetch(targetUrl, {
             method: request.method,
@@ -39,6 +56,12 @@ const proxyAuthRequest = async (
             redirect: 'manual',
         });
         const responseHeaders = new Headers(upstreamResponse.headers);
+        stripConnectionHeaders(responseHeaders);
+        // OAuth callback clears its context cookie and sets the session cookie.
+        // Preserve separate Set-Cookie headers (Expires contains a comma).
+        const cookies = responseHeaders.getSetCookie();
+        responseHeaders.delete('set-cookie');
+        cookies.forEach(cookie => responseHeaders.append('set-cookie', cookie));
 
         // fetch may decode the body before it is returned to the browser.
         responseHeaders.delete('content-encoding');
