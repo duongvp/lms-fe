@@ -51,6 +51,11 @@ export interface IMenuItem {
 
 // Mapping key to URL path và permission tương ứng
 export const menuConfig: IMenuItem[] = [
+    {key:'teacher_reports',label:'Báo cáo giảng dạy',path:'/teacher-reports',permission:PermissionKey.TEACHING_REPORT_VIEW,icon:<BookOutlined/>},
+    {key:'teacher_salary',label:'Lương giảng dạy',permission:PermissionKey.SALARY_VIEW,icon:<BankOutlined/>,children:[
+      {key:'salary_periods',label:'Bảng lương',path:'/teacher-salary',permission:PermissionKey.SALARY_VIEW},
+      {key:'salary_rates',label:'Đơn giá',path:'/teacher-salary/rates',permission:PermissionKey.SALARY_RATE_MANAGE},
+    ]},
     {
         key: "0",
         icon: <DashboardOutlined />,
