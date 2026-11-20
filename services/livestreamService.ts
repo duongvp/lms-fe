@@ -7,6 +7,7 @@ const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://local
 export type CalendarSource = 'livestream' | 'feed';
 
 export interface LivestreamPayload {
+    group_id?: number;
     allow_shared_staff_schedule?: boolean;
     calendar_source?: CalendarSource;
     system_type: string;
@@ -47,6 +48,7 @@ export interface BulkLivestreamPayload {
 }
 
 export interface AutoSchedulePayload {
+    group_id?: number;
     allow_shared_staff_schedule?: boolean;
     calendar_source?: CalendarSource;
     program_code: string;
@@ -160,8 +162,8 @@ export interface HocmaiSectionsBatchData {
     errors_by_lesson_id: Record<string, string[]>;
 }
 
-export const getProgramLessonsForScheduling = (programCode: string, source?: CalendarSource) =>
-    fetchInstance(`${API_BASE_URL}/programs/${encodeURIComponent(programCode)}/lessons${source ? `?calendar_source=${source}` : ""}`, {
+export const getProgramLessonsForScheduling = (programCode: string, source?: CalendarSource, groupId?:number) =>
+    fetchInstance(`${API_BASE_URL}/programs/${encodeURIComponent(programCode)}/lessons${source ? `?calendar_source=${source}` : ""}${groupId ? `${source ? "&" : "?"}group_id=${groupId}` : ""}`, {
         method: "GET",
         credentials: "include",
         cache: "no-store",
@@ -356,6 +358,7 @@ export const importLivestreamMappings = (payload: any) =>
 
 // Hàm mới: lấy danh sách lịch
 export interface LivestreamListParams {
+    group_id?: number;
     deleted?: boolean;
     calendar_source?: CalendarSource;
     page?: number;
@@ -786,6 +789,7 @@ export const toLivestreamPayload = (values: any): LivestreamPayload => {
 
         system_type: payload.system_type,
         code: payload.class_code,
+        ...(payload.group_id ? { group_id: Number(payload.group_id) } : {}),
         teacher: payload.teacher,
         assistant_teacher: serializeAssistantTeachers(payload.assistant_teacher),
         learn_number: Number(payload.learn_number ?? 1),

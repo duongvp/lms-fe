@@ -1,4 +1,5 @@
 "use client";
+import { ScheduleGroupPicker } from '@/components/shared/ProgramGroups';
 import { calendarSourceFromCode } from "@/helper/lesson";
 import { getScheduleConflictLinks, type ScheduleConflictLink } from "@/helper/scheduleConflictLinks";
 import { ScheduleConflictDetails } from "./ScheduleConflictDetails";
@@ -974,6 +975,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
         return {
             allow_shared_staff_schedule: values.allow_shared_staff_schedule === true,
             program_code: programCode,
+            ...(values.group_id ? {group_id:Number(values.group_id)} : {}),
             from_learn_number: fromLearnNumber,
             to_learn_number: toLearnNumber,
             system_type: values.system_type,
@@ -1277,6 +1279,7 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                         if (payload) setPayload(null);
                     }}
                 >
+                    <ScheduleGroupPicker code={programCode} form={form} enabled={open}/>
                     <Form.Item name="allow_shared_staff_schedule" valuePropName="checked" initialValue={false}
                         extra="Chỉ cho phép ở các chương trình khác nhau, cùng tên bài và khớp cả thời gian bắt đầu lẫn kết thúc. Các trường hợp trùng khác vẫn bị chặn.">
                         <Checkbox>Cho phép trùng giáo viên/trợ giảng cho buổi học chung</Checkbox>

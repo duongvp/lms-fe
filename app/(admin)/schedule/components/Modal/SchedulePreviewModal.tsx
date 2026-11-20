@@ -345,6 +345,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                     page,
                     limit: 100,
                     code_exact: code,
+                    ...(initialData?.group_id ? {group_id:initialData.group_id} : {}),
                     calendar_source: initialData?.calendar_source || 'livestream',
                     system_type: initialData?.system_type,
                     start_time: currentStart.subtract(1, 'second').toISOString(),
@@ -895,6 +896,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 calendars: activeSessions.map((session) => ({
                     system_type: formValues.bulk_system_type,
                     code: formValues.bulk_code,
+                    ...(formValues.group_id ? {group_id:Number(formValues.group_id)} : {}),
                     teacher: session.teacher,
                     assistant_teacher: session.assistant_teacher?.join(','),
                     session_id: session.lesson_id,

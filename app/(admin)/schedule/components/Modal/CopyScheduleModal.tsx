@@ -5,6 +5,7 @@ import { Alert, Button, Col, Form, Grid, message, Modal, Row, Tag } from 'antd';
 import { DatePicker, TimePicker } from "../MobileSchedulePickers";
 import dayjs, { type Dayjs } from 'dayjs';
 import TeachingStaffSelect from '@/components/shared/TeachingStaffSelect';
+import { ScheduleGroupPicker } from "@/components/shared/ProgramGroups";
 import HmoMappingSelect from '@/components/shared/HmoMappingSelect';
 import { combineDateTime } from '@/helper/convertDate';
 import { createLivestream, getHocmaiSectionsForSchedulingLesson, type HocmaiSectionOption } from '@/services/livestreamService';
@@ -18,6 +19,7 @@ interface CopyScheduleModalProps {
 }
 
 interface CopyScheduleFormValues {
+    group_id?: number;
     date: Dayjs;
     start_time: Dayjs;
     end_time: Dayjs;
@@ -77,18 +79,21 @@ const CopyScheduleModal: React.FC<CopyScheduleModalProps> = ({
     const [hmoOptions, setHmoOptions] = useState<HocmaiSectionOption[]>([]);
     const [loadingHmoOptions, setLoadingHmoOptions] = useState(false);
     const [messageApi, contextHolder] = message.useMessage();
+    const targetGroup = Form.useWatch('group_id',form);
+    useEffect(()=>{if(source?.group_id && targetGroup && targetGroup!==source.group_id)form.setFieldValue('hmo_mapping_keys',[]);},[targetGroup,source?.group_id,form]);
     const startTime = Form.useWatch('start_time', form) as Dayjs | undefined;
 
     useEffect(() => {
         if (!open || !source) return;
         form.resetFields();
         form.setFieldsValue({
+            group_id: source.group_id || undefined,
             teacher: source.teacher || undefined,
             assistant_teacher: parseAssistants(source.assistant_teacher),
             date: undefined,
             start_time: undefined,
             end_time: undefined,
-            hmo_mapping_keys: mappingKeysFromSource(source.package_lesson_mappings),
+            hmo_mapping_keys: source.group_id ? [] : mappingKeysFromSource(source.package_lesson_mappings),
         });
         if (!source.code || !source.session_id) {
             setHmoOptions([]);
@@ -117,6 +122,7 @@ const CopyScheduleModal: React.FC<CopyScheduleModalProps> = ({
             await createLivestream({
                 system_type: source.system_type || 'topclass',
                 code: source.code,
+                ...(values.group_id ? {group_id:values.group_id} : {}),
                 teacher: values.teacher,
                 assistant_teacher: values.assistant_teacher?.join(',') || undefined,
                 learn_number: Number(source.learn_number),
@@ -235,6 +241,7 @@ const CopyScheduleModal: React.FC<CopyScheduleModalProps> = ({
                 </Row>
             </div>
             <Form form={form} layout="vertical" onFinish={handleSubmit}>
+                <ScheduleGroupPicker code={source?.code} form={form} enabled={open}/>
                 <Row gutter={16}>
                     <Col xs={24} md={8}>
                         <Form.Item name="date" label="Ngày học mới" rules={[{ required: true, message: 'Chọn ngày học mới' }]}>

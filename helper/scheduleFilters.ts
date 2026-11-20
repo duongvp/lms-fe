@@ -6,6 +6,7 @@ export interface ScheduleFilterValues {
     calendar_source?: CalendarSource;
     keyword?: string;
     calendar_id?: number;
+    group_id?: number;
     code?: string;
     teacher?: string[];
     system_type?: Array<"topclass" | "topuni">;
@@ -78,6 +79,7 @@ export const buildScheduleUrl = (values: ScheduleFilterValues, targetPage = 1) =
     const keyword = String(cleaned.keyword || "").trim();
     const teachers = Array.isArray(cleaned.teacher) ? cleaned.teacher : [];
     if (program) params.set("program", program);
+    if (cleaned.group_id) params.set("group_id",String(cleaned.group_id));
     if (cleaned.calendar_source === "feed") params.set("calendar_source", "feed");
     if (keyword) params.set("q", keyword);
     if (cleaned.calendar_id !== undefined) params.set("calendar_id", String(cleaned.calendar_id));

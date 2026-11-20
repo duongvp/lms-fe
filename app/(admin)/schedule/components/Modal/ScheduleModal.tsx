@@ -27,6 +27,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { PermissionKey } from '@/types/permissions';
 import { useLessonsQuery, useLmsCache, usePackageCoursesQuery, useSchedulesQuery } from '@/hooks/useLmsQueries';
 import TeachingStaffSelect from '@/components/shared/TeachingStaffSelect';
+import { ScheduleGroupPicker } from "@/components/shared/ProgramGroups";
 import HmoMappingSelect from '@/components/shared/HmoMappingSelect';
 
 const { Text, Title } = Typography;
@@ -242,6 +243,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     const [updateMode, setUpdateMode] = useState<"current" | "makeup" | "following" | "cancel">("makeup");
 
     const selectedDays = Form.useWatch('days_of_week', form) || [];
+    const selectedGroupId = Form.useWatch('group_id',form) as number | undefined;
     const selectedGrade = Form.useWatch('grade', form);
     const selectedSubject = Form.useWatch('subject_name', form);
     const selectedSubjectCode = Form.useWatch('subject_code', form);
@@ -417,6 +419,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             page: 1,
             limit: 100,
             code_exact: courseCode,
+            ...(initialData?.group_id ? {group_id:initialData.group_id} : {}),
             calendar_source: initialData?.calendar_source || 'livestream',
             system_type: initialData?.system_type,
             sort_by: 'start_time',
@@ -437,10 +440,10 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         }));
 
     React.useEffect(() => {
-        if (!open || !usesProgramContext || !contextProgramCode || addMode !== 'single') return;
+        if (!open || (!usesProgramContext && !selectedGroupId) || !contextProgramCode || addMode !== 'single') return;
         let active = true;
         setLoadingProgramLessons(true);
-        getProgramLessonsForScheduling(contextProgramCode, calendarSource)
+        getProgramLessonsForScheduling(contextProgramCode, calendarSource, selectedGroupId)
             .then((response: any) => {
                 if (!active) return;
                 setLessonOptions((Array.isArray(response?.data) ? response.data : []).map((lesson: any) => ({
@@ -457,12 +460,12 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             })
             .finally(() => active && setLoadingProgramLessons(false));
         return () => { active = false; };
-    }, [addMode, calendarSource, contextProgramCode, messageApi, open, usesProgramContext]);
+    }, [addMode, calendarSource, contextProgramCode, messageApi, open, usesProgramContext, selectedGroupId]);
 
     React.useEffect(() => {
-        if (usesProgramContext) return;
+        if (usesProgramContext || selectedGroupId) return;
         setLessonOptions(singleLessonsQuery.data?.data?.data ?? []);
-    }, [singleLessonsQuery.data, usesProgramContext]);
+    }, [singleLessonsQuery.data, usesProgramContext, selectedGroupId]);
 
     React.useEffect(() => {
         if (!open || isEdit || addMode !== 'single' || !contextProgramCode || !selectedLessonId) {
@@ -486,6 +489,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     }, [addMode, contextProgramCode, isEdit, messageApi, open, selectedLessonId]);
 
     React.useEffect(() => {
+        if(selectedGroupId) return;
         const rows: LessonApiResponse[] = bulkLessonsQuery.data?.data?.data ?? [];
         setBulkLessonOptions(rows);
         if (!rows.length) return;
@@ -500,7 +504,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             'bulk_learn_number',
             suggestedLesson?.learn_number ?? latestScheduledLesson?.learn_number
         );
-    }, [bulkLessonsQuery.data, form]);
+    }, [bulkLessonsQuery.data, form, selectedGroupId]);
 
     React.useEffect(() => {
         if (!open || !usesProgramContext || !contextProgramMetadata) return;
@@ -514,6 +518,19 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             bulk_subject_name: contextProgramMetadata.subject_name,
         });
     }, [open, usesProgramContext, contextProgramMetadata, form]);
+
+    React.useEffect(()=>{
+        if(!open || addMode!=='bulk' || !selectedGroupId || !selectedBulkSubjectCode) return;
+        let active=true;
+        getProgramLessonsForScheduling(selectedBulkSubjectCode,calendarSource,selectedGroupId).then((response:any)=>{
+            if(!active) return;
+            const rows=(response?.data||[]).map((lesson:any)=>({...lesson,id:String(lesson.id),subject_code:selectedBulkSubjectCode,status:1}));
+            setBulkLessonOptions(rows);
+            const latest=rows.filter((r:any)=>r.scheduled_count>0).at(-1);
+            form.setFieldValue('bulk_learn_number',(latest?rows.find((r:any)=>r.learn_number>latest.learn_number):rows[0])?.learn_number??latest?.learn_number);
+        }).catch((error:any)=>{if(active)messageApi.error(error.message||'Không tải được bài học theo nhóm');});
+        return()=>{active=false;};
+    },[open,addMode,selectedGroupId,selectedBulkSubjectCode,calendarSource,form,messageApi]);
 
     const scheduledBulkLessons = bulkLessonOptions.filter(
         (lesson) => Number(lesson.scheduled_count ?? 0) > 0
@@ -1105,6 +1122,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                     }}
                 >
 
+                    <ScheduleGroupPicker code={isEdit ? initialData?.code : addMode === "bulk" ? selectedBulkSubjectCode : contextProgramCode} form={form} disabled={isEdit} enabled={open}/>
                     {!isEdit && (<Form.Item name="allow_shared_staff_schedule" valuePropName="checked" initialValue={false}
                         extra="Chỉ cho phép ở các chương trình khác nhau, cùng tên bài và khớp cả thời gian bắt đầu lẫn kết thúc. Các trường hợp trùng khác vẫn bị chặn.">
                         <Checkbox>Cho phép trùng giáo viên/trợ giảng cho buổi học chung</Checkbox>
@@ -1341,6 +1359,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                         </Form.Item>
                                     </Col>
                                 </Row>}
+
                                 <Form.Item name="learn_number" hidden><Input /></Form.Item>
                                 <Form.Item name="master_lesson_name" hidden><Input /></Form.Item>
                                 <Form.Item name="lesson_scheduled_count" hidden><Input /></Form.Item>

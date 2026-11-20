@@ -30,6 +30,7 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import viLocale from "@fullcalendar/core/locales/vi";
 import DeletedCalendarsModal from "./components/Modal/DeletedCalendarsModal";
+import ProgramGroups from "@/components/shared/ProgramGroups";
 import ScheduleModal from "./components/Modal/ScheduleModal";
 import AutoScheduleModal from "./components/Modal/AutoScheduleModal";
 import BulkEditModal from "./components/Modal/BulkEditModal";
@@ -772,7 +773,7 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
                 <section className="schedule-detail-section">
                     <h3>Thông tin lớp học</h3>
                     <div className="schedule-detail-grid">
-                        <DetailItem label="Chương trình"><Tag color="blue">{record.code || "-"}</Tag></DetailItem>
+                        <DetailItem label="Chương trình"><Tag color="blue">{record.code || "-"}</Tag>{record.group && <Tag color="purple">{record.group.group_code} · {record.group.name}</Tag>}</DetailItem>
                         <DetailItem label="Hệ thống">{record.system_type || "-"}</DetailItem>
                         <DetailItem label="Lớp học">{record.class_name || "-"}</DetailItem>
                         <DetailItem label="Môn học">{record.subject || "-"}</DetailItem>
@@ -1472,6 +1473,7 @@ const Page = () => {
         const values: ScheduleFilterValues = cleanFilterValues({
             calendar_source: searchParams.get("calendar_source") === "feed" ? "feed" : "livestream",
             code: program,
+            group_id: Number(searchParams.get("group_id")) || undefined,
             keyword: String(searchParams.get("q") || "").trim(),
             calendar_id: (() => {
                 const parsed = Number(searchParams.get("calendar_id"));
@@ -1970,7 +1972,7 @@ const Page = () => {
                 id: isDraft
                     ? `${item.key}-${item.start_time}-${item.end_time}-${item.lesson_name || ""}-${item.teacher || ""}`
                     : String(item.key),
-                title: item.lesson_name || (isDraft ? "Lịch mới" : `Bài ${item.learn_number}`),
+                title: (item.group ? `[${item.group.group_code}] ` : "") + (item.lesson_name || (isDraft ? "Lịch mới" : `Bài ${item.learn_number}`)),
                 start: start.toDate(),
                 end: end.toDate(),
                 extendedProps: { record: item, styleType, isDraft },
@@ -2072,6 +2074,7 @@ const Page = () => {
     }, [hasSearched, replaceScheduleUrl, submittedFilterValues]);
 
     const handleScheduleFilter = (values: ScheduleFilterValues) => {
+        if(values.code!==submittedFilterValues.code) values={...values,group_id:undefined};
         if (!String(values.code || "").trim() && !isAdmin) {
             api.warning({
                 message: "Vui lòng chọn Chương trình",
@@ -3618,6 +3621,7 @@ const Page = () => {
                     );
                 }
 
+                if(fieldCode === "lesson_name" && record.group) return <Space direction="vertical" size={2}><span>{text}</span><Tag color="purple">{record.group.group_code} · {record.group.name}</Tag></Space>;
                 if ((fieldCode === "start_time" || fieldCode === "end_time") && text) {
                     return <span>{dayjs(text).format('YYYY-MM-DD HH:mm')}</span>;
                 }
@@ -4161,7 +4165,9 @@ const Page = () => {
     const evgDisabledReason = !selectedRowKeys.length ? "Vui lòng chọn ít nhất một lịch"
         : provisioningEvgBulk ? "Đang xử lý EVG"
         : blockedEvgRows.length ? selectionBlockReason(blockedEvgRows) : "";
-    const classroomDisabledReason = !selectedRowKeys.length ? "Vui lòng chọn ít nhất một lịch"
+    const hasSelectedGroups = selectedScheduleRecords.some(r=>r?.group_id);
+    const onlySelectedGroups = selectedScheduleRecords.length===selectedRowKeys.length && selectedScheduleRecords.length>0 && selectedScheduleRecords.every(r=>r?.group_id);
+    const classroomDisabledReason = hasSelectedGroups ? "Nhóm nhỏ được xếp vào phòng riêng khi đồng bộ học viên" : !selectedRowKeys.length ? "Vui lòng chọn ít nhất một lịch"
         : batchClassroomAssigning ? "Đang chia lớp"
         : blockedClassroomRows.length ? selectionBlockReason(blockedClassroomRows) : "";
     const singleClassroomDisabledReason = selectedRowKeys.length !== 1
@@ -4175,7 +4181,7 @@ const Page = () => {
     );
     const workflowSelectionKey = [...selectedRowKeys].map(Number).filter(Number.isFinite).sort((left, right) => left - right).join(",");
     const isWorkflowStudentSynced = Boolean(workflowSelectionKey) && workflowStudentSyncSelection === workflowSelectionKey;
-    const isWorkflowClassroomAssigned = Boolean(workflowSelectionKey) && workflowClassroomSelection === workflowSelectionKey;
+    const isWorkflowClassroomAssigned = Boolean(workflowSelectionKey) && (workflowClassroomSelection === workflowSelectionKey || (onlySelectedGroups && isWorkflowStudentSynced));
     const isWorkflowEvgProvisioned = Boolean(workflowSelectionKey) && workflowEvgSelection === workflowSelectionKey;
     const showClassroomWorkflow = () => setClassroomWorkflowOpen(true);
     const openWorkflowAction = (action: () => void) => {
@@ -4212,8 +4218,8 @@ const Page = () => {
             ...(isYesterdayAuditFilter ? [{
                 key: "registration-audit",
                 icon: <SearchOutlined />,
-                label: syncActionLabel("Kiểm tra học viên thiếu hôm qua", !selectedRowKeys.length ? "Chọn ít nhất một lịch để kiểm tra" : selectedRowKeys.length > 50 ? "Mỗi lượt kiểm tra tối đa 50 lịch" : ""),
-                disabled: !selectedRowKeys.length || selectedRowKeys.length > 50,
+                label: syncActionLabel("Kiểm tra học viên thiếu hôm qua", hasSelectedGroups ? "Nhóm nhỏ dùng đồng bộ học viên theo lịch" : !selectedRowKeys.length ? "Chọn ít nhất một lịch để kiểm tra" : selectedRowKeys.length > 50 ? "Mỗi lượt kiểm tra tối đa 50 lịch" : ""),
+                disabled: hasSelectedGroups || !selectedRowKeys.length || selectedRowKeys.length > 50,
             }] : []), {
                 key: "sync-students",
                 icon: <DatabaseOutlined />,
@@ -4856,6 +4862,7 @@ const Page = () => {
                     }
                 />
                 )}
+                <ProgramGroups code={submittedFilterValues.code} canCreate={canCreateSchedule} canEdit={canEditSchedule} value={submittedFilterValues.group_id} onFilter={group_id=>handleScheduleFilter({...submittedFilterValues,group_id})}/>
                 {!isMobile && !isDesktop && scheduleSelectionNotice}
                 {isDesktop && (
                     <ScheduleInlineFilters
@@ -5496,7 +5503,7 @@ const Page = () => {
                             </div>
                             <div style={{ display: "flex", gap: 14, position: "relative" }}>
                                 <div style={{ width: 32, height: 32, borderRadius: "50%", background: isWorkflowClassroomAssigned ? "#e6f4ff" : isWorkflowStudentSynced ? "#1677ff" : "#f0f0f0", color: isWorkflowClassroomAssigned ? "#1677ff" : isWorkflowStudentSynced ? "#fff" : "#8c8c8c", display: "grid", placeItems: "center", fontWeight: 600 }}>{isWorkflowClassroomAssigned ? "✓" : "3"}</div><div aria-hidden style={{ position: "absolute", left: 16, top: 32, bottom: -4, width: 1, background: "#91caff" }} />
-                                <div style={{ paddingBottom: 16 }}><Typography.Text strong>3. Tự động chia lớp</Typography.Text><br /><Typography.Text type="secondary">Phân học viên vào room_id/class_id cho các lịch đã chọn.</Typography.Text><br /><Button size="small" icon={<ApartmentOutlined />} disabled={!selectedRowKeys.length || !isWorkflowStudentSynced || batchClassroomAssigning} onClick={() => openWorkflowAction(handleOpenBatchClassroomAssignment)}>Tự động chia lớp đã chọn</Button></div>
+                                <div style={{ paddingBottom: 16 }}><Typography.Text strong>3. Tự động chia lớp</Typography.Text><br /><Typography.Text type="secondary">Phân học viên vào room_id/class_id cho các lịch đã chọn.</Typography.Text><br /><Button size="small" icon={<ApartmentOutlined />} disabled={Boolean(classroomDisabledReason) || !isWorkflowStudentSynced || batchClassroomAssigning} onClick={() => openWorkflowAction(handleOpenBatchClassroomAssignment)}>Tự động chia lớp đã chọn</Button></div>
                             </div>
                             <div style={{ display: "flex", gap: 14, position: "relative" }}>
                                 <div style={{ width: 32, height: 32, borderRadius: "50%", background: isWorkflowEvgProvisioned ? "#e6f4ff" : batchClassroomItems.length && !batchClassroomAssigning ? "#1677ff" : "#f0f0f0", color: isWorkflowEvgProvisioned ? "#1677ff" : batchClassroomItems.length && !batchClassroomAssigning ? "#fff" : "#8c8c8c", display: "grid", placeItems: "center", fontWeight: 600 }}>{isWorkflowEvgProvisioned ? "✓" : "4"}</div>

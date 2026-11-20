@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, '..');
 const esbuild = require(path.resolve(root, '../lms-manage-api/node_modules/esbuild'));
 const taskDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lms-calendar-mobile-'));
 const mocks = {
+  '@/services/learningGroupService': `export const getProgramGroups=async code=>({data:{settings:{code,teaching_model:'large_class',default_capacity:null},groups:[]}});export const saveProgramSettings=async()=>{};export const saveLearningGroup=async()=>{};`,
   '@/hooks/useLmsQueries': `
     const today=new Date().toLocaleDateString('en-CA');
     const row={id:1,key:'qa',code:'qa-program',learn_number:1,lesson_name:'Lịch kiểm thử điện thoại',teacher:'Nguyễn Mỹ Hạnh',assistant_teacher:'Trợ giảng kiểm thử',system_type:'topclass',class_name:'khtn-9-2027',subject:'KHTN 9',room:'lophockhtn-9-2027',session_id:239,student_synced_at:'2026-10-20',package_lesson_mappings:[{lesson_id:169823,package_id:9187,course_id:12345}],start_time:today+'T18:00:00',end_time:today+'T19:00:00',lesson_status:0};
