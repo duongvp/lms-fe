@@ -1,4 +1,5 @@
 export enum PermissionKey {
+    TEACHING_REPORT_VIEW = 'teaching_report.view',
     USER_VIEW = 'users.view',
     USER_CREATE = 'users.create',
     USER_EDIT = 'users.update',

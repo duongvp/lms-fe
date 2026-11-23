@@ -103,8 +103,21 @@ export const menuConfig: IMenuItem[] = [
         key: "6",
         icon: <TeamOutlined />,
         label: "Giáo viên & Trợ giảng",
-        path: "/teacher-profiles",
         permission: PermissionKey.TEACHER_PROFILE_VIEW,
+        children: [
+            {
+                key: "teacher_profiles",
+                label: "Danh sách giáo viên & trợ giảng",
+                path: "/teacher-profiles",
+                permission: PermissionKey.TEACHER_PROFILE_VIEW,
+            },
+            {
+                key: "teacher_reports",
+                label: "Báo cáo giảng dạy",
+                path: "/teacher-reports",
+                permission: PermissionKey.TEACHING_REPORT_VIEW,
+            },
+        ],
     },
     {
         key: "7",
