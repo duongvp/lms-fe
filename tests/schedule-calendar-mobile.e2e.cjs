@@ -12,10 +12,10 @@ const mocks = {
     const row={id:1,key:'qa',code:'qa-program',learn_number:1,lesson_name:'Lịch kiểm thử điện thoại',teacher:'Nguyễn Mỹ Hạnh',assistant_teacher:'Trợ giảng kiểm thử',system_type:'topclass',class_name:'khtn-9-2027',subject:'KHTN 9',room:'lophockhtn-9-2027',session_id:239,student_synced_at:'2026-10-20',package_lesson_mappings:[{lesson_id:169823,package_id:9187,course_id:12345}],start_time:today+'T18:00:00',end_time:today+'T19:00:00',lesson_status:0};
     const schedules={data:{data:{data:[row],total:1}},isLoading:false,isValidating:false};
     const empty={data:[],isLoading:false,isValidating:false};
-    const programs={data:{data:[{code:'qa-program',subject_name:'QA'}]},isLoading:false,isValidating:false};
+    const programs={data:{data:[{code:'qa-program',subject_name:'QA'},{code:'qa-other',subject_name:'QB'},{code:'qa-empty',subject_name:'Không có lịch'}]},isLoading:false,isValidating:false};
     const moduleFields={data:undefined,isLoading:false,isValidating:false};
     const cache={refreshSchedules:async()=>{},refreshLessons:async()=>{}};
-    export const useSchedulesQuery=params=>params?schedules:empty;
+    export const useSchedulesQuery=params=>{if(params)window.qaTableRequest=params;return params?schedules:empty};
     export const useSchedulingProgramsQuery=()=>programs;
     export const useModuleFieldsQuery=()=>moduleFields;
     export const useTeachingStaffQuery=()=>empty;
@@ -26,17 +26,31 @@ const mocks = {
     export const useLmsCache=()=>cache;
   `,
   '@/stores/authStore': `
-    const state={user:{userId:1,permissions:['calendar.view'],roles:['admin'],fieldPolicy:{modules:{calendar:{fields:{'*':{visible:true,editable:false}}}}}},can:()=>false,hasPermission:()=>false,currentProgram:'qa-program',setCurrentProgram:()=>{}};
+    const state={user:{userId:1,permissions:['calendar.view','calendar.create'],roles:['admin'],fieldPolicy:{modules:{calendar:{fields:{'*':{visible:true,editable:false}}}}}},can:permission=>permission==='calendar.create',hasPermission:()=>false,currentProgram:'qa-program',setCurrentProgram:()=>{}};
     export const useAuthStore=selector=>selector(state);useAuthStore.getState=()=>state;
   `,
   'next/navigation': `
     const today=new Date().toLocaleDateString('en-CA');
-    const params=new URLSearchParams({program:'qa-program',from:today,to:today});
+    const params=new URLSearchParams({program:'qa-program',system_type:'topclass',teacher:'Giáo viên trong bộ lọc bảng',from:today,to:today});
     const router={replace:()=>{},push:()=>{},refresh:()=>{}};
     export const useRouter=()=>router;export const useSearchParams=()=>params;export const usePathname=()=>'/schedule';export const useParams=()=>({});
   `,
   '@/components/layouts/AdminLayout/SideMenu': `export const rememberProgramContextUrl=()=>{};`,
-  '@/ultils/fetchInstance': `export const fetchInstance=async()=>({data:[]});`,
+  '@/ultils/fetchInstance': `
+    const today=new Date().toLocaleDateString('en-CA');
+    const row={id:1,key:'qa',code:'qa-program',learn_number:1,lesson_name:'Lịch kiểm thử điện thoại',teacher:'Nguyễn Mỹ Hạnh',assistant_teacher:'Trợ giảng kiểm thử',system_type:'topclass',class_name:'khtn-9-2027',subject:'KHTN 9',room:'lophockhtn-9-2027',session_id:239,package_lesson_mappings:[{lesson_id:169823,package_id:9187,course_id:12345}],start_time:today+'T18:00:00',end_time:today+'T19:00:00',lesson_status:0};
+    const rows=[row,{...row,id:2,key:'qa-other',code:'qa-other',system_type:'topuni',lesson_name:'Buổi học chương trình khác'}];
+    export const fetchInstance=async url=>{
+      const parsed=new URL(url,'http://mock');const q=Object.fromEntries(parsed.searchParams);
+      const current=rows.filter(r=>(!q.start_time||r.start_time>=q.start_time.slice(0,19))&&(!q.end_time||r.start_time<=q.end_time.slice(0,19)));
+      if(parsed.pathname.includes('/filter-options/cross'))return {data:{program_systems:current.map(r=>({code:r.code,system_type:r.system_type})),programs:current.map(r=>r.code),teachers:[],systems:['topclass','topuni'],statuses:[],weekdays:[]}};
+      if(parsed.pathname.endsWith('/livestreams')){
+        window.qaCalendarRequests=[...(window.qaCalendarRequests||[]),q];
+        const data=current.filter(r=>!q.code||r.code===q.code);
+        return {data:{total:data.length,data:data.slice((Number(q.page)-1)*300,Number(q.page)*300)}};
+      }
+      return {data:[]};
+    };`,
 };
 const fixture=`
 import React from 'react';import {createRoot} from 'react-dom/client';
@@ -48,6 +62,7 @@ const until=async fn=>{for(let i=0;i<120;i++){if(fn())return;await pause(50)}thr
 const switchView=mode=>{const el=Array.from(document.querySelectorAll('.ant-segmented-item')).find(el=>el.textContent.includes(mode==='calendar'?'Dạng lịch':'Dạng bảng'));if(!el)throw Error('View switch missing');el.click()};
 (async()=>{
  await until(()=>document.querySelector('.ant-segmented-item'));
+ await until(()=>window.qaTableRequest?.teacher);const tableBefore=JSON.stringify(window.qaTableRequest);
  switchView('calendar');
  await until(()=>document.querySelector('.fc-timegrid-body'));
  await pause(350);
@@ -55,10 +70,53 @@ const switchView=mode=>{const el=Array.from(document.querySelectorAll('.ant-segm
  const first=metrics();
  if(first.stage<300||first.calendar<300)throw Error('Collapsed calendar: '+JSON.stringify(first));
  if(first.width>innerWidth)throw Error('Calendar overflows viewport');
- if(!document.querySelector('.fc-event'))throw Error('Lesson missing');
+ document.querySelector('.fc-timeGridDay-button').click();
+ await until(()=>document.querySelector('.fc-event'));
+ await pause(200);
+ const cards=[...document.querySelectorAll('.fc-timegrid-event-harness > .fc-event')].map(el=>el.getBoundingClientRect());
+ if(cards.some(r=>r.width>321))throw Error('Lesson cards are too wide');
+ for(let i=0;i<cards.length;i++)for(let j=i+1;j<cards.length;j++){const a=cards[i],b=cards[j];if(Math.min(a.right,b.right)>Math.max(a.left,b.left)+1&&Math.min(a.bottom,b.bottom)>Math.max(a.top,b.top)+1)throw Error('Concurrent lessons overlap');}
+ const more=document.querySelector('.fc-timegrid-more-link');
+ if(more){if(!more.textContent.includes('buổi'))throw Error('Hidden lessons link is unclear');more.click();await until(()=>document.querySelector('.fc-popover .fc-event'));document.querySelector('.fc-popover-close').click();}
+ const lessonCount=()=>[...document.querySelectorAll('.fc-timegrid-event-harness > .fc-event')].filter(el=>getComputedStyle(el).visibility!=='hidden').length+[...document.querySelectorAll('.fc-timegrid-more-link')].reduce((n,el)=>n+Number(el.textContent.match(/[0-9]+/)?.[0]||0),0);
+ if(window.qaCalendarRequests.some(q=>q.code||q.teacher||q.system_type||q.keyword))throw Error('Table filters leaked into calendar');
+ if(document.getElementById('calendar-program'))throw Error('Old all-programs filter must be removed');
+ const choose=async label=>{const select=document.getElementById('calendar-create-program').closest('.ant-select');if(!select.classList.contains('ant-select-open'))select.querySelector('.ant-select-selector').dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));await pause(100);const popup=document.getElementById('calendar-create-program_list').closest('.ant-select-dropdown');const option=[...popup.querySelectorAll('.ant-select-item-option')].find(o=>o.textContent===label);if(!option)throw Error('Missing calendar program '+label);option.click();await pause(180);};
+ const creation=document.getElementById('calendar-create-program');if(!creation)throw Error('Creation program picker missing');
+ if(creation.closest('.fc-toolbar-chunk')!==document.querySelector('.fc-today-button').closest('.fc-toolbar-chunk'))throw Error('Creation program picker must be next to Today');
+ await choose('qa-program · QA');await until(()=>document.querySelectorAll('.fc-event').length===1);
+ await choose('qa-empty · Không có lịch');await until(()=>window.qaCreateModal?.programCode==='qa-empty'&&document.querySelectorAll('.fc-event').length===0);
+ if(!document.querySelector('.calendar-create-enabled'))throw Error('Creating in selected program is not enabled');
+ const lane=document.querySelector('.fc-timegrid-slot[data-time="09:00:00"].fc-timegrid-slot-lane');
+ const endLane=document.querySelector('.fc-timegrid-slot[data-time="10:00:00"].fc-timegrid-slot-lane');
+ const from=lane.getBoundingClientRect(),to=endLane.getBoundingClientRect();
+ const x=from.left+from.width/2;
+ lane.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,button:0,buttons:1,clientX:x,clientY:from.top+2}));
+ document.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,buttons:1,clientX:x,clientY:to.top+2}));
+ await until(()=>document.querySelector('.calendar-selection-preview'));
+ const preview=document.querySelector('.calendar-selection-preview');
+ if(!/[0-9]{2}:[0-9]{2} – [0-9]{2}:[0-9]{2}/.test(preview.textContent))throw Error('Missing live drag time range: '+preview.textContent);
+ const firstRange=preview.textContent;
+ document.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,buttons:1,clientX:x,clientY:to.bottom+4}));
+ await until(()=>document.querySelector('.calendar-selection-preview')?.textContent!==firstRange);
+ document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,button:0,clientX:x,clientY:to.bottom+4}));
+ // This fixture intentionally has no editable fields, so releasing must clear the preview.
+ await until(()=>!document.querySelector('.calendar-selection-preview'));
+ if(window.qaCreateModal?.open)throw Error('Creation must still respect field permissions');
+ await pause(100);
+
+ const clear=async()=>{document.getElementById('calendar-create-program').closest('.ant-select').querySelector('.ant-select-clear').dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));await until(()=>!window.qaCreateModal?.programCode&&lessonCount()===2)};
+ await clear();if(document.querySelector('.calendar-create-enabled'))throw Error('Clear must reset creation program');
+ await choose('qa-other · QB');await until(()=>document.querySelectorAll('.fc-event').length===1);await clear();
+ const previousRange=window.qaCalendarRequests.at(-1).start_time;
+ document.querySelector('.fc-next-button').click();await until(()=>window.qaCalendarRequests.at(-1).start_time!==previousRange);
+ document.querySelector('.fc-prev-button').click();await until(()=>lessonCount()===2);
  switchView('table');await pause(200);switchView('calendar');await pause(350);
+ if(JSON.stringify(window.qaTableRequest)!==tableBefore)throw Error('Calendar filter changed table state');
+ if(document.getElementById('calendar-create-program').closest('.ant-select').querySelector('.ant-select-selection-item'))throw Error('Calendar programs must reset on entry');
  const second=metrics();if(second.stage<300||second.calendar<300)throw Error('Collapsed after switching views');
  document.querySelector('.fc-dayGridMonth-button').click();await until(()=>document.querySelector('.fc-daygrid-body'));await pause(200);
+ if(!document.getElementById('calendar-create-program'))throw Error('Creation picker lost after calendar view change');
  if(!document.querySelector('.fc-event'))throw Error('Month lesson missing');
  document.querySelector('.fc-event').click();
  await until(()=>document.querySelector('.ant-modal .schedule-detail'));
@@ -82,7 +140,7 @@ const switchView=mode=>{const el=Array.from(document.querySelectorAll('.ant-segm
 (async()=>{
  const result=await esbuild.build({stdin:{contents:fixture,resolveDir:root,loader:'tsx'},bundle:true,write:false,loader:{'.css':'empty'},platform:'browser',format:'iife',jsx:'automatic',tsconfig:root+'/tsconfig.json',define:{'process.env.NODE_ENV':'"development"','process.env':'{}'},plugins:[{name:'qa-mocks',setup(build){
  build.onResolve({filter:/^\.\/components\/Modal\//},args=>args.importer.endsWith('/schedule/page.tsx')?{path:args.path,namespace:'qa-empty'}:undefined);
- build.onLoad({filter:/.*/,namespace:'qa-empty'},()=>({contents:'export default function Stub(){return null}',loader:'js'}));
+ build.onLoad({filter:/.*/,namespace:'qa-empty'},args=>({contents:args.path.endsWith('/ScheduleModal')?'export default function Stub(props){window.qaCreateModal=props;return null}':'export default function Stub(){return null}',loader:'js'}));
  build.onResolve({filter:/^(@\/|next\/navigation$)/},args=>mocks[args.path]?{path:args.path,namespace:'qa'}:args.path.startsWith('@/')?{path:root+'/'+args.path.slice(2)+(fs.existsSync(root+'/'+args.path.slice(2)+'.tsx')?'.tsx':'.ts')}:undefined);
  build.onLoad({filter:/.*/,namespace:'qa'},args=>({contents:mocks[args.path],loader:'js'}));
  }}]});

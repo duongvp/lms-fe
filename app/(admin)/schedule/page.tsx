@@ -5,18 +5,24 @@ import { runEvgProvisionItems, summarizeEvgProvision, type EvgProvisionItem } fr
 import QuickEvgBannerModal from "./components/Modal/QuickEvgBannerModal";
 import { calendarSourceFromCode } from "@/helper/lesson";
 import { cleanFilterValues, buildScheduleApiParams, buildCalendarRoomReportParams, buildScheduleUrl, type ScheduleFilterValues } from "@/helper/scheduleFilters";
+import { useScheduleCrossFilters } from "@/hooks/useScheduleCrossFilters";
+import { scheduleFacetOptions } from "@/helper/scheduleFacetOptions";
 import { isYesterdayRegistrationRange } from "@/ultils/registrationAuditDate";
 import Select from "@/components/ui/MobileSelect";
 import Table from "@/components/ui/ModalTable";
 import { createPortal } from "react-dom";
 import type { FormInstance } from 'antd';
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
+import useSWR from "swr";
+import { SWR_NAMESPACES } from "@/lib/swrKeys";
+import { loadWeekProgramSchedules } from "@/helper/scheduleWeek";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ConfigProvider as MobileConfigProvider, DatePicker as MobileDatePicker, Popup as MobilePopup } from "antd-mobile";
 import viVN from "antd-mobile/es/locales/vi-VN";
 import { DatePicker, TimePicker } from "./components/MobileSchedulePickers";
 import CustomTable from "@/components/ui/Table";
 import ScheduleSelectionNotice from "./components/ScheduleSelectionNotice";
+import ScheduleWeekTable from "./components/ScheduleWeekTable";
 import ScheduleSelectionCheckbox, { useScheduleSelection, useSelectionKeys, type ScheduleSelectionStore } from "./components/ScheduleSelectionCheckbox";
 import type { ColumnsType } from "antd/es/table";
 import type { FilterDropdownProps } from "antd/es/table/interface";
@@ -911,7 +917,8 @@ const ScheduleFilterSheet = ({
 }) => {
     const [filterForm] = Form.useForm();
     const selectedSource = Form.useWatch('calendar_source', filterForm) || value.calendar_source || 'livestream';
-    const sourceProgramOptions = programOptions.filter(option => calendarSourceFromCode(option.value) === selectedSource);
+    const crossFilters = useScheduleCrossFilters(filterForm, value, open);
+    const sourceProgramOptions = scheduleFacetOptions(programOptions.filter(option => calendarSourceFromCode(option.value) === selectedSource), crossFilters.data?.programs, crossFilters.values.code);
     useEffect(() => {
         filterForm.resetFields();
         filterForm.setFieldsValue({ ...value, calendar_source: value.calendar_source ?? "livestream" });
@@ -960,7 +967,7 @@ const ScheduleFilterSheet = ({
                             }}
                         ><CloseOutlined /></span> } : false}
                         showSearch
-                        loading={loadingPrograms}
+                        loading={loadingPrograms || crossFilters.loading}
                         options={sourceProgramOptions}
                         optionFilterProp="label"
                         placeholder={allowFilterWithoutProgram ? "Tất cả Chương trình" : "Chọn Chương trình"}
@@ -982,16 +989,16 @@ const ScheduleFilterSheet = ({
                     }} />
                 </Form.Item>
                 <Form.Item name="teacher" label="Giáo viên">
-                    <TeachingStaffSelect teacherType={1} mode="multiple" maxTagCount="responsive" allowQuickCreate={false} allowClear showSearch placeholder="Chọn giáo viên" />
+                    <Select mode="multiple" maxTagCount={1} allowClear showSearch optionFilterProp="label" placeholder="Chọn giáo viên" loading={crossFilters.loading} options={crossFilters.teachers} />
                 </Form.Item>
                 <Form.Item name="system_type" label="Hệ thống">
-                    <Select mode="multiple" maxTagCount="responsive" allowClear placeholder="Tất cả hệ thống" options={[{ value: "topclass", label: "Topclass" }, { value: "topuni", label: "Topuni" }]} />
+                    <Select mode="multiple" maxTagCount={1} allowClear placeholder="Tất cả hệ thống" loading={crossFilters.loading} options={scheduleFacetOptions([{ value: "topclass", label: "Topclass" }, { value: "topuni", label: "Topuni" }], crossFilters.data?.systems, crossFilters.values.system_type)} />
                 </Form.Item>
                 <Form.Item name="time_status" label="Trạng thái buổi học">
-                    <Select mode="multiple" maxTagCount="responsive" allowClear placeholder="Tất cả trạng thái" options={[{ value: "upcoming", label: "Chưa bắt đầu" }, { value: "ongoing", label: "Đang diễn ra" }, { value: "completed", label: "Đã kết thúc" }, { value: "cancelled", label: <span style={{ color: "#cf1322" }}>Nghỉ học</span> }]} />
+                    <Select mode="multiple" maxTagCount={1} allowClear placeholder="Tất cả trạng thái" loading={crossFilters.loading} options={scheduleFacetOptions([{ value: "upcoming", label: "Chưa bắt đầu" }, { value: "ongoing", label: "Đang diễn ra" }, { value: "completed", label: "Đã kết thúc" }, { value: "cancelled", label: <span style={{ color: "#cf1322" }}>Nghỉ học</span> }], crossFilters.data?.statuses, crossFilters.values.time_status)} />
                 </Form.Item>
                 <Form.Item name="weekdays" label="Thứ trong tuần">
-                    <Select mode="multiple" maxTagCount="responsive" allowClear placeholder="Tất cả các thứ" options={WEEKDAY_OPTIONS} />
+                    <Select mode="multiple" maxTagCount={1} allowClear placeholder="Tất cả các thứ" loading={crossFilters.loading} options={scheduleFacetOptions(WEEKDAY_OPTIONS, crossFilters.data?.weekdays, crossFilters.values.weekdays)} />
                 </Form.Item>
                 <Form.Item label="Khoảng bài">
                     <Space.Compact block>
@@ -1009,6 +1016,7 @@ const ScheduleFilterSheet = ({
                 >
                     <MobileDateRangePicker />
                 </Form.Item>
+                {crossFilters.error && <Alert type="warning" showIcon message="Không tải được lựa chọn lọc chéo. Vui lòng thử lại." action={<Button size="small" onClick={() => void crossFilters.mutate()}>Thử lại</Button>} />}
             </Form>
             <div className="schedule-filter-sheet-actions">
                 <Button onClick={handleReset}>Xóa lọc</Button>
@@ -1037,7 +1045,8 @@ const ScheduleInlineFilters = ({
 }) => {
     const [filterForm] = Form.useForm();
     const selectedSource = Form.useWatch('calendar_source', filterForm) || value.calendar_source || 'livestream';
-    const sourceProgramOptions = programOptions.filter(option => calendarSourceFromCode(option.value) === selectedSource);
+    const crossFilters = useScheduleCrossFilters(filterForm, value);
+    const sourceProgramOptions = scheduleFacetOptions(programOptions.filter(option => calendarSourceFromCode(option.value) === selectedSource), crossFilters.data?.programs, crossFilters.values.code);
 
     useEffect(() => {
         filterForm.resetFields();
@@ -1070,7 +1079,7 @@ const ScheduleInlineFilters = ({
                         <Select
                             allowClear={allowFilterWithoutProgram}
                             showSearch
-                            loading={loadingPrograms}
+                            loading={loadingPrograms || crossFilters.loading}
                             options={sourceProgramOptions}
                             optionFilterProp="label"
                             placeholder={allowFilterWithoutProgram ? "Tất cả Chương trình" : "Chọn Chương trình"}
@@ -1078,11 +1087,12 @@ const ScheduleInlineFilters = ({
                         />
                     </Form.Item>
                     <Form.Item name="teacher" label="Giáo viên" style={{ flex: "1 1 190px", minWidth: 190, marginBottom: 10 }}>
-                        <TeachingStaffSelect
-                            teacherType={1}
+                        <Select
                             mode="multiple"
-                            maxTagCount="responsive"
-                            allowQuickCreate={false}
+                            maxTagCount={1}
+                            options={crossFilters.teachers}
+                            loading={crossFilters.loading}
+                            optionFilterProp="label"
                             allowClear
                             showSearch
                             placeholder="Tất cả giáo viên"
@@ -1104,10 +1114,11 @@ const ScheduleInlineFilters = ({
                     <Form.Item name="weekdays" label="Thứ" style={{ flex: "1 1 180px", minWidth: 180, marginBottom: 10 }}>
                         <Select
                             mode="multiple"
-                            maxTagCount="responsive"
+                            maxTagCount={1}
                             allowClear
                             placeholder="Tất cả các thứ"
-                            options={WEEKDAY_OPTIONS}
+                            loading={crossFilters.loading}
+                            options={scheduleFacetOptions(WEEKDAY_OPTIONS, crossFilters.data?.weekdays, crossFilters.values.weekdays)}
                         />
                     </Form.Item>
                     <Form.Item label="Khoảng bài" style={{ flex: "1 1 180px", minWidth: 180, marginBottom: 10 }}>
@@ -1123,15 +1134,16 @@ const ScheduleInlineFilters = ({
                     <Form.Item name="time_status" label="Trạng thái" style={{ flex: "1 1 165px", minWidth: 165, marginBottom: 10 }}>
                         <Select
                             mode="multiple"
-                            maxTagCount="responsive"
+                            maxTagCount={1}
                             allowClear
                             placeholder="Tất cả trạng thái"
-                            options={[
+                            loading={crossFilters.loading}
+                            options={scheduleFacetOptions([
                                 { value: "upcoming", label: "Chưa bắt đầu" },
                                 { value: "ongoing", label: "Đang diễn ra" },
                                 { value: "completed", label: "Đã kết thúc" },
                                 { value: "cancelled", label: <span style={{ color: "#cf1322" }}>Nghỉ học</span> },
-                            ]}
+                            ], crossFilters.data?.statuses, crossFilters.values.time_status)}
                         />
                     </Form.Item>
                     <div style={{ display: "flex", flex: "0 1 245px", minWidth: 245, gap: 10 }}>
@@ -1144,13 +1156,14 @@ const ScheduleInlineFilters = ({
                         <Form.Item name="system_type" label="Hệ thống" style={{ flex: "1 1 120px", minWidth: 120, marginBottom: 10 }}>
                             <Select
                                 mode="multiple"
-                                maxTagCount="responsive"
+                                maxTagCount={1}
                                 allowClear
                                 placeholder="Tất cả"
-                                options={[
+                                loading={crossFilters.loading}
+                                options={scheduleFacetOptions([
                                     { value: "topclass", label: "Topclass" },
                                     { value: "topuni", label: "Topuni" },
-                                ]}
+                                ], crossFilters.data?.systems, crossFilters.values.system_type)}
                             />
                         </Form.Item>
                     </div>
@@ -1169,6 +1182,7 @@ const ScheduleInlineFilters = ({
                     </Form.Item>
                 </div>
             </Form>
+            {crossFilters.error && <Alert type="warning" showIcon message="Không tải được lựa chọn lọc chéo. Vui lòng thử lại." action={<Button size="small" onClick={() => void crossFilters.mutate()}>Thử lại</Button>} style={{marginBottom: 10}} />}
             <style>{`
                 .schedule-inline-filters .ant-form-item-explain,
                 .schedule-inline-filters .ant-form-item-extra {
@@ -1245,6 +1259,7 @@ const Page = () => {
     const isAdmin = permissions.includes("*") || roles?.some((role: any) => String(role?.code || role?.name || role).toLowerCase() === "admin");
     const hasPermission = useAuthStore(state => state.hasPermission);
     const can = useAuthStore(state => state.can);
+    const calendarAuthScope = useAuthStore(state => `${state.user.userId}:${state.authSessionVersion}`);
     const [data, setData] = useState<ScheduleDataType[]>(MOCK_SCHEDULES);
     const [filteredData, setFilteredData] = useState<ScheduleDataType[]>(MOCK_SCHEDULES);
     // Bản nháp cập nhật ngay trong ô nhập; không render lại cả bảng mỗi ký tự.
@@ -1559,11 +1574,23 @@ const Page = () => {
     const [submittedFilterValues, setSubmittedFilterValues] = useState<ScheduleFilterValues>({ calendar_source: "livestream" });
     const [tableColumnFilters, setTableColumnFilters] = useState<Record<string, React.Key[] | null>>({});
     const [hasSearched, setHasSearched] = useState(false);
-    const [viewMode, setViewMode] = useState<"table" | "calendar">("table");
+    const [viewMode, setViewMode] = useState<"table" | "calendar" | "week">("table");
     const [calendarMounted, setCalendarMounted] = useState(false);
+    const [calendarCreateProgram, setCalendarCreateProgram] = useState<string|undefined>();
+    const calendarProgramCodes = useMemo(()=>calendarCreateProgram?[calendarCreateProgram]:[],[calendarCreateProgram]);
+    const [calendarCreateProgramSlot, setCalendarCreateProgramSlot] = useState<HTMLElement|null>(null);
+    const [calendarRange, setCalendarRange] = useState<{start_time:string;end_time:string}|null>(null);
+    const handleCalendarDatesSet = useCallback((info: any) => {
+        const next = {
+            start_time: dayjs(info.start).format('YYYY-MM-DDTHH:mm:ss.SSS[Z]'),
+            end_time: dayjs(info.end).subtract(1,'millisecond').format('YYYY-MM-DDTHH:mm:ss.SSS[Z]'),
+        };
+        setCalendarRange(previous => previous?.start_time===next.start_time && previous?.end_time===next.end_time ? previous : next);
+    }, []);
     const [calendarData, setCalendarData] = useState<ScheduleDataType[]>([]);
     const [calendarDetail, setCalendarDetail] = useState<ScheduleDataType | null>(null);
     const calendarRef = useRef<FullCalendar>(null);
+    const [calendarMaxStack, setCalendarMaxStack] = useState(1);
     const screens = Grid.useBreakpoint();
     const isDesktop = Boolean(screens.lg);
     const isMobile = !screens.md;
@@ -1863,30 +1890,32 @@ const Page = () => {
     }), [allRowsSelected, displayedTotalItems, handleRowSelectionChange, handleSelectAll, selectableRowKeys, selectedRowKeys, selectingAllRows, selectionStore]);
 
     const calendarParams = useMemo<LivestreamListParams | null>(() => {
-        if (!hasSearched || !calendarMounted) return null;
+        if (viewMode !== 'calendar' || !calendarMounted || !calendarRange || (!isAdmin && !calendarProgramCodes.length)) return null;
         return {
             page: 1,
-            limit: 100,
-            ...buildScheduleApiParams(submittedFilterValues),
-            sort_by: "start_time",
-            sort_order: "asc",
+            limit: 300,
+            calendar_source: 'livestream',
+            ...calendarRange,
+            sort_by: "start_time,id",
+            sort_order: "asc,asc",
         };
-    }, [calendarMounted, hasSearched, submittedFilterValues]);
+    }, [calendarMounted, viewMode, calendarRange, isAdmin, calendarProgramCodes.length]);
 
 
     // ✅ Chỉ fetch khi đã bấm Lọc
     const schedulesQuery = useSchedulesQuery(hasSearched ? scheduleParams : null);
-    const calendarSchedulesQuery = useSchedulesQuery(calendarParams);
-    const scheduleLoadError = schedulesQuery.error
-        || (viewMode === "calendar" ? calendarSchedulesQuery.error : undefined);
+    const calendarSchedulesQuery = useSWR(calendarParams ? [SWR_NAMESPACES.schedules,'independent-calendar',calendarAuthScope,calendarParams,calendarProgramCodes] as const : null,
+        ([,,,params,codes]) => loadWeekProgramSchedules(params,codes,getLivestreams), {revalidateOnFocus:false});
+    const scheduleLoadError = viewMode === 'table' ? schedulesQuery.error
+        : viewMode === 'calendar' ? calendarSchedulesQuery.error : undefined;
     useEffect(() => {
-        if (!hasSearched || !scheduleLoadError) return;
+        if (!scheduleLoadError || (viewMode === 'table' && !hasSearched)) return;
         api.error({
             key: "schedule-load-error",
             message: "Không thể tải lịch học",
             description: scheduleLoadError.message || "Vui lòng thử lại.",
         });
-    }, [api, hasSearched, scheduleLoadError]);
+    }, [api, hasSearched, viewMode, scheduleLoadError]);
     const moduleFieldsQuery = useModuleFieldsQuery(SCHEDULE_MODULE_CODE);
     const scheduleTeacherFilterOptionsQuery = useScheduleTeacherFilterOptionsQuery(submittedFilterValues.code);
     const headerFilterOptionsQuery = useScheduleHeaderFilterOptionsQuery(
@@ -1900,7 +1929,10 @@ const Page = () => {
     const assistantLabelByUsername = useMemo(() => new Map(
         assistantOptions.map((option) => [String(option.value), String(option.label)])
     ), [assistantOptions]);
-    const programOptions = useMemo(() => {
+    const assistantDisplayNameByUsername = useMemo(() => new Map(
+        assistantOptions.map((option) => [String(option.value), String(option.displayName)])
+    ), [assistantOptions]);
+    const programOptions = useMemo<Array<{value:string;label:string}>>(() => {
         const rows = Array.isArray(programsQuery.data?.data) ? programsQuery.data.data : [];
         return rows.map((program: any) => {
             const code = String(program.code ?? "").trim();
@@ -1933,20 +1965,31 @@ const Page = () => {
     }, [schedulesQuery.data, hasSearched, scheduleResultScope]);
 
     useEffect(() => {
-        if (!hasSearched) {
-            setCalendarData([]);
-            return;
-        }
-        const response: any = calendarSchedulesQuery.data;
-        if (!response?.data) return;
-        setCalendarData(mapScheduleRows(response.data.data ?? []));
-    }, [calendarSchedulesQuery.data, hasSearched]);
+        setCalendarData(mapScheduleRows(calendarSchedulesQuery.data??[]));
+    }, [calendarSchedulesQuery.data]);
 
     useEffect(() => {
         if (viewMode !== "calendar") return;
         const frame = requestAnimationFrame(() => calendarRef.current?.getApi().updateSize());
         return () => cancelAnimationFrame(frame);
     }, [viewMode, isDesktop]);
+
+    useLayoutEffect(() => {
+        if (viewMode !== 'calendar' || !calendarMounted) return;
+        const root = pageScrollRef.current?.querySelector('.custom-calendar-wrapper');
+        if (!root) return;
+        const measure = () => {
+            const column = root.querySelector('.fc-timegrid-col-events');
+            if (!column) return;
+            const isDay = calendarRef.current?.getApi().view.type === 'timeGridDay';
+            // Reserve room for the link to hidden lessons; never squeeze cards into unreadable strips.
+            setCalendarMaxStack(Math.max(1, Math.floor(column.getBoundingClientRect().width / (isDay ? 220 : 150))));
+        };
+        const observer = new ResizeObserver(measure);
+        observer.observe(root);
+        const frame = requestAnimationFrame(measure);
+        return () => { observer.disconnect(); cancelAnimationFrame(frame); };
+    }, [viewMode, calendarMounted, calendarRange]);
 
     const calendarEvents = useMemo(() => {
         const now = dayjs();
@@ -1983,12 +2026,41 @@ const Page = () => {
         center: "title",
         right: "dayGridMonth,timeGridWeek,timeGridDay",
     }) : ({
-        left: "prev,next",
+        left: "prev,next today",
         center: "title",
         right: "timeGridDay,dayGridMonth",
     }), [isDesktop]);
 
+    useLayoutEffect(() => {
+        if(viewMode!=='calendar'||!calendarMounted)return;
+        const root=pageScrollRef.current;
+        if(!root)return;
+        let slot:HTMLElement|null=null;
+        const attach=()=>{
+            const toolbar=root.querySelector('.custom-calendar-wrapper .fc-header-toolbar .fc-toolbar-chunk');
+            if(!toolbar||slot?.parentElement===toolbar)return;
+            slot?.remove();
+            slot=document.createElement('span');
+            slot.className='calendar-create-program-slot';
+            toolbar.appendChild(slot);
+            setCalendarCreateProgramSlot(slot);
+        };
+        const observer=new MutationObserver(attach);
+        observer.observe(root,{childList:true,subtree:true});
+        attach();
+        return()=>{observer.disconnect();slot?.remove();setCalendarCreateProgramSlot(null);};
+    }, [viewMode,calendarMounted,isDesktop]);
+
     const renderCalendarEvent = useCallback((eventInfo: any) => {
+        // FullCalendar's selection preview has no schedule record yet.
+        if (eventInfo.isMirror && !eventInfo.event.extendedProps.record) {
+            const start = dayjs(eventInfo.event.start).format('HH:mm');
+            const end = dayjs(eventInfo.event.end).format('HH:mm');
+            return <div className="calendar-selection-preview">
+                <span>{start} – {end}</span>
+                <span className="calendar-selection-preview-label">Đang chọn giờ</span>
+            </div>;
+        }
         const styleType = eventInfo.event.extendedProps.styleType;
         const isDraft = Boolean(eventInfo.event.extendedProps.isDraft);
         const record = eventInfo.event.extendedProps.record as ScheduleDataType;
@@ -1997,16 +2069,16 @@ const Page = () => {
             : styleType === "cancelled"
             ? { background: "#fff1f0", color: "#cf1322", border: "3px solid #ff4d4f" }
             : styleType === "completed"
-                ? { background: "#f6ffed", color: "#389e0d", border: "3px solid #52c41a" }
+                ? { background: "#fffbe6", color: "#ad6800", border: "3px solid #faad14" }
                 : styleType === "ongoing"
-                    ? { background: "#fff2e8", color: "#d4380d", border: "3px solid #fa541c" }
+                    ? { background: "#f6ffed", color: "#389e0d", border: "3px solid #52c41a" }
                     : { background: "#e6f4ff", color: "#0958d9", border: "3px solid #1677ff" };
         return (
-            <div style={{
+            <div title={`${eventInfo.timeText} · ${eventInfo.event.title}${record.teacher ? ` · ${record.teacher}` : ''}`} style={{
                 backgroundColor: visual.background,
                 color: visual.color,
                 borderLeft: visual.border,
-                padding: "4px 6px",
+                padding: "5px 8px",
                 height: "100%",
                 width: "100%",
                 borderRadius: 4,
@@ -2015,14 +2087,14 @@ const Page = () => {
                 flexDirection: "column",
                 boxSizing: "border-box",
             }}>
-                <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.85 }}>{eventInfo.timeText}</div>
+                <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.4 }}>{eventInfo.timeText}</div>
                 {styleType === "cancelled" && (
-                    <div style={{ fontSize: 10, fontWeight: 700, marginTop: 2 }}>NGHỈ HỌC</div>
+                    <div style={{ fontSize: 10, fontWeight: 500, marginTop: 2 }}>NGHỈ HỌC</div>
                 )}
                 {styleType !== "cancelled" && record.classroom_assigned && (
-                    <div style={{ fontSize: 10, fontWeight: 700, marginTop: 2 }}>ĐÃ CHIA LỚP</div>
+                    <div style={{ fontSize: 10, fontWeight: 500, marginTop: 2 }}>ĐÃ CHIA LỚP</div>
                 )}
-                <div style={{ fontSize: 12, whiteSpace: "normal", lineHeight: 1.3, marginTop: 2, fontWeight: 500 }}>
+                <div style={{ fontSize: 13, whiteSpace: "normal", lineHeight: 1.4, marginTop: 3, fontWeight: 400, display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 3, overflow: 'hidden', overflowWrap: 'anywhere' }}>
                     {eventInfo.event.title}
                 </div>
                 {isDraft && record.teacher && (
@@ -2051,7 +2123,9 @@ const Page = () => {
     const [openFilterDrawer, setOpenFilterDrawer] = useState(false);
     const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
     const [mobileActionGroup, setMobileActionGroup] = useState<string>();
-    const activeProgramCode = String(submittedFilterValues.code || "").trim() || undefined;
+    const activeProgramCode = viewMode === 'calendar'
+        ? calendarCreateProgram
+        : String(submittedFilterValues.code || "").trim() || undefined;
     const canCreateSchedule = can(PermissionKey.SCHEDULE_CREATE, activeProgramCode);
     const canEditSchedule = can(PermissionKey.SCHEDULE_EDIT, activeProgramCode);
     const canDeleteSchedule = can(PermissionKey.SCHEDULE_DELETE, activeProgramCode);
@@ -2141,12 +2215,12 @@ const Page = () => {
             });
             return false;
         }
-        if (!submittedFilterValues.code && !allowManualProgramSelection) {
+        if (!activeProgramCode && !allowManualProgramSelection) {
             api.warning({
                 message: "Vui lòng chọn Chương trình",
-                description: "Chọn Chương trình trong bộ lọc trước khi thêm lịch học.",
+                description: viewMode==='calendar' ? "Chọn một chương trình trong Dạng lịch trước khi thêm lịch học." : "Chọn Chương trình trong bộ lọc trước khi thêm lịch học.",
             });
-            setOpenFilterDrawer(true);
+            if(viewMode!=='calendar')setOpenFilterDrawer(true);
             return false;
         }
         const draft = calendarDraft ? {
@@ -4369,7 +4443,7 @@ const Page = () => {
             // `overflow-x: hidden` kết hợp `overflow-y: visible` sẽ tạo một
             // scroll container ngầm và làm sticky table header bám sai vùng.
             // `clip` vẫn chặn tràn ngang nhưng để header bám Admin Content.
-            overflowX: viewMode === "table" ? "clip" : "hidden",
+            overflowX: viewMode !== "calendar" ? "clip" : "hidden",
             overflowY: viewMode === "calendar" && isDesktop ? "hidden" : "visible",
             WebkitOverflowScrolling: "touch",
         }}>
@@ -4857,7 +4931,7 @@ const Page = () => {
                 />
                 )}
                 {!isMobile && !isDesktop && scheduleSelectionNotice}
-                {isDesktop && (
+                {isDesktop && viewMode === "table" && (
                     <ScheduleInlineFilters
                         value={filterValues}
                         loading={loading}
@@ -4878,6 +4952,9 @@ const Page = () => {
                 .schedule-view-controls-enter {
                     animation: schedule-view-controls-enter 180ms ease-out;
                 }
+                .custom-calendar-wrapper .fc-header-toolbar .fc-toolbar-chunk:first-child{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+                .custom-calendar-wrapper .calendar-create-program-slot{display:inline-flex;align-items:center;max-width:100%;margin-left:0!important}
+                .calendar-create-program-picker{width:240px;max-width:100%;font-size:14px}
                 @media (prefers-reduced-motion: reduce) {
                     .schedule-view-controls-enter { animation: none; }
                 }
@@ -4887,19 +4964,22 @@ const Page = () => {
                 className="responsive-schedule-view-toolbar schedule-view-controls-enter"
                 style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: viewMode === "calendar" ? "space-between" : "flex-end", alignItems: "center", marginBottom: 12 }}
             >
-                {isDesktop && scheduleSelectionNotice}
+                {isDesktop && viewMode === 'table' && scheduleSelectionNotice}
                 {viewMode === "calendar" && (
                     <div className="responsive-calendar-legend" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 16px' }}>
+                        {(calendarSchedulesQuery.isLoading||calendarSchedulesQuery.isValidating)&&<Spin size="small"/>}
+                        {!isAdmin&&!calendarProgramCodes.length&&<Typography.Text type="secondary">Chọn chương trình để xem lịch.</Typography.Text>}
+                        {programsQuery.error&&<Button size="small" danger onClick={()=>void programsQuery.mutate()}>Tải lại chương trình</Button>}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <div style={{ width: 12, height: 12, borderRadius: 2, background: '#e6f4ff', borderLeft: '3px solid #1677ff' }} />
                             <span style={{ fontSize: 13, color: '#555' }}>Sắp diễn ra</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <div style={{ width: 12, height: 12, borderRadius: 2, background: '#fff2e8', borderLeft: '3px solid #fa541c' }} />
+                            <div style={{ width: 12, height: 12, borderRadius: 2, background: '#f6ffed', borderLeft: '3px solid #52c41a' }} />
                             <span style={{ fontSize: 13, color: '#555' }}>Đang diễn ra</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <div style={{ width: 12, height: 12, borderRadius: 2, background: '#f6ffed', borderLeft: '3px solid #52c41a' }} />
+                            <div style={{ width: 12, height: 12, borderRadius: 2, background: '#fffbe6', borderLeft: '3px solid #faad14' }} />
                             <span style={{ fontSize: 13, color: '#555' }}>Đã kết thúc</span>
                         </div>
                     </div>
@@ -4911,14 +4991,28 @@ const Page = () => {
                     options={[
                         { label: "Dạng bảng", value: "table" },
                         { label: "Dạng lịch", value: "calendar" },
+                        { label: "Bảng tuần", value: "week" },
                     ]}
                     onChange={(value) => {
-                        const nextMode = value as "table" | "calendar";
-                        if (nextMode === "calendar") setCalendarMounted(true);
+                        const nextMode = value as "table" | "calendar" | "week";
+                        if (nextMode === "calendar") {
+                            setCalendarMounted(true);
+                            setCalendarCreateProgram(undefined);
+                            calendarRef.current?.getApi().today();
+                        }
+                        if (nextMode !== "table") setOpenFilterDrawer(false);
                         setViewMode(nextMode);
                     }}
                 />
             </div>
+
+            {viewMode==='calendar'&&calendarCreateProgramSlot&&createPortal(
+                <AntSelect id="calendar-create-program" aria-label="Chương trình tạo lịch" className="calendar-create-program-picker"
+                    value={activeProgramCode} onChange={setCalendarCreateProgram} allowClear showSearch optionFilterProp="label"
+                    placeholder="Chương trình tạo lịch" loading={programsQuery.isLoading||programsQuery.isValidating}
+                    options={programOptions.filter(option=>calendarSourceFromCode(option.value)==='livestream')}/>,
+                calendarCreateProgramSlot
+            )}
 
             {isMobile && viewMode === "table" && hasSearched && displayedTotalItems > 0 && (
                 <div className="schedule-mobile-selection-bar">
@@ -4962,7 +5056,7 @@ const Page = () => {
                     display: "flex",
                     flexDirection: "column",
                 }}>
-                    {!hasSearched ? (
+                    {!hasSearched && viewMode === "table" ? (
                         <Empty
                             image={Empty.PRESENTED_IMAGE_SIMPLE}
                             description={
@@ -5100,7 +5194,10 @@ const Page = () => {
                                 }
                             }
                         `}</style>
-                            <div className={`schedule-view-stage${viewMode === "table" ? " schedule-view-stage-table" : ""}`}>
+                            <div className={`schedule-view-stage${viewMode !== "calendar" ? " schedule-view-stage-table" : ""}`}>
+                                {viewMode === 'week' && <div className="schedule-view-pane schedule-view-pane-active">
+                                    <ScheduleWeekTable programs={programsQuery.data?.data??[]} assistantNames={assistantDisplayNameByUsername} allowAllPrograms={Boolean(isAdmin)} onOpen={row=>setCalendarDetail(mapScheduleRows([row])[0])}/>
+                                </div>}
                                 <div
                                     className={`schedule-view-pane custom-calendar-wrapper${viewMode === "calendar" ? " schedule-view-pane-active" : ""}${canCreateSchedule && activeProgramCode ? " calendar-create-enabled" : ""}`}
                                     aria-hidden={viewMode !== "calendar"}
@@ -5135,6 +5232,50 @@ const Page = () => {
                                 }
                                 .custom-calendar-wrapper .fc-timegrid-event-harness > .fc-timegrid-event {
                                     box-shadow: none;
+                                    max-width: 320px;
+                                    margin-right: 4px;
+                                }
+                                .custom-calendar-wrapper .fc-timegrid-event-harness > .fc-event-mirror {
+                                    max-width: none;
+                                    opacity: 1;
+                                }
+                                .custom-calendar-wrapper .calendar-selection-preview {
+                                    height: 100%;
+                                    box-sizing: border-box;
+                                    padding: 4px 6px;
+                                    border: 1px dashed #1677ff;
+                                    border-radius: 4px;
+                                    background: #e6f4ff;
+                                    color: #0958d9;
+                                    font-size: 12px;
+                                    font-weight: 500;
+                                    line-height: 1.4;
+                                    overflow: hidden;
+                                }
+                                .custom-calendar-wrapper .calendar-selection-preview-label {
+                                    display: block;
+                                    font-weight: 400;
+                                }
+                                .custom-calendar-wrapper .fc-direction-ltr .fc-timegrid-col-events {
+                                    margin-right: 60px;
+                                }
+                                .custom-calendar-wrapper .fc-timegrid-more-link {
+                                    right: -56px;
+                                    width: 52px;
+                                    box-sizing: border-box;
+                                    background: #e6f4ff;
+                                    color: #0958d9;
+                                    border: 1px solid #91caff;
+                                    border-radius: 4px;
+                                    font-size: 12px;
+                                    font-weight: 500;
+                                }
+                                .custom-calendar-wrapper .fc-timegrid-more-link:hover {
+                                    background: #bae0ff;
+                                }
+                                .custom-calendar-wrapper .fc-timegrid-more-link-inner {
+                                    padding: 4px;
+                                    white-space: nowrap;
                                 }
                                 .custom-calendar-wrapper .fc-timegrid-slot-label-cushion {
                                     font-size: 13px;
@@ -5181,6 +5322,7 @@ const Page = () => {
                                         initialView={isDesktop ? "timeGridWeek" : "timeGridDay"}
                                         locale={viLocale}
                                         headerToolbar={calendarHeaderToolbar}
+                                        datesSet={handleCalendarDatesSet}
                                         events={calendarEvents}
                                         eventContent={renderCalendarEvent}
                                         eventClick={handleCalendarEventClick}
@@ -5192,10 +5334,10 @@ const Page = () => {
                                         unselectAuto={false}
                                         select={handleCalendarSelect}
                                         dateClick={handleCalendarDateClick}
-                                        // Khi admin xem nhiều chương trình, các lịch trùng giờ có
-                                        // thể rất dày. Giới hạn stack để event còn đủ rộng để đọc;
-                                        // các lịch còn lại nằm trong liên kết "+ thêm" của FullCalendar.
-                                        eventMaxStack={isAdmin && !activeProgramCode ? 3 : undefined}
+                                        // Keep concurrent lessons separate and readable at the current column width.
+                                        slotEventOverlap={false}
+                                        eventMaxStack={calendarMaxStack}
+                                        moreLinkContent={(info) => `+${info.num} buổi`}
                                         moreLinkClick="popover"
                                         height="100%"
                                         allDaySlot={false}
@@ -5394,7 +5536,7 @@ const Page = () => {
                     onDraftChange={handleCalendarDraftChange}
                     moduleFields={moduleFields}
                     fieldPolicy={fieldPolicy}
-                    programCode={String(submittedFilterValues.code || "").trim() || undefined}
+                    programCode={activeProgramCode}
                 />
                 <CopyScheduleModal
                     open={Boolean(copySource)}

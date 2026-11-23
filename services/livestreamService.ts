@@ -112,6 +112,8 @@ export interface SchedulingLesson {
 export interface SchedulingProgram {
     code: string;
     subject_name?: string | null;
+    grade?: number | null;
+    curriculum_subject_name?: string | null;
 }
 
 export const getSchedulingPrograms = () =>
@@ -122,6 +124,24 @@ export const getSchedulingPrograms = () =>
     });
 
 export type CalendarTeacherFilterOption = { value: string; label: string };
+
+export type CalendarCrossFilterOptions = {
+    program_systems?: Array<{code:string;system_type:string|null}>;
+    programs: string[];
+    teachers: CalendarTeacherFilterOption[];
+    systems: string[];
+    statuses: string[];
+    weekdays: number[];
+};
+export const getCalendarCrossFilterOptions = async (params: LivestreamListParams) => {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+    });
+    const response: any = await fetchInstance(`${API_BASE_URL}/filter-options/cross?${query}`, { method: 'GET', credentials: 'include' });
+    if(params.week_links&&!Array.isArray(response?.data?.program_systems)) throw Error('Không tải được lựa chọn lọc của tuần');
+    return response?.data as CalendarCrossFilterOptions;
+};
 
 export type CalendarHeaderFilterOptions = { live_dates: string[]; assistant_teachers: string[]; progress_statuses: string[] };
 export const getCalendarHeaderFilterOptions = async (params: LivestreamListParams) => {
@@ -356,6 +376,7 @@ export const importLivestreamMappings = (payload: any) =>
 
 // Hàm mới: lấy danh sách lịch
 export interface LivestreamListParams {
+    week_links?: boolean;
     deleted?: boolean;
     calendar_source?: CalendarSource;
     page?: number;
