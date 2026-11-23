@@ -3,13 +3,16 @@ const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const root=path.resolve(__dirname,'..');const esbuild=require(path.join(root,'../lms-manage-api/node_modules/esbuild'));
 const taskDir=fs.mkdtempSync(path.join(os.tmpdir(),'lms-salary-ui-'));
 const mode=process.env.QA_MODE||'report';
+const pageMode=mode==='personnel'?'report':mode;
 const mocks={
  '@/stores/authStore':`const s={user:{userId:1},authSessionVersion:1,hasPermission:()=>true};export const useAuthStore=f=>f(s);`,
  '@ant-design/charts':`export const Column=()=>null;`,
  '@/services/teacherSalaryService':`
  let status='pending_review';
  const detail=()=>({period:{id:'7',name:'Lương tháng 11/2020',status,revision:4,calculation_hash:'qa-calculation-hash',scope:['QA'],snapshot:{issues:[]}},teachers:[{id:1,name:'Giáo viên QA',sessions:1,base:'200000',adjustment:'50000',total:'250000',paid:'0',unpaid:'250000'}],items:[{id:'8',snapshot:{teacher:{name:'Giáo viên QA'},lesson_name:'Bài QA',service_date:'2020-11-01',actual_seconds:3600,rate:{amount:'200000'}},amount:'200000'}],adjustments:[],payments:[],total:'250000',paid:'0',unpaid:'250000'});
- export const salaryGet=async(path)=>{
+ export const salaryGet=async(path,params={})=>{
+  if(path==='report' && params.collection==='teachers')return {collection:'teachers',rows:[{id:2,name:'Trợ giảng QA',username:'tg-qa',assigned:1,completed:1,actual_hours:1,makeup:0,substitute:0,groups:1,subjects:1}],pagination:{total:1},summary:{assigned:1},charts:{daily:[]}};
+  if(path==='report' && params.collection==='records'){window.drilldown=params;return {collection:'records',rows:params.person_id===2?[{id:'9',teacher:{name:'Trợ giảng QA'},service_date:'2020-11-01',outcome:'completed',session_kind:'regular',actual_seconds:3600,sources:[]}]:[],pagination:{total:params.person_id===2?1:0},summary:{assigned:1},charts:{daily:[]}};}
   if(path==='options')return {teachers:[{id:1,username:'gv-qa',display_name:'Giáo viên QA',status:1}],programs:['QA']};
   if(path==='overview')return {estimated:'0',confirmed:'250000',unpaid:'250000',teachers:[],periods:[]};
   if(path==='periods')return {rows:[detail().period],pagination:{total:1}};
@@ -23,13 +26,20 @@ const mocks={
 };
 const fixture=`
 import React from 'react';import{createRoot}from'react-dom/client';import{ConfigProvider}from'antd';import Page from '@/components/teacher-salary/TeacherSalaryPage';
-createRoot(document.getElementById('root')).render(<ConfigProvider><Page mode="${mode}"/></ConfigProvider>);
+createRoot(document.getElementById('root')).render(<ConfigProvider><Page mode="${pageMode}"/></ConfigProvider>);
 const wait=ms=>new Promise(r=>setTimeout(r,ms));const until=async(f)=>{for(let i=0;i<200;i++){if(f())return;await wait(50);}throw Error('UI timed out');};
 const button=t=>[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===t);
 const set=(element,value)=>{Object.getOwnPropertyDescriptor(element instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set.call(element,value);element.dispatchEvent(new Event('input',{bubbles:true}));element.dispatchEvent(new Event('change',{bubbles:true}));};
 (async()=>{
  const mode='${mode}';
- if(mode==='report'){
+ if(mode==='personnel'){
+  const tab=()=>[...document.querySelectorAll('[role=tab]')].find(t=>t.textContent.trim()==='Theo nhân sự');
+  await until(tab);tab().click();await until(()=>button('Trợ giảng QA'));button('Trợ giảng QA').click();
+  await until(()=>window.drilldown);
+  if(window.drilldown.person_id!==2)throw Error('Personnel drilldown uses teacher-only filter: '+JSON.stringify(window.drilldown));
+  await until(()=>[...document.querySelectorAll('.ant-table-tbody')].some(t=>t.textContent.includes('Trợ giảng QA')));
+  document.getElementById('qa-result').textContent=JSON.stringify({ok:true,mode,viewport:innerWidth,person_id:window.drilldown.person_id});return;
+ }else if(mode==='report'){
   await until(()=>button('Xác nhận công'));button('Xác nhận công').click();await until(()=>document.getElementById('evidence'));
   set(document.getElementById('evidence'),'Đối soát ghi hình QA');set(document.getElementById('reason'),'Xác nhận QA');
  }else if(mode==='payroll'){
