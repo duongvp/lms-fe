@@ -1,2 +1,2 @@
-import TeacherSalaryPage from '@/components/teacher-salary/TeacherSalaryPage';
-export default function Page() { return <TeacherSalaryPage mode='report'/>; }
+import TeachingReportsPage from '@/components/teaching-reports/TeachingReportsPage';
+export default function Page(){return <TeachingReportsPage/>;}
