@@ -427,7 +427,16 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
             const savedRows = initialRows ?? JSON.parse(sessionStorage.getItem("schedule:auto-edit:rows") || "[]");
             const rows = Array.isArray(savedRows) ? savedRows : [];
             const requestedSet = new Set(requestedIds);
-            const filtered = rows.filter((row) => requestedSet.has(String(row.id)));
+            // Chuẩn hóa ngay khi mở để mapping HMO, cấu hình riêng và xem trước
+            // cùng theo thứ tự bài học, không phụ thuộc thứ tự tick trên bảng.
+            const filtered = rows
+                .filter((row) => requestedSet.has(String(row.id)))
+                .sort((left, right) => (
+                    Number(left.learn_number || 0) - Number(right.learn_number || 0)
+                    || dayjs(left.start_time).valueOf() - dayjs(right.start_time).valueOf()
+                    || Number(left.lesson_count || 0) - Number(right.lesson_count || 0)
+                    || String(left.id).localeCompare(String(right.id), 'vi', { numeric: true })
+                ));
             setSelectedRows(filtered);
             setSelectedRowKeys(filtered.map((row) => String(row.id)));
         } catch {
