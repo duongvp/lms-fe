@@ -1,7 +1,8 @@
 "use client";
+import AccountApprovalSettings, {type AccountApprovalSettingsHandle} from "@/components/calendar-approvals/AccountApprovalSettings";
 import Select from "@/components/ui/MobileSelect";
 import { Modal, Form, Input, Button, Row, Col, Radio, Alert, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CloseCircleOutlined, SaveOutlined } from "@ant-design/icons";
 import CustomSpin from "@/components/ui/Spins";
 import { showErrorMessage, showSuccessMessage } from "@/ultils/message";
@@ -9,6 +10,7 @@ import useUserStore from "@/stores/userStore";
 import useRoleStore from "@/stores/roleStore";
 import { ActionType } from "@/enums/action";
 import { getProgramResources, getRoles, ProgramResource } from "@/services/roleService";
+import {refreshApprovalViews} from '@/services/calendarApprovalService';
 import { createUser, updateUser } from "@/services/userService";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -19,6 +21,7 @@ const formItemLayout = {
 
 const UserModal = () => {
     const [form] = Form.useForm();
+    const approvalSettings=useRef<AccountApprovalSettingsHandle>(null);
     const { modal, resetModal, setShouldReload } = useUserStore();
     const { shouldReload: shouldReloadRole, setShouldReload: setShouldReloadRole, setModal: setRoleModal } = useRoleStore();
     const [loadingModalVisible, setLoadingModalVisible] = useState(false);
@@ -58,7 +61,9 @@ const UserModal = () => {
             if (modal.type === ActionType.CREATE) {
                 await createUser(payload);
             } else if (modal.type === ActionType.UPDATE) {
-                await updateUser(modal.user?.id || 0, payload);
+                const approvalPolicy=approvalSettings.current?.getPendingPolicy();
+                await updateUser(modal.user?.id || 0, {...payload,...(approvalPolicy!==undefined?{approvalPolicy}:{})});
+                refreshApprovalViews();
                 // Cập nhật store nếu là user hiện tại
                 if (modal.user?.id === userId && user.username !== values.username) {
                     setUser({ ...user, username: values.username });
@@ -152,10 +157,10 @@ const UserModal = () => {
                 width={860}
                 centered
                 footer={[
-                    <Button key="back" onClick={onCloseModal} icon={<CloseCircleOutlined />}>
+                    <Button key="back" disabled={loadingModalVisible} onClick={onCloseModal} icon={<CloseCircleOutlined />}>
                         Huỷ
                     </Button>,
-                    <Button key="submit" type="primary" onClick={() => form.submit()} icon={<SaveOutlined />}>
+                    <Button key="submit" loading={loadingModalVisible} type="primary" onClick={() => form.submit()} icon={<SaveOutlined />}>
                         Lưu
                     </Button>,
                 ]}
@@ -274,6 +279,7 @@ const UserModal = () => {
                         </Col>
                     </Row>
                 </Form>
+                {modal.type === ActionType.UPDATE && modal.user?.id && (user.permissions.includes("*") || user.permissions.includes("calendar.workflow.manage")) && <AccountApprovalSettings key={modal.user.id} ref={approvalSettings} userId={modal.user.id} embedded disabled={loadingModalVisible} />}
             </Modal>
         </>
     );

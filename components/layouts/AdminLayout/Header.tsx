@@ -7,6 +7,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import CalendarNotificationBell from '@/components/calendar-approvals/CalendarNotificationBell';
 import {
   menuConfig,
   getActiveKeys,
@@ -248,6 +249,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleMenu }) => {
         {/* Right Side: Warehouse Selector + Profile */}
         <Flex align="center" justify="flex-end" style={{ flex: 1, minWidth: 0 }}>
           <Space size="large">
+            <CalendarNotificationBell />
             <Dropdown menu={{ items: profileMenuItems }} placement="bottomRight" arrow>
               <Flex align="center" gap={8} style={{ cursor: 'pointer' }}>
                 <Avatar style={{ backgroundColor: '#fde3cf', color: '#f56a00', verticalAlign: 'middle' }}>

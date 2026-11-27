@@ -1,4 +1,7 @@
 "use client";
+import { isCalendarApprovalCancelled } from '@/helper/calendarApprovalCancellation';
+import { calendarResultMessage } from '@/services/calendarApprovalService';
+
 import { useEffect, useState } from "react";
 import { Alert, Button, Modal, Space, Table, Typography, message } from "antd";
 import { getLivestreams, restoreLivestream, type CalendarSource } from "@/services/livestreamService";
@@ -33,12 +36,13 @@ export default function DeletedCalendarsModal({ open, programCode, source, onClo
     const restore = async (row: any) => {
         setRestoring(Number(row.id));
         try {
-            await restoreLivestream(String(row.id));
-            api.success("Đã khôi phục lịch học và ghi nhận yêu cầu đồng bộ");
+            const response = await restoreLivestream(String(row.id));
+            api.success(calendarResultMessage(response,"Đã khôi phục lịch học và ghi nhận yêu cầu đồng bộ"));
             if (rows.length === 1 && page > 1) setPage(page - 1);
             else setRefresh(value => value + 1);
             onRestored();
         } catch (cause: any) {
+            if (isCalendarApprovalCancelled(cause)) return;
             api.error(cause?.message || "Không thể khôi phục lịch học");
         } finally { setRestoring(null); }
     };

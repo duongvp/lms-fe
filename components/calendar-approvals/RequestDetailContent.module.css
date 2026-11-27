@@ -1,0 +1,61 @@
+.content { display: flex; flex-direction: column; gap: 20px; color: #1f2937; font-size: 14px; line-height: 1.6; }
+.content h2, .content h3 { margin: 0; color: #172033; font-weight: 600; }
+.heading h2 { overflow-wrap: anywhere; font-size: 22px; line-height: 1.4; margin-bottom: 4px; }
+.content h3 { font-size: 15px; line-height: 1.5; }
+.meta, .label, .hint { color: #667085; font-size: 13px; }
+.meta { overflow-wrap: anywhere; }
+.requestInfo { padding: 16px 18px; background: #f8fafc; border: 1px solid #e8ecf2; border-radius: 10px; display: grid; gap: 12px; }
+.infoGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; }
+.field { min-width: 0; }
+.label { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.value { overflow-wrap: anywhere; white-space: pre-wrap; }
+.decision { padding: 16px 18px; border: 1px solid; border-radius: 10px; display: grid; gap: 12px; }
+.approved { border-color: #cde8d7; background: #f6fbf8; }
+.rejected { border-color: #f1d5d5; background: #fff9f9; }
+.decisionTitle { display: flex; align-items: center; gap: 8px; }
+.approved .decisionTitle > :first-child { color: #328150; }
+.rejected .decisionTitle > :first-child { color: #c84c4c; }
+.sectionHeading, .scheduleHeading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.hint { margin: 5px 0 14px; }
+.cards, .stack { display: grid; gap: 12px; }
+.schedule { border: 1px solid #e3e8ef; border-radius: 10px; padding: 18px; min-width: 0; }
+.scheduleHeading h3 { font-size: 16px; margin-bottom: 4px; }
+.scheduleHeading :global(.ant-tag) { margin: 0; flex-shrink: 0; }
+.scheduleGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+.scheduleGroup { display: flex; gap: 10px; min-width: 0; }
+.time { font-weight: 600; font-variant-numeric: tabular-nums; }
+.staff { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; width: 100%; }
+.extraFields { border-top: 1px solid #edf0f4; margin-top: 16px; padding-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; }
+.mapping { display: grid; gap: 3px; font-size: 13px; }
+.comparison { margin-top: 16px; }
+.comparisonHeading, .comparisonRow { display: grid; grid-template-columns: 140px minmax(0,1fr) minmax(0,1fr); gap: 12px; }
+.comparisonHeading { font-size: 12px; color: #667085; padding-bottom: 8px; }
+.comparisonRow { padding: 10px 0; border-top: 1px solid #edf0f4; align-items: start; }
+.fieldName { display: flex; align-items: center; gap: 6px; padding-top: 9px; font-size: 13px; font-weight: 500; }
+.before, .after { padding: 9px 12px; border-radius: 6px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.before { background: #f6f7f9; color: #475467; }
+.after { background: #eff6ff; color: #172033; }
+.mobileLabel { display: none; }
+.history { background: #fff; border-color: #e3e8ef; border-radius: 10px; }
+.historyHeading { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-weight: 600; }
+.historyHeading .meta { font-weight: 400; }
+.timeline { padding: 10px 4px 0; }
+.timeline :global(.ant-timeline-item:last-child) { padding-bottom: 0; }
+.event { padding-bottom: 4px; }
+.eventActor { color: #475467; }
+.eventReason { margin-top: 6px; color: #475467; white-space: pre-wrap; overflow-wrap: anywhere; }
+.drawerTitle { overflow-wrap: anywhere; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.footer { display: flex; justify-content: flex-end; }
+@media (max-width: 600px) {
+ .content { gap: 16px; }
+ .heading h2 { overflow-wrap: anywhere; font-size: 20px; }
+ .infoGrid, .scheduleGrid, .extraFields { grid-template-columns: 1fr; gap: 12px; }
+ .requestInfo, .decision, .schedule { padding: 14px; }
+ .comparisonHeading { display: none; }
+ .comparisonRow { grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; }
+ .fieldName { grid-column: 1 / -1; padding-top: 0; }
+ .mobileLabel { display: block; font-size: 11px; color: #667085; margin-bottom: 4px; }
+ .before, .after { padding: 8px; }
+}
+
+.iconHeading { display: flex; align-items: center; gap: 8px; }

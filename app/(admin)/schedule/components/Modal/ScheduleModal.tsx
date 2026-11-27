@@ -1,4 +1,8 @@
 'use client';
+import { isCalendarApprovalCancelled } from '@/helper/calendarApprovalCancellation';
+import { useCalendarApprovalPolicy } from '@/hooks/useCalendarApprovalPolicy';
+import { isApprovalResponse } from '@/services/calendarApprovalService';
+
 import Select from "@/components/ui/MobileSelect";
 import { Alert, Modal, Input, Row, Col, Form, Grid, Button, Typography, Radio, Checkbox, Card, message, Space, Tooltip } from 'antd';
 import { DatePicker, TimePicker } from "../MobileSchedulePickers";
@@ -16,6 +20,8 @@ import {
 import type { HocmaiSectionOption } from '@/services/livestreamService';
 import { buildGroupedHmoOptions, summarizeHmoOptions } from '@/helper/hmoOptions';
 import SchedulePreviewModal from './SchedulePreviewModal';
+import RescheduleWorkflowSteps from './RescheduleWorkflowSteps';
+import workflowStyles from './RescheduleWorkflow.module.css';
 import type { ModuleField } from '@/types/fieldPolicy';
 import { resolveFieldRule } from '@/helper/fieldPolicy';
 import { GRADE_OPTIONS } from '@/constants/subjects';
@@ -214,6 +220,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     onDraftChange,
 }) => {
     const screens = Grid.useBreakpoint();
+    const approvalPolicy=useCalendarApprovalPolicy();
     const [form] = Form.useForm();
     const [modalFrame, setModalFrame] = useState({
         x: 24,
@@ -240,6 +247,15 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
 
     // For Update
     const [updateMode, setUpdateMode] = useState<"current" | "makeup" | "following" | "cancel">("makeup");
+    const [workflowStep, setWorkflowStep] = useState(0);
+    const [advancingStep, setAdvancingStep] = useState(false);
+    const advancingStepRef = React.useRef(false);
+    const isRescheduleWorkflow = Boolean(isEdit && updateMode !== 'current');
+    const workflowTopRef = React.useRef<HTMLDivElement>(null);
+    React.useEffect(() => {
+        if (open && isRescheduleWorkflow) workflowTopRef.current?.closest('.ant-modal-body')?.scrollTo({top: 0});
+    }, [open, isRescheduleWorkflow, workflowStep]);
+
 
     const selectedDays = Form.useWatch('days_of_week', form) || [];
     const selectedGrade = Form.useWatch('grade', form);
@@ -669,6 +685,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         setBulkConfigMode("common");
         setSubmitError(null);
         setUpdateMode("following");
+        setWorkflowStep(0);
         setLoadSupportingData(false);
         setLessonOptions([]);
         setBulkLessonOptions([]);
@@ -757,28 +774,57 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         setPreviewOpen(true);
     };
 
+    const advanceWorkflow = async () => {
+        if (!isRescheduleWorkflow || workflowStep === 2) {
+            form.submit();
+            return;
+        }
+        if (advancingStepRef.current) return;
+        advancingStepRef.current = true;
+        setAdvancingStep(true);
+        try {
+            if (workflowStep === 1 && (updateMode === 'makeup' || updateMode === 'following')) {
+                // Reuse the existing field rules; keep fields mounted to preserve drafts.
+                await form.validateFields([
+                    ['new_session', 'date'], ['new_session', 'start_time'],
+                    ['new_session', 'end_time'], ['new_session', 'teacher'],
+                    ['new_session', 'assistant_teacher'],
+                ]);
+            }
+            setWorkflowStep(workflowStep + 1);
+        } catch (error) {
+            const firstError = (error as {errorFields?: Array<{name: (string | number)[]}>}).errorFields?.[0];
+            if (firstError) form.scrollToField(firstError.name, {block: 'center', behavior: 'smooth'});
+        } finally {
+            advancingStepRef.current = false;
+            setAdvancingStep(false);
+        }
+    };
+
     const handleConfirmPreview = async (finalPayload: any, payloadType: 'bulk' | 'single' | 'update_current' | 'update_makeup' | 'update_following' | 'update_cancel') => {
         try {
             setLoading(true);
             setSubmitError(null);
+            let response:any;
             if (payloadType === 'bulk') {
-                await createLivestreamBulk(finalPayload);
+                response = await createLivestreamBulk(finalPayload);
             } else if (payloadType === 'single') {
-                await createLivestream(finalPayload);
+                response = await createLivestream(finalPayload);
             } else {
                 const id = initialData?.id || initialData?.key;
                 if (payloadType === 'update_cancel' || payloadType === 'update_makeup' || payloadType === 'update_following') {
-                    await rescheduleLivestream(id, finalPayload);
+                    response = await rescheduleLivestream(id, finalPayload);
                 } else {
-                    await updateLivestream(id, finalPayload);
+                    response = await updateLivestream(id, finalPayload);
                 }
             }
 
             // Gọi onSuccess với một mảng chuẩn hóa hoặc giá trị phù hợp
-            onSuccess(finalPayload);
+            onSuccess({...finalPayload, approval_required:isApprovalResponse(response)});
             setPreviewOpen(false);
             handleClose();
         } catch (error) {
+            if (isCalendarApprovalCancelled(error)) return;
             console.error('Lỗi submit:', error);
             const errorMessage = getScheduleSubmitError(error);
             setSubmitError(errorMessage);
@@ -848,6 +894,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         if (!formInitialized.current) {
             formInitialized.current = true;
             if (isEdit) {
+                setWorkflowStep(0);
                 form.setFieldsValue({
                     ...initialData,
                     assistant_teacher: String(initialData?.assistant_teacher || '')
@@ -931,7 +978,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             {contextHolder}
             <Modal
                 rootClassName={`schedule-responsive-modal schedule-entry-modal${!isEdit && addMode === 'single' ? ' schedule-entry-add-modal' : ''}`}
-                title={
+                title={<>
                     <div
                         className="schedule-entry-title"
                         onPointerDown={startModalDrag}
@@ -942,10 +989,10 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                             <HolderOutlined className="schedule-entry-drag-icon" style={{ color: '#8c8c8c', marginTop: 5 }} />
                             <div>
                                 <Title level={5} style={{ marginBottom: 4 }}>
-                                    {title || (isEdit ? 'Cập nhật Lịch học' : 'Thêm mới Lịch học')}
+                                    {title || (isEdit ? 'Dời lịch / nghỉ học' : 'Thêm mới Lịch học')}
                                 </Title>
                                 <Text type="secondary" style={{ marginBottom: 0, fontSize: 13, fontWeight: 500 }}>
-                                    {isEdit ? 'Chỉnh sửa thông tin hoặc dời lịch học.' : 'Điền thông tin chi tiết để tạo lịch học mới.'}
+                                    {isEdit ? 'Chọn cách xử lý và kiểm tra lịch theo từng bước trước khi xác nhận.' : 'Điền thông tin chi tiết để tạo lịch học mới.'}
                                 </Text>
                             </div>
                         </Space>
@@ -962,7 +1009,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                             />
                         </Tooltip>
                     </div>
-                }
+                    {isRescheduleWorkflow && <RescheduleWorkflowSteps current={workflowStep}/>}
+                </>}
                 open={open}
                 onCancel={handleClose}
                 afterOpenChange={(visible) => {
@@ -970,7 +1018,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                 }}
                 afterClose={resetAfterClose}
                 forceRender
-                onOk={() => form.submit()}
+                onOk={() => void advanceWorkflow()}
                 width={modalFrame.width}
                 style={{
                     position: 'absolute',
@@ -1030,21 +1078,34 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                     <Button key="back" onClick={handleClose} icon={<CloseCircleOutlined />}>
                         Huỷ
                     </Button>,
+                    isRescheduleWorkflow && workflowStep > 0 ? <Button key="previous" disabled={loading || advancingStep} onClick={() => setWorkflowStep(step => step - 1)}>Quay lại</Button> : null,
                     <Button
                         key="submit"
                         type="primary"
-                        onClick={() => form.submit()}
-                        icon={<EyeFilled />}
-                        loading={loading}
+                        onClick={() => void advanceWorkflow()}
+                        icon={!isRescheduleWorkflow || workflowStep === 2 ? <EyeFilled /> : undefined}
+                        loading={loading || advancingStep}
                         disabled={usesProgramContext && !contextProgramMetadata}
                     >
-                        Xem trước
+                        {isRescheduleWorkflow && workflowStep < 2 ? 'Tiếp tục' : 'Xem trước'}
                     </Button>,
                 ]}
             >
+                {isRescheduleWorkflow && <div ref={workflowTopRef}>
+                    <div className={workflowStyles.context}>
+                        <strong>{initialData?.lesson_name || 'Buổi học được chọn'}</strong>
+                        <p>{initialData?.code || initialData?.class_code} · {parseCalendarWallTime(initialData?.start_time)?.format('DD/MM/YYYY HH:mm')} – {parseCalendarWallTime(initialData?.end_time)?.format('HH:mm')}{afterCancel ? ' · Đã nghỉ học' : ''}</p>
+                        {workflowStep > 0 && <p>Cách xử lý: {updateMode === 'cancel' ? 'Nghỉ học (không dời)' : updateMode === 'following' ? 'Dời chuỗi' : 'Tạo lịch bù'}</p>}
+                    </div>
+                    {workflowStep === 1 && <p className={workflowStyles.stepIntro}>{updateMode === 'cancel' ? 'Kiểm tra thông tin buổi nghỉ và tên hiển thị. Các buổi học sau được giữ nguyên.' : updateMode === 'following' ? 'Thiết lập buổi mới ở cuối khóa. Kiểm tra các buổi bị dời đề cương tại bước xem trước.' : 'Chọn ngày, giờ và nhân sự cho buổi học bù. Các buổi học sau được giữ nguyên.'}</p>}
+                    {workflowStep === 2 && <p className={workflowStyles.stepIntro}>Chọn có gửi thông báo tới người dùng hay không và nhập nội dung nếu bật gửi. Bước tiếp theo sẽ hiển thị lịch để kiểm tra trước khi lưu hoặc gửi duyệt.</p>}
+                </div>}
                 {isEdit && (
-                    <div style={{ marginBottom: 24 }}>
+                    <div hidden={isRescheduleWorkflow && workflowStep !== 0} style={{ marginBottom: 24 }}>
+                        <Typography.Text strong>Buổi học này cần được xử lý như thế nào?</Typography.Text>
                         <Radio.Group
+                            className={workflowStyles.modeChoices}
+                            aria-label="Cách xử lý lịch nghỉ học"
                             value={updateMode}
                             onChange={(e) => {
                                 const nextMode = e.target.value as typeof updateMode;
@@ -1070,13 +1131,12 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                     });
                                 }
                             }}
-                            buttonStyle="solid"
                         >
-                            <Radio.Button value="makeup">{afterCancel ? 'Tạo lịch bù' : 'Nghỉ học & Tạo lịch bù'}</Radio.Button>
+                            <Radio className={`${workflowStyles.modeChoice} ${updateMode === 'makeup' ? workflowStyles.selectedChoice : ''}`} value="makeup"><span className={workflowStyles.choiceTitle}>{afterCancel ? 'Tạo lịch bù' : 'Nghỉ học & Tạo lịch bù'}</span><span className={workflowStyles.choiceDescription}>Tạo một buổi học bù riêng cho cùng bài học. Các buổi sau giữ nguyên.</span></Radio>
                             {(!afterCancel || allowFollowingAfterCancel) && (
-                                <Radio.Button value="following">{afterCancel ? 'Dời chuỗi' : 'Nghỉ học & Dời chuỗi'}</Radio.Button>
+                                <Radio className={`${workflowStyles.modeChoice} ${updateMode === 'following' ? workflowStyles.selectedChoice : ''}`} value="following"><span className={workflowStyles.choiceTitle}>{afterCancel ? 'Dời chuỗi' : 'Nghỉ học & Dời chuỗi'}</span><span className={workflowStyles.choiceDescription}>Dời đề cương xuống các buổi tiếp theo và thêm một buổi mới ở cuối khóa.</span></Radio>
                             )}
-                            {!afterCancel && <Radio.Button value="cancel">Nghỉ học (Không dời)</Radio.Button>}
+                            {!afterCancel && <Radio className={`${workflowStyles.modeChoice} ${updateMode === 'cancel' ? workflowStyles.selectedChoice : ''}`} value="cancel"><span className={workflowStyles.choiceTitle}>Nghỉ học (Không dời)</span><span className={workflowStyles.choiceDescription}>Đánh dấu buổi này nghỉ học, chưa tạo lịch bù và không thay đổi các buổi sau.</span></Radio>}
                         </Radio.Group>
                         {afterCancel && !allowFollowingAfterCancel && (
                             <Alert
@@ -1092,12 +1152,14 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
 
                 <Form
                     className="responsive-modal-form responsive-schedule-form"
+                    hidden={isRescheduleWorkflow && workflowStep === 0}
                     layout="vertical"
                     form={form}
                     onFinish={handleFinish}
                     onFinishFailed={({ errorFields }) => {
                         const firstError = errorFields[0];
                         if (!firstError) return;
+                        if (isRescheduleWorkflow) setWorkflowStep(firstError.name[0] === 'change_reason' ? 2 : 1);
                         requestAnimationFrame(() => form.scrollToField(firstError.name, {
                             block: 'center',
                             behavior: 'smooth',
@@ -1110,7 +1172,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                         <Checkbox>Cho phép trùng giáo viên/trợ giảng cho buổi học chung</Checkbox>
                     </Form.Item>)}
 
-                    {isEdit && updateMode !== 'makeup' && updateMode !== 'following' && renderChangeReason()}
+                    {isEdit && <div hidden={isRescheduleWorkflow && workflowStep !== 2}>{renderChangeReason()}</div>}
 
 
                     {/* Form fields for Single Add and Current Update */}
@@ -1769,7 +1831,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
 
                     {/* Form fields for Update Makeup / Following */}
                     {isEdit && (updateMode === 'makeup' || updateMode === 'following') && (
-                        <>
+                        <div hidden={isRescheduleWorkflow && workflowStep !== 1}>
                             <FormSection title={afterCancel ? 'Thông tin buổi đã nghỉ' : 'Thông tin buổi học sẽ nghỉ'}>
                                 <Row gutter={24}>
                                     <Col span={12}>
@@ -1933,13 +1995,12 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                     </Col> */}
                                 </Row>
                             </FormSection>
-                            {renderChangeReason()}
-                        </>
+                        </div>
                     )}
 
                     {/* Form fields for Update Cancel */}
                     {isEdit && updateMode === 'cancel' && (
-                        <>
+                        <div hidden={isRescheduleWorkflow && workflowStep !== 1}>
                             <FormSection title="Xác nhận nghỉ học">
                                 <div style={{ padding: '12px 16px', background: '#fff1f0', border: '1px solid #ffa39e', borderRadius: 6 }}>
                                     <Text type="danger">
@@ -1962,7 +2023,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                                     </Col>
                                 </Row>
                             </FormSection>
-                        </>
+                        </div>
                     )}
 
                 </Form>
@@ -1971,11 +2032,13 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             {previewOpen && previewValues && (
                 <SchedulePreviewModal
                     open={previewOpen}
+                    rescheduleWorkflow={isRescheduleWorkflow}
                     onClose={() => {
                         setPreviewOpen(false);
                         setSubmitError(null);
                     }}
                     onConfirm={handleConfirmPreview}
+                    requiresApproval={approvalPolicy.required_operations.includes(!isEdit?"create":updateMode==="current"?"update":updateMode==="cancel"?"cancel":"reschedule")}
                     formValues={previewValues}
                     isEdit={isEdit || false}
                     initialData={initialData}

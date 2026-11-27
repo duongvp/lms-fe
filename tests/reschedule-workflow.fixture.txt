@@ -1,0 +1,96 @@
+import '@ant-design/v5-patch-for-react-19';
+import React, {useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import {Form} from 'antd';
+import dayjs from 'dayjs';
+import './app/globals.css';
+import ScheduleModal from './app/(admin)/schedule/components/Modal/ScheduleModal';
+const originalUseForm=Form.useForm;
+window.qaForms=[];
+Form.useForm=(...args)=>{const result=originalUseForm(...args);if(!window.qaForms.includes(result[0]))window.qaForms.push(result[0]);return result};
+window.qaWrites=[];window.qaSuccess=[];
+window.qaRows=[
+ {id:101,key:'qa-1',code:'qa',system_type:'topclass',learn_number:1,lesson_name:'Bài đang chọn',teacher:'Giáo viên QA',assistant_teacher:'tg',start_time:'2030-12-01T18:00:00',end_time:'2030-12-01T20:00:00',lesson_status:0},
+ {id:102,key:'qa-2',code:'qa',system_type:'topclass',learn_number:2,lesson_name:'Bài tiếp theo',teacher:'Giáo viên QA',assistant_teacher:'tg',start_time:'2030-12-08T18:00:00',end_time:'2030-12-08T20:00:00',lesson_status:0},
+];
+let configure;
+function App(){const [config,setConfig]=useState({open:true,afterCancel:false,allowFollowingAfterCancel:true});configure=setConfig;return <ScheduleModal {...config} isEdit={config.isEdit!==false} initialData={window.qaRows[0]} onClose={()=>setConfig(c=>({...c,open:false}))} onSuccess={value=>window.qaSuccess.push(value)}/>}
+createRoot(document.getElementById('root')).render(<App/>);
+window.addEventListener('error',event=>document.getElementById('qa-result').textContent=JSON.stringify({ok:false,error:event.message}));
+const pause=ms=>new Promise(r=>setTimeout(r,ms));
+const visible=el=>el&&!!el.getClientRects().length;
+const until=async fn=>{for(let i=0;i<180;i++){if(fn())return;await pause(30)}throw Error('Timeout: '+fn+'; '+document.body.innerText.slice(-800))};
+const button=text=>[...document.querySelectorAll('button')].find(el=>visible(el)&&el.textContent===text);
+const assert=(condition,label)=>{if(!condition)throw Error(label)};
+const primaryModal=()=>document.querySelector('.schedule-entry-modal .ant-modal');
+const step=number=>[...document.querySelectorAll('[aria-label]')].some(el=>visible(el)&&el.getAttribute('aria-label').startsWith('Bước '+number+' trên 4'));
+const click=async text=>{await until(()=>button(text));button(text).click();await pause(200)};
+const choose=async mode=>{const input=document.querySelector('input[value="'+mode+'"]');assert(input,'Missing mode '+mode);input.closest('label').click();await pause(70)};
+const fill=async values=>{window.qaForms[0].setFieldsValue(values);await pause(200)};
+const notification=()=>[...document.querySelectorAll('label.ant-checkbox-wrapper')].find(el=>visible(el)&&el.textContent.includes('Gửi thông báo'));
+async function checkFixedProgress(number){
+ await pause(350);
+ const progress=[...document.querySelectorAll('[aria-label]')].find(el=>visible(el)&&el.getAttribute('aria-label').startsWith('Bước '+number+' trên 4'));
+ const body=progress.closest('.ant-modal-content').querySelector('.ant-modal-body');
+ assert(!body.contains(progress),'Progress must be outside the scrolling body');
+ const before=progress.getBoundingClientRect().top;body.scrollTop=body.scrollHeight;await pause(100);
+ assert(Math.abs(progress.getBoundingClientRect().top-before)<1,'Progress moved when modal body scrolled');
+ body.scrollTop=0;
+}
+async function reopen(extra={}){await until(()=>!visible(primaryModal()));await pause(350);configure({open:true,afterCancel:false,allowFollowingAfterCancel:true,...extra});await until(()=>extra.isEdit===false?button('Xem trước'):step(1));await pause(100)}
+const newSession={date:dayjs('2030-12-15'),start_time:dayjs('2030-12-15T18:00:00'),end_time:dayjs('2030-12-15T20:00:00'),teacher:'Giáo viên QA',assistant_teacher:['tg']};
+(async()=>{
+ await until(()=>step(1));await pause(350);
+ // Reproduce production ordering: component-library styles can arrive last.
+ document.querySelectorAll('style[data-css-hash]').forEach(style=>document.head.appendChild(style));
+ const contrast=(foreground,background)=>{const lum=color=>{const rgb=color.match(/[\d.]+/g).slice(0,3).map(Number).map(value=>{const s=value/255;return s<=0.04045?s/12.92:((s+0.055)/1.055)**2.4});return rgb[0]*0.2126+rgb[1]*0.7152+rgb[2]*0.0722};const a=lum(foreground),b=lum(background);return (Math.max(a,b)+0.05)/(Math.min(a,b)+0.05)};
+ const checkCards=()=>{const group=document.querySelector('[aria-label="Cách xử lý lịch nghỉ học"]');const cards=[...group.querySelectorAll('label.ant-radio-wrapper')];let bottom;
+  for(const card of cards){const rect=card.getBoundingClientRect(),container=group.getBoundingClientRect();assert(Math.abs(rect.width-container.width)<2&&Math.abs(rect.left-container.left)<2,'Choice cards must fill and align with group');if(bottom!==undefined)assert(rect.top-bottom>=9,'Choice cards must have a visible gap');bottom=rect.bottom;const background=getComputedStyle(card).backgroundColor;for(const text of card.querySelectorAll('.ant-radio-label>span'))assert(contrast(getComputedStyle(text).color,background)>=4.5,'Choice text lacks contrast');}
+ };
+ for(const mode of ['makeup','following','cancel']){await choose(mode);checkCards();}await choose('makeup');
+ assert(!visible(document.getElementById('new_session_date')),'Details should be hidden on step 1');
+ await click('Tiếp tục');assert(step(2),'Missing details step');await checkFixedProgress(2);
+ await click('Tiếp tục');await until(()=>window.qaForms[0].getFieldError(['new_session','date']).length);assert(step(2),'Missing date must block next step');
+ await fill({new_session:{...newSession,end_time:dayjs('2030-12-15T17:00:00')}});await click('Tiếp tục');await until(()=>window.qaForms[0].getFieldError(['new_session','end_time']).length);assert(step(2),'Invalid end time must block next step');
+ await fill({new_session:newSession,canceled_lesson_name_prefix:'[NGHỈ QA] ',new_lesson_name_prefix:'[BÙ QA] '});
+ await click('Tiếp tục');await until(()=>step(3));
+ await fill({change_reason:'Lý do kiểm thử'});await click('Quay lại');assert(step(2),'Back does not return to details');
+ assert(window.qaForms[0].getFieldValue(['new_session','date']).format('YYYY-MM-DD')==='2030-12-15','Back drops draft date');
+ await click('Quay lại');assert(step(1),'Back does not return to mode');await click('Tiếp tục');await click('Tiếp tục');
+ assert(window.qaForms[0].getFieldValue('change_reason')==='Lý do kiểm thử','Back drops reason');
+ assert(window.qaWrites.length===0,'Navigating steps must never write data');
+ await click('Xem trước');await until(()=>step(4));await checkFixedProgress(4);
+ assert(window.qaWrites.length===0,'Preview must not write data');
+ await click('Quay lại chỉnh sửa');await until(()=>!step(4));assert(step(3),'Preview back should return to notification step');
+ await click('Xem trước');await until(()=>step(4));window.qaFail=true;await click('Xác nhận Lưu');
+ await until(()=>document.body.innerText.includes('QA conflict'));
+ assert(step(4)&&window.qaSuccess.length===0,'Error should keep preview and not complete');
+ await click('Xác nhận Lưu');await until(()=>window.qaSuccess.length===1);
+ let write=window.qaWrites.at(-1);assert(write.url.endsWith('/101/reschedule')&&write.method==='PUT','Changed reschedule endpoint');
+ assert(write.body.mode==='makeup'&&write.body.new_session.assistant_teacher==='tg'&&write.body.reason==='Lý do kiểm thử','Makeup payload changed');
+ assert(write.body.canceled_lesson_name_prefix==='[NGHỈ QA] '&&write.body.new_lesson_name_prefix==='[BÙ QA] ','Display name prefixes lost');
+ await reopen();await choose('following');await click('Tiếp tục');
+ await fill({new_session:{...newSession,date:dayjs('2030-12-07')}});await click('Tiếp tục');assert(step(2),'Following course end validation lost');
+ await fill({new_session:newSession});await click('Tiếp tục');notification().click();await pause(50);await click('Xem trước');await until(()=>step(4));
+ await until(()=>document.body.innerText.includes('Bài tiếp theo'));await click('Xác nhận Lưu');await until(()=>window.qaSuccess.length===2);
+ write=window.qaWrites.at(-1);assert(write.body.mode==='following'&&write.body.send_notification===false&&write.body.new_session.start_time==='2030-12-15T18:00:00.000Z','Following payload changed');
+ await reopen();await choose('cancel');await click('Tiếp tục');assert(!visible(document.getElementById('new_session_date')),'Cancel should not require a new session');await click('Tiếp tục');
+ await click('Xem trước');assert(!step(4),'Missing notification reason must block preview');
+ await fill({change_reason:'Nghỉ kiểm thử'});await click('Xem trước');await until(()=>step(4));await click('Xác nhận Lưu');await until(()=>window.qaSuccess.length===3);
+ write=window.qaWrites.at(-1);assert(write.body.mode==='cancel'&&!write.body.new_session&&write.body.reason==='Nghỉ kiểm thử','Cancel payload changed');
+ await reopen({afterCancel:true,allowFollowingAfterCancel:false});assert(!document.querySelector('input[value="following"]')&&!document.querySelector('input[value="cancel"]'),'Invalid after-cancel actions exposed');
+ await click('Tiếp tục');await fill({new_session:newSession});await click('Tiếp tục');notification().click();await pause(50);await click('Xem trước');await until(()=>step(4));await click('Xác nhận Lưu');await until(()=>window.qaSuccess.length===4);
+ write=window.qaWrites.at(-1);assert(write.body.mode==='makeup'&&write.body.source_state==='canceled_without_makeup','After-cancel source state lost');
+ window.qaRequiresApproval=true;
+ await reopen({afterCancel:true,allowFollowingAfterCancel:true});assert(document.querySelector('input[value="following"]'),'Allowed after-cancel following action missing');
+ await choose('following');await click('Tiếp tục');await fill({new_session:newSession});await click('Tiếp tục');notification().click();await pause(80);await click('Xem trước');await until(()=>step(4));await click('Gửi yêu cầu duyệt');await until(()=>window.qaSuccess.length===5);
+ write=window.qaWrites.at(-1);assert(write.body.mode==='following'&&write.body.source_state==='canceled_without_makeup'&&window.qaSuccess.at(-1).approval_required===true,'Approval response or after-cancel following payload changed');
+ await reopen({afterCancel:true,allowFollowingAfterCancel:true});
+ await click('Huỷ');await reopen({isEdit:false});assert(!step(1)&&button('Xem trước')&&!button('Tiếp tục'),'Create flow should remain unchanged');
+ await click('Huỷ');window.qaCanAssign=false;await reopen();await click('Tiếp tục');
+ assert(document.getElementById('new_session_teacher').closest('.ant-select-disabled')&&document.getElementById('new_session_assistant_teacher').closest('.ant-select-disabled'),'Assignment permissions must remain enforced');
+ const modal=primaryModal();assert(modal.scrollWidth<=modal.clientWidth+2,'Modal overflows horizontally');
+ if(innerWidth<768)assert(modal.getBoundingClientRect().width<=innerWidth,'Mobile modal too wide');
+ await click('Quay lại');await until(()=>step(1));checkCards();
+ document.getElementById('qa-result').textContent=JSON.stringify({ok:true,viewport:innerWidth,checks:['aligned full-width radio cards and readable contrast with library CSS loaded last','progress stays fixed while form and preview scroll','step navigation and preserved draft','required date and time rules','no writes before confirmation','preview error and retry','unchanged makeup/following/cancel payloads','optional notifications','after-cancel restrictions and payload','approval response preserved','create flow unchanged','assignment permissions','responsive modal']});
+})().catch(error=>document.getElementById('qa-result').textContent=JSON.stringify({ok:false,error:error.stack}));

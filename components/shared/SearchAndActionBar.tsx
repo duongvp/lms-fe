@@ -6,6 +6,7 @@ import React from 'react';
 
 interface SearchAndActionsBarProps {
     showSearch?: boolean;
+    guidePrefix?: string;
     titleBtnAdd?: string;
     titleBtnImport?: string;
     onSearch: (value: string) => Promise<any>;
@@ -28,6 +29,7 @@ interface SearchAndActionsBarProps {
 
 export default function SearchAndActionsBar({
     showSearch = true,
+    guidePrefix,
     onSearch,
     titleBtnAdd = "Thêm mới",
     titleBtnImport = "Import",
@@ -68,7 +70,7 @@ export default function SearchAndActionsBar({
 
     return (
         <Row className="responsive-search-actions" style={{ width: '100%', marginBottom: '16px' }} gutter={[16, 8]}>
-            <Col xxl={6} lg={8} md={10} sm={24} xs={24}>
+            <Col data-schedule-tour={guidePrefix !== undefined ? `${guidePrefix}search` : undefined} xxl={6} lg={8} md={10} sm={24} xs={24}>
                 {showSearch && (
                     <CustomSearchInput
                         placeholder={placeholder}
@@ -98,7 +100,7 @@ export default function SearchAndActionsBar({
                         }
                         {
                             handleAddBtn && (
-                                <Button type="primary" onClick={handleAddBtn} icon={<PlusOutlined />}>
+                                <Button data-schedule-tour={guidePrefix !== undefined ? `${guidePrefix}create` : undefined} type="primary" onClick={handleAddBtn} icon={<PlusOutlined />}>
                                     {titleBtnAdd}
                                     <CaretDownOutlined />
                                 </Button>

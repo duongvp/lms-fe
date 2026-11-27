@@ -8,6 +8,9 @@ export interface ScheduleFilterValues {
     calendar_id?: number;
     code?: string;
     teacher?: string[];
+    assistant_teachers?: string[];
+    subject_name?: string;
+    grade?: number;
     system_type?: Array<"topclass" | "topuni">;
     time_status?: Array<"upcoming" | "ongoing" | "completed" | "cancelled">;
     date_range?: [Dayjs, Dayjs];
@@ -81,7 +84,10 @@ export const buildScheduleUrl = (values: ScheduleFilterValues, targetPage = 1) =
     if (cleaned.calendar_source === "feed") params.set("calendar_source", "feed");
     if (keyword) params.set("q", keyword);
     if (cleaned.calendar_id !== undefined) params.set("calendar_id", String(cleaned.calendar_id));
+    if (cleaned.subject_name) params.set("subject_name", cleaned.subject_name);
+    if (cleaned.grade !== undefined) params.set("grade", String(cleaned.grade));
     if (teachers.length) params.set("teacher", teachers.join(","));
+    if (cleaned.assistant_teachers?.length) params.set("assistant_teachers", cleaned.assistant_teachers.join(","));
     if (cleaned.system_type?.length) params.set("system_type", cleaned.system_type.join(","));
     if (cleaned.time_status?.length) params.set("status", cleaned.time_status.join(","));
     if (cleaned.weekdays?.length) params.set("weekdays", cleaned.weekdays.join(","));

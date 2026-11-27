@@ -300,6 +300,10 @@ const getLevelKeys = (items1: LevelKeysProps[]) => {
 
 const isPathActive = (currentPath: string, targetPath: string) => {
     if (!targetPath) return false;
+    // Trang phê duyệt được mở từ thông báo, không thuộc menu Lịch học.
+    if (targetPath === "/schedule" && (
+        currentPath === "/schedule/approvals" || currentPath.startsWith("/schedule/approvals/")
+    )) return false;
     if (currentPath === targetPath) return true;
     if (currentPath.startsWith(targetPath + "/")) return true;
     return false;
@@ -311,7 +315,7 @@ export const getActiveKeys = (pathname: string) => {
 
     for (const item of menuConfig) {
         if (item.children) {
-            for (const child of item.children) {
+            for (const child of [...item.children].sort((a,b)=>(b.path?.length||0)-(a.path?.length||0))) {
                 if (child.path && isPathActive(pathname, child.path)) {
                     activeTopKey = item.key;
                     activeSideKey = child.key;

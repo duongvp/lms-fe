@@ -1,4 +1,7 @@
 "use client";
+import { isCalendarApprovalCancelled } from '@/helper/calendarApprovalCancellation';
+import { calendarResultMessage } from '@/services/calendarApprovalService';
+
 
 import Select from "@/components/ui/MobileSelect";
 import React, { useEffect, useState } from "react";
@@ -94,7 +97,7 @@ const SwapScheduleModal = ({ open, source, programs, onClose, onSuccess }: {
     source: Schedule | null;
     programs: Array<{ value: string; label: string }>;
     onClose: () => void;
-    onSuccess: () => void;
+    onSuccess: (response?:any) => void;
 }) => {
     const [form] = Form.useForm();
     const [api, contextHolder] = notification.useNotification();
@@ -159,7 +162,7 @@ const SwapScheduleModal = ({ open, source, programs, onClose, onSuccess }: {
         try {
             const firstRange = values.first_range as [Dayjs, Dayjs];
             const secondRange = values.second_range as [Dayjs, Dayjs];
-            await swapLivestreamTimes({
+            const response = await swapLivestreamTimes({
                 first_id: source!.id!, second_id: values.second_id,
                 first_start_time: combineDateTime(firstRange[0], firstRange[0]),
                 first_end_time: combineDateTime(firstRange[1], firstRange[1]),
@@ -167,8 +170,9 @@ const SwapScheduleModal = ({ open, source, programs, onClose, onSuccess }: {
                 second_end_time: combineDateTime(secondRange[1], secondRange[1]),
                 reason: values.reason,
             });
-            onSuccess();
+            onSuccess(response);
         } catch (error: any) {
+            if (isCalendarApprovalCancelled(error)) return;
             setErrorNotice({
                 title: "Hoán đổi lịch thất bại",
                 detail: error?.message || "Không thể hoán đổi hai lịch học.",

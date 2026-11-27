@@ -185,12 +185,15 @@ const makeRequest = async (
     if (externalSignal?.aborted) abortFromCaller();
     else externalSignal?.addEventListener('abort', abortFromCaller, { once: true });
     const isFormData = options.body instanceof FormData;
-    const mergedHeaders = {
-        ...(token && { Authorization: `Bearer ${token}` }),
-
-        ...(options.headers || {}),
-        ...(!isFormData && { 'Content-Type': 'application/json' }) // ✅ chỉ set nếu không phải FormData
-    };
+    // Headers treats names case-insensitively. Object spread could send both
+    // `content-type` and `Content-Type`, which fetch joined into an invalid MIME type.
+    const mergedHeaders = new Headers(options.headers);
+    if (token && !mergedHeaders.has('authorization')) {
+        mergedHeaders.set('Authorization', `Bearer ${token}`);
+    }
+    if (!isFormData && !mergedHeaders.has('content-type')) {
+        mergedHeaders.set('Content-Type', 'application/json');
+    }
 
     try {
         return await fetch(url, {

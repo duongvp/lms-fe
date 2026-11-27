@@ -1,4 +1,10 @@
 "use client";
+import styles from './RoleModal.module.css';
+import ApprovalPolicyEditor from '@/components/approval-policy/ApprovalPolicyEditor';
+import {useAuthStore} from '@/stores/authStore';
+import {refreshApprovalViews} from '@/services/calendarApprovalService';
+import useSWR from 'swr';
+import {getApprovalPolicyModules,type ApprovalModule,type ModulePolicyMap} from '@/services/approvalPolicyService';
 import Table from "@/components/ui/ModalTable";
 import {
     Modal,
@@ -169,6 +175,13 @@ const convertFieldPolicyToBE = (
 const RoleModal = () => {
     const [form] = Form.useForm();
     const { modal, resetModal, setShouldReload } = useRoleStore();
+    const hasPermission=useAuthStore(s=>s.hasPermission);
+    const userId=useAuthStore(s=>s.user.userId),session=useAuthStore(s=>s.authSessionVersion);
+    const {data:policyModules,error:policyError,isLoading:policyLoading,mutate:reloadPolicyModules}=useSWR(modal.open?['approval-policy-modules',userId,session]:null,getApprovalPolicyModules);
+    const supportedModules:ApprovalModule[]=policyModules?.data||[];
+    const canManagePolicy=supportedModules.some(module=>hasPermission(module.managePermission));
+    const [approvalPolicy,setApprovalPolicy]=useState<ModulePolicyMap>({});
+    useEffect(()=>{if(modal.open)setApprovalPolicy(modal.role?.approvalPolicy||{});},[modal.open,modal.role]);
     const [loadingModalVisible, setLoadingModalVisible] = useState(false);
     const [expandedGroups, setExpandedGroups] = useState<{ [key: string]: boolean }>({});
     const [checkedGroups, setCheckedGroups] = useState<{ [key: string]: string[] }>({});
@@ -404,6 +417,7 @@ const RoleModal = () => {
             const fieldPolicyBE = convertFieldPolicyToBE(fieldPolicy, modulesStructure);
 
             const roleData = {
+                ...(canManagePolicy?{approvalPolicy:Object.fromEntries(supportedModules.filter(module=>hasPermission(module.managePermission)).map(module=>[module.key,approvalPolicy[module.key]||{}]))}:{}),
                 role_name: values.roleName,
                 description: values.description || "",
                 permissions: permissions.map((code) => ({ code })),
@@ -424,6 +438,7 @@ const RoleModal = () => {
 
             showSuccessMessage(`${modal.title} thành công!`);
             setShouldReload(true);
+            refreshApprovalViews();
             onCloseModal();
         } catch (error: any) {
             console.error("Lỗi submit:", error);
@@ -508,13 +523,18 @@ const RoleModal = () => {
                                 <Title level={5}>Phân quyền thao tác</Title>
                                 <Row gutter={[24, 16]}>
                                     {Object.entries(permissionsStructure).map(([groupName, groupItems]) => (
-                                        <Col xs={24} sm={12} md={8} key={groupName}>
+                                        <Col xs={24} lg={12} key={groupName}>
                                             <p style={{ fontWeight: 500, marginBottom: 12 }}>{groupName}</p>
                                             {Object.keys(groupItems).map((itemName) => {
                                                 const isExpanded = expandedGroups[itemName] ?? false;
                                                 const currentChecked = checkedGroups[itemName] || [];
                                                 const itemData = getItemData(itemName);
-                                                const actionsToShow = itemData?.actions || [];
+                                                const approvalOrder=['approval.view','submit_approval','approve','reject','history.view','workflow.manage'];
+                                                const choices=(itemData?.actions||[]).map((label,index)=>({label,key:itemData!.keys[index],approvalRank:approvalOrder.indexOf(itemData!.keys[index].split('.').slice(1).join('.'))}));
+                                                const permissionSections=[
+                                                    {title:'Nghiệp vụ',items:choices.filter(choice=>choice.approvalRank<0)},
+                                                    {title:'Phê duyệt',items:choices.filter(choice=>choice.approvalRank>=0).sort((a,b)=>a.approvalRank-b.approvalRank)},
+                                                ].filter(section=>section.items.length);
 
                                                 return (
                                                     <div
@@ -552,16 +572,21 @@ const RoleModal = () => {
                                                         {isExpanded && itemData && (
                                                             <Form.Item
                                                                 name={["permissions", itemName]}
-                                                                style={{ marginTop: 8, marginLeft: 40 }}
+                                                                style={{ marginTop: 12, marginLeft: 24 }}
+                                                                labelCol={{span:0}} wrapperCol={{span:24}}
                                                             >
                                                                 <Checkbox.Group
-                                                                    style={{ display: "flex", flexDirection: "column" }}
-                                                                    options={actionsToShow}
+                                                                    className={styles.permissionGroup}
                                                                     value={currentChecked}
                                                                     onChange={(checked) =>
                                                                         onChildCheck(itemName, checked as string[])
                                                                     }
-                                                                />
+                                                                >
+                                                                    {permissionSections.map(section=><div className={styles.permissionSection} key={section.title}>
+                                                                        {permissionSections.length>1&&<div className={styles.permissionSectionTitle}>{section.title}</div>}
+                                                                        <div className={styles.permissionChoices}>{section.items.map(choice=><Checkbox key={choice.key} value={choice.label}>{choice.label}</Checkbox>)}</div>
+                                                                    </div>)}
+                                                                </Checkbox.Group>
                                                             </Form.Item>
                                                         )}
                                                     </div>
@@ -592,29 +617,15 @@ const RoleModal = () => {
                                                 title: "Trường dữ liệu",
                                                 dataIndex: "fieldLabel",
                                                 key: "fieldLabel",
+                                                render:(label:string,record:any)=>record.isSelectAll?<Typography.Text style={{color:'#1677ff',fontWeight:600}}>Chọn tất cả</Typography.Text>:label,
                                             },
                                             {
-                                                title: (
-                                                    <div style={{ lineHeight: 1.4, textAlign: 'center' }}>
-                                                        <div>Xem</div>
-                                                        <Checkbox
-                                                            aria-label="Chọn tất cả quyền xem"
-                                                            checked={isAllVisible}
-                                                            indeterminate={visibleCount > 0 && !isAllVisible}
-                                                            onChange={(event) => setModuleFieldPermissions(
-                                                                module.code,
-                                                                fieldCodes,
-                                                                'visible',
-                                                                event.target.checked,
-                                                            )}
-                                                        />
-                                                        <div style={{ fontSize: 12 }}>Tất cả</div>
-                                                    </div>
-                                                ),
+                                                title: "Xem",
                                                 key: "view",
                                                 align: "center",
                                                 width: 100,
                                                 render: (_: any, record: any) => {
+                                                    if(record.isSelectAll)return <Checkbox aria-label="Chọn tất cả quyền xem" checked={isAllVisible} indeterminate={visibleCount>0&&!isAllVisible} onChange={event=>setModuleFieldPermissions(module.code,fieldCodes,'visible',event.target.checked)}/>;
                                                     const isChecked =
                                                         fieldPolicy[module.code]?.visible_fields?.includes(
                                                             record.fieldCode
@@ -659,27 +670,12 @@ const RoleModal = () => {
                                                 },
                                             },
                                             {
-                                                title: (
-                                                    <div style={{ lineHeight: 1.4, textAlign: 'center' }}>
-                                                        <div>Sửa</div>
-                                                        <Checkbox
-                                                            aria-label="Chọn tất cả quyền sửa"
-                                                            checked={isAllEditable}
-                                                            indeterminate={editableCount > 0 && !isAllEditable}
-                                                            onChange={(event) => setModuleFieldPermissions(
-                                                                module.code,
-                                                                fieldCodes,
-                                                                'editable',
-                                                                event.target.checked,
-                                                            )}
-                                                        />
-                                                        <div style={{ fontSize: 12 }}>Tất cả</div>
-                                                    </div>
-                                                ),
+                                                title: "Sửa",
                                                 key: "edit",
                                                 align: "center",
                                                 width: 100,
                                                 render: (_: any, record: any) => {
+                                                    if(record.isSelectAll)return <Checkbox aria-label="Chọn tất cả quyền sửa" checked={isAllEditable} indeterminate={editableCount>0&&!isAllEditable} onChange={event=>setModuleFieldPermissions(module.code,fieldCodes,'editable',event.target.checked)}/>;
                                                     const isChecked =
                                                         fieldPolicy[module.code]?.editable_fields?.includes(
                                                             record.fieldCode
@@ -726,7 +722,8 @@ const RoleModal = () => {
                                         return (
                                             <Collapse.Panel header={module.name} key={module.code}>
                                                 <Table
-                                                    dataSource={dataSource}
+                                                    dataSource={[{key:'__select_all_fields__',fieldCode:'__select_all_fields__',fieldLabel:'Chọn tất cả',isSelectAll:true},...dataSource]}
+                                                    onRow={(record:any)=>record.isSelectAll?{style:{background:'#f3f7ff'}}:{}}
                                                     columns={columns}
                                                     pagination={false}
                                                     size="small"
@@ -736,6 +733,10 @@ const RoleModal = () => {
                                         );
                                     })}
                                 </Collapse>
+                            </Tabs.TabPane>
+                            <Tabs.TabPane tab="Phê duyệt" key="approval">
+                                <Alert type="info" showIcon message="Chính sách phê duyệt mặc định theo vai trò" description="Chính sách phê duyệt không thay thế quyền thao tác. Chính sách được cấu hình riêng cho từng thao tác trong từng chức năng quản lý. Khi tài khoản có nhiều vai trò và đang kế thừa cấu hình, chỉ cần một vai trò yêu cầu phê duyệt thì thao tác đó phải được gửi duyệt trước khi áp dụng. Thiết lập riêng của tài khoản được ưu tiên hơn cấu hình từ vai trò." style={{marginBottom:12}}/>
+                                {policyError?<Alert type="error" message="Không tải được danh sách chức năng hỗ trợ phê duyệt" action={<Button onClick={()=>void reloadPolicyModules()}>Thử lại</Button>}/>:policyLoading?<Skeleton active/>:supportedModules.length?<ApprovalPolicyEditor mode="role" modules={supportedModules} value={approvalPolicy} onChange={setApprovalPolicy} canEdit={module=>hasPermission(module.managePermission)}/>:<Typography.Text type="secondary">Chưa có chức năng hỗ trợ quy định phê duyệt.</Typography.Text>}
                             </Tabs.TabPane>
                         </Tabs>
                     </Form>

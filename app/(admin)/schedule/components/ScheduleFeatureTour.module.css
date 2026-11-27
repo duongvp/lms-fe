@@ -1,0 +1,21 @@
+.bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; flex-shrink: 0; min-width: 0; }
+ .help { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex-shrink: 0; height: 32px; padding-inline: 12px; color: #1677ff; background: #f0f6ff; border: 1px solid #d6e4ff; border-radius: 8px; font-weight: 500; box-shadow: none; }
+.help:hover { color: #0958d9 !important; background: #e6f4ff !important; border-color: #91caff !important; }
+.help:focus-visible { outline: 2px solid #1677ff; outline-offset: 2px; }
+.heading { display: flex; align-items: center; gap: 12px; padding-right: 24px; }
+.headingIcon { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; flex-shrink: 0; background: #e6f4ff; color: #1677ff; border-radius: 14px; font-size: 26px; }
+.eyebrow { color: #697586; font-size: 11px; font-weight: 600; letter-spacing: 1px; line-height: 1.5; }
+.headingTitle { color: #202939; font-size: 22px; font-weight: 600; line-height: 1.4; }
+.welcome .intro { color: #526077; margin: 20px 0 16px; line-height: 1.6; }
+.highlights { display: grid; gap: 16px; padding: 18px; background: #f8fafc; border: 1px solid #eef2f6; border-radius: 12px; }
+.highlight { display: flex; align-items: flex-start; gap: 12px; }
+.highlight > :global(.anticon) { color: #1677ff; font-size: 18px; margin-top: 3px; }
+.highlight strong { display: block; color: #364152; font-size: 14px; font-weight: 500; }
+.highlight span:not(:global(.anticon)) { display: block; color: #697586; font-size: 13px; margin-top: 3px; line-height: 1.5; }
+.welcome .reminder { color: #697586; font-size: 12px; line-height: 1.6; margin: 16px 0 4px; }
+.welcomeActions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 8px; }
+@media (max-width: 767px) { .help { height: 28px; padding-inline: 10px; } .headingTitle { font-size: 20px; } .highlights { padding: 14px; } }
+@media (max-width: 380px) { .welcomeActions > button { flex: 1; padding-inline: 8px; } }
+.tour :global(.ant-tour-description) { line-height: 1.6; overflow-wrap: anywhere; }
+.tour :global(.ant-tour-title) { padding-inline-end: 16px; overflow-wrap: anywhere; }
+.tour :global(.ant-tour-inner) { max-height: calc(100dvh - 32px); overflow-y: auto; overflow-x: hidden; }

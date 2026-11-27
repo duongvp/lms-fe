@@ -3,7 +3,7 @@
 import useSWR, { useSWRConfig } from "swr";
 import { useAuthStore } from "@/stores/authStore";
 import { getLessons, type LessonListParams } from "@/services/lessonService";
-import { getCalendarHeaderFilterOptions, getCalendarTeacherFilterOptions, getLivestreams, getSchedulingPrograms, type LivestreamListParams } from "@/services/livestreamService";
+import { getScheduleClassificationOptions, getCalendarHeaderFilterOptions, getCalendarTeacherFilterOptions, getLivestreams, getSchedulingPrograms, type LivestreamListParams } from "@/services/livestreamService";
 import { getModuleFields } from "@/services/roleService";
 import { getTeachingStaffOptions, type CanViewStreamKey } from "@/services/teacherProfileService";
 import { getPackageCourses } from "@/services/packageCourseService";
@@ -93,7 +93,7 @@ export const useLmsCache = () => {
             // Danh sách chương trình xếp lịch cũng lấy từ đề cương, kể cả
             // chương trình mới chưa có lịch. Xóa cache này khi đề cương đổi.
             (key) => isSWRNamespace(key, SWR_NAMESPACES.lessons)
-                || (Array.isArray(key) && key[0] === SWR_NAMESPACES.schedules && key[1] === "programs"),
+                || (Array.isArray(key) && key[0] === SWR_NAMESPACES.schedules && ["programs","classifications"].includes(String(key[1]))),
             undefined,
             { revalidate: true }
         ),
@@ -110,4 +110,9 @@ export const useLmsCache = () => {
             { revalidate: true }
         ),
     };
+};
+
+export const useScheduleClassificationOptionsQuery=()=>{
+ const scope=useAuthCacheScope();
+ return useSWR(swrKeys.scheduleClassifications(scope),getScheduleClassificationOptions,{dedupingInterval:60_000});
 };

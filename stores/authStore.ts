@@ -52,10 +52,9 @@ const mergeFieldPolicies = (policies: any[]) => {
             .map((policy) => policy.modules?.[moduleCode]?.fields)
             .filter(Boolean);
 
-        if (modulePolicies.length !== validPolicies.length) {
-            return;
-        }
-
+        // Match backend RBAC: roles add visible/editable grants. A workflow
+        // role that only defines calendar must not hide users/quiz fields
+        // already granted by another role.
         const fieldCodes = Array.from(
             new Set(modulePolicies.flatMap((fields) => Object.keys(fields)))
         );

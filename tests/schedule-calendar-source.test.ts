@@ -67,3 +67,13 @@ test('nguồn lịch lưu trong session cũ không ghi đè nguồn của chươ
         else Reflect.deleteProperty(globalThis, 'window');
     }
 });
+
+
+test('môn và khối được gửi cùng bộ lọc cũ và lưu lại trong URL',()=>{
+ const values={subject_name:'Toán',grade:8,code:'toan-8',teacher:['Cô An'],weekdays:[1],from_learn_number:2};
+ const params=buildScheduleApiParams(values);
+ assert.equal(params.subject_name,'Toán');assert.equal(params.grade,8);assert.equal(params.teacher,'Cô An');
+ const url=new URL(buildScheduleUrl(values,3),'https://example.test');
+ assert.equal(url.searchParams.get('subject_name'),'Toán');assert.equal(url.searchParams.get('grade'),'8');assert.equal(url.searchParams.get('page'),'3');
+ assert.equal(buildScheduleApiParams({}).subject_name,undefined);assert.equal(buildScheduleApiParams({}).grade,undefined);
+});

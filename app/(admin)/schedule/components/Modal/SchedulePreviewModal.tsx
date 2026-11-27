@@ -1,3 +1,5 @@
+import RescheduleWorkflowSteps from './RescheduleWorkflowSteps';
+import {calendarLessonDisplayName} from '@/helper/calendarLessonDisplayName';
 import Select from "@/components/ui/MobileSelect";
 import Table from "@/components/ui/ModalTable";
 import React, { useEffect, useRef, useState } from 'react';
@@ -53,6 +55,8 @@ const { Text } = Typography;
 
 interface SchedulePreviewModalProps {
     open: boolean;
+    requiresApproval?: boolean;
+    rescheduleWorkflow?: boolean;
     onClose: () => void;
     onConfirm: (
         payload: any,
@@ -120,6 +124,8 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
     open,
     onClose,
     onConfirm,
+    requiresApproval=false,
+    rescheduleWorkflow=false,
     formValues,
     isEdit,
     initialData,
@@ -366,9 +372,6 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
         }
     }, [buildFollowingPreviewSessions, initialData]);
 
-    const renderNamePattern = (pattern: string, occurrence: number) =>
-        pattern.replaceAll('{n}', String(occurrence));
-
     const buildDynamicLessonNames = React.useCallback((
         currentSessions: PreviewSession[],
         prefix = lessonNamePrefix,
@@ -400,7 +403,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                 master_lesson_name: masterName,
                 lesson_name: occurrence === 1
                     ? masterName
-                    : `${renderNamePattern(prefix, occurrence)}${masterName}${renderNamePattern(suffix, occurrence)}`.slice(0, 400),
+                    : calendarLessonDisplayName(masterName,prefix,suffix,occurrence),
             };
         });
     }, [lessonNamePrefix, lessonNameSuffix, lessons]);
@@ -1175,12 +1178,13 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
             <Modal
                 rootClassName="schedule-responsive-modal"
                 open={open}
-                title={
+                title={<>
                     <Space>
                         <InfoCircleOutlined style={{ color: '#1890ff' }} />
-                        <span>Xác nhận thông tin Lịch học</span>
+                        <span>{rescheduleWorkflow ? 'Xem trước dời lịch / nghỉ học' : 'Xác nhận thông tin Lịch học'}</span>
                     </Space>
-                }
+                    {rescheduleWorkflow && <RescheduleWorkflowSteps current={3}/>}
+                </>}
                 centered
                 width={1280}
                 onCancel={onClose}
@@ -1196,7 +1200,7 @@ const SchedulePreviewModal: React.FC<SchedulePreviewModalProps> = ({
                         disabled={loadingFollowingPreview || (!isEdit && loadingPackageCourses)}
                         icon={<CheckCircleOutlined />}
                     >
-                        Xác nhận Lưu
+                        {requiresApproval?"Gửi yêu cầu duyệt":"Xác nhận Lưu"}
                     </Button>,
                 ]}
                 styles={{

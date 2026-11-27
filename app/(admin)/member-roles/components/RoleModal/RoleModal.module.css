@@ -1,0 +1,28 @@
+.permissionGroup {
+  width: 100%;
+}
+.permissionSection + .permissionSection {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #edf0f3;
+}
+.permissionSectionTitle {
+  margin-bottom: 8px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 600;
+}
+.permissionChoices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 10px 16px;
+}
+.permissionChoices :global(.ant-checkbox-wrapper) {
+  display: flex;
+  align-items: flex-start;
+  margin: 0;
+  line-height: 22px;
+}
+.permissionChoices :global(.ant-checkbox) {
+  margin-top: 4px;
+}

@@ -1,4 +1,6 @@
 "use client";
+import { isCalendarApprovalCancelled } from '@/helper/calendarApprovalCancellation';
+import { calendarResultMessage, isApprovalResponse } from '@/services/calendarApprovalService';
 import { buildScheduleColumnFilterParams, normalizeScheduleAssistants, SCHEDULE_PROGRESS_FILTERS } from "@/helper/scheduleColumnFilters";
 import { runClassroomAssignmentItems, type BatchClassroomAssignmentItem } from "@/helper/batchClassroomAssignment";
 import { runEvgProvisionItems, summarizeEvgProvision, type EvgProvisionItem } from "@/helper/batchEvgProvision";
@@ -12,10 +14,12 @@ import { createPortal } from "react-dom";
 import type { FormInstance } from 'antd';
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ConfigProvider as MobileConfigProvider, DatePicker as MobileDatePicker, Popup as MobilePopup } from "antd-mobile";
-import viVN from "antd-mobile/es/locales/vi-VN";
+import { Popup as MobilePopup } from "antd-mobile";
 import { DatePicker, TimePicker } from "./components/MobileSchedulePickers";
 import CustomTable from "@/components/ui/Table";
+import ScheduleFilterPanel from "./components/ScheduleFilterPanel";
+import ScheduleFilterSheet from "./components/ScheduleFilterSheet";
+import ScheduleFeatureTour from "./components/ScheduleFeatureTour";
 import ScheduleSelectionNotice from "./components/ScheduleSelectionNotice";
 import ScheduleSelectionCheckbox, { useScheduleSelection, useSelectionKeys, type ScheduleSelectionStore } from "./components/ScheduleSelectionCheckbox";
 import type { ColumnsType } from "antd/es/table";
@@ -580,16 +584,6 @@ const ScheduleModalController = React.forwardRef<ScheduleModalControllerRef, Sch
 
 ScheduleModalController.displayName = "ScheduleModalController";
 
-const WEEKDAY_OPTIONS = [
-    { value: 1, label: "Thứ 2" },
-    { value: 2, label: "Thứ 3" },
-    { value: 3, label: "Thứ 4" },
-    { value: 4, label: "Thứ 5" },
-    { value: 5, label: "Thứ 6" },
-    { value: 6, label: "Thứ 7" },
-    { value: 7, label: "Chủ nhật" },
-];
-
 const DEFAULT_MODULE_FIELDS: ModuleField[] = [
     { fieldCode: "learn_number", fieldLabel: "Bài học", fieldType: "number", sortOrder: 1 },
     { fieldCode: "lesson_name", fieldLabel: "Tên bài học", fieldType: "text", sortOrder: 2 },
@@ -616,10 +610,6 @@ const HIDDEN_SCHEDULE_LIST_FIELDS = new Set([
 ]);
 
 const MOCK_SCHEDULES: ScheduleDataType[] = [];
-const CALENDAR_SOURCE_OPTIONS = [
-    { value: "livestream", label: "Livestream" },
-    { value: "feed", label: "Feed" },
-];
 // Các filter này được gửi lên API để total và phân trang tính trên toàn bộ dữ liệu.
 const SERVER_TABLE_FILTER_FIELDS = new Set(["teacher", "learn_number", "system_type", "live_weekday", "live_date", "assistant_teacher", "lesson_status"]);
 const CALENDAR_PLUGINS = [dayGridPlugin, timeGridPlugin, interactionPlugin];
@@ -828,360 +818,8 @@ const ScheduleDetailRow = ({ record }: { record: ScheduleDataType }) => {
     );
 };
 
-const MobileDateRangePicker = ({
-    value,
-    onChange,
-}: {
-    value?: [Dayjs, Dayjs];
-    onChange?: (value?: [Dayjs, Dayjs]) => void;
-}) => {
-    const [target, setTarget] = useState<"start" | "end" | null>(null);
-    const selectedDate = target === "start" ? value?.[0] : value?.[1];
-    const updateDate = (date: Date) => {
-        const nextDate = dayjs(date).startOf("day");
-        const currentStart = value?.[0];
-        const currentEnd = value?.[1];
-        const nextRange: [Dayjs, Dayjs] = target === "end"
-            ? currentStart && nextDate.isBefore(currentStart)
-                ? [nextDate, nextDate]
-                : [currentStart || nextDate, nextDate]
-            : currentEnd && nextDate.isAfter(currentEnd)
-                ? [nextDate, nextDate]
-                : [nextDate, currentEnd || nextDate];
-        onChange?.(nextRange);
-        setTarget(null);
-    };
-    const displayDate = (date?: Dayjs) => date?.isValid() ? date.format("DD/MM/YYYY") : "Chọn ngày";
-
-    return (
-        <>
-            <div className="schedule-mobile-date-range">
-                <button type="button" onClick={() => setTarget("start")}>
-                    <span>Từ ngày</span>
-                    <strong>{displayDate(value?.[0])}</strong>
-                </button>
-                <span className="schedule-mobile-date-range-divider">đến</span>
-                <button type="button" onClick={() => setTarget("end")}>
-                    <span>Đến ngày</span>
-                    <strong>{displayDate(value?.[1])}</strong>
-                </button>
-            </div>
-            {value?.[0] && value?.[1] && (
-                <Button type="link" size="small" onClick={() => onChange?.(undefined)} style={{ paddingInline: 0, marginTop: 4 }}>
-                    Xóa khoảng ngày
-                </Button>
-            )}
-            <MobileConfigProvider locale={viVN}>
-                <MobileDatePicker
-                visible={Boolean(target)}
-                value={selectedDate?.toDate()}
-                precision="day"
-                title={target === "start" ? "Chọn ngày bắt đầu" : "Chọn ngày kết thúc"}
-                onClose={() => setTarget(null)}
-                onConfirm={updateDate}
-                cancelText="Hủy"
-                confirmText="Xác nhận"
-                style={{ "--z-index": 1200 } as React.CSSProperties}
-                />
-            </MobileConfigProvider>
-        </>
-    );
-};
-
-const ScheduleFilterSheet = ({
-    open,
-    value,
-    loading,
-    onSearch,
-    onReset,
-    onClose,
-    programOptions,
-    loadingPrograms,
-    allowFilterWithoutProgram,
-}: {
-    open: boolean;
-    value: ScheduleFilterValues;
-    loading: boolean;
-    onSearch: (values: ScheduleFilterValues) => void;
-    onReset: () => void;
-    onClose: () => void;
-    programOptions: Array<{ value: string; label: string }>;
-    loadingPrograms: boolean;
-    allowFilterWithoutProgram: boolean;
-}) => {
-    const [filterForm] = Form.useForm();
-    const selectedSource = Form.useWatch('calendar_source', filterForm) || value.calendar_source || 'livestream';
-    const sourceProgramOptions = programOptions.filter(option => calendarSourceFromCode(option.value) === selectedSource);
-    useEffect(() => {
-        filterForm.resetFields();
-        filterForm.setFieldsValue({ ...value, calendar_source: value.calendar_source ?? "livestream" });
-    }, [filterForm, value]);
-
-    const handleReset = () => {
-        filterForm.resetFields();
-        onReset();
-    };
-
-    return (
-        <MobilePopup
-            position="bottom"
-            visible={open}
-            onClose={onClose}
-            closeOnMaskClick
-            bodyClassName={`schedule-filter-sheet${open ? " schedule-filter-sheet-open" : ""}`}
-            bodyStyle={{ height: "calc(100dvh - 48px)" }}
-        >
-            <div className="schedule-filter-sheet-header">
-                <div>
-                    <Typography.Text strong className="schedule-filter-sheet-title">
-                        Bộ lọc lịch học
-                    </Typography.Text>
-                    <Typography.Text type="secondary">
-                        Lọc theo chương trình, thời gian và giáo viên
-                    </Typography.Text>
-                </div>
-                <Button type="text" aria-label="Đóng bộ lọc" icon={<CloseOutlined />} onClick={onClose} />
-            </div>
-            <Form className="schedule-filter-sheet-body" form={filterForm} layout="vertical" onFinish={(values) => onSearch(cleanFilterValues(values))}>
-                <Form.Item
-                    name="code"
-                    label="Chương trình"
-                    rules={allowFilterWithoutProgram ? [] : [{ required: true, message: "Vui lòng chọn Chương trình" }]}
-                >
-                    <Select
-                        className="schedule-filter-program"
-                        allowClear={allowFilterWithoutProgram ? { clearIcon: <span
-                            className="schedule-filter-program-clear-icon"
-                            aria-label="Xóa chương trình đã chọn"
-                            onTouchEnd={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                filterForm.setFieldValue("code", undefined);
-                            }}
-                        ><CloseOutlined /></span> } : false}
-                        showSearch
-                        loading={loadingPrograms}
-                        options={sourceProgramOptions}
-                        optionFilterProp="label"
-                        placeholder={allowFilterWithoutProgram ? "Tất cả Chương trình" : "Chọn Chương trình"}
-                        notFoundContent={loadingPrograms ? "Đang tải..." : "Không có Chương trình"}
-                    />
-                </Form.Item>
-                {allowFilterWithoutProgram && (
-                    <Alert
-                        type="info"
-                        showIcon
-                        message="Admin có thể lọc theo thời gian mà không cần chọn Chương trình"
-                        style={{ marginTop: -8, marginBottom: 16 }}
-                    />
-                )}
-                <Form.Item name="calendar_source" label="Nguồn lịch">
-                    <AntSelect options={CALENDAR_SOURCE_OPTIONS} allowClear={false} onChange={(source) => {
-                        const code = filterForm.getFieldValue('code');
-                        if (code && calendarSourceFromCode(code) !== source) filterForm.setFieldValue('code', undefined);
-                    }} />
-                </Form.Item>
-                <Form.Item name="teacher" label="Giáo viên">
-                    <TeachingStaffSelect teacherType={1} mode="multiple" maxTagCount="responsive" allowQuickCreate={false} allowClear showSearch placeholder="Chọn giáo viên" />
-                </Form.Item>
-                <Form.Item name="system_type" label="Hệ thống">
-                    <Select mode="multiple" maxTagCount="responsive" allowClear placeholder="Tất cả hệ thống" options={[{ value: "topclass", label: "Topclass" }, { value: "topuni", label: "Topuni" }]} />
-                </Form.Item>
-                <Form.Item name="time_status" label="Trạng thái buổi học">
-                    <Select mode="multiple" maxTagCount="responsive" allowClear placeholder="Tất cả trạng thái" options={[{ value: "upcoming", label: "Chưa bắt đầu" }, { value: "ongoing", label: "Đang diễn ra" }, { value: "completed", label: "Đã kết thúc" }, { value: "cancelled", label: <span style={{ color: "#cf1322" }}>Nghỉ học</span> }]} />
-                </Form.Item>
-                <Form.Item name="weekdays" label="Thứ trong tuần">
-                    <Select mode="multiple" maxTagCount="responsive" allowClear placeholder="Tất cả các thứ" options={WEEKDAY_OPTIONS} />
-                </Form.Item>
-                <Form.Item label="Khoảng bài">
-                    <Space.Compact block>
-                        <Form.Item name="from_learn_number" noStyle><InputNumber min={1} precision={0} placeholder="Từ bài" style={{ width: "50%" }} /></Form.Item>
-                        <Form.Item name="to_learn_number" noStyle><InputNumber min={1} precision={0} placeholder="Đến bài" style={{ width: "50%" }} /></Form.Item>
-                    </Space.Compact>
-                </Form.Item>
-                <Form.Item
-                    name="date_range"
-                    label="Khoảng ngày"
-                    normalize={(range) => {
-                        const [from, to] = Array.isArray(range) ? range : [];
-                        return dayjs.isDayjs(from) && from.isValid() && dayjs.isDayjs(to) && to.isValid() ? [from, to] : undefined;
-                    }}
-                >
-                    <MobileDateRangePicker />
-                </Form.Item>
-            </Form>
-            <div className="schedule-filter-sheet-actions">
-                <Button onClick={handleReset}>Xóa lọc</Button>
-                <Button type="primary" onClick={() => filterForm.submit()} loading={loading}>Tìm kiếm</Button>
-            </div>
-        </MobilePopup>
-    );
-};
-
-const ScheduleInlineFilters = ({
-    value,
-    loading,
-    onSearch,
-    onReset,
-    programOptions,
-    loadingPrograms,
-    allowFilterWithoutProgram,
-}: {
-    value: ScheduleFilterValues;
-    loading: boolean;
-    onSearch: (values: ScheduleFilterValues) => void;
-    onReset: () => void;
-    programOptions: Array<{ value: string; label: string }>;
-    loadingPrograms: boolean;
-    allowFilterWithoutProgram: boolean;
-}) => {
-    const [filterForm] = Form.useForm();
-    const selectedSource = Form.useWatch('calendar_source', filterForm) || value.calendar_source || 'livestream';
-    const sourceProgramOptions = programOptions.filter(option => calendarSourceFromCode(option.value) === selectedSource);
-
-    useEffect(() => {
-        filterForm.resetFields();
-        filterForm.setFieldsValue({ ...value, calendar_source: value.calendar_source ?? "livestream" });
-    }, [filterForm, value]);
-
-    return (
-        <div
-            className="schedule-inline-filters"
-            style={{
-                marginBottom: 14,
-                padding: "12px 16px 4px",
-                border: "1px solid #e8e8e8",
-                borderRadius: 8,
-                background: "#fafafa",
-            }}
-        >
-            <Form
-                form={filterForm}
-                layout="vertical"
-                onFinish={(values) => onSearch(cleanFilterValues(values))}
-            >
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", gap: "0 12px" }}>
-                    <Form.Item
-                        name="code"
-                        label="Chương trình"
-                        style={{ flex: "1 1 230px", minWidth: 220, marginBottom: 10 }}
-                        rules={allowFilterWithoutProgram ? [] : [{ required: true, message: "Chọn Chương trình" }]}
-                    >
-                        <Select
-                            allowClear={allowFilterWithoutProgram}
-                            showSearch
-                            loading={loadingPrograms}
-                            options={sourceProgramOptions}
-                            optionFilterProp="label"
-                            placeholder={allowFilterWithoutProgram ? "Tất cả Chương trình" : "Chọn Chương trình"}
-                            notFoundContent={loadingPrograms ? "Đang tải..." : "Không có Chương trình"}
-                        />
-                    </Form.Item>
-                    <Form.Item name="teacher" label="Giáo viên" style={{ flex: "1 1 190px", minWidth: 190, marginBottom: 10 }}>
-                        <TeachingStaffSelect
-                            teacherType={1}
-                            mode="multiple"
-                            maxTagCount="responsive"
-                            allowQuickCreate={false}
-                            allowClear
-                            showSearch
-                            placeholder="Tất cả giáo viên"
-                        />
-                    </Form.Item>
-                    <Form.Item
-                        name="date_range"
-                        label="Khoảng ngày"
-                        style={{ flex: "1 1 220px", minWidth: 220, marginBottom: 10 }}
-                        normalize={(range) => {
-                            const [from, to] = Array.isArray(range) ? range : [];
-                            return dayjs.isDayjs(from) && from.isValid() && dayjs.isDayjs(to) && to.isValid()
-                                ? [from, to]
-                                : undefined;
-                        }}
-                    >
-                        <RangePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
-                    </Form.Item>
-                    <Form.Item name="weekdays" label="Thứ" style={{ flex: "1 1 180px", minWidth: 180, marginBottom: 10 }}>
-                        <Select
-                            mode="multiple"
-                            maxTagCount="responsive"
-                            allowClear
-                            placeholder="Tất cả các thứ"
-                            options={WEEKDAY_OPTIONS}
-                        />
-                    </Form.Item>
-                    <Form.Item label="Khoảng bài" style={{ flex: "1 1 180px", minWidth: 180, marginBottom: 10 }}>
-                        <Space.Compact block>
-                            <Form.Item name="from_learn_number" noStyle>
-                                <InputNumber min={1} precision={0} placeholder="Từ bài" style={{ width: "50%" }} />
-                            </Form.Item>
-                            <Form.Item name="to_learn_number" noStyle>
-                                <InputNumber min={1} precision={0} placeholder="Đến bài" style={{ width: "50%" }} />
-                            </Form.Item>
-                        </Space.Compact>
-                    </Form.Item>
-                    <Form.Item name="time_status" label="Trạng thái" style={{ flex: "1 1 165px", minWidth: 165, marginBottom: 10 }}>
-                        <Select
-                            mode="multiple"
-                            maxTagCount="responsive"
-                            allowClear
-                            placeholder="Tất cả trạng thái"
-                            options={[
-                                { value: "upcoming", label: "Chưa bắt đầu" },
-                                { value: "ongoing", label: "Đang diễn ra" },
-                                { value: "completed", label: "Đã kết thúc" },
-                                { value: "cancelled", label: <span style={{ color: "#cf1322" }}>Nghỉ học</span> },
-                            ]}
-                        />
-                    </Form.Item>
-                    <div style={{ display: "flex", flex: "0 1 245px", minWidth: 245, gap: 10 }}>
-                        <Form.Item name="calendar_source" label="Nguồn lịch" style={{ flex: "0 0 115px", minWidth: 115, marginBottom: 10 }}>
-                            <AntSelect options={CALENDAR_SOURCE_OPTIONS} allowClear={false} onChange={(source) => {
-                        const code = filterForm.getFieldValue('code');
-                        if (code && calendarSourceFromCode(code) !== source) filterForm.setFieldValue('code', undefined);
-                    }} />
-                        </Form.Item>
-                        <Form.Item name="system_type" label="Hệ thống" style={{ flex: "1 1 120px", minWidth: 120, marginBottom: 10 }}>
-                            <Select
-                                mode="multiple"
-                                maxTagCount="responsive"
-                                allowClear
-                                placeholder="Tất cả"
-                                options={[
-                                    { value: "topclass", label: "Topclass" },
-                                    { value: "topuni", label: "Topuni" },
-                                ]}
-                            />
-                        </Form.Item>
-                    </div>
-                    <Form.Item label=" " colon={false} style={{ flex: "0 0 auto", marginBottom: 10 }}>
-                        <Space>
-                            <Button onClick={() => {
-                                filterForm.resetFields();
-                                onReset();
-                            }}>
-                                Xóa lọc
-                            </Button>
-                            <Button type="primary" htmlType="submit" icon={<FilterOutlined />} loading={loading}>
-                                Lọc
-                            </Button>
-                        </Space>
-                    </Form.Item>
-                </div>
-            </Form>
-            <style>{`
-                .schedule-inline-filters .ant-form-item-explain,
-                .schedule-inline-filters .ant-form-item-extra {
-                    min-height: 22px;
-                }
-                .schedule-inline-filters .ant-form-item-explain:empty,
-                .schedule-inline-filters .ant-form-item-extra:empty {
-                    min-height: 0;
-                }
-            `}</style>
-        </div>
-    );
-};
+type ScheduleFiltersProps=React.ComponentProps<typeof ScheduleFilterPanel>;
+const ScheduleInlineFilters=(props:ScheduleFiltersProps)=><ScheduleFilterPanel {...props}/>;
 
 type EvgBannerOverrideInputProps = {
     onChange: (bannerUrl: string, isValid: boolean) => void;
@@ -1237,11 +875,12 @@ const EvgBannerOverrideInput = ({ onChange }: EvgBannerOverrideInputProps) => {
 
 const Page = () => {
     const pageScrollRef = useRef<HTMLDivElement>(null);
+    const [tourHelpContainer, setTourHelpContainer] = useState<HTMLSpanElement | null>(null);
     const [showBackToTop, setShowBackToTop] = useState(false);
     const [roomReportOpen, setRoomReportOpen] = useState(false);
     const [floatingActionsMounted, setFloatingActionsMounted] = useState(false);
     useEffect(() => setFloatingActionsMounted(true), []);
-    const { fieldPolicy, permissions, roles } = useAuthStore((state) => state.user);
+    const { userId, fieldPolicy, permissions, roles } = useAuthStore((state) => state.user);
     const isAdmin = permissions.includes("*") || roles?.some((role: any) => String(role?.code || role?.name || role).toLowerCase() === "admin");
     const hasPermission = useAuthStore(state => state.hasPermission);
     const can = useAuthStore(state => state.can);
@@ -1444,7 +1083,7 @@ const Page = () => {
         const program = urlProgram || (isAdmin ? "" : sharedProgram);
         const hasDateFilter = Boolean(searchParams.get("from") || searchParams.get("to"));
         const hasOtherFilter = Boolean(
-            searchParams.get("q") || searchParams.get("teacher") || searchParams.get("system_type")
+            searchParams.get("subject_name") || searchParams.get("grade") || searchParams.get("q") || searchParams.get("teacher") || searchParams.get("assistant_teachers") || searchParams.get("system_type")
             || searchParams.get("status") || searchParams.get("weekdays")
             || searchParams.get("from_learn_number") || searchParams.get("to_learn_number")
             || searchParams.get("calendar_id") || searchParams.get("calendar_source") === "feed"
@@ -1472,6 +1111,8 @@ const Page = () => {
         const values: ScheduleFilterValues = cleanFilterValues({
             calendar_source: searchParams.get("calendar_source") === "feed" ? "feed" : "livestream",
             code: program,
+            subject_name: String(searchParams.get("subject_name") || "").trim() || undefined,
+            grade: (()=>{const grade=Number(searchParams.get("grade"));return Number.isInteger(grade)&&grade>=1&&grade<=12?grade:undefined;})(),
             keyword: String(searchParams.get("q") || "").trim(),
             calendar_id: (() => {
                 const parsed = Number(searchParams.get("calendar_id"));
@@ -1481,6 +1122,7 @@ const Page = () => {
                 .split(",")
                 .map((teacher) => teacher.trim())
                 .filter(Boolean),
+            assistant_teachers: String(searchParams.get("assistant_teachers") || "").split(",").map(value => value.trim()).filter(Boolean),
             system_type: String(searchParams.get("system_type") || "")
                 .split(",")
                 .filter((system): system is "topclass" | "topuni" => (
@@ -1834,7 +1476,7 @@ const Page = () => {
         ),
         onSelectAll: (selected: boolean) => handleSelectAll(selected),
         columnTitle: () => (
-            <ImmediateSelectAllCheckbox
+            <span data-schedule-tour="selection"><ImmediateSelectAllCheckbox
                 store={selectionStore}
                 scope={selectableRowKeys}
                 completeScope={hasActiveTableColumnFilters || data.length >= totalItems}
@@ -1842,7 +1484,7 @@ const Page = () => {
                 busy={selectingAllRows}
                 disabled={displayedTotalItems <= 0 || (hasActiveTableColumnFilters || totalItems <= data.length) && selectableRowKeys.size === 0}
                 onChange={(checked) => void handleSelectAll(checked)}
-            />
+            /></span>
         ),
         // Checkbox nằm trong row có expandRowByClick. Chặn bubble ngay tại ô
         // chọn để click lệch trong vùng checkbox không vô tình mở chi tiết.
@@ -2980,8 +2622,8 @@ const Page = () => {
                 )
                 : await importLivestreamsFile(file, programCode || undefined, sheetUrl);
             api.success({
-                message: isUpdate ? "Cập nhật thành công" : "Import thành công",
-                description: isUpdate
+                message: calendarResultMessage(response,isUpdate ? "Cập nhật thành công" : "Import thành công"),
+                description: isApprovalResponse(response)?"Lịch chính thức chưa thay đổi.":isUpdate
                     ? `Đã cập nhật ${response?.data?.count ?? 0} lịch học; bỏ qua ${response?.data?.unchangedRows ?? 0} lịch không thay đổi.`
                     : `Đã tạo ${response?.data?.count ?? 0} lịch học.`,
             });
@@ -2991,6 +2633,7 @@ const Page = () => {
                 await refreshSchedules();
             }
         } catch (error: any) {
+            if (isCalendarApprovalCancelled(error)) return;
             const errors = error?.detail?.errors;
             const importFailures: ScheduleImportError[] = Array.isArray(errors) && errors.length
                 ? errors
@@ -3010,8 +2653,8 @@ const Page = () => {
             void refreshSchedules();
         }
         api.success({
-            message: "Cập nhật thành công",
-            description: "Đã cập nhật danh sách lịch học.",
+            message: _values?.approval_required ? "Đã gửi yêu cầu duyệt" : "Cập nhật thành công",
+            description: _values?.approval_required ? "Lịch chính thức chưa thay đổi." : "Đã cập nhật danh sách lịch học.",
         });
     };
 
@@ -3058,10 +2701,10 @@ const Page = () => {
             cancelText: 'Hủy',
             onOk: async () => {
                 try {
-                    await deleteLivestream(record.key);
+                    const response = await deleteLivestream(record.key);
                     api.success({
-                        message: "Xóa thành công",
-                        description: "Đã xóa lịch học khỏi danh sách.",
+                        message: calendarResultMessage(response,"Xóa thành công"),
+                        description: isApprovalResponse(response)?"Lịch chính thức chưa thay đổi.":"Đã xóa lịch học khỏi danh sách.",
                     });
                     setSelectedRowKeys((keys) =>
                         keys.filter((key) => String(key) !== String(record.key))
@@ -3070,6 +2713,7 @@ const Page = () => {
                         await refreshSchedules();
                     }
                 } catch (error: any) {
+            if (isCalendarApprovalCancelled(error)) return;
                     api.error({
                         message: "Xóa thất bại",
                         description: error?.message || "Không thể xóa lịch học.",
@@ -3106,22 +2750,25 @@ const Page = () => {
 
         Modal.confirm({
             title: `Xóa ${ids.length} lịch học đã chọn?`,
-            content: "Các lịch học sẽ bị xóa khỏi hệ thống. Thao tác này không thể hoàn tác.",
+            content: "Các lịch được xóa mềm sau khi đáp ứng điều kiện phê duyệt của tài khoản.",
             okText: `Xóa ${ids.length} lịch`,
             okType: "danger",
             cancelText: "Hủy",
             onOk: async () => {
                 setDeletingSelectedSchedules(true);
                 const deletedIds: number[] = [];
+                const pendingIds: number[] = [];
                 const failedIds: number[] = [];
+                let batchApprovalReason:string|undefined;let batchApprovalTitle:string|undefined;
                 try {
                     // Xóa tuần tự để mỗi lịch hoàn tất đầy đủ việc thu hồi user,
                     // mapping và thông báo trước khi chuyển sang lịch tiếp theo.
                     for (const id of ids) {
                         try {
-                            await deleteLivestream(String(id));
-                            deletedIds.push(id);
-                        } catch {
+                            const response=await deleteLivestream(String(id),batchApprovalReason,batchApprovalTitle);
+                            if(isApprovalResponse(response)){pendingIds.push(id);batchApprovalReason=response.data.request?.reason;batchApprovalTitle=response.data.request?.title;}else deletedIds.push(id);
+                        } catch (error) {
+                            if(isCalendarApprovalCancelled(error))return;
                             failedIds.push(id);
                         }
                     }
@@ -3129,6 +2776,7 @@ const Page = () => {
                     setSelectedRowKeys(failedIds.map(String));
                     deletedIds.forEach((id) => selectedRowsCacheRef.current.delete(String(id)));
 
+                    if(pendingIds.length) api.success({message:"Đã gửi yêu cầu duyệt",description:`${pendingIds.length} lịch đang chờ duyệt; lịch chính thức chưa thay đổi.`});
                     if (deletedIds.length) {
                         api.success({
                             message: "Xóa lịch hoàn tất",
@@ -3353,17 +3001,18 @@ const Page = () => {
                     sanitizedRow.change_reason = content;
                 }
 
-                await updateLivestream(key, sanitizedRow);
+                const response = await updateLivestream(key, sanitizedRow);
                 setEditingKey("");
                 api.success({
-                    message: "Cập nhật thành công",
-                    description: "Đã lưu thay đổi nhanh của dòng.",
+                    message: calendarResultMessage(response,"Cập nhật thành công"),
+                    description: isApprovalResponse(response)?"Lịch chính thức chưa thay đổi.":"Đã lưu thay đổi nhanh của dòng.",
                 });
                 if (hasSearched) {
                     await refreshSchedules();
                 }
             }
         } catch (errInfo: any) {
+            if (isCalendarApprovalCancelled(errInfo)) return;
             console.log("Validate Failed:", errInfo);
             const isValidationError = Array.isArray(errInfo?.errorFields);
             api.error({
@@ -4374,6 +4023,7 @@ const Page = () => {
             WebkitOverflowScrolling: "touch",
         }}>
             {contextHolder}
+            <ScheduleFeatureTour helpContainer={tourHelpContainer} accountId={userId} viewMode={viewMode} isMobile={isMobile} hasResults={hasSearched && (viewMode === 'table' ? tableDisplayData.length > 0 : calendarData.length > 0)} access={{create:canCreateSchedule,edit:canEditSchedule,delete:canDeleteSchedule,import:canImportSchedule,export:canExportSchedule,submit:hasPermission(PermissionKey.CALENDAR_SUBMIT_APPROVAL),review:hasPermission(PermissionKey.CALENDAR_VIEW_APPROVAL),sync:canEditSchedule}}/>
             {canDeleteSchedule && <DeletedCalendarsModal
                 open={deletedCalendarsOpen} programCode={String(activeProgramCode || "")}
                 source={submittedFilterValues.calendar_source ?? "livestream"} onClose={() => setDeletedCalendarsOpen(false)}
@@ -4624,7 +4274,7 @@ const Page = () => {
                         className="schedule-add-fab"
                         type="primary"
                         tooltip="Thêm mới"
-                        aria-label="Thêm mới lịch học"
+                        data-schedule-tour="create" aria-label="Thêm mới lịch học"
                         icon={<PlusOutlined />}
                         onClick={handleMobileAddBtn}
                         style={{ position: 'static', width: 48, height: 48, margin: 0 }}
@@ -4694,7 +4344,7 @@ const Page = () => {
 
                 {isMobile ? (
                     <div className="schedule-mobile-toolbar">
-                        <div className="schedule-mobile-search">
+                        <div data-schedule-tour="search" className="schedule-mobile-search">
                             <CustomSearchInput
                                 placeholder="Tìm chương trình, bài học, giáo viên, phòng..."
                                 value={searchTextRef.current}
@@ -4705,13 +4355,13 @@ const Page = () => {
                         </div>
                         <Button
                             className="schedule-mobile-toolbar-button"
-                            aria-label="Mở menu thao tác"
+                            data-schedule-tour="actions" aria-label="Mở menu thao tác"
                             icon={<MoreOutlined />}
                             loading={refreshingScheduleList || deletingSelectedSchedules}
                             onClick={() => { setMobileActionGroup(undefined); setMobileActionsOpen(true); }}
                         />
                          <Tooltip title="Lọc lịch học">
-                            <Button className="schedule-mobile-toolbar-button" aria-label="Lọc lịch học" icon={<FilterOutlined />} onClick={() => setOpenFilterDrawer(true)} />
+                            <Button className="schedule-mobile-toolbar-button" data-schedule-tour="filters" aria-label="Lọc lịch học" icon={<FilterOutlined />} onClick={() => setOpenFilterDrawer(true)} />
                         </Tooltip>
                         <MobilePopup
                             position="bottom"
@@ -4743,6 +4393,7 @@ const Page = () => {
                     </div>
                 ) : (
                 <SearchAndActionsBar
+                    guidePrefix=""
                     onSearch={handleSearch}
                     searchValue={searchTextRef.current}
                     onSearchValueChange={handleSearchValueChange}
@@ -4755,7 +4406,7 @@ const Page = () => {
                             <div className="schedule-workflow-actions">
                                 {canCreateSchedule && (
                                     <Button
-                                        icon={<CalendarOutlined />}
+                                        data-schedule-tour="auto" icon={<CalendarOutlined />}
                                         disabled={!submittedFilterValues.code}
                                         onClick={handleOpenAutoSchedule}
                                     >
@@ -4764,7 +4415,7 @@ const Page = () => {
                                 )}
                                 {canEditSchedule && (
                                     <Button
-                                        icon={<EditOutlined />}
+                                        data-schedule-tour="bulk" icon={<EditOutlined />}
                                         onClick={handleOpenBulkEdit}
                                     >
                                         Sửa hàng loạt
@@ -4784,10 +4435,10 @@ const Page = () => {
                             </div>
                             <div className="schedule-utility-actions">
                                 <Dropdown trigger={["click"]} menu={desktopOtherActionsMenu}>
-                                    <Button icon={<MoreOutlined />}>Thao tác khác <DownOutlined /></Button>
+                                    <Button data-schedule-tour="other" icon={<MoreOutlined />}>Thao tác khác <DownOutlined /></Button>
                                 </Dropdown>
                                 <Dropdown trigger={["click"]} menu={syncMenu} disabled={selectingAllRows}>
-                                    <Button icon={<DatabaseOutlined />} loading={selectingAllRows || syncingTeachingUsers || syncingStudents || batchClassroomAssigning || resendingToHocmai || provisioningEvgBulk}>
+                                    <Button data-schedule-tour="sync" icon={<DatabaseOutlined />} loading={selectingAllRows || syncingTeachingUsers || syncingStudents || batchClassroomAssigning || resendingToHocmai || provisioningEvgBulk}>
                                         Đồng bộ <DownOutlined />
                                     </Button>
                                 </Dropdown>
@@ -4835,11 +4486,11 @@ const Page = () => {
                                         },
                                     }}
                                 >
-                                    <Button icon={<MoreOutlined />} loading={deletingSelectedSchedules}>Thao tác khác</Button>
+                                    <Button data-schedule-tour="other" icon={<MoreOutlined />} loading={deletingSelectedSchedules}>Thao tác khác</Button>
                                 </Dropdown>
                             )}
                             <Dropdown trigger={["click"]} menu={syncMenu} disabled={selectingAllRows}>
-                                <Button icon={<DatabaseOutlined />} loading={selectingAllRows || syncingTeachingUsers || syncingStudents || batchClassroomAssigning || resendingToHocmai || provisioningEvgBulk}>
+                                <Button data-schedule-tour="sync" icon={<DatabaseOutlined />} loading={selectingAllRows || syncingTeachingUsers || syncingStudents || batchClassroomAssigning || resendingToHocmai || provisioningEvgBulk}>
                                     Đồng bộ <DownOutlined />
                                 </Button>
                             </Dropdown>
@@ -4851,7 +4502,7 @@ const Page = () => {
                             >
                                 Làm mới
                             </Button>
-                            <Button icon={<FilterOutlined />} onClick={() => setOpenFilterDrawer(true)}>Lọc</Button>
+                            <Button data-schedule-tour="filters" icon={<FilterOutlined />} onClick={() => setOpenFilterDrawer(true)}>Lọc</Button>
                         </div>
                     }
                 />
@@ -4904,7 +4555,10 @@ const Page = () => {
                         </div>
                     </div>
                 )}
+                <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:8,marginInlineStart:'auto'}}>
+                <span ref={setTourHelpContainer} style={{display:'inline-flex'}} />
                 <Segmented
+                    data-schedule-tour="view"
                     style={{ flexShrink: 0 }}
                     size={isMobile ? "small" : "middle"}
                     value={viewMode}
@@ -4918,10 +4572,11 @@ const Page = () => {
                         setViewMode(nextMode);
                     }}
                 />
+                </div>
             </div>
 
             {isMobile && viewMode === "table" && hasSearched && displayedTotalItems > 0 && (
-                <div className="schedule-mobile-selection-bar">
+                <div data-schedule-tour="selection" className="schedule-mobile-selection-bar">
                     <div className="schedule-mobile-selection-heading">
                         <ImmediateSelectAllCheckbox
                             store={selectionStore}
@@ -4951,7 +4606,7 @@ const Page = () => {
                 form={form}
                 component={false}
             >
-                <div className="schedule-view-container" style={{
+                <div data-schedule-tour="content" className="schedule-view-container" style={{
                     // Bảng đi theo luồng của trang; chỉ lịch cần một khung cao cố định.
                     // Form component={false} không sinh DOM, nên chiều cao phải
                     // đặt trên div thật để lịch không bị co về 0 trên mobile.
@@ -5367,9 +5022,9 @@ const Page = () => {
                     fullscreen
                     programCode={autoScheduleProgram}
                     onClose={() => setAutoScheduleProgram(null)}
-                    onSuccess={async () => {
+                    onSuccess={async (response) => {
                         await refreshSchedules();
-                        api.success({ message: "Đã tạo lịch tự động" });
+                        api.success({ message: calendarResultMessage(response,"Đã tạo lịch tự động") });
                     }}
                 />}
                 {bulkEditSelection && <BulkEditModal
@@ -5378,9 +5033,9 @@ const Page = () => {
                     requestedIds={bulkEditSelection.ids}
                     initialRows={bulkEditSelection.rows}
                     onClose={() => setBulkEditSelection(null)}
-                    onSuccess={async () => {
+                    onSuccess={async (response) => {
                         await refreshSchedules();
-                        api.success({ message: "Đã cập nhật lịch học" });
+                        api.success({ message: calendarResultMessage(response,"Đã cập nhật lịch học") });
                         setBulkEditSelection(null);
                     }}
                 />}
@@ -5400,12 +5055,12 @@ const Page = () => {
                     open={Boolean(copySource)}
                     source={copySource}
                     onClose={() => setCopySource(null)}
-                    onSuccess={() => {
+                    onSuccess={(response) => {
                         setCopySource(null);
                         if (hasSearched) void refreshSchedules();
                         api.success({
-                            message: "Sao chép lịch học thành công",
-                            description: "Buổi học mới đã được tạo và giữ nguyên thông tin bài học từ lịch cũ.",
+                            message: calendarResultMessage(response,"Sao chép lịch học thành công"),
+                            description: isApprovalResponse(response)?"Lịch chính thức chưa thay đổi.":"Buổi học mới đã được tạo và giữ nguyên thông tin bài học từ lịch cũ.",
                         });
                     }}
                 />
@@ -5414,12 +5069,12 @@ const Page = () => {
                     source={swapSource}
                     programs={programOptions}
                     onClose={() => setSwapSource(null)}
-                    onSuccess={() => {
+                    onSuccess={(response) => {
                         setSwapSource(null);
                         if (hasSearched) void refreshSchedules();
                         api.success({
-                            message: "Hoán đổi lịch thành công",
-                            description: "Hai buổi học đã nhận khung giờ mới và được kiểm tra xung đột.",
+                            message: calendarResultMessage(response,"Hoán đổi lịch thành công"),
+                            description: isApprovalResponse(response)?"Lịch chính thức chưa thay đổi.":"Hai buổi học đã nhận khung giờ mới và được kiểm tra xung đột.",
                         });
                     }}
                 />

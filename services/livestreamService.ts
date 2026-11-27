@@ -1,6 +1,34 @@
+import {CalendarApprovalCancelledError} from '@/helper/calendarApprovalCancellation';
+import { useAuthStore } from "@/stores/authStore";
 import { Dayjs } from "dayjs";
 import { combineDateTime, normalizeSchedulePayload } from "@/helper/convertDate";
-import { fetchInstance } from "@/ultils/fetchInstance";
+import { fetchInstance as baseFetchInstance } from "@/ultils/fetchInstance";
+import { isApprovalResponse, refreshApprovalViews } from "./calendarApprovalService";
+
+// Explicitly opt in to proposal responses; legacy API clients receive APPROVAL_REQUIRED.
+const fetchInstance: typeof baseFetchInstance = async (url, options={}, responseType="json", timeoutMs) => {
+  const headers=new Headers(options.headers);
+  if(options.method && !["GET","HEAD"].includes(options.method.toUpperCase())) {
+    headers.set("X-Calendar-Submit-Approval","true");
+    headers.set("Idempotency-Key",crypto.randomUUID());
+  }
+  const send=()=>baseFetchInstance(url,{...options,headers:Object.fromEntries(headers.entries())},responseType,timeoutMs);
+  let result;
+  try{result=await send();}catch(error:any){
+    if(error?.detail?.code!=='APPROVAL_REASON_REQUIRED')throw error;
+    const identity=useAuthStore.getState();
+    const {requestApprovalReason}=await import('@/components/calendar-approvals/requestApprovalReason');
+    const submission=await requestApprovalReason('',{operation:error.detail.operation});
+    const current=useAuthStore.getState();
+    if(current.user.userId!==identity.user.userId||current.authSessionVersion!==identity.authSessionVersion)throw new CalendarApprovalCancelledError();
+    headers.set('X-Calendar-Approval-Reason',encodeURIComponent(submission.reason));
+    headers.set('X-Calendar-Approval-Title',encodeURIComponent(submission.title));
+    // Reuse the same body and idempotency key. The first response created no request.
+    result=await send();
+  }
+  if(isApprovalResponse(result)) refreshApprovalViews();
+  return result;
+};
 
 const API_BASE_URL = `${process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://localhost:5000"}/api/livestreams`;
 
@@ -367,6 +395,8 @@ export interface LivestreamListParams {
     code?: string;
     code_exact?: string;
     subject?: string;
+    subject_name?: string;
+    grade?: number;
     classroom?: string;
     system_type?: "topclass" | "topuni" | Array<"topclass" | "topuni">;
     lesson_status?: string | number;
@@ -751,10 +781,10 @@ export const cancelLivestream = (id: string) =>
         credentials: "include",
     });
 
-export const deleteLivestream = (id: string) =>
+export const deleteLivestream = (id: string, approvalReason?:string,approvalTitle?:string) =>
     fetchInstance(`${API_BASE_URL}/${id}`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers:approvalReason?{'X-Calendar-Approval-Reason':encodeURIComponent(approvalReason),...(approvalTitle?{'X-Calendar-Approval-Title':encodeURIComponent(approvalTitle)}:{})}:undefined,
         credentials: "include",
     });
 
@@ -973,3 +1003,6 @@ export const toBulkUpdatePayload = (
 
     return { ids: selectedLessons, ...values };
 };
+
+export type ScheduleClassification={code:string;subject_name:string;grade:number|null};
+export const getScheduleClassificationOptions=()=>fetchInstance(`${API_BASE_URL}/classification-options`,{credentials:'include'});

@@ -1,4 +1,10 @@
 export enum PermissionKey {
+    CALENDAR_SUBMIT_APPROVAL = 'calendar.submit_approval',
+    CALENDAR_APPROVE = 'calendar.approve',
+    CALENDAR_REJECT = 'calendar.reject',
+    CALENDAR_VIEW_APPROVAL = 'calendar.approval.view',
+    CALENDAR_VIEW_HISTORY = 'calendar.history.view',
+    CALENDAR_WORKFLOW_MANAGE = 'calendar.workflow.manage',
     TEACHING_REPORT_VIEW = 'teaching_report.view',
     USER_VIEW = 'users.view',
     USER_CREATE = 'users.create',

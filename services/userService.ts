@@ -36,6 +36,7 @@ export interface UserProgramScope {
 
 // Payload dùng cho update user
 export interface UpdateUserPayload {
+    approvalPolicy?: unknown;
     name?: string;
     email?: string;
     phone?: string;

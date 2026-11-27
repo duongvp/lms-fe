@@ -1,4 +1,5 @@
 "use client";
+import { calendarResultMessage } from '@/services/calendarApprovalService';
 
 import { Button, Result, message } from "antd";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -32,9 +33,9 @@ const AutoSchedulePage = () => {
             fullscreen
             programCode={programCode}
             onClose={() => router.replace(returnTo)}
-            onSuccess={async () => {
+            onSuccess={async (response) => {
                 await refreshSchedules();
-                message.success("Đã tạo lịch tự động");
+                message.success(calendarResultMessage(response,"Đã tạo lịch tự động"));
             }}
         />
     );

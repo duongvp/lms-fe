@@ -1,4 +1,5 @@
 "use client";
+import { calendarResultMessage } from '@/services/calendarApprovalService';
 
 import { Alert, Button, Result, message } from "antd";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -40,9 +41,9 @@ const AutoEditSchedulePage = () => {
                 fullscreen
                 requestedIds={requestedIds}
                 onClose={backToSchedule}
-                onSuccess={async () => {
+                onSuccess={async (response) => {
                     await refreshSchedules();
-                    message.success("Đã cập nhật lịch học");
+                    message.success(calendarResultMessage(response,"Đã cập nhật lịch học"));
                     backToSchedule();
                 }}
             />

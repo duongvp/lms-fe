@@ -1,4 +1,8 @@
 'use client';
+import {calendarLessonDisplayName} from '@/helper/calendarLessonDisplayName';
+import { isCalendarApprovalCancelled } from '@/helper/calendarApprovalCancellation';
+import { calendarResultMessage } from '@/services/calendarApprovalService';
+
 
 import Select from "@/components/ui/MobileSelect";
 import React, { useEffect } from 'react';
@@ -140,10 +144,6 @@ const normalizedMappingKeys = (mappings: any[] = []) => mappings
 
 const sameStringArray = (left: string[] = [], right: string[] = []) => (
     [...left].sort().join('\u0000') === [...right].sort().join('\u0000')
-);
-
-const renderNamePattern = (pattern: unknown, occurrence: number) => (
-    String(pattern || '').replaceAll('{n}', String(occurrence))
 );
 
 const DEFAULT_CANCELED_LESSON_PREFIX = '[NGHỈ HỌC] ';
@@ -310,7 +310,7 @@ const getEndDisabledTime = (startTime?: Dayjs | null) => {
 interface BulkEditModalProps {
     open: boolean;
     onClose: () => void;
-    onSuccess: () => void | Promise<void>;
+    onSuccess: (response?:any) => void | Promise<void>;
     requestedIds?: string[];
     initialRows?: any[];
     fullscreen?: boolean;
@@ -1334,10 +1334,10 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                     total: targetIds.length,
                     completed: committedCount,
                     percent: 96,
-                    message: 'Đã lưu thay đổi. Đang tải lại danh sách lịch học...',
+                    message: calendarResultMessage(response,'Đã lưu thay đổi. Đang tải lại danh sách lịch học...'),
                 });
                 sessionStorage.removeItem("schedule:auto-edit:rows");
-                await onSuccess();
+                await onSuccess(response);
                 leavingPageRef.current = true;
                 hideModalImmediately();
                 return;
@@ -1445,7 +1445,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         if (isSingleLessonSelection || occurrence > 1 || applyToFirstSession) {
                             lessonNameByCalendarId.set(
                                 String(record.id),
-                                `${renderNamePattern(rule?.prefix ?? values.lesson_name_prefix, occurrence)}${requireSourceLessonName(record)}${renderNamePattern(rule?.suffix ?? values.lesson_name_suffix, occurrence)}`.slice(0, 400)
+                                calendarLessonDisplayName(requireSourceLessonName(record),rule?.prefix ?? values.lesson_name_prefix,rule?.suffix ?? values.lesson_name_suffix,occurrence)
                             );
                         }
                     });
@@ -1463,7 +1463,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                         if (config.enable_lesson_name_pattern) {
                             lessonNameByCalendarId.set(
                                 String(record.id),
-                                `${renderNamePattern(config.lesson_name_prefix, occurrence)}${requireSourceLessonName(record)}${renderNamePattern(config.lesson_name_suffix, occurrence)}`.slice(0, 400)
+                                calendarLessonDisplayName(requireSourceLessonName(record),config.lesson_name_prefix,config.lesson_name_suffix,occurrence)
                             );
                         }
                     });
@@ -1618,13 +1618,14 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
                 total: targetIds.length,
                 completed: committedCount,
                 percent: 96,
-                message: 'Đã lưu thay đổi. Đang tải lại danh sách lịch học...',
+                message: calendarResultMessage(response,'Đã lưu thay đổi. Đang tải lại danh sách lịch học...'),
             });
             sessionStorage.removeItem("schedule:auto-edit:rows");
-            await onSuccess();
+            await onSuccess(response);
             leavingPageRef.current = true;
             hideModalImmediately();
         } catch (err) {
+            if (isCalendarApprovalCancelled(err)) return;
             console.error("Lỗi cập nhật hàng loạt:", err);
             setSubmitError(getSubmitError(err));
             message.error({

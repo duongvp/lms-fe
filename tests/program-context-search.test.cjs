@@ -170,3 +170,28 @@ for (const program of ['nguvan-8-2027', 'feed-tramtiepsuctrithuc']) {
         assert.equal(cleanLessonFilters({ subject_code: program }).calendar_source, source);
     });
 }
+
+
+test('approval pages do not activate schedule menu; calendar tools keep their active menu', () => {
+    const config = source.slice(source.indexOf('export const menuConfig'), source.indexOf('// Chỉ ba trang'));
+    const active = source.slice(source.indexOf('const isPathActive'), source.indexOf('const SideMenu:'));
+    const module = { exports: {} };
+    const icons = Object.fromEntries([...config.matchAll(/<(\w+)/g)].map(match => [match[1], () => null]));
+    vm.runInNewContext(transformSync(config + active, { loader: 'tsx', format: 'cjs' }).code, {
+        module, exports: module.exports, React: { createElement: () => null },
+        PermissionKey: new Proxy({}, { get: (_, key) => key }), ...icons,
+    });
+    const { getActiveKeys } = module.exports;
+    for (const pathname of ['/schedule/approvals', '/schedule/approvals/10']) {
+        const result = getActiveKeys(pathname);
+        assert.equal(result.activeTopKey, '');
+        assert.equal(result.activeSideKey, '');
+    }
+    for (const pathname of ['/schedule', '/schedule/auto', '/schedule/auto-edit']) {
+        const result = getActiveKeys(pathname);
+        assert.equal(result.activeTopKey, 'schedule_management');
+        assert.equal(result.activeSideKey, 'schedule_calendar');
+    }
+    assert.equal(getActiveKeys('/program-teacher-banners').activeSideKey, 'schedule_banners');
+    assert.equal(getActiveKeys('/dashboard').activeTopKey, '0');
+});

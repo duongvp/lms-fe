@@ -1,4 +1,7 @@
 'use client';
+import { isCalendarApprovalCancelled } from '@/helper/calendarApprovalCancellation';
+import { calendarResultMessage } from '@/services/calendarApprovalService';
+
 
 import React, { useEffect, useState } from 'react';
 import { Alert, Button, Col, Form, Grid, message, Modal, Row, Tag } from 'antd';
@@ -14,7 +17,7 @@ interface CopyScheduleModalProps {
     open: boolean;
     source: any | null;
     onClose: () => void;
-    onSuccess: () => void;
+    onSuccess: (response?:any) => void;
 }
 
 interface CopyScheduleFormValues {
@@ -114,7 +117,7 @@ const CopyScheduleModal: React.FC<CopyScheduleModalProps> = ({
         if (!source) return;
         try {
             setLoading(true);
-            await createLivestream({
+            const response = await createLivestream({
                 system_type: source.system_type || 'topclass',
                 code: source.code,
                 teacher: values.teacher,
@@ -130,9 +133,10 @@ const CopyScheduleModal: React.FC<CopyScheduleModalProps> = ({
                 lesson_status: 0,
                 package_lesson_mappings: mappingKeysToPayload(values.hmo_mapping_keys),
             });
-            onSuccess();
+            onSuccess(response);
             form.resetFields();
         } catch (error: any) {
+            if (isCalendarApprovalCancelled(error)) return;
             messageApi.error(
                 error?.detail?.message
                 || error?.message

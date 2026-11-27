@@ -1,0 +1,6 @@
+.body { overflow-x: hidden; overflow-y: auto; max-height: calc(100dvh - 200px); }
+.form { min-width: 0; }
+.form :global(.ant-col) { min-width: 0; }
+.form :global(.ant-select), .form :global(.ant-picker) { width: 100%; min-width: 0; max-width: 100%; }
+.form :global(.ant-picker-input) { min-width: 0; }
+.form :global(.ant-select-selection-item-content) { white-space: normal; overflow-wrap: anywhere; }

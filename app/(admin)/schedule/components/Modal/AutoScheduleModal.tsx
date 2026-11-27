@@ -1,4 +1,7 @@
 "use client";
+import { isCalendarApprovalCancelled } from '@/helper/calendarApprovalCancellation';
+import { calendarResultMessage } from '@/services/calendarApprovalService';
+
 import { calendarSourceFromCode } from "@/helper/lesson";
 import { getScheduleConflictLinks, type ScheduleConflictLink } from "@/helper/scheduleConflictLinks";
 import { ScheduleConflictDetails } from "./ScheduleConflictDetails";
@@ -33,7 +36,7 @@ type Props = {
     open: boolean;
     programCode: string;
     onClose: () => void;
-    onSuccess: () => void | Promise<void>;
+    onSuccess: (response?:any) => void | Promise<void>;
     fullscreen?: boolean;
 };
 
@@ -1075,20 +1078,21 @@ const AutoScheduleModal = ({ open, programCode, onClose, onSuccess, fullscreen =
                 total,
                 completed,
                 percent: 96,
-                message: "Đã lưu lịch học. Đang tải lại danh sách...",
+                message: calendarResultMessage(response,"Đã lưu lịch học. Đang tải lại danh sách..."),
             });
             setPreview([]);
             setPayload(null);
-            await onSuccess();
+            await onSuccess(response);
             setCommitProgress({
                 total,
                 completed,
                 percent: 100,
-                message: "Đã hoàn tất tạo lịch học.",
+                message: calendarResultMessage(response,"Đã hoàn tất tạo lịch học."),
             });
             await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
             onClose();
         } catch (error: any) {
+            if (isCalendarApprovalCancelled(error)) return;
             setScheduleError({
                 title: "Chưa thể tạo lịch tự động",
                 detail: error?.message || "Không thể tạo lịch tự động. Vui lòng thử lại.",

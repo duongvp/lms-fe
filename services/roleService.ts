@@ -1,5 +1,6 @@
 // services/roleService.ts
 
+import type {ModulePolicyMap} from './approvalPolicyService';
 import { fetchInstance } from "@/ultils/fetchInstance";
 import type { ModuleField, ModuleStructure } from "@/types/fieldPolicy";
 import { validateFieldPolicy } from "@/helper/fieldPolicy";
@@ -32,6 +33,7 @@ export interface RoleApiResponse {
     description?: string;
     permissions?: RolePermissionItem[];
     fieldPolicy?: any;
+    approvalPolicy?: ModulePolicyMap;
     isActive?: boolean;
     createdAt?: string;
     updatedAt?: string;
@@ -42,6 +44,7 @@ export interface RolePayload {
     description?: string;
     permissions?: Array<string | { code: string } | { key: string }>;
     fieldPolicy?: any;
+    approvalPolicy?: ModulePolicyMap;
 }
 
 export type ProgramScopeMode = "ALL" | "RESTRICTED" | "DENY";
